@@ -1,12 +1,12 @@
-import { createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
+import { Pool } from "pg";
+import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "./schema";
 
-const client = createClient({
-  url: process.env.DATABASE_URL || "file:./orbit-docs.sqlite",
+export const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL || process.env.DATABASE_URL,
 });
 
-export const db = drizzle(client, { schema });
+export const db = drizzle(pool, { schema });
 
 export function getDb() {
   return db;
