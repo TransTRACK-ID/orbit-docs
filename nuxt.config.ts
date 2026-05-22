@@ -73,4 +73,18 @@ export default defineNuxtConfig({
   },
 
   compatibilityDate: "2025-01-31",
+
+  vite: {
+    server: {
+      hmr: {
+        protocol: "ws",
+        clientPort: 3000,
+        port: 3000,
+      },
+      watch: {
+        usePolling: true,
+        interval: 1000,
+      },
+    },
+  },
 });
