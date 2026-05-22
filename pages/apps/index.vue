@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
+import type { AppItem } from "~/composables/useApps";
 
 const $page = usePageStore();
 onBeforeMount(() => {
@@ -17,6 +18,7 @@ const {
   fetchStats,
   fetchActivities,
   createApp,
+  updateApp,
   deleteApp,
 } = useApps();
 
@@ -26,57 +28,105 @@ onMounted(() => {
   fetchActivities();
 });
 
-const showModal = ref(false);
-const form = reactive({
+// Create modal
+const showCreateModal = ref(false);
+const createForm = reactive({
   name: "",
   description: "",
   owner: "",
   status: "active",
   repoUrl: "",
 });
-const nameError = ref(false);
+const createNameError = ref(false);
 
-const statusClass: Record<string, string> = {
-  active: "pill-green",
-  draft: "pill-blue",
-  maintenance: "pill-amber",
-};
-
-const statusLabel: Record<string, string> = {
-  active: "Active",
-  draft: "Draft",
-  maintenance: "Maintenance",
-};
-
-function openModal() {
-  showModal.value = true;
-  nameError.value = false;
-  form.name = "";
-  form.description = "";
-  form.owner = "";
-  form.status = "active";
-  form.repoUrl = "";
+function openCreateModal() {
+  showCreateModal.value = true;
+  createNameError.value = false;
+  createForm.name = "";
+  createForm.description = "";
+  createForm.owner = "";
+  createForm.status = "active";
+  createForm.repoUrl = "";
 }
 
-function closeModal() {
-  showModal.value = false;
-  nameError.value = false;
+function closeCreateModal() {
+  showCreateModal.value = false;
+  createNameError.value = false;
 }
 
-async function submitForm() {
-  if (!form.name.trim()) {
-    nameError.value = true;
+async function submitCreate() {
+  if (!createForm.name.trim()) {
+    createNameError.value = true;
     return;
   }
-  nameError.value = false;
+  createNameError.value = false;
   await createApp({
-    name: form.name.trim(),
-    description: form.description,
-    owner: form.owner,
-    status: form.status,
-    repoUrl: form.repoUrl,
+    name: createForm.name.trim(),
+    description: createForm.description,
+    owner: createForm.owner,
+    status: createForm.status,
+    repoUrl: createForm.repoUrl,
   });
-  closeModal();
+  closeCreateModal();
+}
+
+// Edit modal
+const showEditModal = ref(false);
+const editingApp = ref<AppItem | null>(null);
+const editForm = reactive({
+  name: "",
+  description: "",
+  owner: "",
+  status: "active",
+  repoUrl: "",
+});
+const editNameError = ref(false);
+
+function openEditModal(app: AppItem) {
+  editingApp.value = app;
+  editForm.name = app.name;
+  editForm.description = app.description || "";
+  editForm.owner = app.owner || "";
+  editForm.status = app.status;
+  editForm.repoUrl = app.repoUrl || "";
+  showEditModal.value = true;
+  editNameError.value = false;
+}
+
+function closeEditModal() {
+  showEditModal.value = false;
+  editingApp.value = null;
+  editNameError.value = false;
+}
+
+async function submitEdit() {
+  if (!editForm.name.trim()) {
+    editNameError.value = true;
+    return;
+  }
+  editNameError.value = false;
+  if (!editingApp.value) return;
+  await updateApp(editingApp.value.id, {
+    name: editForm.name.trim(),
+    description: editForm.description,
+    owner: editForm.owner,
+    status: editForm.status,
+    repoUrl: editForm.repoUrl,
+  });
+  closeEditModal();
+}
+
+// Delete confirmation
+const appToDelete = ref<AppItem | null>(null);
+
+function confirmDelete(app: AppItem) {
+  appToDelete.value = app;
+}
+
+async function doDelete() {
+  if (!appToDelete.value) return;
+  await deleteApp(appToDelete.value.id);
+  appToDelete.value = null;
 }
 
 function onSearch() {
@@ -102,12 +152,41 @@ function timeAgo(dateStr: string | null) {
   return `${Math.floor(diff / 2419200)} months ago`;
 }
 
+const statusClass: Record<string, string> = {
+  active: "pill-green",
+  draft: "pill-blue",
+  maintenance: "pill-amber",
+};
+
+const statusLabel: Record<string, string> = {
+  active: "Active",
+  draft: "Draft",
+  maintenance: "Maintenance",
+};
+
 const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
 </script>
 
 <template>
   <div class="apps-page">
-    <!-- Stats bar -->
+    <!-- Topbar -->
+    <header class="topbar">
+      <h1>Apps</h1>
+      <div style="display:flex;align-items:center;gap:16px;">
+        <input
+          v-model="search"
+          class="search"
+          placeholder="Search apps, versions, docs…"
+          aria-label="Search apps, versions, and docs"
+          @input="onSearch"
+        />
+        <button type="button" class="btn btn-primary" @click="openCreateModal">
+          + New App
+        </button>
+      </div>
+    </header>
+
+    <!-- Stats -->
     <div class="stats-bar">
       <div class="stat">
         <span class="stat-num">{{ stats?.activeApps ?? 0 }}</span>
@@ -127,33 +206,17 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
       </div>
     </div>
 
-    <!-- Header row -->
-    <div class="row-between" style="margin-bottom: 20px">
+    <!-- App cards -->
+    <div class="row-between" style="margin-bottom:20px;">
       <h2>Your apps</h2>
-      <div class="flex gap-2">
-        <div class="relative">
-          <input
-            v-model="search"
-            class="search"
-            placeholder="Search apps…"
-            aria-label="Search apps"
-            @input="onSearch"
-          />
-        </div>
-        <button type="button" class="btn btn-primary" @click="openModal">
-          + New App
-        </button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost">Filter</button>
+        <button class="btn btn-ghost">Sort</button>
       </div>
     </div>
 
-    <!-- App cards -->
     <div v-if="isLoading" class="grid-4">
-      <div
-        v-for="n in 4"
-        :key="n"
-        class="card"
-        style="height: 160px"
-      >
+      <div v-for="n in 4" :key="n" class="card" style="height: 160px">
         <div class="animate-pulse space-y-3">
           <div class="h-4 bg-gray-200 rounded w-3/4"></div>
           <div class="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -162,41 +225,47 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
       </div>
     </div>
 
-    <div v-else-if="apps.length === 0" class="text-center py-12">
-      <p class="text-gray-500">No apps found.</p>
+    <div v-else-if="apps.length === 0" class="empty-state">
+      <p>No apps found.</p>
     </div>
 
     <div v-else class="grid-4">
-      <div
-        v-for="app in apps"
-        :key="app.id"
-        class="card"
-      >
+      <div v-for="app in apps" :key="app.id" class="card">
         <div class="card-head">
           <div>
             <div class="card-title">{{ app.name }}</div>
-            <div class="card-meta">
-              Updated {{ timeAgo(app.updatedAt) }}
-            </div>
+            <div class="card-meta">Updated {{ timeAgo(app.updatedAt) }}</div>
           </div>
-          <span
-            class="pill"
-            :class="statusClass[app.status] || 'pill-blue'"
-          >
+          <span class="pill" :class="statusClass[app.status] || 'pill-blue'">
             {{ statusLabel[app.status] || app.status }}
           </span>
         </div>
-        <div class="flex items-center gap-2 mt-2">
-          <span
-            v-if="app.latestVersion"
-            class="num pill pill-blue"
-          >
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+          <span v-if="app.latestVersion" class="num pill pill-blue">
             v{{ app.latestVersion.version }}
           </span>
           <span v-else class="num text-xs text-gray-400">No version</span>
-          <span class="text-xs text-gray-500">by {{ app.owner || "Unknown" }}</span>
+          <span style="color:var(--muted);font-size:12px;">
+            by {{ app.owner || "Unknown" }}
+          </span>
         </div>
         <div class="card-foot">
+          <div class="flex items-center gap-1">
+            <button
+              class="btn btn-ghost btn-sm"
+              title="Edit app"
+              @click="openEditModal(app)"
+            >
+              <IconsPencil size="14" />
+            </button>
+            <button
+              class="btn btn-ghost btn-sm"
+              title="Delete app"
+              @click="confirmDelete(app)"
+            >
+              <IconsTrash size="14" />
+            </button>
+          </div>
           <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm">
             Versions
           </NuxtLink>
@@ -208,8 +277,8 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
     </div>
 
     <!-- Recent activity -->
-    <div class="mt-8">
-      <div class="row-between mb-4">
+    <div style="margin-top:var(--gap-xl, 32px);">
+      <div class="row-between" style="margin-bottom:16px;">
         <h2>Recent activity</h2>
         <button class="btn btn-ghost" @click="fetchActivities">
           Refresh
@@ -240,39 +309,30 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
       </table>
     </div>
 
-    <!-- New App Modal -->
-    <div class="modal-overlay" :class="{ open: showModal }" @click.self="closeModal">
+    <!-- Create Modal -->
+    <div class="modal-overlay" :class="{ open: showCreateModal }" @click.self="closeCreateModal">
       <div class="modal">
         <div class="modal-header">
           <h2>Create New App</h2>
-          <button
-            type="button"
-            class="modal-close"
-            aria-label="Close modal"
-            @click="closeModal"
-          >
+          <button type="button" class="modal-close" aria-label="Close modal" @click="closeCreateModal">
             ✕
           </button>
         </div>
-        <form novalidate @submit.prevent="submitForm">
+        <form novalidate @submit.prevent="submitCreate">
           <div class="modal-body">
             <div class="form-group">
               <label for="appName">App Name</label>
               <input
                 id="appName"
-                v-model="form.name"
+                v-model="createForm.name"
                 type="text"
                 placeholder="e.g. Payment Gateway"
                 required
-                :class="{ 'input-error': nameError }"
+                :class="{ 'input-error': createNameError }"
                 aria-describedby="appNameError"
-                @input="nameError = false"
+                @input="createNameError = false"
               />
-              <span
-                id="appNameError"
-                class="error-msg"
-                :class="{ show: nameError }"
-              >
+              <span id="appNameError" class="error-msg" :class="{ show: createNameError }">
                 App name is required
               </span>
             </div>
@@ -280,25 +340,19 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
               <label for="appDesc">
                 Description <span class="opt">(optional)</span>
               </label>
-              <textarea
-                id="appDesc"
-                v-model="form.description"
-                placeholder="What does this app do?"
-              />
+              <textarea id="appDesc" v-model="createForm.description" placeholder="What does this app do?" />
             </div>
             <div class="form-row">
               <div class="form-group">
                 <label for="appOwner">Owner</label>
-                <select id="appOwner" v-model="form.owner">
+                <select id="appOwner" v-model="createForm.owner">
                   <option value="">Select owner…</option>
-                  <option v-for="o in owners" :key="o" :value="o">
-                    {{ o }}
-                  </option>
+                  <option v-for="o in owners" :key="o" :value="o">{{ o }}</option>
                 </select>
               </div>
               <div class="form-group">
                 <label for="appStatus">Initial Status</label>
-                <select id="appStatus" v-model="form.status">
+                <select id="appStatus" v-model="createForm.status">
                   <option value="active">Active</option>
                   <option value="draft">Draft</option>
                   <option value="maintenance">Maintenance</option>
@@ -309,32 +363,112 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
               <label for="appRepo">
                 Repository URL <span class="opt">(optional)</span>
               </label>
-              <input
-                id="appRepo"
-                v-model="form.repoUrl"
-                type="url"
-                placeholder="https://github.com/org/repo"
-              />
+              <input id="appRepo" v-model="createForm.repoUrl" type="url" placeholder="https://github.com/org/repo" />
             </div>
           </div>
           <div class="modal-foot">
-            <button
-              type="button"
-              class="btn btn-secondary"
-              @click="closeModal"
-            >
+            <button type="button" class="btn btn-secondary" @click="closeCreateModal">
               Cancel
             </button>
-            <button
-              type="submit"
-              class="btn btn-primary"
-              :disabled="isCreating"
-            >
+            <button type="submit" class="btn btn-primary" :disabled="isCreating">
               <span v-if="isCreating">Creating…</span>
               <span v-else>Create App</span>
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal-overlay" :class="{ open: showEditModal }" @click.self="closeEditModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Edit App</h2>
+          <button type="button" class="modal-close" aria-label="Close modal" @click="closeEditModal">
+            ✕
+          </button>
+        </div>
+        <form novalidate @submit.prevent="submitEdit">
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="editName">App Name</label>
+              <input
+                id="editName"
+                v-model="editForm.name"
+                type="text"
+                required
+                :class="{ 'input-error': editNameError }"
+                aria-describedby="editNameError"
+                @input="editNameError = false"
+              />
+              <span id="editNameError" class="error-msg" :class="{ show: editNameError }">
+                App name is required
+              </span>
+            </div>
+            <div class="form-group">
+              <label for="editDesc">
+                Description <span class="opt">(optional)</span>
+              </label>
+              <textarea id="editDesc" v-model="editForm.description" placeholder="What does this app do?" />
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="editOwner">Owner</label>
+                <select id="editOwner" v-model="editForm.owner">
+                  <option value="">Select owner…</option>
+                  <option v-for="o in owners" :key="o" :value="o">{{ o }}</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="editStatus">Status</label>
+                <select id="editStatus" v-model="editForm.status">
+                  <option value="active">Active</option>
+                  <option value="draft">Draft</option>
+                  <option value="maintenance">Maintenance</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="editRepo">
+                Repository URL <span class="opt">(optional)</span>
+              </label>
+              <input id="editRepo" v-model="editForm.repoUrl" type="url" placeholder="https://github.com/org/repo" />
+            </div>
+          </div>
+          <div class="modal-foot">
+            <button type="button" class="btn btn-secondary" @click="closeEditModal">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" :class="{ open: !!appToDelete }" @click.self="appToDelete = null">
+      <div class="modal" style="width: 400px;">
+        <div class="modal-header">
+          <h2>Delete App</h2>
+          <button type="button" class="modal-close" aria-label="Close modal" @click="appToDelete = null">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <p style="margin:0;color:var(--muted);">
+            Are you sure you want to delete <strong>{{ appToDelete?.name }}</strong>? This action cannot be undone.
+          </p>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-secondary" @click="appToDelete = null">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-primary" style="background:oklch(50% 0.16 25);border-color:oklch(50% 0.16 25);" @click="doDelete">
+            Delete
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -355,6 +489,20 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
   --radius-lg: 12px;
 }
 
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.topbar h1 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 20px;
+  color: var(--fg);
+}
+
 h2 {
   margin: 0;
   font-weight: 600;
@@ -370,7 +518,7 @@ h2 {
 }
 
 .search {
-  width: 240px;
+  width: 320px;
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -519,6 +667,12 @@ h2 {
   background: var(--fg-soft);
 }
 
+.empty-state {
+  text-align: center;
+  padding: 48px 0;
+  color: var(--muted);
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -530,6 +684,8 @@ h2 {
   font-weight: 500;
   transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
     border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  background: transparent;
 }
 .btn-primary {
   background: var(--accent);
@@ -614,6 +770,7 @@ h2 {
   color: var(--muted);
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
+  font-size: 16px;
 }
 .modal-close:hover {
   color: var(--fg);
@@ -693,6 +850,11 @@ h2 {
   .btn,
   .search {
     transition: none !important;
+  }
+}
+@media (max-width: 768px) {
+  .search {
+    width: 180px;
   }
 }
 </style>

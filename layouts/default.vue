@@ -1,41 +1,50 @@
-<script setup lang="ts">
-import type { DrawerInterface } from "flowbite";
-
-let drawerSidebar: DrawerInterface | null = null;
-
-const windowWidth = ref(0);
-
-const isMdAndUp = computed((): boolean => {
-  return windowWidth.value >= 768;
-});
-
-function resizeHandler() {
-  if (process.client) {
-    windowWidth.value = window.innerWidth;
-  }
-}
-
-watch(isMdAndUp, () => {
-  drawerSidebar?.hide();
-});
-
-onMounted(() => {
-  if (process.client) {
-    window.addEventListener("resize", resizeHandler);
-    windowWidth.value = window.innerWidth;
-  }
-});
-</script>
-
 <template>
-  <div class="min-h-screen bg-gray-100">
-    <LayoutsSidebar
-      @on-mounted="drawerSidebar = $event"
-      @on-click-close-sidebar="drawerSidebar?.hide()"
-    />
-    <div class="px-6 py-4 md:pl-[340px] min-h-screen w-full">
-      <LayoutsHeader />
-      <slot />
+  <div class="app-shell">
+    <LayoutsSidebar />
+    <div class="main">
+      <div class="content">
+        <slot />
+      </div>
+      <footer class="pagefoot">
+        <span>Orbit Docs · Internal documentation platform</span>
+        <span class="num">v2026.05</span>
+      </footer>
     </div>
   </div>
 </template>
+
+<style scoped>
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg, oklch(98% 0.004 250));
+}
+.content {
+  padding: 32px;
+  flex: 1;
+}
+.pagefoot {
+  padding: 20px 32px;
+  color: var(--muted, oklch(55% 0.015 250));
+  font-size: 12px;
+  border-top: 1px solid var(--border, oklch(90% 0.006 250));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.num {
+  font-family: var(--font-mono, 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace);
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 768px) {
+  .content {
+    padding: 20px;
+  }
+}
+</style>
