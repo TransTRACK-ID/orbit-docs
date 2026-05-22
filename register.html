@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orbit Docs · Create Account</title>
+  <style>
+    :root {
+      --bg:      oklch(98% 0.004 250);
+      --surface: oklch(100% 0 0);
+      --fg:      oklch(20% 0.02 250);
+      --muted:   oklch(55% 0.015 250);
+      --border:  oklch(90% 0.006 250);
+      --accent:  oklch(55% 0.16 25);
+      --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
+      --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+      --font-display: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --font-mono:    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+      --fs-h2: 20px;
+      --fs-body: 14px;
+      --fs-meta: 12px;
+      --gap-sm: 12px;
+      --gap-md: 16px;
+      --gap-lg: 24px;
+      --radius: 8px;
+      --radius-lg: 12px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font-family: var(--font-body); font-size: var(--fs-body);
+      line-height: 1.5; text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3 { margin: 0; font-weight: 600; }
+
+    /* ─── auth shell ────────────────────────────────────────────── */
+    .auth-shell {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 100vh; padding: var(--gap-lg);
+    }
+    .auth-brand {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: var(--gap-lg);
+      font-family: var(--font-display); font-size: 22px; font-weight: 600;
+    }
+    .auth-brand svg { width: 26px; height: 26px; color: var(--accent); flex-shrink: 0; }
+
+    /* ─── card ──────────────────────────────────────────────────── */
+    .auth-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      width: 100%; max-width: 440px;
+      padding: var(--gap-lg);
+    }
+    .auth-card h2 {
+      font-size: var(--fs-h2); margin-bottom: var(--gap-md);
+    }
+    .auth-card .subtitle {
+      color: var(--muted); font-size: var(--fs-body);
+      margin-bottom: var(--gap-lg);
+    }
+
+    /* ─── form ──────────────────────────────────────────────────── */
+    .form-group { margin-bottom: var(--gap-md); }
+    .form-group label {
+      display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px;
+    }
+    .form-group input[type="email"],
+    .form-group input[type="password"],
+    .form-group input[type="text"] {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--bg); font: inherit; font-size: 14px; color: var(--fg);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .form-group input:focus {
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .input-error {
+      border-color: oklch(55% 0.18 25) !important;
+      box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
+    }
+    .error-msg {
+      display: none; color: oklch(50% 0.16 25); font-size: 12px; margin-top: 4px;
+    }
+    .error-msg.show { display: block; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap-md); }
+
+    .checkbox-label {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--muted); cursor: pointer;
+    }
+    .checkbox-label input[type="checkbox"] {
+      width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer;
+    }
+    .link { color: var(--accent); font-weight: 500; }
+    .link:hover { text-decoration: underline; }
+
+    .hint {
+      color: var(--muted); font-size: 12px; margin-top: 4px;
+    }
+
+    /* ─── buttons ─────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 10px 16px; border-radius: var(--radius);
+      border: 1px solid transparent; font-size: 14px; font-weight: 500;
+      transition: background .15s cubic-bezier(.4,0,.2,1), border-color .15s cubic-bezier(.4,0,.2,1);
+    }
+    .btn-block { width: 100%; }
+    .btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+    .btn-primary:hover { background: color-mix(in oklch, var(--accent) 88%, black); }
+    .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+    .btn-secondary:hover { border-color: var(--fg); }
+
+    /* ─── focus ─────────────────────────────────────────────────── */
+    .btn:focus-visible,
+    .form-group input:focus-visible,
+    .checkbox-label:focus-visible,
+    .link:focus-visible {
+      outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius);
+    }
+
+    /* ─── divider ───────────────────────────────────────────────── */
+    .divider {
+      display: flex; align-items: center; gap: var(--gap-md);
+      margin: var(--gap-lg) 0; color: var(--muted); font-size: 12px;
+    }
+    .divider::before, .divider::after {
+      content: ""; flex: 1; height: 1px; background: var(--border);
+    }
+
+    /* ─── auth footer ───────────────────────────────────────────── */
+    .auth-footer {
+      margin-top: var(--gap-lg); text-align: center;
+      color: var(--muted); font-size: 13px;
+    }
+    .auth-footer a { color: var(--accent); font-weight: 500; }
+    .auth-footer a:hover { text-decoration: underline; }
+
+    /* ─── strength meter ────────────────────────────────────────── */
+    .strength-bar {
+      display: flex; gap: 4px; margin-top: 6px;
+    }
+    .strength-segment {
+      flex: 1; height: 3px; border-radius: 2px; background: var(--border);
+      transition: background .15s;
+    }
+    .strength-segment.weak   { background: oklch(60% 0.18 25); }
+    .strength-segment.fair   { background: oklch(75% 0.14 85); }
+    .strength-segment.good   { background: oklch(60% 0.18 145); }
+    .strength-segment.strong { background: oklch(55% 0.14 255); }
+
+    /* ─── pagefoot ──────────────────────────────────────────────── */
+    .pagefoot {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 16px var(--gap-lg); color: var(--muted); font-size: 12px;
+      border-top: 1px solid var(--border); background: var(--surface);
+      display: flex; justify-content: space-between;
+    }
+    .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+    /* ─── toast ─────────────────────────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 24px; right: 32px; z-index: 200;
+      background: var(--fg); color: var(--surface);
+      padding: 12px 20px; border-radius: var(--radius);
+      font-size: 14px; font-weight: 500;
+      box-shadow: 0 8px 24px color-mix(in oklch, var(--fg) 20%, transparent);
+      opacity: 0; transform: translateY(8px);
+      transition: opacity .2s cubic-bezier(.4,0,.2,1), transform .2s cubic-bezier(.4,0,.2,1);
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+    @media (max-width: 520px) {
+      .auth-shell { padding: var(--gap-md); }
+      .auth-card { padding: var(--gap-md); }
+      .form-row { grid-template-columns: 1fr; }
+      .pagefoot { flex-direction: column; gap: 4px; align-items: center; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-shell">
+    <div class="auth-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+      Orbit Docs
+    </div>
+
+    <div class="auth-card">
+      <h2>Create your account</h2>
+      <p class="subtitle">Join your team on Orbit Docs.</p>
+
+      <form novalidate id="registerForm">
+        <div class="form-row">
+          <div class="form-group">
+            <label for="firstName">First name</label>
+            <input type="text" id="firstName" placeholder="Jane" required autocomplete="given-name" aria-describedby="firstNameError" />
+            <span class="error-msg" id="firstNameError">First name is required.</span>
+          </div>
+          <div class="form-group">
+            <label for="lastName">Last name</label>
+            <input type="text" id="lastName" placeholder="Doe" required autocomplete="family-name" aria-describedby="lastNameError" />
+            <span class="error-msg" id="lastNameError">Last name is required.</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email address</label>
+          <input type="email" id="email" placeholder="you@company.com" required autocomplete="email" aria-describedby="emailError" />
+          <span class="error-msg" id="emailError">Please enter a valid email address.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="••••••••" required autocomplete="new-password" aria-describedby="passwordHint passwordError" />
+          <p class="hint" id="passwordHint">Min. 8 characters with a number and a symbol.</p>
+          <div class="strength-bar" id="strengthBar" aria-hidden="true">
+            <div class="strength-segment"></div>
+            <div class="strength-segment"></div>
+            <div class="strength-segment"></div>
+            <div class="strength-segment"></div>
+          </div>
+          <span class="error-msg" id="passwordError">Password must be at least 8 characters.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="confirmPassword">Confirm password</label>
+          <input type="password" id="confirmPassword" placeholder="••••••••" required autocomplete="new-password" aria-describedby="confirmPasswordError" />
+          <span class="error-msg" id="confirmPasswordError">Passwords do not match.</span>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="terms" required aria-describedby="termsError" />
+            I agree to the <a href="#" class="link">Terms of Service</a> and <a href="#" class="link">Privacy Policy</a>
+          </label>
+          <span class="error-msg" id="termsError">You must agree to continue.</span>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Create Account</button>
+      </form>
+
+      <div class="divider">or</div>
+
+      <a href="login.html" class="btn btn-secondary btn-block">Sign in to existing account</a>
+    </div>
+
+    <div class="auth-footer">
+      <span>Already part of a workspace? <a href="login.html">Sign in</a></span>
+    </div>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Orbit Docs · Internal documentation platform</span>
+    <span class="num">v2026.05</span>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const form = document.getElementById('registerForm');
+    const firstNameInput = document.getElementById('firstName');
+    const lastNameInput = document.getElementById('lastName');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const confirmInput = document.getElementById('confirmPassword');
+    const termsInput = document.getElementById('terms');
+
+    function showFieldError(input, errorId, show) {
+      const errorEl = document.getElementById(errorId);
+      if (show) {
+        input.classList.add('input-error');
+        input.setAttribute('aria-invalid', 'true');
+        if (errorEl) errorEl.classList.add('show');
+      } else {
+        input.classList.remove('input-error');
+        input.setAttribute('aria-invalid', 'false');
+        if (errorEl) errorEl.classList.remove('show');
+      }
+    }
+
+    function isValidEmail(str) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
+    }
+
+    function scorePassword(str) {
+      let score = 0;
+      if (str.length >= 8) score++;
+      if (/[0-9]/.test(str)) score++;
+      if (/[^A-Za-z0-9]/.test(str)) score++;
+      if (str.length >= 12 && /[A-Z]/.test(str) && /[a-z]/.test(str)) score++;
+      return Math.min(score, 4);
+    }
+
+    function updateStrength(str) {
+      const segments = document.querySelectorAll('.strength-segment');
+      const score = scorePassword(str);
+      const classes = ['weak', 'fair', 'good', 'strong'];
+      segments.forEach((seg, i) => {
+        seg.className = 'strength-segment';
+        if (i < score && str.length > 0) {
+          seg.classList.add(classes[Math.min(i, classes.length - 1)]);
+        }
+      });
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    passwordInput.addEventListener('input', (e) => updateStrength(e.target.value));
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      let valid = true;
+
+      if (!firstNameInput.value.trim()) {
+        showFieldError(firstNameInput, 'firstNameError', true);
+        valid = false;
+      } else {
+        showFieldError(firstNameInput, 'firstNameError', false);
+      }
+
+      if (!lastNameInput.value.trim()) {
+        showFieldError(lastNameInput, 'lastNameError', true);
+        valid = false;
+      } else {
+        showFieldError(lastNameInput, 'lastNameError', false);
+      }
+
+      const email = emailInput.value.trim();
+      if (!email || !isValidEmail(email)) {
+        showFieldError(emailInput, 'emailError', true);
+        valid = false;
+      } else {
+        showFieldError(emailInput, 'emailError', false);
+      }
+
+      const password = passwordInput.value;
+      if (!password || password.length < 8) {
+        showFieldError(passwordInput, 'passwordError', true);
+        valid = false;
+      } else {
+        showFieldError(passwordInput, 'passwordError', false);
+      }
+
+      if (confirmInput.value !== password || !confirmInput.value) {
+        showFieldError(confirmInput, 'confirmPasswordError', true);
+        valid = false;
+      } else {
+        showFieldError(confirmInput, 'confirmPasswordError', false);
+      }
+
+      if (!termsInput.checked) {
+        showFieldError(termsInput, 'termsError', true);
+        valid = false;
+      } else {
+        showFieldError(termsInput, 'termsError', false);
+      }
+
+      if (!valid) {
+        const firstInvalid = form.querySelector('.input-error');
+        if (firstInvalid) firstInvalid.focus();
+        return;
+      }
+
+      showToast('Account created successfully');
+      // In a real app: redirect to dashboard or onboarding
+      // window.location.href = 'index.html';
+    });
+
+    [firstNameInput, lastNameInput, emailInput, confirmInput, termsInput].forEach(el => {
+      el.addEventListener('input', () => {
+        const errId = el.getAttribute('aria-describedby').split(' ')[0];
+        showFieldError(el, errId, false);
+      });
+    });
+  </script>
+</body>
+</html>
