@@ -19,5 +19,8 @@ export function clearCookies() {
 }
 
 export function setupCookies() {
-  setCookie("is_show_select_order_tooltip_cookie", "true");
+  // Mark that the auth handshake completed successfully.
+  // This is a lightweight client-side flag that components can use
+  // to skip initial loading states when the session is already warm.
+  setCookie("auth.initialized", "true");
 }
