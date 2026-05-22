@@ -25,7 +25,6 @@ export default defineNuxtConfig({
   css: ["@/assets/css/global.css"],
 
   modules: [
-    "@vite-pwa/nuxt",
     "@nuxtjs/tailwindcss",
     "@pinia/nuxt",
     "@pinia-plugin-persistedstate/nuxt",
