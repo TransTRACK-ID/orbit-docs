@@ -3,7 +3,6 @@ import { useField, useForm } from "vee-validate";
 import { object, string } from "yup";
 import { useAuthStore } from "~/store/auth";
 import { usePageStore } from "~/store/page";
-import { toast } from "vue3-toastify";
 
 definePageMeta({
   auth: {
@@ -90,6 +89,7 @@ onMounted(async () => {
         <div
           v-if="isShowNotificationError"
           class="p-3 rounded-[var(--od-radius)] border text-[13px] font-medium"
+          aria-live="polite"
           style="
             background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent);
             color: oklch(50% 0.16 25);
@@ -114,7 +114,7 @@ onMounted(async () => {
             placeholder="you@company.com"
             required
             autocomplete="email"
-            class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
+            class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
             :class="{
               'border-[oklch(55%_0.18_25)]': errors.email,
             }"
@@ -131,6 +131,7 @@ onMounted(async () => {
             id="emailError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
+            aria-live="polite"
           >
             {{ errors.email }}
           </p>
@@ -152,7 +153,7 @@ onMounted(async () => {
               placeholder="••••••••"
               required
               autocomplete="current-password"
-              class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
+              class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.password,
               }"
@@ -183,6 +184,7 @@ onMounted(async () => {
             id="passwordError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
+            aria-live="polite"
           >
             {{ errors.password }}
           </p>

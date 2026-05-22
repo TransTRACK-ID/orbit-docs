@@ -98,7 +98,7 @@ function goToLogin() {
               placeholder="you@company.com"
               required
               autocomplete="email"
-              class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
+              class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.email,
               }"
@@ -110,12 +110,13 @@ function goToLogin() {
               :aria-invalid="errors.email ? 'true' : undefined"
               :aria-describedby="errors.email ? 'emailError' : undefined"
             />
-            <p
-              v-if="errors.email"
-              id="emailError"
-              class="mt-1 text-[12px]"
-              style="color: oklch(50% 0.16 25)"
-            >
+          <p
+            v-if="errors.email"
+            id="emailError"
+            class="mt-1 text-[12px]"
+            style="color: oklch(50% 0.16 25)"
+            aria-live="polite"
+          >
               {{ errors.email }}
             </p>
           </div>

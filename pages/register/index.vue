@@ -115,7 +115,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             placeholder="e.g. Sarah Chen"
             required
             autocomplete="name"
-            class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
+            class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
             :class="{
               'border-[oklch(55%_0.18_25)]': errors.name,
             }"
@@ -132,6 +132,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             id="nameError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
+            aria-live="polite"
           >
             {{ errors.name }}
           </p>
@@ -152,7 +153,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             placeholder="you@company.com"
             required
             autocomplete="email"
-            class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
+            class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
             :class="{
               'border-[oklch(55%_0.18_25)]': errors.email,
             }"
@@ -169,6 +170,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             id="emailError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
+            aria-live="polite"
           >
             {{ errors.email }}
           </p>
@@ -190,7 +192,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
               placeholder="••••••••"
               required
               autocomplete="new-password"
-              class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
+              class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.password,
               }"
@@ -221,6 +223,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             id="passwordError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
+            aria-live="polite"
           >
             {{ errors.password }}
           </p>
@@ -242,7 +245,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
               placeholder="••••••••"
               required
               autocomplete="new-password"
-              class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
+              class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.passwordConfirmation,
               }"
@@ -273,6 +276,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             id="passwordConfirmationError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
+            aria-live="polite"
           >
             {{ errors.passwordConfirmation }}
           </p>
