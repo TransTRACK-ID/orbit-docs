@@ -94,7 +94,7 @@ const onSubmit = handleSubmit(async (values) => {
               placeholder="••••••••"
               required
               autocomplete="new-password"
-              class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
+              class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.password,
               }"
@@ -125,6 +125,7 @@ const onSubmit = handleSubmit(async (values) => {
             id="passwordError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
+            aria-live="polite"
           >
             {{ errors.password }}
           </p>
@@ -146,7 +147,7 @@ const onSubmit = handleSubmit(async (values) => {
               placeholder="••••••••"
               required
               autocomplete="new-password"
-              class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
+              class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.passwordConfirm,
               }"
@@ -177,6 +178,7 @@ const onSubmit = handleSubmit(async (values) => {
             id="passwordConfirmError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
+            aria-live="polite"
           >
             {{ errors.passwordConfirm }}
           </p>
