@@ -2,6 +2,12 @@
 import { usePageStore } from "~/store/page";
 import type { AppItem } from "~/composables/useApps";
 
+definePageMeta({
+  auth: {
+    required: true,
+  },
+});
+
 const $page = usePageStore();
 onBeforeMount(() => {
   $page.setTitle("Apps");
@@ -298,7 +304,7 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
             <td class="num">{{ formatDate(log.createdAt) }}</td>
             <td>{{ log.appName || "—" }}</td>
             <td>{{ log.action }}</td>
-            <td>{{ log.actor }}</td>
+            <td>{{ log.user }}</td>
           </tr>
           <tr v-if="activities.length === 0">
             <td colspan="4" class="text-center text-gray-400 py-4">
