@@ -1,6 +1,6 @@
 import { pool } from "~/server/database";
 import { getDb } from "~/server/database";
-import { apps, appVersions, activityLogs } from "~/server/database/schema";
+import { apps, appVersions, activityLogs, owners } from "~/server/database/schema";
 import { count } from "drizzle-orm";
 
 export default defineNitroPlugin(async () => {
@@ -41,9 +41,30 @@ export default defineNitroPlugin(async () => {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS owners (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT,
+      role TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
   // Seed demo data if apps table is empty
   const db = getDb();
   const appsCount = await db.select({ count: count() }).from(apps);
+  const ownersCount = await db.select({ count: count() }).from(owners);
+
+  if (ownersCount[0]?.count === 0) {
+    await db.insert(owners).values([
+      { id: crypto.randomUUID(), name: "Sarah Chen", email: "sarah.chen@example.com", role: "Engineering Lead" },
+      { id: crypto.randomUUID(), name: "Mike Ross", email: "mike.ross@example.com", role: "Backend Engineer" },
+      { id: crypto.randomUUID(), name: "Jen Park", email: "jen.park@example.com", role: "Product Manager" },
+      { id: crypto.randomUUID(), name: "Tom Lee", email: "tom.lee@example.com", role: "Technical Writer" },
+    ]);
+  }
 
   if (appsCount[0]?.count === 0) {
     const appIds = [
