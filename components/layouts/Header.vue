@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { useAuthStore } from "~/store/auth";
-import { usePageStore } from "~/store/page";
 import type { ElementEvent } from "~/types/element";
+
+const props = defineProps<{
+  title?: string;
+}>();
 
 const $auth = useAuthStore();
 const $router = useRouter();
-const $page = usePageStore();
 const { data } = useAuth();
 
-const emit = defineEmits(["on-click-open-sidebar"]);
-// logout
 let modalLogout: ElementEvent | null = null;
 async function logout() {
   $auth.logout().then(() => {
@@ -22,7 +22,7 @@ async function logout() {
   <GeneralModalConfirmation
     id="modal-logout"
     title="Confirm Logout"
-    subtitle="Are you sure you want to log out? This will end your current session. Press 'Log out' to continue."
+    subtitle="Are you sure you want to log out? This will end your current session."
     confirm-label="Log Out"
     :is-loading="$auth.isLoading"
     @mounted="modalLogout = $event"
@@ -34,57 +34,88 @@ async function logout() {
     </template>
   </GeneralModalConfirmation>
 
-  <div class="w-full flex items-center justify-between">
-    <div class="flex items-center">
-      <!-- burger menu -->
-      <GeneralIconButton
-        class="block md:hidden mr-4"
-        @click="emit('on-click-open-sidebar')"
-      >
-        <template #icon>
-          <IconsMenu />
-        </template>
-      </GeneralIconButton>
-
-      <slot name="header" />
-
-      <h1 v-if="!$slots.header" class="text-2xl font-[600]">
-        {{ $page.$state.title }}
-      </h1>
-    </div>
-
-    <div class="flex items-center space-x-4">
-      <div class="text-right">
-        <p class="text-base text-black font-[600] mb-1">Test Admin</p>
-        <p class="text-sm font-[400] text-gray-500">
-          {{ capitalizeString("admin", "_") }}
-        </p>
-      </div>
-
+  <header class="topbar">
+    <h1>{{ props.title }}</h1>
+    <div class="topbar-actions">
+      <slot name="actions" />
       <GeneralDropdown v-if="data" id="dropdown-profile">
         <template #activator>
-          <general-avatar :src="null" />
+          <button class="profile-btn" aria-label="Open user menu">
+            <general-avatar :src="null" size="28" />
+          </button>
         </template>
-
         <template #content>
-          <ul>
-            <li
-              class="py-2.5 px-4 flex items-center cursor-pointer hover:bg-gray-100"
-              @click="$router.push('/change-password')"
-            >
-              <IconsSettings size="16" class="mr-2 stroke-gray-700" />
-              <p class="text-sm text-gray-700">Change Password</p>
+          <ul class="dropdown-menu">
+            <li class="dropdown-item" @click="$router.push('/change-password')">
+              <IconsSettings size="16" />
+              <span>Change Password</span>
+            </li>
+            <li class="dropdown-item" @click="modalLogout?.show()">
+              <IconsLogout size="16" />
+              <span>Log out</span>
             </li>
           </ul>
-          <div
-            class="py-2.5 px-4 flex items-center cursor-pointer hover:bg-gray-100"
-            @click="modalLogout?.show()"
-          >
-            <IconsLogout size="16" class="mr-2 stroke-gray-700" />
-            <p class="text-sm text-gray-700">Log out</p>
-          </div>
         </template>
       </GeneralDropdown>
     </div>
-  </div>
+  </header>
 </template>
+
+<style scoped>
+.topbar {
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  background: var(--surface, oklch(100% 0 0));
+  border-bottom: 1px solid var(--border, oklch(90% 0.006 250));
+}
+.topbar h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--fg, oklch(20% 0.02 250));
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.profile-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--border, oklch(90% 0.006 250));
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: border-color .15s;
+}
+.profile-btn:hover {
+  border-color: var(--fg, oklch(20% 0.02 250));
+}
+.dropdown-menu {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  min-width: 180px;
+}
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--fg, oklch(20% 0.02 250));
+  cursor: pointer;
+  transition: background .1s;
+}
+.dropdown-item:hover {
+  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
+}
+</style>
