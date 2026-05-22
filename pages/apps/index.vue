@@ -236,9 +236,25 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
             <div class="card-title">{{ app.name }}</div>
             <div class="card-meta">Updated {{ timeAgo(app.updatedAt) }}</div>
           </div>
-          <span class="pill" :class="statusClass[app.status] || 'pill-blue'">
-            {{ statusLabel[app.status] || app.status }}
-          </span>
+          <div class="card-actions">
+            <span class="pill" :class="statusClass[app.status] || 'pill-blue'">
+              {{ statusLabel[app.status] || app.status }}
+            </span>
+            <button
+              class="btn btn-ghost btn-sm action-btn"
+              title="Edit app"
+              @click="openEditModal(app)"
+            >
+              <IconsPencil size="14" />
+            </button>
+            <button
+              class="btn btn-ghost btn-sm action-btn"
+              title="Delete app"
+              @click="confirmDelete(app)"
+            >
+              <IconsTrash size="14" />
+            </button>
+          </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
           <span v-if="app.latestVersion" class="num pill pill-blue">
@@ -250,22 +266,6 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
           </span>
         </div>
         <div class="card-foot">
-          <div class="flex items-center gap-1">
-            <button
-              class="btn btn-ghost btn-sm"
-              title="Edit app"
-              @click="openEditModal(app)"
-            >
-              <IconsPencil size="14" />
-            </button>
-            <button
-              class="btn btn-ghost btn-sm"
-              title="Delete app"
-              @click="confirmDelete(app)"
-            >
-              <IconsTrash size="14" />
-            </button>
-          </div>
           <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm">
             Versions
           </NuxtLink>
@@ -465,7 +465,7 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
           <button type="button" class="btn btn-secondary" @click="appToDelete = null">
             Cancel
           </button>
-          <button type="button" class="btn btn-primary" style="background:oklch(50% 0.16 25);border-color:oklch(50% 0.16 25);" @click="doDelete">
+          <button type="button" class="btn btn-danger" @click="doDelete">
             Delete
           </button>
         </div>
@@ -563,6 +563,7 @@ h2 {
   align-items: start;
   justify-content: space-between;
   margin-bottom: 12px;
+  gap: 12px;
 }
 .card-title {
   font-size: 16px;
@@ -573,6 +574,12 @@ h2 {
   color: var(--muted);
   font-size: 13px;
   margin-top: 4px;
+}
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 .card-foot {
   display: flex;
@@ -714,6 +721,18 @@ h2 {
 .btn-sm {
   padding: 6px 12px;
   font-size: 13px;
+}
+.btn-danger {
+  background: oklch(55% 0.16 25);
+  color: var(--surface);
+  border-color: oklch(55% 0.16 25);
+}
+.btn-danger:hover {
+  background: oklch(50% 0.18 25);
+}
+.action-btn {
+  padding: 4px;
+  border-radius: 6px;
 }
 
 .modal-overlay {
