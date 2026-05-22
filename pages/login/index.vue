@@ -2,6 +2,7 @@
 import { useField, useForm } from "vee-validate";
 import { object, string } from "yup";
 import { useAuthStore } from "~/store/auth";
+import { usePageStore } from "~/store/page";
 import { toast } from "vue3-toastify";
 
 definePageMeta({
@@ -17,6 +18,9 @@ definePageMeta({
 
 const { getSession } = useAuth();
 const $auth = useAuthStore();
+const $page = usePageStore();
+
+$page.setTitle("Sign in");
 
 const isShowPw = ref(false);
 const isShowNotificationError = ref(false);
@@ -109,6 +113,7 @@ onMounted(async () => {
             type="email"
             placeholder="you@company.com"
             required
+            autocomplete="email"
             class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
             :class="{
               'border-[oklch(55%_0.18_25)]': errors.email,
@@ -118,9 +123,12 @@ onMounted(async () => {
                 ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
                 : undefined
             "
+            :aria-invalid="errors.email ? 'true' : undefined"
+            :aria-describedby="errors.email ? 'emailError' : undefined"
           />
           <p
             v-if="errors.email"
+            id="emailError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
           >
@@ -143,6 +151,7 @@ onMounted(async () => {
               :type="isShowPw ? 'text' : 'password'"
               placeholder="••••••••"
               required
+              autocomplete="current-password"
               class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.password,
@@ -152,6 +161,8 @@ onMounted(async () => {
                   ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
                   : undefined
               "
+              :aria-invalid="errors.password ? 'true' : undefined"
+              :aria-describedby="errors.password ? 'passwordError' : undefined"
             />
             <button
               type="button"
@@ -169,6 +180,7 @@ onMounted(async () => {
           </div>
           <p
             v-if="errors.password"
+            id="passwordError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
           >
@@ -190,7 +202,7 @@ onMounted(async () => {
         <button
           type="submit"
           :disabled="$auth.isLoading"
-          class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] disabled:opacity-60 disabled:cursor-not-allowed"
+          class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2"
         >
           <IconsLoading
             v-if="$auth.isLoading"
@@ -221,3 +233,9 @@ onMounted(async () => {
     </footer>
   </AppLayoutsAuth>
 </template>
+
+<style scoped>
+input:focus {
+  box-shadow: 0 0 0 3px var(--od-accent-soft);
+}
+</style>
