@@ -1,0 +1,61 @@
+# ─── Sensitive files ─────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+*.pem
+*.key
+*.cert
+secrets/
+config/secrets*
+
+# ─── Node modules ──────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ─── Build output ──────────────────────────────────────────
+.nuxt/
+.output/
+dist/
+build/
+*.tsbuildinfo
+.vite/
+.vercel
+.netlify
+
+# ─── IDE / Editor ──────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── OS files ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ─── Logs & temp ───────────────────────────────────────────
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.temp
+
+# ─── Testing ───────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ─── Docker ────────────────────────────────────────────────
+docker-compose.override.yml
+
+# ─── Misc ──────────────────────────────────────────────────
+.cache/
+.parcel-cache/
