@@ -23,6 +23,7 @@ $page.setTitle("Sign in");
 
 const isShowPw = ref(false);
 const isShowNotificationError = ref(false);
+const rememberMe = ref(false);
 
 const schema = object({
   email: string()
@@ -55,24 +56,6 @@ onMounted(async () => {
 
 <template>
   <AppLayoutsAuth>
-    <!-- Brand -->
-    <div class="flex items-center justify-center gap-2.5 mb-8">
-      <svg
-        class="w-[22px] h-[22px] text-[var(--od-accent)]"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <path
-          d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-        />
-        <path d="M2 12h20" />
-      </svg>
-      <span class="text-lg font-semibold text-[var(--od-fg)]">Orbit Docs</span>
-    </div>
-
     <!-- Card -->
     <div
       class="bg-[var(--od-surface)] border border-[var(--od-border)] rounded-[var(--od-radius-lg)] p-6"
@@ -190,8 +173,16 @@ onMounted(async () => {
           </p>
         </div>
 
-        <!-- Forgot password -->
-        <div class="flex justify-end">
+        <!-- Remember me + Forgot password -->
+        <div class="flex items-center justify-between">
+          <label class="inline-flex items-center gap-2 text-[13px] text-[var(--od-muted)] cursor-pointer select-none">
+            <input
+              v-model="rememberMe"
+              type="checkbox"
+              class="w-4 h-4 accent-[var(--od-accent)] cursor-pointer"
+            />
+            Remember me
+          </label>
           <NuxtLink
             to="/forgot-password"
             class="text-[13px] text-[var(--od-muted)] hover:text-[var(--od-fg)] hover:underline transition-colors"
@@ -228,11 +219,6 @@ onMounted(async () => {
         </NuxtLink>
       </div>
     </div>
-
-    <!-- Page foot -->
-    <footer class="mt-6 text-center text-[12px] text-[var(--od-muted)]">
-      <span>Orbit Docs · Internal documentation platform</span>
-    </footer>
   </AppLayoutsAuth>
 </template>
 
