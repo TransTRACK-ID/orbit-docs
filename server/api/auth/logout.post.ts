@@ -1,8 +1,16 @@
 import { createError, defineEventHandler, deleteCookie, readBody } from "h3";
+import { resolveApiBaseUrl } from "../../utils/api-url";
 
 export default defineEventHandler(async (event) => {
   try {
-    const baseUrl = useRuntimeConfig().public.baseAPI;
+    const config = useRuntimeConfig();
+    const baseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+
+    // Preview mode: no external API available, return mock response
+    if (baseUrl.includes('127.0.0.1') || baseUrl.includes('localhost')) {
+      deleteCookie(event, "session_token", { path: "/" });
+      return { status: 'success', message: 'Logged out (preview)' };
+    }
 
     const body = await readBody(event);
 

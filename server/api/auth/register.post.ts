@@ -7,6 +7,7 @@ import { useRuntimeConfig } from "#imports";
 import crypto from "crypto";
 import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { $fetch } from "ofetch";
+import { resolveApiBaseUrl } from "../../utils/api-url";
 
 interface RegisterResponse {
   status: string;
@@ -97,13 +98,26 @@ export default defineEventHandler(async (event) => {
     const plainText = JSON.stringify({ name, email, password, passwordConfirmation });
     const encryptedPayload = await encryptAES(plainText, appKey);
 
-    const apiBaseUrl = config.public.baseAPI;
+    const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
     if (!apiBaseUrl) {
       throw createError({
         statusCode: 500,
         statusMessage: "Server Error",
         message: "API base URL not configured",
       });
+    }
+
+    // Preview mode: no external API available, return mock response
+    if (apiBaseUrl.includes('127.0.0.1') || apiBaseUrl.includes('localhost')) {
+      const mockToken = 'preview-mock-token-' + Date.now();
+      setCookie(event, 'session_token', mockToken, { httpOnly: true, path: '/' });
+      return {
+        status: 'success',
+        data: {
+          access_token: mockToken,
+          user: { id: 'preview-user', email: body.email, name: 'Preview User' }
+        }
+      };
     }
 
     const response = await $fetch<RegisterResponse>(

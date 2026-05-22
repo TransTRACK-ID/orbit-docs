@@ -1,6 +1,7 @@
 import { type H3Event, getCookie, getHeader, createError } from "h3";
 import { $fetch } from "ofetch";
 import { useRuntimeConfig } from "#imports";
+import { resolveApiBaseUrl } from "./api-url";
 
 interface SessionUser {
   id: string;
@@ -71,7 +72,7 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
   }
 
   const config = useRuntimeConfig();
-  const apiBaseUrl = config.public.baseAPI;
+  const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
 
   if (!apiBaseUrl) {
     throw createError({
@@ -79,6 +80,15 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
       statusMessage: "Server Error",
       message: "API base URL not configured",
     });
+  }
+
+  // Preview mode: no external API available, return mock user
+  if (apiBaseUrl.includes('127.0.0.1') || apiBaseUrl.includes('localhost')) {
+    return {
+      id: 'preview-user',
+      email: 'preview@example.com',
+      name: 'Preview User',
+    };
   }
 
   try {
