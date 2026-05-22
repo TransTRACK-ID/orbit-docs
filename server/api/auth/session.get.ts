@@ -4,6 +4,7 @@
 import { defineEventHandler, getCookie, getHeader, createError } from 'h3';
 import { $fetch } from 'ofetch';
 import { useRuntimeConfig } from '#imports';
+import { resolveApiBaseUrl } from '../../utils/api-url';
 
 interface SessionResponse {
     status: string;
@@ -60,7 +61,7 @@ export default defineEventHandler(async (event) => {
 
         // Get the API base URL from runtime config
         const config = useRuntimeConfig();
-        const apiBaseUrl = config.public.baseAPI;
+        const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
 
         if (!apiBaseUrl) {
             throw createError({
@@ -68,6 +69,17 @@ export default defineEventHandler(async (event) => {
                 statusMessage: 'Server Error',
                 message: 'API base URL not configured'
             });
+        }
+
+        // Preview mode: no external API available, return mock session
+        if (apiBaseUrl.includes('127.0.0.1') || apiBaseUrl.includes('localhost')) {
+            return {
+                status: 'success',
+                data: {
+                    user: { id: 'preview-user', email: 'preview@example.com', name: 'Preview User' },
+                    companies: [{ id: 'preview-company', name: 'Preview Company' }]
+                }
+            };
         }
 
         // Make the request to the third-party API to validate the session

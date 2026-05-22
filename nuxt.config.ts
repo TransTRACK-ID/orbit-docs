@@ -68,8 +68,12 @@ export default defineNuxtConfig({
   runtimeConfig: {
     appKey: process.env.APP_KEY,
     public: {
-      baseAPI: process.env.API_BASE_URL,
+      // Client-side base URL — should be relative so requests go through the preview proxy
+      baseAPI: process.env.NUXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL,
     },
+    // Server-only base URL — can be absolute (e.g. http://127.0.0.1:port/api/preview/taskId)
+    // so server-side $fetch gets a valid URL instead of crashing on relative paths
+    apiBaseUrl: process.env.API_BASE_URL,
   },
 
   compatibilityDate: "2025-01-31",
