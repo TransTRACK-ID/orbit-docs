@@ -32,6 +32,7 @@ export default defineNuxtConfig({
     "@sidebase/nuxt-auth",
     "nuxt3-leaflet",
     "@nuxt/image",
+    "@nuxt/icon",
     "@nuxt/test-utils/module",
   ],
 
