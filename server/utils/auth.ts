@@ -1,7 +1,7 @@
 import { type H3Event, getCookie, getHeader, createError } from "h3";
 import { $fetch } from "ofetch";
 import { useRuntimeConfig } from "#imports";
-import { resolveApiBaseUrl } from "./api-url";
+import { resolveApiBaseUrl, isPreviewMode } from "./api-url";
 
 interface SessionUser {
   id: string;
@@ -83,7 +83,7 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
   }
 
   // Preview mode: no external API available, return mock user
-  if (apiBaseUrl.includes('127.0.0.1') || apiBaseUrl.includes('localhost')) {
+  if (isPreviewMode(config)) {
     return {
       id: 'preview-user',
       email: 'preview@example.com',

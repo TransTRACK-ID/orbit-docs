@@ -4,7 +4,7 @@
 import { defineEventHandler, getCookie, getHeader, createError } from 'h3';
 import { $fetch } from 'ofetch';
 import { useRuntimeConfig } from '#imports';
-import { resolveApiBaseUrl } from '../../utils/api-url';
+import { resolveApiBaseUrl, isPreviewMode } from '../../utils/api-url';
 
 interface SessionResponse {
     status: string;
@@ -72,7 +72,7 @@ export default defineEventHandler(async (event) => {
         }
 
         // Preview mode: no external API available, return mock session
-        if (apiBaseUrl.includes('127.0.0.1') || apiBaseUrl.includes('localhost')) {
+        if (isPreviewMode(config)) {
             return {
                 status: 'success',
                 data: {

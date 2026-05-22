@@ -7,7 +7,7 @@ import { useRuntimeConfig } from "#imports";
 import crypto from "crypto";
 import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { $fetch } from "ofetch";
-import { resolveApiBaseUrl } from "../../utils/api-url";
+import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
 
 interface RegisterResponse {
   status: string;
@@ -108,7 +108,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Preview mode: no external API available, return mock response
-    if (apiBaseUrl.includes('127.0.0.1') || apiBaseUrl.includes('localhost')) {
+    if (isPreviewMode(config)) {
       const mockToken = 'preview-mock-token-' + Date.now();
       setCookie(event, 'session_token', mockToken, { httpOnly: true, path: '/' });
       return {
