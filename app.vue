@@ -5,7 +5,7 @@ const $page = usePageStore();
 
 const updateHead = (title: string) => {
   useHead({
-    title: title ? `${title} - Fuel Management` : "Fuel Management",
+    title: title ? `${title} - Orbit Docs` : "Orbit Docs",
   });
 };
 
