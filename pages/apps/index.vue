@@ -2,6 +2,12 @@
 import { usePageStore } from "~/store/page";
 import type { AppItem } from "~/composables/useApps";
 
+definePageMeta({
+  auth: {
+    required: true,
+  },
+});
+
 const $page = usePageStore();
 onBeforeMount(() => {
   $page.setTitle("Apps");
@@ -13,8 +19,8 @@ const {
   activities,
   isLoading,
   isCreating,
-  search,
   fetchApps,
+  fetchApp,
   fetchStats,
   fetchActivities,
   createApp,
@@ -22,11 +28,117 @@ const {
   deleteApp,
 } = useApps();
 
+const isDeleting = ref(false);
+
+// Search, filter & sort
+const searchQuery = ref("");
+const statusFilter = ref("");
+const ownerFilter = ref("");
+const sortBy = ref<"updatedAt" | "name" | "status">("updatedAt");
+const sortOrder = ref<"asc" | "desc">("desc");
+const showFilterMenu = ref(false);
+const showSortMenu = ref(false);
+const ownerList = ref<string[]>([]);
+
 onMounted(() => {
   fetchApps();
   fetchStats();
   fetchActivities();
+  fetchOwnerList();
+  document.addEventListener("click", onDocClick);
 });
+onBeforeUnmount(() => {
+  document.removeEventListener("click", onDocClick);
+});
+
+async function fetchOwnerList() {
+  try {
+    const res = await $fetch<{ data: { name: string }[] }>("/api/owners");
+    ownerList.value = res.data.map((o) => o.name).filter(Boolean);
+  } catch {
+    ownerList.value = [];
+  }
+}
+
+const hasActiveFilters = computed(
+  () =>
+    !!searchQuery.value.trim() ||
+    !!statusFilter.value ||
+    !!ownerFilter.value
+);
+
+const activeSortLabel = computed(() => {
+  const labels: Record<string, string> = {
+    "updatedAt-desc": "Recently updated",
+    "updatedAt-asc": "Oldest first",
+    "name-asc": "Name A–Z",
+    "name-desc": "Name Z–A",
+    "status-asc": "Status",
+  };
+  return labels[`${sortBy.value}-${sortOrder.value}`] || "Sort";
+});
+
+const filteredApps = computed(() => {
+  let result = [...apps.value];
+
+  const q = searchQuery.value.trim().toLowerCase();
+  if (q) {
+    result = result.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) ||
+        (a.description && a.description.toLowerCase().includes(q)) ||
+        (a.owner && a.owner.toLowerCase().includes(q)) ||
+        (a.latestVersion?.version &&
+          a.latestVersion.version.toLowerCase().includes(q))
+    );
+  }
+
+  if (statusFilter.value) {
+    result = result.filter((a) => a.status === statusFilter.value);
+  }
+
+  if (ownerFilter.value) {
+    result = result.filter((a) => a.owner === ownerFilter.value);
+  }
+
+  result.sort((a, b) => {
+    let cmp = 0;
+    if (sortBy.value === "name") {
+      cmp = a.name.localeCompare(b.name);
+    } else if (sortBy.value === "updatedAt") {
+      cmp =
+        new Date(a.updatedAt || 0).getTime() -
+        new Date(b.updatedAt || 0).getTime();
+    } else if (sortBy.value === "status") {
+      const order = { active: 0, maintenance: 1, draft: 2 };
+      cmp = (order[a.status] ?? 99) - (order[b.status] ?? 99);
+    }
+    return sortOrder.value === "asc" ? cmp : -cmp;
+  });
+
+  return result;
+});
+
+function clearFilters() {
+  searchQuery.value = "";
+  statusFilter.value = "";
+  ownerFilter.value = "";
+}
+
+function setSort(
+  field: "updatedAt" | "name" | "status",
+  order: "asc" | "desc"
+) {
+  sortBy.value = field;
+  sortOrder.value = order;
+  showSortMenu.value = false;
+}
+
+function onDocClick(e: MouseEvent) {
+  const t = e.target as HTMLElement;
+  if (!t.closest(".filter-dropdown-wrap")) showFilterMenu.value = false;
+  if (!t.closest(".sort-dropdown-wrap")) showSortMenu.value = false;
+}
 
 // Create modal
 const showCreateModal = ref(false);
@@ -81,14 +193,26 @@ const editForm = reactive({
   repoUrl: "",
 });
 const editNameError = ref(false);
+const isEditing = ref(false);
 
-function openEditModal(app: AppItem) {
-  editingApp.value = app;
-  editForm.name = app.name;
-  editForm.description = app.description || "";
-  editForm.owner = app.owner || "";
-  editForm.status = app.status;
-  editForm.repoUrl = app.repoUrl || "";
+async function openEditModal(app: AppItem) {
+  try {
+    const fresh = await fetchApp(app.id);
+    editingApp.value = fresh;
+    editForm.name = fresh.name;
+    editForm.description = fresh.description || "";
+    editForm.owner = fresh.owner || "";
+    editForm.status = fresh.status;
+    editForm.repoUrl = fresh.repoUrl || "";
+  } catch {
+    // Fallback to stale data if fetch fails
+    editingApp.value = app;
+    editForm.name = app.name;
+    editForm.description = app.description || "";
+    editForm.owner = app.owner || "";
+    editForm.status = app.status;
+    editForm.repoUrl = app.repoUrl || "";
+  }
   showEditModal.value = true;
   editNameError.value = false;
 }
@@ -105,15 +229,20 @@ async function submitEdit() {
     return;
   }
   editNameError.value = false;
-  if (!editingApp.value) return;
-  await updateApp(editingApp.value.id, {
-    name: editForm.name.trim(),
-    description: editForm.description,
-    owner: editForm.owner,
-    status: editForm.status,
-    repoUrl: editForm.repoUrl,
-  });
-  closeEditModal();
+  if (!editingApp.value || isEditing.value) return;
+  isEditing.value = true;
+  try {
+    await updateApp(editingApp.value.id, {
+      name: editForm.name.trim(),
+      description: editForm.description,
+      owner: editForm.owner,
+      status: editForm.status,
+      repoUrl: editForm.repoUrl,
+    });
+    closeEditModal();
+  } finally {
+    isEditing.value = false;
+  }
 }
 
 // Delete confirmation
@@ -124,13 +253,14 @@ function confirmDelete(app: AppItem) {
 }
 
 async function doDelete() {
-  if (!appToDelete.value) return;
-  await deleteApp(appToDelete.value.id);
-  appToDelete.value = null;
-}
-
-function onSearch() {
-  fetchApps();
+  if (!appToDelete.value || isDeleting.value) return;
+  isDeleting.value = true;
+  try {
+    await deleteApp(appToDelete.value.id);
+  } finally {
+    appToDelete.value = null;
+    isDeleting.value = false;
+  }
 }
 
 function formatDate(dateStr: string | null) {
@@ -164,7 +294,6 @@ const statusLabel: Record<string, string> = {
   maintenance: "Maintenance",
 };
 
-const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
 </script>
 
 <template>
@@ -174,11 +303,10 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
       <h1>Apps</h1>
       <div style="display:flex;align-items:center;gap:16px;">
         <input
-          v-model="search"
+          v-model="searchQuery"
           class="search"
           placeholder="Search apps, versions, docs…"
           aria-label="Search apps, versions, and docs"
-          @input="onSearch"
         />
         <button type="button" class="btn btn-primary" @click="openCreateModal">
           + New App
@@ -208,10 +336,135 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
 
     <!-- App cards -->
     <div class="row-between" style="margin-bottom:20px;">
-      <h2>Your apps</h2>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <h2>Your apps</h2>
+        <span v-if="hasActiveFilters" class="result-count">
+          {{ filteredApps.length }} result{{ filteredApps.length === 1 ? '' : 's' }}
+        </span>
+      </div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-ghost">Filter</button>
-        <button class="btn btn-ghost">Sort</button>
+        <div class="filter-dropdown-wrap" style="position:relative;">
+          <button
+            class="btn btn-ghost"
+            :class="{ active: hasActiveFilters }"
+            @click.stop="showFilterMenu = !showFilterMenu"
+          >
+            Filter
+            <span v-if="hasActiveFilters" class="filter-dot" />
+          </button>
+          <div v-if="showFilterMenu" class="dropdown-menu">
+            <div class="dropdown-header">Status</div>
+            <div
+              class="dropdown-item"
+              :class="{ active: !statusFilter }"
+              @click="statusFilter = ''"
+            >
+              <span v-if="!statusFilter" class="check">✓</span>
+              <span v-else class="check-placeholder" />
+              All statuses
+            </div>
+            <div
+              v-for="s in ['active','draft','maintenance']"
+              :key="s"
+              class="dropdown-item"
+              :class="{ active: statusFilter === s }"
+              @click="statusFilter = s"
+            >
+              <span v-if="statusFilter === s" class="check">✓</span>
+              <span v-else class="check-placeholder" />
+              {{ statusLabel[s] }}
+            </div>
+
+            <div class="dropdown-divider" />
+            <div class="dropdown-header">Owner</div>
+            <div
+              class="dropdown-item"
+              :class="{ active: !ownerFilter }"
+              @click="ownerFilter = ''"
+            >
+              <span v-if="!ownerFilter" class="check">✓</span>
+              <span v-else class="check-placeholder" />
+              All owners
+            </div>
+            <div
+              v-for="o in ownerList"
+              :key="o"
+              class="dropdown-item"
+              :class="{ active: ownerFilter === o }"
+              @click="ownerFilter = o"
+            >
+              <span v-if="ownerFilter === o" class="check">✓</span>
+              <span v-else class="check-placeholder" />
+              {{ o }}
+            </div>
+
+            <div class="dropdown-divider" />
+            <div
+              class="dropdown-item"
+              style="color:var(--accent);justify-content:center;"
+              @click="clearFilters"
+            >
+              Clear all filters
+            </div>
+          </div>
+        </div>
+
+        <div class="sort-dropdown-wrap" style="position:relative;">
+          <button
+            class="btn btn-ghost"
+            :class="{ active: sortBy !== 'updatedAt' || sortOrder !== 'desc' }"
+            @click.stop="showSortMenu = !showSortMenu"
+          >
+            {{ activeSortLabel }}
+          </button>
+          <div v-if="showSortMenu" class="dropdown-menu">
+            <div
+              class="dropdown-item"
+              :class="{ active: sortBy === 'updatedAt' && sortOrder === 'desc' }"
+              @click="setSort('updatedAt', 'desc')"
+            >
+              <span v-if="sortBy === 'updatedAt' && sortOrder === 'desc'" class="check">✓</span>
+              <span v-else class="check-placeholder" />
+              Recently updated
+            </div>
+            <div
+              class="dropdown-item"
+              :class="{ active: sortBy === 'updatedAt' && sortOrder === 'asc' }"
+              @click="setSort('updatedAt', 'asc')"
+            >
+              <span v-if="sortBy === 'updatedAt' && sortOrder === 'asc'" class="check">✓</span>
+              <span v-else class="check-placeholder" />
+              Oldest first
+            </div>
+            <div
+              class="dropdown-item"
+              :class="{ active: sortBy === 'name' && sortOrder === 'asc' }"
+              @click="setSort('name', 'asc')"
+            >
+              <span v-if="sortBy === 'name' && sortOrder === 'asc'" class="check">✓</span>
+              <span v-else class="check-placeholder" />
+              Name A–Z
+            </div>
+            <div
+              class="dropdown-item"
+              :class="{ active: sortBy === 'name' && sortOrder === 'desc' }"
+              @click="setSort('name', 'desc')"
+            >
+              <span v-if="sortBy === 'name' && sortOrder === 'desc'" class="check">✓</span>
+              <span v-else class="check-placeholder" />
+              Name Z–A
+            </div>
+            <div
+              class="dropdown-item"
+              :class="{ active: sortBy === 'status' }"
+              @click="setSort('status', 'asc')"
+            >
+              <span v-if="sortBy === 'status'" class="check">✓</span>
+              <span v-else class="check-placeholder" />
+              Status
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -225,12 +478,15 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
       </div>
     </div>
 
-    <div v-else-if="apps.length === 0" class="empty-state">
-      <p>No apps found.</p>
+    <div v-else-if="filteredApps.length === 0" class="empty-state">
+      <p>No apps match your filters.</p>
+      <button v-if="hasActiveFilters" class="btn btn-ghost" @click="clearFilters">
+        Clear filters
+      </button>
     </div>
 
     <div v-else class="grid-4">
-      <div v-for="app in apps" :key="app.id" class="card">
+      <div v-for="app in filteredApps" :key="app.id" class="card">
         <div class="card-head">
           <div>
             <div class="card-title">{{ app.name }}</div>
@@ -298,7 +554,7 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
             <td class="num">{{ formatDate(log.createdAt) }}</td>
             <td>{{ log.appName || "—" }}</td>
             <td>{{ log.action }}</td>
-            <td>{{ log.user }}</td>
+            <td>{{ log.actor }}</td>
           </tr>
           <tr v-if="activities.length === 0">
             <td colspan="4" class="text-center text-gray-400 py-4">
@@ -345,10 +601,7 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
             <div class="form-row">
               <div class="form-group">
                 <label for="appOwner">Owner</label>
-                <select id="appOwner" v-model="createForm.owner">
-                  <option value="">Select owner…</option>
-                  <option v-for="o in owners" :key="o" :value="o">{{ o }}</option>
-                </select>
+                <AppOwnerSelect id="appOwner" v-model="createForm.owner" />
               </div>
               <div class="form-group">
                 <label for="appStatus">Initial Status</label>
@@ -414,10 +667,7 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
             <div class="form-row">
               <div class="form-group">
                 <label for="editOwner">Owner</label>
-                <select id="editOwner" v-model="editForm.owner">
-                  <option value="">Select owner…</option>
-                  <option v-for="o in owners" :key="o" :value="o">{{ o }}</option>
-                </select>
+                <AppOwnerSelect id="editOwner" v-model="editForm.owner" />
               </div>
               <div class="form-group">
                 <label for="editStatus">Status</label>
@@ -439,8 +689,9 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
             <button type="button" class="btn btn-secondary" @click="closeEditModal">
               Cancel
             </button>
-            <button type="submit" class="btn btn-primary">
-              Save Changes
+            <button type="submit" class="btn btn-primary" :disabled="isEditing">
+              <span v-if="isEditing">Saving…</span>
+              <span v-else>Save Changes</span>
             </button>
           </div>
         </form>
@@ -465,8 +716,9 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
           <button type="button" class="btn btn-secondary" @click="appToDelete = null">
             Cancel
           </button>
-          <button type="button" class="btn btn-danger" @click="doDelete">
-            Delete
+          <button type="button" class="btn btn-danger" :disabled="isDeleting" @click="doDelete">
+            <span v-if="isDeleting">Deleting…</span>
+            <span v-else>Delete</span>
           </button>
         </div>
       </div>
@@ -860,6 +1112,75 @@ h2 {
   gap: 10px;
   padding: 16px 24px;
   border-top: 1px solid var(--border);
+}
+
+.result-count {
+  font-size: 13px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px color-mix(in oklch, var(--fg) 10%, transparent);
+  min-width: 200px;
+  padding: 6px 0;
+  z-index: 50;
+}
+.dropdown-header {
+  padding: 6px 16px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+}
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  font-size: 14px;
+  color: var(--fg);
+  cursor: pointer;
+  transition: background .1s;
+  user-select: none;
+}
+.dropdown-item:hover {
+  background: var(--fg-soft);
+}
+.dropdown-item.active {
+  color: var(--accent);
+  font-weight: 500;
+}
+.check {
+  width: 16px;
+  text-align: center;
+  font-size: 13px;
+}
+.check-placeholder {
+  width: 16px;
+  display: inline-block;
+}
+.dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0;
+}
+.btn-ghost.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.filter-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
 }
 
 @media (prefers-reduced-motion: reduce) {

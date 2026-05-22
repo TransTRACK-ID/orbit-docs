@@ -1,9 +1,18 @@
 <script setup lang="ts">
 import { useField, useForm } from "vee-validate";
 import { object, string, ref as yupRef } from "yup";
+import { usePageStore } from "~/store/page";
+import { toast } from "vue3-toastify";
+
+const $page = usePageStore();
+const router = useRouter();
+
+$page.setTitle("Create new password");
 
 const isShowPw = ref(false);
 const isShowPwConfirm = ref(false);
+const isLoading = ref(false);
+const isSuccess = ref(false);
 
 const schema = object({
   password: string()
@@ -28,75 +37,207 @@ const { handleSubmit, errors } = useForm({
 const { value: password } = useField<string>("password");
 const { value: passwordConfirm } = useField<string>("passwordConfirm");
 
-const onSubmit = handleSubmit((values) => {
-  // TODO: INTEGRATION FORGOT PASSWORD
-  console.log(values);
+const onSubmit = handleSubmit(async (values) => {
+  isLoading.value = true;
+  try {
+    // TODO: INTEGRATION FORGOT PASSWORD
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    console.log(values);
+    isSuccess.value = true;
+    toast.success("Password reset successfully", {
+      toastClassName: "toastify-success",
+    });
+  } catch {
+    toast.error("Failed to reset password. Please try again.", {
+      toastClassName: "toastify-error",
+    });
+  } finally {
+    isLoading.value = false;
+  }
 });
+
+function goToLogin() {
+  router.push("/login");
+}
 </script>
 
 <template>
   <AppLayoutsAuth>
-    <div class="w-full max-w-[500px] flex flex-col gap-y-5 mt-5">
-      <div class="absolute top-[130px] z-10">
-        <h2 class="text-[44px] font-bold">Create New Password</h2>
-      </div>
-      <form @submit.prevent="onSubmit" class="mt-12 space-y-6">
-        <span class="text-sm text-gray-700">
-          Fill with new password for your reason security
-        </span>
-
-        <GeneralTextInput
-          id="inputNewPass"
-          v-model="password"
-          :type="isShowPw ? 'text' : 'password'"
-          label="New Password"
-          placeholder="New Password"
-          required
-        >
-          <template #suffix>
-            <div class="cursor-pointer" @click.stop="isShowPw = !isShowPw">
-              <IconsEye v-if="isShowPw" size="20" class="stroke-gray-700" />
-              <IconsEyeOff v-else size="20" class="stroke-gray-700" />
-            </div>
-          </template>
-        </GeneralTextInput>
-        <p class="text-red-500 text-sm" v-if="errors.password">
-          {{ errors.password }}
+    <!-- Card -->
+    <div
+      class="bg-[var(--od-surface)] border border-[var(--od-border)] rounded-[var(--od-radius-lg)] p-6"
+    >
+      <template v-if="!isSuccess">
+        <h1 class="text-[18px] font-semibold text-[var(--od-fg)] mb-1">
+          Create new password
+        </h1>
+        <p class="text-[14px] text-[var(--od-muted)] mb-6">
+          Your new password must be at least 8 characters and include lowercase, uppercase, number, and special characters.
         </p>
 
-        <GeneralTextInput
-          id="inputNewPassConfirm"
-          v-model="passwordConfirm"
-          :type="isShowPwConfirm ? 'text' : 'password'"
-          label="New Password Confirm"
-          placeholder="New Password Confirm"
-          required
-        >
-          <template #suffix>
-            <div
-              class="cursor-pointer"
-              @click.stop="isShowPwConfirm = !isShowPwConfirm"
+        <form @submit.prevent="onSubmit" class="space-y-4">
+          <!-- New Password -->
+          <div>
+            <label
+              for="inputNewPass"
+              class="block text-[13px] font-medium text-[var(--od-fg)] mb-1.5"
             >
-              <IconsEye
-                v-if="isShowPwConfirm"
-                size="20"
-                class="stroke-gray-700"
+              New password
+            </label>
+            <div class="relative">
+              <input
+                id="inputNewPass"
+                v-model="password"
+                :type="isShowPw ? 'text' : 'password'"
+                placeholder="••••••••"
+                required
+                autocomplete="new-password"
+                class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
+                :class="{
+                'border-[var(--od-error)]': errors.password,
+              }"
+              :style="
+                errors.password
+                  ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
+                  : undefined
+              "
+                :aria-invalid="errors.password ? 'true' : undefined"
+                :aria-describedby="errors.password ? 'passwordError' : undefined"
               />
-              <IconsEyeOff v-else size="20" class="stroke-gray-700" />
+              <button
+                type="button"
+                tabindex="-1"
+                class="absolute inset-y-0 right-0 flex items-center justify-center w-10 text-[var(--od-muted)] hover:text-[var(--od-fg)] transition-colors"
+                @click="isShowPw = !isShowPw"
+              >
+                <IconsEye
+                  v-if="isShowPw"
+                  size="18"
+                  class="text-[var(--od-muted)]"
+                />
+                <IconsEyeOff v-else size="18" class="text-[var(--od-muted)]" />
+              </button>
             </div>
-          </template>
-        </GeneralTextInput>
-        <p class="text-red-500 text-sm" v-if="errors.passwordConfirm">
-          {{ errors.passwordConfirm }}
-        </p>
+            <p
+              v-if="errors.password"
+              id="passwordError"
+              class="mt-1 text-[12px]"
+            style="color: var(--od-error-text)"
+            aria-live="polite"
+          >
+            {{ errors.password }}
+            </p>
+          </div>
 
-        <GeneralButton
-          type="submit"
-          label="Create New Password"
-          variant="primary"
-          class="w-[210px] h-12"
-        />
-      </form>
+          <!-- Confirm Password -->
+          <div>
+            <label
+              for="inputNewPassConfirm"
+              class="block text-[13px] font-medium text-[var(--od-fg)] mb-1.5"
+            >
+              Confirm password
+            </label>
+            <div class="relative">
+              <input
+                id="inputNewPassConfirm"
+                v-model="passwordConfirm"
+                :type="isShowPwConfirm ? 'text' : 'password'"
+                placeholder="••••••••"
+                required
+                autocomplete="new-password"
+                class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
+                :class="{
+                'border-[var(--od-error)]': errors.passwordConfirm,
+              }"
+              :style="
+                errors.passwordConfirm
+                  ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
+                  : undefined
+              "
+                :aria-invalid="errors.passwordConfirm ? 'true' : undefined"
+                :aria-describedby="errors.passwordConfirm ? 'passwordConfirmError' : undefined"
+              />
+              <button
+                type="button"
+                tabindex="-1"
+                class="absolute inset-y-0 right-0 flex items-center justify-center w-10 text-[var(--od-muted)] hover:text-[var(--od-fg)] transition-colors"
+                @click="isShowPwConfirm = !isShowPwConfirm"
+              >
+                <IconsEye
+                  v-if="isShowPwConfirm"
+                  size="18"
+                  class="text-[var(--od-muted)]"
+                />
+                <IconsEyeOff v-else size="18" class="text-[var(--od-muted)]" />
+              </button>
+            </div>
+            <p
+              v-if="errors.passwordConfirm"
+              id="passwordConfirmError"
+              class="mt-1 text-[12px]"
+            style="color: var(--od-error-text)"
+            aria-live="polite"
+          >
+            {{ errors.passwordConfirm }}
+            </p>
+          </div>
+
+          <!-- Submit -->
+          <button
+            type="submit"
+            :disabled="isLoading"
+            class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2"
+          >
+            <IconsLoading
+              v-if="isLoading"
+              size="18"
+              class="text-[var(--od-surface)] fill-[var(--od-surface)]"
+            />
+            <span v-else>Reset password</span>
+          </button>
+        </form>
+      </template>
+
+      <template v-else>
+        <div class="text-center">
+          <div
+            class="w-12 h-12 mx-auto mb-4 rounded-full flex items-center justify-center"
+            style="background: var(--od-success-soft)"
+          >
+            <svg
+              class="w-6 h-6"
+              style="color: var(--od-success-text)"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          </div>
+
+          <h1 class="text-[18px] font-semibold text-[var(--od-fg)] mb-2">
+            Password updated
+          </h1>
+          <p class="text-[14px] text-[var(--od-muted)] mb-6">
+            Your password has been reset successfully. You can now sign in with your new password.
+          </p>
+
+          <button
+            type="button"
+            class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2"
+            @click="goToLogin"
+          >
+            Sign in
+          </button>
+        </div>
+      </template>
     </div>
   </AppLayoutsAuth>
 </template>
+
+<style scoped>
+input:focus {
+  box-shadow: 0 0 0 3px var(--od-accent-soft);
+}
+</style>

@@ -25,13 +25,13 @@ export default defineNuxtConfig({
   css: ["@/assets/css/global.css"],
 
   modules: [
-    "@vite-pwa/nuxt",
     "@nuxtjs/tailwindcss",
     "@pinia/nuxt",
     "@pinia-plugin-persistedstate/nuxt",
     "@sidebase/nuxt-auth",
     "nuxt3-leaflet",
     "@nuxt/image",
+    "@nuxt/icon",
     "@nuxt/test-utils/module",
   ],
 
@@ -46,11 +46,11 @@ export default defineNuxtConfig({
           method: "post",
         },
         signOut: {
-          path: "/signOut",
+          path: "/logout",
           method: "post",
         },
         getSession: {
-          path: "/getSession",
+          path: "/session",
           method: "get",
         },
       },
@@ -68,16 +68,25 @@ export default defineNuxtConfig({
   runtimeConfig: {
     appKey: process.env.APP_KEY,
     public: {
-      baseAPI: process.env.API_BASE_URL,
+      // Client-side base URL — should be relative so requests go through the preview proxy
+      baseAPI: process.env.NUXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL,
     },
+    // Server-only base URL — can be absolute (e.g. http://127.0.0.1:port/api/preview/taskId)
+    // so server-side $fetch gets a valid URL instead of crashing on relative paths
+    apiBaseUrl: process.env.API_BASE_URL,
+    isPreview: process.env.ORBIT_PREVIEW === 'true',
   },
 
   compatibilityDate: "2025-01-31",
 
   vite: {
     server: {
+      hmr: {
+        protocol: "ws",
+      },
       watch: {
-        ignored: ["**/node_modules/**", "**/.git/**"],
+        usePolling: true,
+        interval: 1000,
       },
     },
   },

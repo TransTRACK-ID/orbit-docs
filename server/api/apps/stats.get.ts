@@ -1,9 +1,11 @@
 import { defineEventHandler } from "h3";
 import { getDb } from "~/server/database";
 import { apps, appVersions } from "~/server/database/schema";
-import { eq, sql, count } from "drizzle-orm";
+import { eq, count } from "drizzle-orm";
+import { requireAuth } from "~/server/utils/auth";
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  await requireAuth(event);
   const db = getDb();
 
   const activeAppsResult = await db

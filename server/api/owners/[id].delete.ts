@@ -1,11 +1,11 @@
 import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { apps, appVersions, activityLogs } from "~/server/database/schema";
+import { owners } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
-import { requireAuth, getActorName } from "~/server/utils/auth";
+import { requireAuth } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
-  const user = await requireAuth(event);
+  await requireAuth(event);
   const db = getDb();
   const id = getRouterParam(event, "id");
 
@@ -13,14 +13,14 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage: "Bad Request",
-      message: "App ID is required",
+      message: "Owner ID is required",
     });
   }
 
   const existing = await db
     .select()
-    .from(apps)
-    .where(eq(apps.id, id))
+    .from(owners)
+    .where(eq(owners.id, id))
     .limit(1)
     .then((rows) => rows[0]);
 
@@ -28,20 +28,11 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 404,
       statusMessage: "Not Found",
-      message: "App not found",
+      message: "Owner not found",
     });
   }
 
-  const actor = getActorName(user);
-  await db.insert(activityLogs).values({
-    appId: existing.id,
-    appName: existing.name,
-    action: "App deleted",
-    actor,
-  });
-
-  await db.delete(appVersions).where(eq(appVersions.appId, id));
-  await db.delete(apps).where(eq(apps.id, id));
+  await db.delete(owners).where(eq(owners.id, id));
 
   return { data: { id, deleted: true } };
 });
