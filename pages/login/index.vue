@@ -74,9 +74,9 @@ onMounted(async () => {
           class="p-3 rounded-[var(--od-radius)] border text-[13px] font-medium"
           aria-live="polite"
           style="
-            background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent);
-            color: oklch(50% 0.16 25);
-            border-color: oklch(55% 0.18 25);
+            background: var(--od-error-bg);
+            color: var(--od-error-text);
+            border-color: var(--od-error);
           "
         >
           Invalid email or password. Please try again.
@@ -98,14 +98,14 @@ onMounted(async () => {
             required
             autocomplete="email"
             class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
-            :class="{
-              'border-[oklch(55%_0.18_25)]': errors.email,
-            }"
-            :style="
-              errors.email
-                ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
-                : undefined
-            "
+              :class="{
+                'border-[var(--od-error)]': errors.email,
+              }"
+              :style="
+                errors.email
+                  ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
+                  : undefined
+              "
             :aria-invalid="errors.email ? 'true' : undefined"
             :aria-describedby="errors.email ? 'emailError' : undefined"
           />
@@ -113,7 +113,7 @@ onMounted(async () => {
             v-if="errors.email"
             id="emailError"
             class="mt-1 text-[12px]"
-            style="color: oklch(50% 0.16 25)"
+            style="color: var(--od-error-text)"
             aria-live="polite"
           >
             {{ errors.email }}
@@ -138,11 +138,11 @@ onMounted(async () => {
               autocomplete="current-password"
               class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
-                'border-[oklch(55%_0.18_25)]': errors.password,
+                'border-[var(--od-error)]': errors.password,
               }"
               :style="
                 errors.password
-                  ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
+                  ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
                   : undefined
               "
               :aria-invalid="errors.password ? 'true' : undefined"
@@ -166,7 +166,7 @@ onMounted(async () => {
             v-if="errors.password"
             id="passwordError"
             class="mt-1 text-[12px]"
-            style="color: oklch(50% 0.16 25)"
+            style="color: var(--od-error-text)"
             aria-live="polite"
           >
             {{ errors.password }}

@@ -94,13 +94,13 @@ function goToLogin() {
                 autocomplete="new-password"
                 class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
                 :class="{
-                  'border-[oklch(55%_0.18_25)]': errors.password,
-                }"
-                :style="
-                  errors.password
-                    ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
-                    : undefined
-                "
+                'border-[var(--od-error)]': errors.password,
+              }"
+              :style="
+                errors.password
+                  ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
+                  : undefined
+              "
                 :aria-invalid="errors.password ? 'true' : undefined"
                 :aria-describedby="errors.password ? 'passwordError' : undefined"
               />
@@ -122,10 +122,10 @@ function goToLogin() {
               v-if="errors.password"
               id="passwordError"
               class="mt-1 text-[12px]"
-              style="color: oklch(50% 0.16 25)"
-              aria-live="polite"
-            >
-              {{ errors.password }}
+            style="color: var(--od-error-text)"
+            aria-live="polite"
+          >
+            {{ errors.password }}
             </p>
           </div>
 
@@ -147,13 +147,13 @@ function goToLogin() {
                 autocomplete="new-password"
                 class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
                 :class="{
-                  'border-[oklch(55%_0.18_25)]': errors.passwordConfirm,
-                }"
-                :style="
-                  errors.passwordConfirm
-                    ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
-                    : undefined
-                "
+                'border-[var(--od-error)]': errors.passwordConfirm,
+              }"
+              :style="
+                errors.passwordConfirm
+                  ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
+                  : undefined
+              "
                 :aria-invalid="errors.passwordConfirm ? 'true' : undefined"
                 :aria-describedby="errors.passwordConfirm ? 'passwordConfirmError' : undefined"
               />
@@ -175,10 +175,10 @@ function goToLogin() {
               v-if="errors.passwordConfirm"
               id="passwordConfirmError"
               class="mt-1 text-[12px]"
-              style="color: oklch(50% 0.16 25)"
-              aria-live="polite"
-            >
-              {{ errors.passwordConfirm }}
+            style="color: var(--od-error-text)"
+            aria-live="polite"
+          >
+            {{ errors.passwordConfirm }}
             </p>
           </div>
 
@@ -202,11 +202,11 @@ function goToLogin() {
         <div class="text-center">
           <div
             class="w-12 h-12 mx-auto mb-4 rounded-full flex items-center justify-center"
-            style="background: color-mix(in oklch, oklch(60% 0.18 145) 10%, transparent)"
+            style="background: var(--od-success-soft)"
           >
             <svg
               class="w-6 h-6"
-              style="color: oklch(50% 0.14 145)"
+              style="color: var(--od-success-text)"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"

@@ -6,31 +6,37 @@
   <title>Orbit Docs · Sign In</title>
   <style>
     :root {
-      --bg:      oklch(98% 0.004 250);
-      --surface: oklch(100% 0 0);
-      --fg:      oklch(20% 0.02 250);
-      --muted:   oklch(55% 0.015 250);
-      --border:  oklch(90% 0.006 250);
-      --accent:  oklch(55% 0.16 25);
-      --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
-      --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
-      --font-display: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
-      --font-body:    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
-      --font-mono:    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
-      --fs-h2: 20px;
-      --fs-body: 14px;
-      --fs-meta: 12px;
-      --gap-sm: 12px;
-      --gap-md: 16px;
-      --gap-lg: 24px;
-      --radius: 8px;
-      --radius-lg: 12px;
+      --od-bg:      oklch(98% 0.004 250);
+      --od-surface: oklch(100% 0 0);
+      --od-fg:      oklch(20% 0.02 250);
+      --od-muted:   oklch(55% 0.015 250);
+      --od-border:  oklch(90% 0.006 250);
+      --od-accent:  oklch(55% 0.16 25);
+      --od-accent-soft: color-mix(in oklch, var(--od-accent) 12%, transparent);
+      --od-fg-soft:     color-mix(in oklch, var(--od-fg) 6%, transparent);
+      --od-error:       oklch(55% 0.18 25);
+      --od-error-text:  oklch(50% 0.16 25);
+      --od-error-soft:  color-mix(in oklch, var(--od-error) 20%, transparent);
+      --od-error-bg:    color-mix(in oklch, var(--od-error) 8%, transparent);
+      --od-success:     oklch(60% 0.18 145);
+      --od-success-text: oklch(50% 0.14 145);
+      --od-font-display: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --od-font-body:    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --od-font-mono:    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+      --od-fs-h2: 20px;
+      --od-fs-body: 14px;
+      --od-fs-meta: 12px;
+      --od-gap-sm: 12px;
+      --od-gap-md: 16px;
+      --od-gap-lg: 24px;
+      --od-radius: 8px;
+      --od-radius-lg: 12px;
     }
     *, *::before, *::after { box-sizing: border-box; }
     html { -webkit-text-size-adjust: 100%; }
     body {
-      margin: 0; background: var(--bg); color: var(--fg);
-      font-family: var(--font-body); font-size: var(--fs-body);
+      margin: 0; background: var(--od-bg); color: var(--od-fg);
+      font-family: var(--od-font-body); font-size: var(--od-fs-body);
       line-height: 1.5; text-rendering: optimizeLegibility;
       -webkit-font-smoothing: antialiased;
     }
@@ -42,32 +48,32 @@
     .auth-shell {
       display: flex; flex-direction: column;
       align-items: center; justify-content: center;
-      min-height: 100vh; padding: var(--gap-lg);
+      min-height: 100vh; padding: var(--od-gap-lg);
     }
     .auth-brand {
       display: flex; align-items: center; gap: 10px;
-      margin-bottom: var(--gap-lg);
-      font-family: var(--font-display); font-size: 22px; font-weight: 600;
+      margin-bottom: var(--od-gap-lg);
+      font-family: var(--od-font-display); font-size: 22px; font-weight: 600;
     }
-    .auth-brand svg { width: 26px; height: 26px; color: var(--accent); flex-shrink: 0; }
+    .auth-brand svg { width: 26px; height: 26px; color: var(--od-accent); flex-shrink: 0; }
 
     /* ─── card ──────────────────────────────────────────────────── */
     .auth-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius-lg);
+      background: var(--od-surface); border: 1px solid var(--od-border);
+      border-radius: var(--od-radius-lg);
       width: 100%; max-width: 400px;
-      padding: var(--gap-lg);
+      padding: var(--od-gap-lg);
     }
     .auth-card h2 {
-      font-size: var(--fs-h2); margin-bottom: var(--gap-md);
+      font-size: var(--od-fs-h2); margin-bottom: var(--od-gap-md);
     }
     .auth-card .subtitle {
-      color: var(--muted); font-size: var(--fs-body);
-      margin-bottom: var(--gap-lg);
+      color: var(--od-muted); font-size: var(--od-fs-body);
+      margin-bottom: var(--od-gap-lg);
     }
 
     /* ─── form ──────────────────────────────────────────────────── */
-    .form-group { margin-bottom: var(--gap-md); }
+    .form-group { margin-bottom: var(--od-gap-md); }
     .form-group label {
       display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px;
     }
@@ -75,91 +81,91 @@
     .form-group input[type="password"],
     .form-group input[type="text"] {
       width: 100%; padding: 10px 12px;
-      border: 1px solid var(--border); border-radius: var(--radius);
-      background: var(--bg); font: inherit; font-size: 14px; color: var(--fg);
+      border: 1px solid var(--od-border); border-radius: var(--od-radius);
+      background: var(--od-bg); font: inherit; font-size: 14px; color: var(--od-fg);
       transition: border-color .15s, box-shadow .15s;
     }
     .form-group input:focus {
-      outline: none; border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-soft);
+      outline: none; border-color: var(--od-accent);
+      box-shadow: 0 0 0 3px var(--od-accent-soft);
     }
     .input-error {
-      border-color: oklch(55% 0.18 25) !important;
-      box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
+      border-color: var(--od-error) !important;
+      box-shadow: 0 0 0 3px var(--od-error-soft) !important;
     }
     .error-msg {
-      display: none; color: oklch(50% 0.16 25); font-size: 12px; margin-top: 4px;
+      display: none; color: var(--od-error-text); font-size: 12px; margin-top: 4px;
     }
     .error-msg.show { display: block; }
 
     .form-row-between {
       display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: var(--gap-lg);
+      margin-bottom: var(--od-gap-lg);
     }
     .checkbox-label {
       display: inline-flex; align-items: center; gap: 8px;
-      font-size: 13px; color: var(--muted); cursor: pointer;
+      font-size: 13px; color: var(--od-muted); cursor: pointer;
     }
     .checkbox-label input[type="checkbox"] {
-      width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer;
+      width: 16px; height: 16px; accent-color: var(--od-accent); cursor: pointer;
     }
-    .link { color: var(--accent); font-weight: 500; font-size: 13px; }
+    .link { color: var(--od-accent); font-weight: 500; font-size: 13px; }
     .link:hover { text-decoration: underline; }
 
     /* ─── buttons ─────────────────────────────────────────────────── */
     .btn {
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-      padding: 10px 16px; border-radius: var(--radius);
+      padding: 10px 16px; border-radius: var(--od-radius);
       border: 1px solid transparent; font-size: 14px; font-weight: 500;
       transition: background .15s cubic-bezier(.4,0,.2,1), border-color .15s cubic-bezier(.4,0,.2,1);
     }
     .btn-block { width: 100%; }
-    .btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
-    .btn-primary:hover { background: color-mix(in oklch, var(--accent) 88%, black); }
-    .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
-    .btn-secondary:hover { border-color: var(--fg); }
+    .btn-primary { background: var(--od-accent); color: var(--od-surface); border-color: var(--od-accent); }
+    .btn-primary:hover { background: color-mix(in oklch, var(--od-accent) 88%, black); }
+    .btn-secondary { background: transparent; color: var(--od-fg); border-color: var(--od-border); }
+    .btn-secondary:hover { border-color: var(--od-fg); }
 
     /* ─── focus ─────────────────────────────────────────────────── */
     .btn:focus-visible,
     .form-group input:focus-visible,
     .checkbox-label:focus-visible,
     .link:focus-visible {
-      outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius);
+      outline: 2px solid var(--od-accent); outline-offset: 2px; border-radius: var(--od-radius);
     }
 
     /* ─── divider ───────────────────────────────────────────────── */
     .divider {
-      display: flex; align-items: center; gap: var(--gap-md);
-      margin: var(--gap-lg) 0; color: var(--muted); font-size: 12px;
+      display: flex; align-items: center; gap: var(--od-gap-md);
+      margin: var(--od-gap-lg) 0; color: var(--od-muted); font-size: 12px;
     }
     .divider::before, .divider::after {
-      content: ""; flex: 1; height: 1px; background: var(--border);
+      content: ""; flex: 1; height: 1px; background: var(--od-border);
     }
 
     /* ─── auth footer ───────────────────────────────────────────── */
     .auth-footer {
-      margin-top: var(--gap-lg); text-align: center;
-      color: var(--muted); font-size: 13px;
+      margin-top: var(--od-gap-lg); text-align: center;
+      color: var(--od-muted); font-size: 13px;
     }
-    .auth-footer a { color: var(--accent); font-weight: 500; }
+    .auth-footer a { color: var(--od-accent); font-weight: 500; }
     .auth-footer a:hover { text-decoration: underline; }
 
     /* ─── pagefoot ──────────────────────────────────────────────── */
     .pagefoot {
       position: fixed; bottom: 0; left: 0; right: 0;
-      padding: 16px var(--gap-lg); color: var(--muted); font-size: 12px;
-      border-top: 1px solid var(--border); background: var(--surface);
+      padding: 16px var(--od-gap-lg); color: var(--od-muted); font-size: 12px;
+      border-top: 1px solid var(--od-border); background: var(--od-surface);
       display: flex; justify-content: space-between;
     }
-    .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .num { font-family: var(--od-font-mono); font-variant-numeric: tabular-nums; }
 
     /* ─── toast ─────────────────────────────────────────────────── */
     .toast {
       position: fixed; bottom: 24px; right: 32px; z-index: 200;
-      background: var(--fg); color: var(--surface);
-      padding: 12px 20px; border-radius: var(--radius);
+      background: var(--od-fg); color: var(--od-surface);
+      padding: 12px 20px; border-radius: var(--od-radius);
       font-size: 14px; font-weight: 500;
-      box-shadow: 0 8px 24px color-mix(in oklch, var(--fg) 20%, transparent);
+      box-shadow: 0 8px 24px color-mix(in oklch, var(--od-fg) 20%, transparent);
       opacity: 0; transform: translateY(8px);
       transition: opacity .2s cubic-bezier(.4,0,.2,1), transform .2s cubic-bezier(.4,0,.2,1);
       pointer-events: none;
@@ -167,8 +173,8 @@
     .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
 
     @media (max-width: 480px) {
-      .auth-shell { padding: var(--gap-md); }
-      .auth-card { padding: var(--gap-md); }
+      .auth-shell { padding: var(--od-gap-md); }
+      .auth-card { padding: var(--od-gap-md); }
       .pagefoot { flex-direction: column; gap: 4px; align-items: center; }
     }
     @media (prefers-reduced-motion: reduce) {

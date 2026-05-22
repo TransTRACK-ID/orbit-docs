@@ -82,11 +82,11 @@ function goToLogin() {
               autocomplete="email"
               class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
-                'border-[oklch(55%_0.18_25)]': errors.email,
+                'border-[var(--od-error)]': errors.email,
               }"
               :style="
                 errors.email
-                  ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
+                  ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
                   : undefined
               "
               :aria-invalid="errors.email ? 'true' : undefined"
@@ -96,10 +96,10 @@ function goToLogin() {
               v-if="errors.email"
               id="emailError"
               class="mt-1 text-[12px]"
-              style="color: oklch(50% 0.16 25)"
-              aria-live="polite"
-            >
-              {{ errors.email }}
+            style="color: var(--od-error-text)"
+            aria-live="polite"
+          >
+            {{ errors.email }}
             </p>
           </div>
 
