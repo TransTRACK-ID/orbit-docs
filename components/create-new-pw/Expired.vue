@@ -1,52 +1,83 @@
 <script setup lang="ts">
 const router = useRouter();
+
 function goToSetupPw() {
   router.push("/forgot-password");
 }
 </script>
 
 <template>
-  <div class="relative w-full h-screen overflow-hidden bg-gray-50">
-    <img
-      src="/bg-login-page.png"
-      alt="background"
-      class="absolute w-full h-full"
-    />
+  <AppLayoutsAuth>
+    <!-- Brand -->
+    <div class="flex items-center justify-center gap-2.5 mb-8">
+      <svg
+        class="w-[22px] h-[22px] text-[var(--od-accent)]"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <path
+          d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
+        />
+        <path d="M2 12h20" />
+      </svg>
+      <span class="text-lg font-semibold text-[var(--od-fg)]">Orbit Docs</span>
+    </div>
 
+    <!-- Card -->
     <div
-      class="relative z-10 flex items-center justify-center w-full h-full p-4"
+      class="bg-[var(--od-surface)] border border-[var(--od-border)] rounded-[var(--od-radius-lg)] p-6 text-center"
     >
       <div
-        class="relative w-full max-w-[1164px] max-h-[750px] bg-white rounded-[20px] overflow-hidden shadow-lg"
+        class="w-12 h-12 mx-auto mb-4 rounded-full flex items-center justify-center"
+        style="background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent)"
       >
-        <img
-          src="/bg-expired.png"
-          alt="expired image"
-          class="w-full h-[650px] object-cover"
-        />
-
-        <div
-          class="absolute top-0 left-0 w-full h-full flex flex-col items-center text-center px-10 py-16 gap-y-6"
+        <svg
+          class="w-6 h-6"
+          style="color: oklch(50% 0.16 25)"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
         >
-          <h2 class="text-[48px] font-bold text-black mb-4">
-            Oops, this link <br />
-            has expired
-          </h2>
-          <p class="text-base text-gray-700 w-[870px] mb-6 leading-[150%]">
-            Hi there, your Set New Password link has expired, because you
-            haven’t used it. Set New Password link expires after every 30
-            minutes and can only be used once. You can request another link by
-            clicking the button below.
-          </p>
-          <GeneralButton
-            @on-click="goToSetupPw()"
-            type="button"
-            label="Setup New Password"
-            variant="primary"
-            class="w-[210px] h-12"
-          />
-        </div>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      </div>
+
+      <h1 class="text-[18px] font-semibold text-[var(--od-fg)] mb-2">
+        Link expired
+      </h1>
+      <p class="text-[14px] text-[var(--od-muted)] mb-6">
+        This password reset link has expired or already been used. Reset links are valid for 30 minutes and can only be used once.
+      </p>
+
+      <button
+        type="button"
+        class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)]"
+        @click="goToSetupPw"
+      >
+        Request new link
+      </button>
+
+      <div
+        class="mt-6 pt-4 border-t border-[var(--od-border)] text-center text-[13px] text-[var(--od-muted)]"
+      >
+        <NuxtLink
+          to="/login"
+          class="font-medium text-[var(--od-accent)] hover:underline transition-colors"
+        >
+          Back to sign in
+        </NuxtLink>
       </div>
     </div>
-  </div>
+
+    <!-- Page foot -->
+    <footer class="mt-6 text-center text-[12px] text-[var(--od-muted)]">
+      <span>Orbit Docs · Internal documentation platform</span>
+    </footer>
+  </AppLayoutsAuth>
 </template>

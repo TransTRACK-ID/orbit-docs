@@ -162,9 +162,9 @@ onMounted(async () => {
               <IconsEye
                 v-if="isShowPw"
                 size="18"
-                class="stroke-gray-500"
+                class="text-[var(--od-muted)]"
               />
-              <IconsEyeOff v-else size="18" class="stroke-gray-500" />
+              <IconsEyeOff v-else size="18" class="text-[var(--od-muted)]" />
             </button>
           </div>
           <p
@@ -195,7 +195,7 @@ onMounted(async () => {
           <IconsLoading
             v-if="$auth.isLoading"
             size="18"
-            class="text-white fill-white"
+            class="text-[var(--od-surface)] fill-[var(--od-surface)]"
           />
           <span v-else>Sign in</span>
         </button>
