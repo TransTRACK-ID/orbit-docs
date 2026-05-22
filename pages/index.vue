@@ -1,7 +1,11 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+const router = useRouter();
+
+onMounted(() => {
+  router.replace('/apps');
+});
+</script>
 
 <template>
-  <div class="text-gray-500">pages</div>
+  <div />
 </template>
-
-<style scoped></style>
