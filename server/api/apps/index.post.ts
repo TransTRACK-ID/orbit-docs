@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     appId: app.id,
     appName: app.name,
     action: "App created",
-    user: owner || "System",
+    actor: owner || "System",
   });
 
   return { data: app };
