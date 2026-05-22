@@ -56,7 +56,7 @@ async function fetchOwnerList() {
     const res = await $fetch<{ data: { name: string }[] }>("/api/owners");
     ownerList.value = res.data.map((o) => o.name).filter(Boolean);
   } catch {
-    ownerList.value = owners;
+    ownerList.value = [];
   }
 }
 
@@ -294,7 +294,6 @@ const statusLabel: Record<string, string> = {
   maintenance: "Maintenance",
 };
 
-const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
 </script>
 
 <template>
@@ -604,7 +603,7 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
                 <label for="appOwner">Owner</label>
                 <select id="appOwner" v-model="createForm.owner">
                   <option value="">Select owner…</option>
-                  <option v-for="o in owners" :key="o" :value="o">{{ o }}</option>
+                  <option v-for="o in ownerList" :key="o" :value="o">{{ o }}</option>
                 </select>
               </div>
               <div class="form-group">
@@ -673,7 +672,7 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
                 <label for="editOwner">Owner</label>
                 <select id="editOwner" v-model="editForm.owner">
                   <option value="">Select owner…</option>
-                  <option v-for="o in owners" :key="o" :value="o">{{ o }}</option>
+                  <option v-for="o in ownerList" :key="o" :value="o">{{ o }}</option>
                 </select>
               </div>
               <div class="form-group">
