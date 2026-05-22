@@ -46,11 +46,11 @@ export default defineNuxtConfig({
           method: "post",
         },
         signOut: {
-          path: "/signOut",
+          path: "/logout",
           method: "post",
         },
         getSession: {
-          path: "/getSession",
+          path: "/session",
           method: "get",
         },
       },

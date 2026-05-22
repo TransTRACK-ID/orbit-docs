@@ -1,7 +1,7 @@
 // This endpoint handles session validation by forwarding the session token to the third-party API
 // The third-party API endpoint is ${process.env.NUXT_PUBLIC_API_BASE_URL}/api/v1/auth/session
 
-import { defineEventHandler, getCookie, createError } from 'h3';
+import { defineEventHandler, getCookie, getHeader, createError } from 'h3';
 import { $fetch } from 'ofetch';
 import { useRuntimeConfig } from '#imports';
 
@@ -39,8 +39,16 @@ interface ErrorResponse {
 
 export default defineEventHandler(async (event) => {
     try {
-        // Get the session token from the cookie
-        const sessionToken = getCookie(event, 'session_token');
+        // Get the session token from the cookie or Authorization header
+        let sessionToken = getCookie(event, 'session_token');
+
+        // Fallback to Authorization header (used by @sidebase/nuxt-auth)
+        if (!sessionToken) {
+            const authHeader = getHeader(event, 'authorization');
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                sessionToken = authHeader.slice(7);
+            }
+        }
 
         if (!sessionToken) {
             throw createError({

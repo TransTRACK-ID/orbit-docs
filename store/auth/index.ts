@@ -91,7 +91,7 @@ export const useAuthStore = defineStore("auth", {
         this.clearCookies();
 
         // Clear cache by making a request with cache-control: no-cache
-        await $fetch("/api/auth/getSession", {
+        await $fetch("/api/auth/session", {
           headers: {
             "Cache-Control": "no-cache, no-store, must-revalidate",
             Pragma: "no-cache",
