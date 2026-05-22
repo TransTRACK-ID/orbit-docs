@@ -74,6 +74,7 @@ export default defineNuxtConfig({
     // Server-only base URL — can be absolute (e.g. http://127.0.0.1:port/api/preview/taskId)
     // so server-side $fetch gets a valid URL instead of crashing on relative paths
     apiBaseUrl: process.env.API_BASE_URL,
+    isPreview: process.env.ORBIT_PREVIEW === 'true',
   },
 
   compatibilityDate: "2025-01-31",

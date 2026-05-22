@@ -15,3 +15,7 @@ export function resolveApiBaseUrl(baseAPI: string | undefined): string {
   const port = process.env.PORT || process.env.NUXT_PORT || '3000'
   return `http://127.0.0.1:${port}${baseAPI}`
 }
+
+export function isPreviewMode(config: any): boolean {
+  return config.isPreview === true || config.isPreview === 'true'
+}
