@@ -1,121 +1,126 @@
 <script setup lang="ts">
-import { useActiveRoute } from "@/composables/useActiveRoute";
 import { sidebarMenu } from "@/constant/sidebar";
-import type { IChildSidebar, ISidebar } from "@/types/sidebar";
 
-const { data } = useAuth();
 const route = useRoute();
-const { isActive } = useActiveRoute();
 
-let menuData = reactive(sidebarMenu);
-
-const emit = defineEmits(["on-mounted", "on-click-close-sidebar"]);
-
-const getMenuActiveClass = (destination: string) => {
-  const hover = route.path.startsWith(destination)
-    ? "bg-white-50 text-primary-700 border border-primary-700"
-    : "hover:bg-gray-100";
-  return `py-2 px-3 space-x-3 flex items-center rounded-md transition ${hover}`;
-};
-
-const getIconMenuActive = (destination: string) => {
-  return route.path.startsWith(destination)
-    ? "stroke-primary-700"
-    : "stroke-gray-400";
-};
-
-const getActiveClass = (route: string) => {
-  return isActive(route) ? "stroke-primary-700" : "stroke-gray-400";
-};
-
-const toggleMenu = (index: number) => {
-  menuData[index].isOpen = !menuData[index].isOpen;
-};
-
-watchEffect(() => {
-  menuData = menuData.map((menuItem: ISidebar) => {
-    if (menuItem.menu && menuItem.menu.length > 0) {
-      menuItem.menu.map((subMenu: IChildSidebar) => {
-        if (route.path.includes(subMenu.route)) {
-          menuItem.isOpen = true;
-        }
-      });
-    }
-    return menuItem;
-  });
-});
+const isActive = (path: string) => route.path === path || route.path.startsWith(path + "/");
 </script>
 
 <template>
-  <aside
-    class="w-full h-full md:w-[300px] fixed top-0 border-r overflow-y-auto py-5 px-4 z-40 bg-white transition-transform -translate-x-full md:translate-x-0"
-  >
-    <div class="px-3 flex items-center justify-between">
-      <div class="flex items-center w-full">
-        <icons-logo-order-planning-full />
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        <path d="M2 12h20"/>
+      </svg>
+      Orbit Docs
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-group">
+        <div class="nav-group-title">Workspace</div>
+        <NuxtLink
+          v-for="item in sidebarMenu.filter(i => i.id !== 'menu__settings')"
+          :key="item.id"
+          :to="item.route"
+          class="nav-item"
+          :class="{ active: isActive(item.route || '') }"
+        >
+          <component :is="item.icon" size="16" />
+          <span>{{ item.label }}</span>
+        </NuxtLink>
       </div>
-    </div>
 
-    <div class="py-5 mt-5">
-      <ul class="space-y-3">
-        <li v-for="(menuItem, index) in menuData" :key="menuItem.id">
-          <template v-if="menuItem.menu && menuItem.menu.length > 0">
-            <button
-              class="w-full flex items-center justify-between text-sm"
-              :class="getMenuActiveClass(menuItem?.startWith || '')"
-              @click="toggleMenu(index)"
-            >
-              <div class="flex items-center gap-3">
-                <component
-                  :is="menuItem.icon"
-                  :class="getIconMenuActive(menuItem?.startWith || '')"
-                />
-                <span class="font-medium text-base">{{ menuItem?.label }}</span>
-              </div>
-              <IconsChevronDown
-                :class="`
-    transition-transform duration-200 stroke-gray-900
-    ${menuItem.isOpen ? 'rotate-180' : ''}
-    ${getIconMenuActive(menuItem?.startWith || '')}
-  `"
-              />
-            </button>
-
-            <ul v-show="menuItem.isOpen" class="space-y-3 mt-2">
-              <li v-for="subMenuItem in menuItem.menu" :key="subMenuItem.id">
-                <AppNavigationLink
-                  :id="subMenuItem.id"
-                  :name="subMenuItem.label"
-                  :destination="subMenuItem.route"
-                >
-                  <template #icon>
-                    <component
-                      :is="subMenuItem.icon"
-                      :class="getActiveClass(subMenuItem.route)"
-                    />
-                  </template>
-                </AppNavigationLink>
-              </li>
-            </ul>
-          </template>
-
-          <AppNavigationLink
-            v-else
-            :id="menuItem.id"
-            :name="menuItem.label"
-            :destination="menuItem.route"
-          >
-            <template #icon>
-              <component
-                :is="menuItem.icon"
-                :class="getActiveClass(menuItem.route || '')"
-              />
-            </template>
-          </AppNavigationLink>
-        </li>
-      </ul>
-    </div>
+      <div class="nav-group" style="margin-top: auto;">
+        <div class="nav-group-title">Account</div>
+        <NuxtLink
+          v-for="item in sidebarMenu.filter(i => i.id === 'menu__settings')"
+          :key="item.id"
+          :to="item.route"
+          class="nav-item"
+          :class="{ active: isActive(item.route || '') }"
+        >
+          <component :is="item.icon" size="16" />
+          <span>{{ item.label }}</span>
+        </NuxtLink>
+      </div>
+    </nav>
   </aside>
 </template>
 
-<style scoped></style>
+<style scoped>
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  background: var(--surface, oklch(100% 0 0));
+  border-right: 1px solid var(--border, oklch(90% 0.006 250));
+  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 24px;
+  font-family: var(--font-display, -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif);
+  font-size: 18px;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border, oklch(90% 0.006 250));
+  margin-bottom: 12px;
+  color: var(--fg, oklch(20% 0.02 250));
+}
+.sidebar-brand svg {
+  color: var(--accent, oklch(55% 0.16 25));
+  flex-shrink: 0;
+}
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.nav-group {
+  padding: 8px 0;
+}
+.nav-group-title {
+  padding: 8px 20px;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted, oklch(55% 0.015 250));
+  font-weight: 500;
+}
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  margin: 2px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--muted, oklch(55% 0.015 250));
+  transition: background .1s cubic-bezier(.4,0,.2,1), color .1s cubic-bezier(.4,0,.2,1);
+  text-decoration: none;
+}
+.nav-item:hover {
+  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
+  color: var(--fg, oklch(20% 0.02 250));
+}
+.nav-item.active {
+  background: var(--accent-soft, color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent));
+  color: var(--accent, oklch(55% 0.16 25));
+  font-weight: 500;
+}
+.nav-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.nav-item:focus-visible {
+  outline: 2px solid var(--accent, oklch(55% 0.16 25));
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+</style>

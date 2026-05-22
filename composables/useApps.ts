@@ -107,6 +107,26 @@ export const useApps = () => {
     }
   }
 
+  async function updateApp(id: string, payload: CreateAppPayload) {
+    try {
+      const data = await $fetch<{ data: AppItem }>(`/api/apps/${id}`, {
+        method: "PUT",
+        body: payload,
+      });
+      const idx = apps.value.findIndex((a) => a.id === id);
+      if (idx !== -1) {
+        apps.value[idx] = { ...apps.value[idx], ...data.data };
+      }
+      toast.success(`App "${data.data.name}" updated`);
+      await Promise.all([fetchStats(), fetchActivities()]);
+      return data.data;
+    } catch (e: any) {
+      const msg = e?.message || "Failed to update app";
+      toast.error(msg);
+      throw e;
+    }
+  }
+
   async function deleteApp(id: string) {
     try {
       await $fetch(`/api/apps/${id}`, {
@@ -132,6 +152,7 @@ export const useApps = () => {
     fetchStats,
     fetchActivities,
     createApp,
+    updateApp,
     deleteApp,
   };
 };
