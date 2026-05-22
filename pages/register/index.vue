@@ -45,6 +45,30 @@ const { value: email } = useField<string>("email");
 const { value: password } = useField<string>("password");
 const { value: passwordConfirmation } = useField<string>("passwordConfirmation");
 
+const strengthScore = computed(() => {
+  const val = password.value || "";
+  let score = 0;
+  if (val.length >= 8) score++;
+  if (/[0-9]/.test(val)) score++;
+  if (/[^A-Za-z0-9]/.test(val)) score++;
+  if (val.length >= 12 && /[A-Z]/.test(val) && /[a-z]/.test(val)) score++;
+  return Math.min(score, 4);
+});
+
+const strengthLabel = computed(() => {
+  const labels = ["Weak", "Fair", "Good", "Strong"];
+  const score = strengthScore.value;
+  if (!password.value || password.value.length === 0) return "";
+  return labels[Math.min(score, 3)];
+});
+
+const strengthClass = computed(() => {
+  const classes = ["weak", "fair", "good", "strong"];
+  const score = strengthScore.value;
+  if (!password.value || password.value.length === 0) return "";
+  return classes[Math.min(score, 3)];
+});
+
 const onSubmitRegister = handleSubmit(async (values) => {
   try {
     await $auth.register({
@@ -70,24 +94,6 @@ const onSubmitRegister = handleSubmit(async (values) => {
 
 <template>
   <AppLayoutsAuth>
-    <!-- Brand -->
-    <div class="flex items-center justify-center gap-2.5 mb-8">
-      <svg
-        class="w-[22px] h-[22px] text-[var(--od-accent)]"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <path
-          d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"
-        />
-        <path d="M2 12h20" />
-      </svg>
-      <span class="text-lg font-semibold text-[var(--od-fg)]">Orbit Docs</span>
-    </div>
-
     <!-- Card -->
     <div
       class="bg-[var(--od-surface)] border border-[var(--od-border)] rounded-[var(--od-radius-lg)] p-6"
@@ -218,6 +224,35 @@ const onSubmitRegister = handleSubmit(async (values) => {
               <IconsEyeOff v-else size="18" class="text-[var(--od-muted)]" />
             </button>
           </div>
+          <!-- Strength meter -->
+          <div class="mt-1.5 flex items-center gap-2">
+            <div class="flex-1 flex gap-1">
+              <div
+                v-for="i in 4"
+                :key="i"
+                class="h-[3px] flex-1 rounded-full transition-colors"
+                :class="{
+                  'bg-[var(--od-border)]': i > strengthScore || !password,
+                  'bg-[oklch(60%_0.18_25)]': strengthClass === 'weak' && i <= strengthScore,
+                  'bg-[oklch(75%_0.14_85)]': strengthClass === 'fair' && i <= strengthScore,
+                  'bg-[oklch(60%_0.18_145)]': strengthClass === 'good' && i <= strengthScore,
+                  'bg-[oklch(55%_0.14_255)]': strengthClass === 'strong' && i <= strengthScore,
+                }"
+              />
+            </div>
+            <span
+              v-if="strengthLabel"
+              class="text-[11px] font-medium tabular-nums"
+              :class="{
+                'text-[oklch(50%_0.16_25)]': strengthClass === 'weak',
+                'text-[oklch(60%_0.12_85)]': strengthClass === 'fair',
+                'text-[oklch(50%_0.14_145)]': strengthClass === 'good',
+                'text-[oklch(55%_0.14_255)]': strengthClass === 'strong',
+              }"
+            >
+              {{ strengthLabel }}
+            </span>
+          </div>
           <p
             v-if="errors.password"
             id="passwordError"
@@ -310,11 +345,6 @@ const onSubmitRegister = handleSubmit(async (values) => {
         </NuxtLink>
       </div>
     </div>
-
-    <!-- Page foot -->
-    <footer class="mt-6 text-center text-[12px] text-[var(--od-muted)]">
-      <span>Orbit Docs · Internal documentation platform</span>
-    </footer>
   </AppLayoutsAuth>
 </template>
 
