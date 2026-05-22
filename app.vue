@@ -3,11 +3,11 @@ import { usePageStore } from "~/store/page";
 
 const $page = usePageStore();
 
-const updateHead = (title: string) => {
-  useHead({
-    title: title ? `${title} - Fuel Management` : "Fuel Management",
-  });
-};
+  const updateHead = (title: string) => {
+    useHead({
+      title: title ? `${title} · Orbit Docs` : "Orbit Docs",
+    });
+  };
 
 watch(
   () => $page.title,
