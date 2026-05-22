@@ -1,6 +1,6 @@
 import { pool } from "~/server/database";
 import { getDb } from "~/server/database";
-import { apps, appVersions, activityLogs } from "~/server/database/schema";
+import { apps, appVersions, activityLogs, owners } from "~/server/database/schema";
 import { count } from "drizzle-orm";
 
 export default defineNitroPlugin(async () => {
@@ -36,14 +36,35 @@ export default defineNitroPlugin(async () => {
       app_id TEXT REFERENCES apps(id) ON DELETE SET NULL,
       app_name TEXT,
       action TEXT NOT NULL,
-      user TEXT NOT NULL,
+      actor TEXT NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS owners (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT,
+      role TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
 
   // Seed demo data if apps table is empty
   const db = getDb();
   const appsCount = await db.select({ count: count() }).from(apps);
+  const ownersCount = await db.select({ count: count() }).from(owners);
+
+  if (ownersCount[0]?.count === 0) {
+    await db.insert(owners).values([
+      { id: crypto.randomUUID(), name: "Sarah Chen", email: "sarah.chen@example.com", role: "Engineering Lead" },
+      { id: crypto.randomUUID(), name: "Mike Ross", email: "mike.ross@example.com", role: "Backend Engineer" },
+      { id: crypto.randomUUID(), name: "Jen Park", email: "jen.park@example.com", role: "Product Manager" },
+      { id: crypto.randomUUID(), name: "Tom Lee", email: "tom.lee@example.com", role: "Technical Writer" },
+    ]);
+  }
 
   if (appsCount[0]?.count === 0) {
     const appIds = [
@@ -78,11 +99,11 @@ export default defineNitroPlugin(async () => {
     const activityIds = Array.from({ length: 5 }, () => crypto.randomUUID());
 
     await db.insert(activityLogs).values([
-      { id: activityIds[0], appId: appIds[0], appName: "API Gateway", action: "Published v2.4.1", user: "Sarah Chen" },
-      { id: activityIds[1], appId: appIds[2], appName: "Billing Engine", action: "Updated docs", user: "Mike Ross" },
-      { id: activityIds[2], appId: appIds[4], appName: "Data Pipeline", action: "Created v4.1.0-rc", user: "Sarah Chen" },
-      { id: activityIds[3], appId: appIds[1], appName: "Auth Service", action: "Published changelog", user: "Jen Park" },
-      { id: activityIds[4], appId: appIds[3], appName: "Notification Service", action: "Draft doc created", user: "Tom Lee" },
+      { id: activityIds[0], appId: appIds[0], appName: "API Gateway", action: "Published v2.4.1", actor: "Sarah Chen" },
+      { id: activityIds[1], appId: appIds[2], appName: "Billing Engine", action: "Updated docs", actor: "Mike Ross" },
+      { id: activityIds[2], appId: appIds[4], appName: "Data Pipeline", action: "Created v4.1.0-rc", actor: "Sarah Chen" },
+      { id: activityIds[3], appId: appIds[1], appName: "Auth Service", action: "Published changelog", actor: "Jen Park" },
+      { id: activityIds[4], appId: appIds[3], appName: "Notification Service", action: "Draft doc created", actor: "Tom Lee" },
     ]);
   }
 });

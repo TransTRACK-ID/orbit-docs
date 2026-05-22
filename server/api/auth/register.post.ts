@@ -1,6 +1,6 @@
-// This endpoint receives login credentials from the client, encrypts them using the server's appKey,
-// and forwards the encrypted payload to the third-party API
-// The third-party API endpoint is ${process.env.NUXT_PUBLIC_API_BASE_URL}/api/v1/auth/login
+// This endpoint receives registration data from the client, encrypts it using the server's appKey,
+// and forwards the encrypted payload to the third-party API.
+// The third-party API endpoint is ${process.env.NUXT_PUBLIC_API_BASE_URL}/api/v1/auth/register
 // The payload format sent to the third-party API is: { "payload": "[encrypted-data]" }
 
 import { useRuntimeConfig } from "#imports";
@@ -9,7 +9,7 @@ import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { $fetch } from "ofetch";
 import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
 
-interface LoginResponse {
+interface RegisterResponse {
   status: string;
   data?: {
     access_token: string;
@@ -41,40 +41,49 @@ async function encryptAES(plainText: string, key: string): Promise<string> {
   const nonce = crypto.randomBytes(12);
   const plainTextBuffer = Buffer.from(plainText, "utf-8");
 
-  // Create cipher
   const cipher = crypto.createCipheriv("aes-256-gcm", keyBuffer, nonce);
 
-  // Encrypt the data
   const encryptedBuffer = Buffer.concat([
     cipher.update(plainTextBuffer),
     cipher.final(),
   ]);
 
-  // Get the auth tag
   const authTag = cipher.getAuthTag();
 
-  // Combine nonce, encrypted data, and auth tag
   const result = Buffer.concat([nonce, encryptedBuffer, authTag]);
 
-  // Return as base64
   return result.toString("base64");
 }
 
 export default defineEventHandler(async (event) => {
   try {
-    // Get the login credentials from the request body
     const body = await readBody(event);
-    const { email, password } = body;
+    const { name, email, password, passwordConfirmation } = body;
 
-    if (!email || !password) {
+    if (!name || !email || !password) {
       throw createError({
         statusCode: 400,
         statusMessage: "Bad Request",
-        message: "Missing required credentials",
+        message: "Missing required fields",
       });
     }
 
-    // Get the appKey from runtime config
+    if (password !== passwordConfirmation) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Bad Request",
+        message: "Passwords do not match",
+      });
+    }
+
+    if (password.length < 8) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Bad Request",
+        message: "Password must be at least 8 characters",
+      });
+    }
+
     const config = useRuntimeConfig();
     const appKey = config.appKey;
 
@@ -86,15 +95,10 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // Create the plain text JSON with email and password
-    const plainText = JSON.stringify({ email, password });
-
-    // Encrypt the plain text
+    const plainText = JSON.stringify({ name, email, password, passwordConfirmation });
     const encryptedPayload = await encryptAES(plainText, appKey);
 
-    // Server-only base URL — can be absolute in preview mode so $fetch works
     const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
-
     if (!apiBaseUrl) {
       throw createError({
         statusCode: 500,
@@ -116,9 +120,8 @@ export default defineEventHandler(async (event) => {
       };
     }
 
-    // Make the request to the third-party API
-    const response = await $fetch<LoginResponse>(
-      `${apiBaseUrl}/api/v1/auth/login`,
+    const response = await $fetch<RegisterResponse>(
+      `${apiBaseUrl}/api/v1/auth/register`,
       {
         method: "POST",
         body: { payload: encryptedPayload },
@@ -129,9 +132,6 @@ export default defineEventHandler(async (event) => {
       }
     );
 
-    // If we get here, the login was successful
-    // Set any necessary cookies based on the response
-
     if (response.data?.access_token) {
       setCookie(event, "session_token", response.data.access_token, {
         httpOnly: true,
@@ -139,18 +139,15 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // Return the response from the third-party API
     return response;
   } catch (error: unknown) {
-    // Handle errors from the third-party API
-    console.error("Login error:", error);
+    console.error("Registration error:", error);
 
-    // Forward the error status and message
     const err = error as ErrorResponse;
     throw createError({
       statusCode: err.response?.status || 500,
       statusMessage: err.response?.statusText || "Internal Server Error",
-      message: err.response?.data?.message || "An error occurred during login",
+      message: err.response?.data?.message || "An error occurred during registration",
     });
   }
 });

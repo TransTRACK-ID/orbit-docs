@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { setPageLayout } from "#app";
-import { computed, ref, watch } from "vue";
+import { ref } from "vue";
 
 definePageMeta({
   auth: {
@@ -14,15 +13,6 @@ definePageMeta({
 });
 
 const isExpired = ref(false);
-const targetLayout = computed(() => (isExpired.value ? false : "login"));
-
-watch(
-  targetLayout,
-  (newLayout) => {
-    setPageLayout(newLayout);
-  },
-  { immediate: true }
-);
 </script>
 
 <template>

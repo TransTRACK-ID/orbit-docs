@@ -1,9 +1,10 @@
 // This endpoint handles session validation by forwarding the session token to the third-party API
 // The third-party API endpoint is ${process.env.NUXT_PUBLIC_API_BASE_URL}/api/v1/auth/session
 
-import { defineEventHandler, getCookie, createError } from 'h3';
+import { defineEventHandler, getCookie, getHeader, createError } from 'h3';
 import { $fetch } from 'ofetch';
 import { useRuntimeConfig } from '#imports';
+import { resolveApiBaseUrl, isPreviewMode } from '../../utils/api-url';
 
 interface SessionResponse {
     status: string;
@@ -39,8 +40,16 @@ interface ErrorResponse {
 
 export default defineEventHandler(async (event) => {
     try {
-        // Get the session token from the cookie
-        const sessionToken = getCookie(event, 'session_token');
+        // Get the session token from the cookie or Authorization header
+        let sessionToken = getCookie(event, 'session_token');
+
+        // Fallback to Authorization header (used by @sidebase/nuxt-auth)
+        if (!sessionToken) {
+            const authHeader = getHeader(event, 'authorization');
+            if (authHeader && authHeader.startsWith('Bearer ')) {
+                sessionToken = authHeader.slice(7);
+            }
+        }
 
         if (!sessionToken) {
             throw createError({
@@ -52,7 +61,7 @@ export default defineEventHandler(async (event) => {
 
         // Get the API base URL from runtime config
         const config = useRuntimeConfig();
-        const apiBaseUrl = config.public.baseAPI;
+        const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
 
         if (!apiBaseUrl) {
             throw createError({
@@ -60,6 +69,17 @@ export default defineEventHandler(async (event) => {
                 statusMessage: 'Server Error',
                 message: 'API base URL not configured'
             });
+        }
+
+        // Preview mode: no external API available, return mock session
+        if (isPreviewMode(config)) {
+            return {
+                status: 'success',
+                data: {
+                    user: { id: 'preview-user', email: 'preview@example.com', name: 'Preview User' },
+                    companies: [{ id: 'preview-company', name: 'Preview Company' }]
+                }
+            };
         }
 
         // Make the request to the third-party API to validate the session

@@ -33,7 +33,7 @@ export const activityLogs = pgTable("activity_logs", {
   appId: text("app_id").references(() => apps.id, { onDelete: "set null" }),
   appName: text("app_name"),
   action: text("action").notNull(),
-  user: text("user").notNull(),
+  actor: text("actor").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
