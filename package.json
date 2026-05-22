@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@nuxt/devtools": "latest",
-    "@nuxt/icon": "^2.2.2",
+    "@nuxt/icon": "^1.15.0",
     "@nuxt/test-utils": "^3.19.0",
     "@nuxtjs/tailwindcss": "^6.9.4",
     "@pinia-plugin-persistedstate/nuxt": "^1.2.0",
@@ -51,10 +51,4 @@
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.1/xlsx-0.20.1.tgz",
     "yup": "^1.6.1"
   },
-  "overrides": {
-    "@nuxt/kit": "^3.15.4"
-  },
-  "resolutions": {
-    "sharp": "^0.29.0"
-  }
 }

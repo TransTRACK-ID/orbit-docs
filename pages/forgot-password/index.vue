@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useField, useForm } from "vee-validate";
 import { object, string } from "yup";
+import { usePageStore } from "~/store/page";
 
 definePageMeta({
   auth: {
@@ -14,6 +15,9 @@ definePageMeta({
 });
 
 const router = useRouter();
+const $page = usePageStore();
+
+$page.setTitle("Reset password");
 
 const isLoading = ref(false);
 const isSubmitted = ref(false);
@@ -93,6 +97,7 @@ function goToLogin() {
               type="email"
               placeholder="you@company.com"
               required
+              autocomplete="email"
               class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.email,
@@ -102,9 +107,12 @@ function goToLogin() {
                   ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
                   : undefined
               "
+              :aria-invalid="errors.email ? 'true' : undefined"
+              :aria-describedby="errors.email ? 'emailError' : undefined"
             />
             <p
               v-if="errors.email"
+              id="emailError"
               class="mt-1 text-[12px]"
               style="color: oklch(50% 0.16 25)"
             >
@@ -116,7 +124,7 @@ function goToLogin() {
           <button
             type="submit"
             :disabled="isLoading"
-            class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] disabled:opacity-60 disabled:cursor-not-allowed"
+            class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2"
           >
             <IconsLoading
               v-if="isLoading"
@@ -134,7 +142,7 @@ function goToLogin() {
           Remember your password?
           <button
             type="button"
-            class="font-medium text-[var(--od-accent)] hover:underline transition-colors"
+            class="font-medium text-[var(--od-accent)] hover:underline transition-colors focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2 rounded-[var(--od-radius)]"
             @click="goToLogin"
           >
             Sign in
@@ -153,7 +161,7 @@ function goToLogin() {
 
         <button
           type="button"
-          class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)]"
+          class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2"
           @click="goToLogin"
         >
           Back to sign in
@@ -165,7 +173,7 @@ function goToLogin() {
           Didn't receive it?
           <button
             type="button"
-            class="font-medium text-[var(--od-accent)] hover:underline transition-colors"
+            class="font-medium text-[var(--od-accent)] hover:underline transition-colors focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2 rounded-[var(--od-radius)]"
             @click="isSubmitted = false"
           >
             Try again
@@ -180,3 +188,9 @@ function goToLogin() {
     </footer>
   </AppLayoutsAuth>
 </template>
+
+<style scoped>
+input:focus {
+  box-shadow: 0 0 0 3px var(--od-accent-soft);
+}
+</style>

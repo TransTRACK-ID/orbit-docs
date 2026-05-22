@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { useField, useForm } from "vee-validate";
 import { object, string, ref as yupRef } from "yup";
+import { usePageStore } from "~/store/page";
+
+const $page = usePageStore();
+
+$page.setTitle("Create new password");
 
 const isShowPw = ref(false);
 const isShowPwConfirm = ref(false);
@@ -88,6 +93,7 @@ const onSubmit = handleSubmit(async (values) => {
               :type="isShowPw ? 'text' : 'password'"
               placeholder="••••••••"
               required
+              autocomplete="new-password"
               class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.password,
@@ -97,6 +103,8 @@ const onSubmit = handleSubmit(async (values) => {
                   ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
                   : undefined
               "
+              :aria-invalid="errors.password ? 'true' : undefined"
+              :aria-describedby="errors.password ? 'passwordError' : undefined"
             />
             <button
               type="button"
@@ -114,6 +122,7 @@ const onSubmit = handleSubmit(async (values) => {
           </div>
           <p
             v-if="errors.password"
+            id="passwordError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
           >
@@ -136,6 +145,7 @@ const onSubmit = handleSubmit(async (values) => {
               :type="isShowPwConfirm ? 'text' : 'password'"
               placeholder="••••••••"
               required
+              autocomplete="new-password"
               class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.passwordConfirm,
@@ -145,6 +155,8 @@ const onSubmit = handleSubmit(async (values) => {
                   ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
                   : undefined
               "
+              :aria-invalid="errors.passwordConfirm ? 'true' : undefined"
+              :aria-describedby="errors.passwordConfirm ? 'passwordConfirmError' : undefined"
             />
             <button
               type="button"
@@ -162,6 +174,7 @@ const onSubmit = handleSubmit(async (values) => {
           </div>
           <p
             v-if="errors.passwordConfirm"
+            id="passwordConfirmError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
           >
@@ -173,7 +186,7 @@ const onSubmit = handleSubmit(async (values) => {
         <button
           type="submit"
           :disabled="isLoading"
-          class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] disabled:opacity-60 disabled:cursor-not-allowed"
+          class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2"
         >
           <IconsLoading
             v-if="isLoading"
@@ -191,3 +204,9 @@ const onSubmit = handleSubmit(async (values) => {
     </footer>
   </AppLayoutsAuth>
 </template>
+
+<style scoped>
+input:focus {
+  box-shadow: 0 0 0 3px var(--od-accent-soft);
+}
+</style>
