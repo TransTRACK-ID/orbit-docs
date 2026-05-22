@@ -5,7 +5,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
-  requireAuth(event);
+  await requireAuth(event);
   const db = getDb();
   const query = getQuery(event);
   const search = typeof query.search === "string" ? query.search : "";

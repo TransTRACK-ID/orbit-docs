@@ -21,12 +21,15 @@ const {
   isCreating,
   search,
   fetchApps,
+  fetchApp,
   fetchStats,
   fetchActivities,
   createApp,
   updateApp,
   deleteApp,
 } = useApps();
+
+const isDeleting = ref(false);
 
 onMounted(() => {
   fetchApps();
@@ -87,14 +90,26 @@ const editForm = reactive({
   repoUrl: "",
 });
 const editNameError = ref(false);
+const isEditing = ref(false);
 
-function openEditModal(app: AppItem) {
-  editingApp.value = app;
-  editForm.name = app.name;
-  editForm.description = app.description || "";
-  editForm.owner = app.owner || "";
-  editForm.status = app.status;
-  editForm.repoUrl = app.repoUrl || "";
+async function openEditModal(app: AppItem) {
+  try {
+    const fresh = await fetchApp(app.id);
+    editingApp.value = fresh;
+    editForm.name = fresh.name;
+    editForm.description = fresh.description || "";
+    editForm.owner = fresh.owner || "";
+    editForm.status = fresh.status;
+    editForm.repoUrl = fresh.repoUrl || "";
+  } catch {
+    // Fallback to stale data if fetch fails
+    editingApp.value = app;
+    editForm.name = app.name;
+    editForm.description = app.description || "";
+    editForm.owner = app.owner || "";
+    editForm.status = app.status;
+    editForm.repoUrl = app.repoUrl || "";
+  }
   showEditModal.value = true;
   editNameError.value = false;
 }
@@ -111,15 +126,20 @@ async function submitEdit() {
     return;
   }
   editNameError.value = false;
-  if (!editingApp.value) return;
-  await updateApp(editingApp.value.id, {
-    name: editForm.name.trim(),
-    description: editForm.description,
-    owner: editForm.owner,
-    status: editForm.status,
-    repoUrl: editForm.repoUrl,
-  });
-  closeEditModal();
+  if (!editingApp.value || isEditing.value) return;
+  isEditing.value = true;
+  try {
+    await updateApp(editingApp.value.id, {
+      name: editForm.name.trim(),
+      description: editForm.description,
+      owner: editForm.owner,
+      status: editForm.status,
+      repoUrl: editForm.repoUrl,
+    });
+    closeEditModal();
+  } finally {
+    isEditing.value = false;
+  }
 }
 
 // Delete confirmation
@@ -130,9 +150,14 @@ function confirmDelete(app: AppItem) {
 }
 
 async function doDelete() {
-  if (!appToDelete.value) return;
-  await deleteApp(appToDelete.value.id);
-  appToDelete.value = null;
+  if (!appToDelete.value || isDeleting.value) return;
+  isDeleting.value = true;
+  try {
+    await deleteApp(appToDelete.value.id);
+  } finally {
+    appToDelete.value = null;
+    isDeleting.value = false;
+  }
 }
 
 function onSearch() {
@@ -304,7 +329,7 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
             <td class="num">{{ formatDate(log.createdAt) }}</td>
             <td>{{ log.appName || "—" }}</td>
             <td>{{ log.action }}</td>
-            <td>{{ log.user }}</td>
+            <td>{{ log.actor }}</td>
           </tr>
           <tr v-if="activities.length === 0">
             <td colspan="4" class="text-center text-gray-400 py-4">
@@ -445,8 +470,9 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
             <button type="button" class="btn btn-secondary" @click="closeEditModal">
               Cancel
             </button>
-            <button type="submit" class="btn btn-primary">
-              Save Changes
+            <button type="submit" class="btn btn-primary" :disabled="isEditing">
+              <span v-if="isEditing">Saving…</span>
+              <span v-else>Save Changes</span>
             </button>
           </div>
         </form>
@@ -471,8 +497,9 @@ const owners = ["Sarah Chen", "Mike Ross", "Jen Park", "Tom Lee"];
           <button type="button" class="btn btn-secondary" @click="appToDelete = null">
             Cancel
           </button>
-          <button type="button" class="btn btn-danger" @click="doDelete">
-            Delete
+          <button type="button" class="btn btn-danger" :disabled="isDeleting" @click="doDelete">
+            <span v-if="isDeleting">Deleting…</span>
+            <span v-else>Delete</span>
           </button>
         </div>
       </div>

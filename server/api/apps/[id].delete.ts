@@ -2,10 +2,10 @@ import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { apps, appVersions, activityLogs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
-import { requireAuth } from "~/server/utils/auth";
+import { requireAuth, getActorName } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
-  requireAuth(event);
+  const user = await requireAuth(event);
   const db = getDb();
   const id = getRouterParam(event, "id");
 
@@ -31,6 +31,14 @@ export default defineEventHandler(async (event) => {
       message: "App not found",
     });
   }
+
+  const actor = getActorName(user);
+  await db.insert(activityLogs).values({
+    appId: existing.id,
+    appName: existing.name,
+    action: "App deleted",
+    actor,
+  });
 
   await db.delete(appVersions).where(eq(appVersions.appId, id));
   await db.delete(apps).where(eq(apps.id, id));

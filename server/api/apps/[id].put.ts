@@ -1,11 +1,11 @@
 import { defineEventHandler, readBody, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { apps } from "~/server/database/schema";
+import { apps, activityLogs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
-import { requireAuth } from "~/server/utils/auth";
+import { requireAuth, getActorName } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
-  requireAuth(event);
+  const user = await requireAuth(event);
   const db = getDb();
   const id = getRouterParam(event, "id");
 
@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
   if (owner !== undefined) updateData.owner = owner || null;
   if (status !== undefined) updateData.status = status;
   if (repoUrl !== undefined) updateData.repoUrl = repoUrl || null;
+  updateData.updatedAt = new Date();
 
   const app = await db
     .update(apps)
@@ -41,6 +42,14 @@ export default defineEventHandler(async (event) => {
       message: "App not found",
     });
   }
+
+  const actor = getActorName(user);
+  await db.insert(activityLogs).values({
+    appId: app.id,
+    appName: app.name,
+    action: "App updated",
+    actor,
+  });
 
   return { data: app };
 });
