@@ -19,11 +19,11 @@ function goToSetupPw() {
     >
       <div
         class="w-12 h-12 mx-auto mb-4 rounded-full flex items-center justify-center"
-        style="background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent)"
+        style="background: var(--od-error-bg)"
       >
         <svg
           class="w-6 h-6"
-          style="color: oklch(50% 0.16 25)"
+          style="color: var(--od-error-text)"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

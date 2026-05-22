@@ -23,6 +23,19 @@
   --od-font-body: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
   --od-font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
 
+  /* Semantic status tokens — used across forms, pills, and feedback surfaces */
+  --od-error: oklch(55% 0.18 25);
+  --od-error-text: oklch(50% 0.16 25);
+  --od-error-soft: color-mix(in oklch, var(--od-error) 20%, transparent);
+  --od-error-bg: color-mix(in oklch, var(--od-error) 8%, transparent);
+  --od-success: oklch(60% 0.18 145);
+  --od-success-text: oklch(50% 0.14 145);
+  --od-success-soft: color-mix(in oklch, var(--od-success) 10%, transparent);
+  --od-warning: oklch(75% 0.14 85);
+  --od-warning-text: oklch(60% 0.12 85);
+  --od-info: oklch(60% 0.16 255);
+  --od-info-text: oklch(55% 0.14 255);
+
   /* Legacy tokens retained for backward compatibility */
   --primary-25: #fffafa;
   --primary-50: #fff1f2;

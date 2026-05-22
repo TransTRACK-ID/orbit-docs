@@ -123,12 +123,12 @@ const onSubmitRegister = handleSubmit(async (values) => {
             autocomplete="name"
             class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
             :class="{
-              'border-[oklch(55%_0.18_25)]': errors.name,
+               'border-[var(--od-error)]': errors.name,
             }"
             :style="
-              errors.name
-                ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
-                : undefined
+               errors.name
+                 ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
+                 : undefined
             "
             :aria-invalid="errors.name ? 'true' : undefined"
             :aria-describedby="errors.name ? 'nameError' : undefined"
@@ -137,7 +137,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             v-if="errors.name"
             id="nameError"
             class="mt-1 text-[12px]"
-            style="color: oklch(50% 0.16 25)"
+            style="color: var(--od-error-text)"
             aria-live="polite"
           >
             {{ errors.name }}
@@ -161,11 +161,11 @@ const onSubmitRegister = handleSubmit(async (values) => {
             autocomplete="email"
             class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
             :class="{
-              'border-[oklch(55%_0.18_25)]': errors.email,
+              'border-[var(--od-error)]': errors.email,
             }"
             :style="
               errors.email
-                ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
+                ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
                 : undefined
             "
             :aria-invalid="errors.email ? 'true' : undefined"
@@ -175,7 +175,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             v-if="errors.email"
             id="emailError"
             class="mt-1 text-[12px]"
-            style="color: oklch(50% 0.16 25)"
+            style="color: var(--od-error-text)"
             aria-live="polite"
           >
             {{ errors.email }}
@@ -200,11 +200,11 @@ const onSubmitRegister = handleSubmit(async (values) => {
               autocomplete="new-password"
               class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
-                'border-[oklch(55%_0.18_25)]': errors.password,
+                'border-[var(--od-error)]': errors.password,
               }"
               :style="
                 errors.password
-                  ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
+                  ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
                   : undefined
               "
               :aria-invalid="errors.password ? 'true' : undefined"
@@ -233,10 +233,10 @@ const onSubmitRegister = handleSubmit(async (values) => {
                 class="h-[3px] flex-1 rounded-full transition-colors"
                 :class="{
                   'bg-[var(--od-border)]': i > strengthScore || !password,
-                  'bg-[oklch(60%_0.18_25)]': strengthClass === 'weak' && i <= strengthScore,
-                  'bg-[oklch(75%_0.14_85)]': strengthClass === 'fair' && i <= strengthScore,
-                  'bg-[oklch(60%_0.18_145)]': strengthClass === 'good' && i <= strengthScore,
-                  'bg-[oklch(55%_0.14_255)]': strengthClass === 'strong' && i <= strengthScore,
+                  'bg-[var(--od-error)]': strengthClass === 'weak' && i <= strengthScore,
+                  'bg-[var(--od-warning)]': strengthClass === 'fair' && i <= strengthScore,
+                  'bg-[var(--od-success)]': strengthClass === 'good' && i <= strengthScore,
+                  'bg-[var(--od-info)]': strengthClass === 'strong' && i <= strengthScore,
                 }"
               />
             </div>
@@ -244,10 +244,10 @@ const onSubmitRegister = handleSubmit(async (values) => {
               v-if="strengthLabel"
               class="text-[11px] font-medium tabular-nums"
               :class="{
-                'text-[oklch(50%_0.16_25)]': strengthClass === 'weak',
-                'text-[oklch(60%_0.12_85)]': strengthClass === 'fair',
-                'text-[oklch(50%_0.14_145)]': strengthClass === 'good',
-                'text-[oklch(55%_0.14_255)]': strengthClass === 'strong',
+                'text-[var(--od-error-text)]': strengthClass === 'weak',
+                'text-[var(--od-warning-text)]': strengthClass === 'fair',
+                'text-[var(--od-success-text)]': strengthClass === 'good',
+                'text-[var(--od-info-text)]': strengthClass === 'strong',
               }"
             >
               {{ strengthLabel }}
@@ -257,7 +257,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             v-if="errors.password"
             id="passwordError"
             class="mt-1 text-[12px]"
-            style="color: oklch(50% 0.16 25)"
+            style="color: var(--od-error-text)"
             aria-live="polite"
           >
             {{ errors.password }}
@@ -282,11 +282,11 @@ const onSubmitRegister = handleSubmit(async (values) => {
               autocomplete="new-password"
               class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-[border-color,box-shadow] focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
-                'border-[oklch(55%_0.18_25)]': errors.passwordConfirmation,
+                'border-[var(--od-error)]': errors.passwordConfirmation,
               }"
               :style="
                 errors.passwordConfirmation
-                  ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
+                  ? { boxShadow: '0 0 0 3px var(--od-error-soft)' }
                   : undefined
               "
               :aria-invalid="errors.passwordConfirmation ? 'true' : undefined"
@@ -310,7 +310,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             v-if="errors.passwordConfirmation"
             id="passwordConfirmationError"
             class="mt-1 text-[12px]"
-            style="color: oklch(50% 0.16 25)"
+            style="color: var(--od-error-text)"
             aria-live="polite"
           >
             {{ errors.passwordConfirmation }}

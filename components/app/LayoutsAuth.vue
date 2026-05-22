@@ -22,8 +22,13 @@
     <slot />
 
     <!-- Page foot -->
-    <footer class="mt-6 text-center text-[12px] text-[var(--od-muted)]">
+    <footer
+      class="mt-6 flex items-center justify-center gap-2 text-[12px] text-[var(--od-muted)]"
+    >
       <span>Orbit Docs · Internal documentation platform</span>
+      <span class="font-[var(--od-font-mono)] text-[11px] tabular-nums"
+        >v2026.05</span
+      >
     </footer>
   </div>
 </template>
