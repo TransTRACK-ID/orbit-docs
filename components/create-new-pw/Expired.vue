@@ -1,5 +1,10 @@
 <script setup lang="ts">
+import { usePageStore } from "~/store/page";
+
 const router = useRouter();
+const $page = usePageStore();
+
+$page.setTitle("Link expired");
 
 function goToSetupPw() {
   router.push("/forgot-password");
@@ -57,7 +62,7 @@ function goToSetupPw() {
 
       <button
         type="button"
-        class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)]"
+        class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2"
         @click="goToSetupPw"
       >
         Request new link
@@ -68,7 +73,7 @@ function goToSetupPw() {
       >
         <NuxtLink
           to="/login"
-          class="font-medium text-[var(--od-accent)] hover:underline transition-colors"
+          class="font-medium text-[var(--od-accent)] hover:underline transition-colors focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2 rounded-[var(--od-radius)]"
         >
           Back to sign in
         </NuxtLink>

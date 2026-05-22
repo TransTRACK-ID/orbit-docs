@@ -2,6 +2,7 @@
 import { useField, useForm } from "vee-validate";
 import { object, string, ref as yupRef } from "yup";
 import { useAuthStore } from "~/store/auth";
+import { usePageStore } from "~/store/page";
 import { toast } from "vue3-toastify";
 
 definePageMeta({
@@ -16,7 +17,10 @@ definePageMeta({
 });
 
 const $auth = useAuthStore();
+const $page = usePageStore();
 const router = useRouter();
+
+$page.setTitle("Create your account");
 
 const isShowPw = ref(false);
 const isShowConfirmPw = ref(false);
@@ -110,6 +114,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             type="text"
             placeholder="e.g. Sarah Chen"
             required
+            autocomplete="name"
             class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
             :class="{
               'border-[oklch(55%_0.18_25)]': errors.name,
@@ -119,9 +124,12 @@ const onSubmitRegister = handleSubmit(async (values) => {
                 ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
                 : undefined
             "
+            :aria-invalid="errors.name ? 'true' : undefined"
+            :aria-describedby="errors.name ? 'nameError' : undefined"
           />
           <p
             v-if="errors.name"
+            id="nameError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
           >
@@ -143,6 +151,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
             type="email"
             placeholder="you@company.com"
             required
+            autocomplete="email"
             class="w-full px-3 py-2.5 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
             :class="{
               'border-[oklch(55%_0.18_25)]': errors.email,
@@ -152,9 +161,12 @@ const onSubmitRegister = handleSubmit(async (values) => {
                 ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
                 : undefined
             "
+            :aria-invalid="errors.email ? 'true' : undefined"
+            :aria-describedby="errors.email ? 'emailError' : undefined"
           />
           <p
             v-if="errors.email"
+            id="emailError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
           >
@@ -177,6 +189,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
               :type="isShowPw ? 'text' : 'password'"
               placeholder="••••••••"
               required
+              autocomplete="new-password"
               class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.password,
@@ -186,6 +199,8 @@ const onSubmitRegister = handleSubmit(async (values) => {
                   ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
                   : undefined
               "
+              :aria-invalid="errors.password ? 'true' : undefined"
+              :aria-describedby="errors.password ? 'passwordError' : undefined"
             />
             <button
               type="button"
@@ -203,6 +218,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
           </div>
           <p
             v-if="errors.password"
+            id="passwordError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
           >
@@ -225,6 +241,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
               :type="isShowConfirmPw ? 'text' : 'password'"
               placeholder="••••••••"
               required
+              autocomplete="new-password"
               class="w-full px-3 py-2.5 pr-10 text-[14px] text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] placeholder:text-[var(--od-muted)] transition-colors focus:outline-none focus:border-[var(--od-accent)]"
               :class="{
                 'border-[oklch(55%_0.18_25)]': errors.passwordConfirmation,
@@ -234,6 +251,8 @@ const onSubmitRegister = handleSubmit(async (values) => {
                   ? { boxShadow: '0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent)' }
                   : undefined
               "
+              :aria-invalid="errors.passwordConfirmation ? 'true' : undefined"
+              :aria-describedby="errors.passwordConfirmation ? 'passwordConfirmationError' : undefined"
             />
             <button
               type="button"
@@ -251,6 +270,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
           </div>
           <p
             v-if="errors.passwordConfirmation"
+            id="passwordConfirmationError"
             class="mt-1 text-[12px]"
             style="color: oklch(50% 0.16 25)"
           >
@@ -262,7 +282,7 @@ const onSubmitRegister = handleSubmit(async (values) => {
         <button
           type="submit"
           :disabled="$auth.isLoading"
-          class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] disabled:opacity-60 disabled:cursor-not-allowed"
+          class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)] disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[var(--od-accent)] focus-visible:outline-offset-2"
         >
           <IconsLoading
             v-if="$auth.isLoading"
@@ -293,3 +313,9 @@ const onSubmitRegister = handleSubmit(async (values) => {
     </footer>
   </AppLayoutsAuth>
 </template>
+
+<style scoped>
+input:focus {
+  box-shadow: 0 0 0 3px var(--od-accent-soft);
+}
+</style>
