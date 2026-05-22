@@ -78,8 +78,6 @@ export default defineNuxtConfig({
     server: {
       hmr: {
         protocol: "ws",
-        clientPort: 3000,
-        port: 3000,
       },
       watch: {
         usePolling: true,
