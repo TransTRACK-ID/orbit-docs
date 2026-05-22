@@ -61,6 +61,30 @@ export const useAuthStore = defineStore("auth", {
       }
     },
 
+    async register(payload: {
+      name: string;
+      email: string;
+      password: string;
+      passwordConfirmation: string;
+    }) {
+      this.isLoading = true;
+      try {
+        const response = await $fetch("/api/auth/register", {
+          method: "POST",
+          body: payload,
+        });
+        return response;
+      } catch (error: unknown) {
+        const err = error as any;
+        toast.error(err.data?.message || "Registration failed. Please try again.", {
+          toastClassName: "toastify-error",
+        });
+        throw error;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
     async logout() {
       try {
         const { signOut } = useAuth();

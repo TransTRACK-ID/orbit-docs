@@ -1,9 +1,5 @@
 <template>
-  <div class="grid lg:grid-cols-2 gap-10">
+  <div class="w-full max-w-[420px] mx-auto">
     <slot />
-
-    <div class="hidden lg:flex justify-center">
-      <img src="/login-page.png" alt="login" />
-    </div>
   </div>
 </template>
