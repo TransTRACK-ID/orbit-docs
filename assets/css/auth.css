@@ -1,0 +1,176 @@
+/* Orbit Docs — Auth layout & form primitives
+ * Use alongside assets/css/global.css for design tokens & fonts.
+ */
+
+/* ─── layout ────────────────────────────────────────────────── */
+body {
+  margin: 0;
+  background: var(--od-bg);
+  color: var(--od-fg);
+  font-family: var(--od-font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+a { color: inherit; text-decoration: none; }
+button { font: inherit; cursor: pointer; }
+h1 { margin: 0; font-weight: 600; font-size: 24px; }
+
+/* ─── auth card ─────────────────────────────────────────────── */
+.auth-card {
+  background: var(--od-surface);
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius-lg);
+  padding: 32px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.auth-header svg {
+  width: 22px;
+  height: 22px;
+  color: var(--od-accent);
+  flex-shrink: 0;
+}
+.auth-header h1 {
+  font-family: var(--od-font-display);
+  font-size: 18px;
+}
+
+.auth-sub {
+  color: var(--od-muted);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+/* ─── form primitives ─────────────────────────────────────────── */
+.form-group { margin-bottom: 16px; }
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.form-group label .opt {
+  color: var(--od-muted);
+  font-weight: 400;
+}
+.form-group input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--od-border);
+  border-radius: var(--od-radius);
+  background: var(--od-bg);
+  font: inherit;
+  font-size: 14px;
+  color: var(--od-fg);
+  transition: border-color .15s, box-shadow .15s;
+}
+.form-group input:focus {
+  outline: none;
+  border-color: var(--od-accent);
+  box-shadow: 0 0 0 3px var(--od-accent-soft);
+}
+
+.input-error {
+  border-color: oklch(55% 0.18 25) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
+}
+.error-msg {
+  display: none;
+  color: oklch(50% 0.16 25);
+  font-size: 12px;
+  margin-top: 4px;
+}
+.error-msg.show { display: block; }
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* ─── buttons ───────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: var(--od-radius);
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background .15s cubic-bezier(.4,0,.2,1), border-color .15s cubic-bezier(.4,0,.2,1);
+}
+.btn-primary {
+  background: var(--od-accent);
+  color: var(--od-surface);
+  border-color: var(--od-accent);
+}
+.btn-primary:hover {
+  background: color-mix(in oklch, var(--od-accent) 88%, black);
+}
+.btn-secondary {
+  background: transparent;
+  color: var(--od-fg);
+  border-color: var(--od-border);
+}
+.btn-secondary:hover {
+  border-color: var(--od-fg);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--od-accent);
+  outline-offset: 2px;
+  border-radius: var(--od-radius);
+}
+
+/* ─── footer link ───────────────────────────────────────────── */
+.auth-foot {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--od-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--od-muted);
+}
+.auth-foot a {
+  color: var(--od-accent);
+  font-weight: 500;
+  transition: color .15s;
+}
+.auth-foot a:hover {
+  color: color-mix(in oklch, var(--od-accent) 88%, black);
+}
+
+/* ─── responsive ────────────────────────────────────────────── */
+@media (max-width: 420px) {
+  .form-row { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
