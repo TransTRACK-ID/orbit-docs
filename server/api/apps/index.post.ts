@@ -1,10 +1,10 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { getDb } from "~/server/database";
 import { apps, activityLogs } from "~/server/database/schema";
-import { requireAuth } from "~/server/utils/auth";
+import { requireAuth, getActorName } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
-  requireAuth(event);
+  const user = await requireAuth(event);
   const db = getDb();
   const body = await readBody(event);
 
@@ -30,11 +30,12 @@ export default defineEventHandler(async (event) => {
     .returning()
     .then((rows) => rows[0]);
 
+  const actor = getActorName(user);
   await db.insert(activityLogs).values({
     appId: app.id,
     appName: app.name,
     action: "App created",
-    actor: owner || "System",
+    actor,
   });
 
   return { data: app };
