@@ -6,7 +6,6 @@ import {
   IconsDocEditor,
   IconsPublishedDocs,
   IconsEmbedDocs,
-  IconsUser,
   IconsSettings,
 } from "#components";
 import type { ISidebar } from "@/types/sidebar";
@@ -60,13 +59,6 @@ export const sidebarMenu: ISidebar[] = [
     label: "Embed Docs",
     route: "/embed-docs",
     icon: markRaw(IconsEmbedDocs),
-    active: false,
-  },
-  {
-    id: "menu__owners",
-    label: "Owners",
-    route: "/owners",
-    icon: markRaw(IconsUser),
     active: false,
   },
   {

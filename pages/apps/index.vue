@@ -601,10 +601,7 @@ const statusLabel: Record<string, string> = {
             <div class="form-row">
               <div class="form-group">
                 <label for="appOwner">Owner</label>
-                <select id="appOwner" v-model="createForm.owner">
-                  <option value="">Select owner…</option>
-                  <option v-for="o in ownerList" :key="o" :value="o">{{ o }}</option>
-                </select>
+                <AppOwnerSelect id="appOwner" v-model="createForm.owner" />
               </div>
               <div class="form-group">
                 <label for="appStatus">Initial Status</label>
@@ -670,10 +667,7 @@ const statusLabel: Record<string, string> = {
             <div class="form-row">
               <div class="form-group">
                 <label for="editOwner">Owner</label>
-                <select id="editOwner" v-model="editForm.owner">
-                  <option value="">Select owner…</option>
-                  <option v-for="o in ownerList" :key="o" :value="o">{{ o }}</option>
-                </select>
+                <AppOwnerSelect id="editOwner" v-model="editForm.owner" />
               </div>
               <div class="form-group">
                 <label for="editStatus">Status</label>
