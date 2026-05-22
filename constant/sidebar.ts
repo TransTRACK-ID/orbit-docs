@@ -1,8 +1,15 @@
-import { IconsBarChart, IconsBell, IconsEye } from "#components";
+import { IconsBarChart, IconsBell, IconsEye, IconsApps } from "#components";
 import type { ISidebar } from "@/types/sidebar";
 import { markRaw } from "vue";
 
 export const sidebarMenu: ISidebar[] = [
+  {
+    id: "menu__apps",
+    label: "Apps",
+    route: "/apps",
+    icon: markRaw(IconsApps),
+    active: false,
+  },
   {
     id: "menu__dashboard",
     label: "Dashboard",
