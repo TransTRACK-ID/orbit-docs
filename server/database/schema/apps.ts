@@ -1,7 +1,7 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
-export const apps = sqliteTable("apps", {
+export const apps = pgTable("apps", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull(),
   description: text("description"),
@@ -10,15 +10,11 @@ export const apps = sqliteTable("apps", {
     .notNull()
     .default("active"),
   repoUrl: text("repo_url"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
-    () => new Date()
-  ),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(
-    () => new Date()
-  ),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-export const appVersions = sqliteTable("app_versions", {
+export const appVersions = pgTable("app_versions", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   appId: text("app_id")
     .notNull()
@@ -28,23 +24,17 @@ export const appVersions = sqliteTable("app_versions", {
     .notNull()
     .default("draft"),
   createdBy: text("created_by"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
-    () => new Date()
-  ),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(
-    () => new Date()
-  ),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-export const activityLogs = sqliteTable("activity_logs", {
+export const activityLogs = pgTable("activity_logs", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   appId: text("app_id").references(() => apps.id, { onDelete: "set null" }),
   appName: text("app_name"),
   action: text("action").notNull(),
   user: text("user").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(
-    () => new Date()
-  ),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 export const appsRelations = relations(apps, ({ many }) => ({
