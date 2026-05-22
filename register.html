@@ -385,10 +385,17 @@
       // window.location.href = 'index.html';
     });
 
-    [firstNameInput, lastNameInput, emailInput, confirmInput, termsInput].forEach(el => {
+    [firstNameInput, lastNameInput, emailInput, passwordInput, confirmInput, termsInput].forEach(el => {
       el.addEventListener('input', () => {
-        const errId = el.getAttribute('aria-describedby').split(' ')[0];
-        showFieldError(el, errId, false);
+        const ids = (el.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+        ids.forEach(id => {
+          const errEl = document.getElementById(id);
+          if (errEl && errEl.classList.contains('error-msg')) {
+            errEl.classList.remove('show');
+          }
+        });
+        el.classList.remove('input-error');
+        el.setAttribute('aria-invalid', 'false');
       });
     });
   </script>
