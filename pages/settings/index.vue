@@ -353,16 +353,6 @@ async function revokeAllKeys() {
 
 <template>
   <div class="settings-page">
-    <!-- Topbar -->
-    <header class="topbar">
-      <h1>Settings</h1>
-      <div class="topbar-meta">
-        <span class="workspace-label">
-          Workspace: <strong>{{ workspace?.name || "—" }}</strong>
-        </span>
-      </div>
-    </header>
-
     <!-- Settings layout -->
     <div class="settings-layout">
       <!-- Settings navigation -->
@@ -890,32 +880,6 @@ async function revokeAllKeys() {
   --radius-lg: var(--od-radius-lg);
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.topbar h1 {
-  margin: 0;
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--fg);
-}
-.topbar-meta {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-.workspace-label {
-  color: var(--muted);
-  font-size: 14px;
-}
-.workspace-label strong {
-  color: var(--fg);
-}
-
 .settings-layout {
   display: flex;
   gap: 32px;
@@ -1429,9 +1393,6 @@ async function revokeAllKeys() {
   }
   .form-row {
     grid-template-columns: 1fr;
-  }
-  .topbar {
-    flex-wrap: wrap;
   }
 }
 
