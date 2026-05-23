@@ -24,6 +24,7 @@ $page.setTitle("Create your account");
 
 const isShowPw = ref(false);
 const isShowConfirmPw = ref(false);
+const serverError = ref("");
 
 const schema = object({
   name: string().required("Full name is required"),
@@ -38,7 +39,7 @@ const schema = object({
     .required("Please confirm your password"),
 });
 
-const { handleSubmit, errors } = useForm({ validationSchema: schema });
+const { handleSubmit, errors, setErrors } = useForm({ validationSchema: schema });
 
 const { value: name } = useField<string>("name");
 const { value: email } = useField<string>("email");
@@ -70,6 +71,7 @@ const strengthClass = computed(() => {
 });
 
 const onSubmitRegister = handleSubmit(async (values) => {
+  serverError.value = "";
   try {
     await $auth.register({
       name: values.name,
@@ -86,8 +88,11 @@ const onSubmitRegister = handleSubmit(async (values) => {
     $auth.email = values.email;
     $auth.password = values.password;
     await $auth.login();
-  } catch {
-    // Errors are handled in the store
+  } catch (e: any) {
+    serverError.value = e?.data?.message || "Registration failed. Please try again.";
+    if (e?.statusCode === 409 || /email/i.test(serverError.value)) {
+      setErrors({ email: serverError.value });
+    }
   }
 });
 </script>
@@ -106,6 +111,20 @@ const onSubmitRegister = handleSubmit(async (values) => {
       </p>
 
       <form @submit.prevent="onSubmitRegister" class="space-y-4">
+        <!-- Server error -->
+        <div
+          v-if="serverError"
+          class="p-3 rounded-[var(--od-radius)] border text-[13px] font-medium"
+          aria-live="polite"
+          style="
+            background: var(--od-error-bg);
+            color: var(--od-error-text);
+            border-color: var(--od-error);
+          "
+        >
+          {{ serverError }}
+        </div>
+
         <!-- Full name -->
         <div>
           <label
