@@ -107,6 +107,11 @@ export default defineEventHandler(async (event) => {
           httpOnly: true,
           path: "/",
         });
+        setCookie(event, "auth.token", response.data.access_token, {
+          httpOnly: false,
+          path: "/",
+          maxAge: 60 * 60 * 24,
+        });
       }
 
       // Auto-provision the user as workspace admin if they don't have a member record
@@ -134,7 +139,11 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    setCookie(event, "session_token", user.id, { httpOnly: true, path: "/" });
+    // Use a stable token in preview mode so @sidebase/nuxt-auth can recover auth state
+    const token = isPreviewMode(config) ? "preview-mock-token" : user.id;
+
+    setCookie(event, "session_token", token, { httpOnly: true, path: "/" });
+    setCookie(event, "auth.token", token, { httpOnly: false, path: "/", maxAge: 60 * 60 * 24 });
 
     // Auto-provision the user as workspace admin if they don't have a member record
     try {
@@ -147,7 +156,7 @@ export default defineEventHandler(async (event) => {
     return {
       status: "success",
       data: {
-        access_token: user.id,
+        access_token: token,
         user: { id: user.id, email: user.email, name: user.name },
       },
     };

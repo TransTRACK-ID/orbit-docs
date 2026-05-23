@@ -1,4 +1,4 @@
-import { createError, defineEventHandler, deleteCookie, readBody } from "h3";
+import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
 
 export default defineEventHandler(async (event) => {
@@ -8,7 +8,8 @@ export default defineEventHandler(async (event) => {
 
     // Preview mode: no external API available, return mock response
     if (isPreviewMode(config)) {
-      deleteCookie(event, "session_token", { path: "/" });
+      setCookie(event, "session_token", "", { path: "/", maxAge: 0 });
+      setCookie(event, "auth.token", "", { path: "/", maxAge: 0 });
       return { status: 'success', message: 'Logged out (preview)' };
     }
 
@@ -20,15 +21,25 @@ export default defineEventHandler(async (event) => {
     });
 
     // Clear the session token cookie on the server side
-    deleteCookie(event, "session_token", {
+    setCookie(event, "session_token", "", {
       path: "/",
+      maxAge: 0,
+    });
+    setCookie(event, "auth.token", "", {
+      path: "/",
+      maxAge: 0,
     });
 
     return { ...res };
   } catch (error: any) {
     // Even if the third-party logout fails, clear the local cookie
-    deleteCookie(event, "session_token", {
+    setCookie(event, "session_token", "", {
       path: "/",
+      maxAge: 0,
+    });
+    setCookie(event, "auth.token", "", {
+      path: "/",
+      maxAge: 0,
     });
 
     throw createError({
