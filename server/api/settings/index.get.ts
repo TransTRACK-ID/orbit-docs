@@ -7,15 +7,20 @@ export default defineEventHandler(async (event) => {
   await requireAuth(event);
   const db = getDb();
 
-  const rows = await db.select().from(workspaceSettings).limit(1);
-  const row = rows[0];
+  let rows = await db.select().from(workspaceSettings).limit(1);
+  let row = rows[0];
 
   if (!row) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: "Not Found",
-      message: "Workspace settings not found",
-    });
+    const inserted = await db.insert(workspaceSettings).values({
+      id: crypto.randomUUID(),
+      name: "Acme Engineering",
+      slug: "acme-engineering",
+      description: "Internal documentation platform for product and engineering teams.",
+      theme: "light",
+      logoUrl: null,
+      publicDocsAccess: true,
+    }).returning();
+    row = inserted[0];
   }
 
   return { data: row };

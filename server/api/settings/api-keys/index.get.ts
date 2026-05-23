@@ -7,15 +7,16 @@ export default defineEventHandler(async (event) => {
   await requireAuth(event);
   const db = getDb();
 
-  const rows = await db.select().from(apiKeys).limit(1);
-  const row = rows[0];
+  let rows = await db.select().from(apiKeys).limit(1);
+  let row = rows[0];
 
   if (!row) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: "Not Found",
-      message: "API keys not found",
-    });
+    const inserted = await db.insert(apiKeys).values({
+      id: crypto.randomUUID(),
+      productionKey: "od_live_••••••••••••••••••••••••",
+      webhookSecret: "whsec_••••••••••••••••••••••••••",
+    }).returning();
+    row = inserted[0];
   }
 
   return { data: row };

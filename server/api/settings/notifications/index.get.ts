@@ -7,15 +7,18 @@ export default defineEventHandler(async (event) => {
   await requireAuth(event);
   const db = getDb();
 
-  const rows = await db.select().from(notificationSettings).limit(1);
-  const row = rows[0];
+  let rows = await db.select().from(notificationSettings).limit(1);
+  let row = rows[0];
 
   if (!row) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: "Not Found",
-      message: "Notification settings not found",
-    });
+    const inserted = await db.insert(notificationSettings).values({
+      id: crypto.randomUUID(),
+      emailDigest: true,
+      releaseAlerts: true,
+      docComments: false,
+      slackNotifications: false,
+    }).returning();
+    row = inserted[0];
   }
 
   return { data: row };

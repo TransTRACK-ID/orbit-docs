@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { toast } from "vue3-toastify";
 import { usePageStore } from "~/store/page";
-import type { TeamMember, TeamRole } from "~/types/settings";
+import type {
+  TeamMember,
+  TeamRole,
+  UpdateIntegrationsPayload,
+  UpdateNotificationsPayload,
+} from "~/types/settings";
 
 definePageMeta({
   auth: { required: true },
@@ -82,7 +87,7 @@ async function saveGeneral() {
     slug: generalForm.slug,
     description: generalForm.description,
     theme: generalForm.theme,
-    logoUrl: generalForm.logoUrl || undefined,
+    logoUrl: generalForm.logoUrl === "" ? null : generalForm.logoUrl || undefined,
   });
   generalDirty.value = false;
 }
@@ -173,18 +178,18 @@ const rolePillClass: Record<TeamRole, string> = {
 };
 
 // ─── Integrations toggles ───────────────────────────────────────
-async function toggleIntegration(key: keyof typeof integrations.value) {
+async function toggleIntegration(key: keyof UpdateIntegrationsPayload) {
   if (!integrations.value) return;
-  const payload: Record<string, boolean> = {};
-  payload[key] = !integrations.value[key as keyof typeof integrations.value];
+  const payload: UpdateIntegrationsPayload = {};
+  payload[key] = !integrations.value[key];
   await updateIntegrations(payload);
 }
 
 // ─── Notifications toggles ────────────────────────────────────────
-async function toggleNotification(key: keyof typeof notifications.value) {
+async function toggleNotification(key: keyof UpdateNotificationsPayload) {
   if (!notifications.value) return;
-  const payload: Record<string, boolean> = {};
-  payload[key] = !notifications.value[key as keyof typeof notifications.value];
+  const payload: UpdateNotificationsPayload = {};
+  payload[key] = !notifications.value[key];
   await updateNotifications(payload);
 }
 
