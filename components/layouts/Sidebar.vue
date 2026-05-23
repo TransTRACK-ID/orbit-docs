@@ -1,10 +1,27 @@
 <script setup lang="ts">
 import { sidebarMenu } from "@/constant/sidebar";
+import { useAuthStore } from "~/store/auth";
 
 const route = useRoute();
 const { workspace } = useSettings();
+const $auth = useAuthStore();
+const { data } = useAuth();
 
 const isActive = (path: string) => route.path === path || route.path.startsWith(path + "/");
+
+const user = computed(() => {
+  const d = data.value as any;
+  return d?.data?.user || d?.user || null;
+});
+
+const userName = computed(() => user.value?.name || "");
+const userEmail = computed(() => user.value?.email || "");
+
+function logout() {
+  $auth.logout().then(() => {
+    window.location.href = "/login";
+  });
+}
 </script>
 
 <template>
@@ -59,6 +76,20 @@ const isActive = (path: string) => route.path === path || route.path.startsWith(
           <component :is="item.icon" size="16" />
           <span>{{ item.label }}</span>
         </NuxtLink>
+
+        <div v-if="user" class="sidebar-profile">
+          <div class="profile-row">
+            <general-avatar :src="null" :size="28" :name="userName" />
+            <div class="profile-info">
+              <div class="profile-name">{{ userName }}</div>
+              <div v-if="userEmail" class="profile-email">{{ userEmail }}</div>
+            </div>
+          </div>
+          <button class="logout-btn" @click="logout">
+            <IconsLogout size="16" class="logout-icon" />
+            <span>Sign out</span>
+          </button>
+        </div>
       </div>
     </nav>
   </aside>
@@ -149,5 +180,66 @@ const isActive = (path: string) => route.path === path || route.path.startsWith(
   outline: 2px solid var(--accent, oklch(55% 0.16 25));
   outline-offset: 2px;
   border-radius: 8px;
+}
+
+.sidebar-profile {
+  padding: 12px;
+  margin: 8px 12px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border, oklch(90% 0.006 250));
+  background: var(--bg, oklch(98% 0.004 250));
+}
+.profile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.profile-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+.profile-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg, oklch(20% 0.02 250));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profile-email {
+  font-size: 11px;
+  color: var(--muted, oklch(55% 0.015 250));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.logout-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border, oklch(90% 0.006 250));
+  background: transparent;
+  color: var(--muted, oklch(55% 0.015 250));
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  font-family: inherit;
+}
+.logout-btn:hover {
+  color: var(--fg, oklch(20% 0.02 250));
+  border-color: var(--fg, oklch(20% 0.02 250));
+  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
+}
+.logout-icon {
+  stroke: currentColor;
+  flex-shrink: 0;
 }
 </style>
