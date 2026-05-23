@@ -56,6 +56,7 @@ export default defineNuxtConfig({
       },
       pages: {
         login: "/login",
+        navigateUnauthenticatedTo: "/login",
       },
       token: {
         signInResponseTokenPointer: "/data/access_token",
