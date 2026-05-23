@@ -792,17 +792,17 @@ async function revokeAllKeys() {
 
 <style scoped>
 .settings-page {
-  --bg: oklch(98% 0.004 250);
-  --surface: oklch(100% 0 0);
-  --fg: oklch(20% 0.02 250);
-  --muted: oklch(55% 0.015 250);
-  --border: oklch(90% 0.006 250);
-  --accent: oklch(55% 0.16 25);
-  --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
-  --fg-soft: color-mix(in oklch, var(--fg) 6%, transparent);
-  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
-  --radius: 8px;
-  --radius-lg: 12px;
+  --bg: var(--od-bg);
+  --surface: var(--od-surface);
+  --fg: var(--od-fg);
+  --muted: var(--od-muted);
+  --border: var(--od-border);
+  --accent: var(--od-accent);
+  --accent-soft: var(--od-accent-soft);
+  --fg-soft: var(--od-fg-soft);
+  --font-mono: var(--od-font-mono);
+  --radius: var(--od-radius);
+  --radius-lg: var(--od-radius-lg);
 }
 
 .topbar {

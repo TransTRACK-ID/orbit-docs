@@ -12,7 +12,7 @@ import type {
 } from "~/types/settings";
 
 export const useSettings = () => {
-  const workspace = ref<WorkspaceSettings | null>(null);
+  const workspace = useState<WorkspaceSettings | null>("workspace-settings", () => null);
   const teamMembers = ref<TeamMember[]>([]);
   const currentMember = ref<TeamMember | null>(null);
   const pendingInvitations = ref<TeamMember[]>([]);

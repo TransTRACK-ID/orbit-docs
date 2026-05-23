@@ -2,6 +2,7 @@
 import { sidebarMenu } from "@/constant/sidebar";
 
 const route = useRoute();
+const { workspace } = useSettings();
 
 const isActive = (path: string) => route.path === path || route.path.startsWith(path + "/");
 </script>
@@ -9,12 +10,26 @@ const isActive = (path: string) => route.path === path || route.path.startsWith(
 <template>
   <aside class="sidebar">
     <div class="sidebar-brand">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22">
+      <img
+        v-if="workspace?.logoUrl"
+        :src="workspace.logoUrl"
+        alt="Workspace logo"
+        class="workspace-logo"
+      />
+      <svg
+        v-else
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        width="22"
+        height="22"
+      >
         <circle cx="12" cy="12" r="10"/>
         <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
         <path d="M2 12h20"/>
       </svg>
-      Orbit Docs
+      {{ workspace?.name || "Orbit Docs" }}
     </div>
 
     <nav class="sidebar-nav">
@@ -80,6 +95,13 @@ const isActive = (path: string) => route.path === path || route.path.startsWith(
 .sidebar-brand svg {
   color: var(--accent, oklch(55% 0.16 25));
   flex-shrink: 0;
+}
+.workspace-logo {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 4px;
 }
 .sidebar-nav {
   display: flex;
