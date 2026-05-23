@@ -10,6 +10,23 @@ const $auth = useAuthStore();
 const $router = useRouter();
 const { data } = useAuth();
 
+const user = computed(() => {
+  const d = data.value as any;
+  return d?.data?.user || d?.user || null;
+});
+
+const userName = computed(() => user.value?.name || "");
+const userEmail = computed(() => user.value?.email || "");
+const userInitials = computed(() => {
+  if (!userName.value) return "";
+  return userName.value
+    .split(" ")
+    .map((n: string) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+});
+
 let modalLogout: ElementEvent | null = null;
 async function logout() {
   $auth.logout().then(() => {
@@ -41,17 +58,24 @@ async function logout() {
       <GeneralDropdown v-if="data" id="dropdown-profile">
         <template #activator>
           <button class="profile-btn" aria-label="Open user menu">
-            <general-avatar :src="null" size="28" />
+            <general-avatar :src="null" :size="28" :name="userName" />
           </button>
         </template>
         <template #content>
+          <div class="dropdown-header">
+            <general-avatar :src="null" :size="36" :name="userName" />
+            <div class="dropdown-header-info">
+              <div v-if="userName" class="dropdown-name">{{ userName }}</div>
+              <div v-if="userEmail" class="dropdown-email">{{ userEmail }}</div>
+            </div>
+          </div>
           <ul class="dropdown-menu">
             <li class="dropdown-item" @click="$router.push('/change-password')">
               <IconsSettings size="16" />
               <span>Change Password</span>
             </li>
-            <li class="dropdown-item" @click="modalLogout?.show()">
-              <IconsLogout size="16" />
+            <li class="dropdown-item text-[var(--od-error)]" @click="modalLogout?.show()">
+              <IconsLogout size="16" class="stroke-[var(--od-error)]" />
               <span>Log out</span>
             </li>
           </ul>
@@ -82,6 +106,7 @@ async function logout() {
   display: flex;
   align-items: center;
   gap: 16px;
+  position: relative;
 }
 .profile-btn {
   display: flex;
@@ -95,15 +120,41 @@ async function logout() {
   cursor: pointer;
   padding: 0;
   transition: border-color .15s;
+  overflow: hidden;
 }
 .profile-btn:hover {
   border-color: var(--fg, oklch(20% 0.02 250));
+}
+.dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border, oklch(90% 0.006 250));
+}
+.dropdown-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dropdown-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg, oklch(20% 0.02 250));
+}
+.dropdown-email {
+  font-size: 12px;
+  color: var(--muted, oklch(55% 0.015 250));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dropdown-menu {
   list-style: none;
   margin: 0;
   padding: 4px 0;
-  min-width: 180px;
+  min-width: 200px;
 }
 .dropdown-item {
   display: flex;
