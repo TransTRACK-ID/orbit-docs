@@ -29,9 +29,7 @@ const userInitials = computed(() => {
 
 let modalLogout: ElementEvent | null = null;
 async function logout() {
-  $auth.logout().then(() => {
-    window.location.href = "/login";
-  });
+  await $auth.logout();
 }
 </script>
 

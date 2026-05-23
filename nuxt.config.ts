@@ -38,6 +38,9 @@ export default defineNuxtConfig({
   ssr: false,
 
   auth: {
+    baseURL: process.env.NUXT_APP_BASE_URL
+      ? `${process.env.NUXT_APP_BASE_URL}api/auth`
+      : '/api/auth',
     provider: {
       type: "local",
       endpoints: {
