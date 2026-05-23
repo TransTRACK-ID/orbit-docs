@@ -91,6 +91,13 @@ const generalForm = reactive({
   theme: "light" as "light" | "dark" | "system",
   logoUrl: "",
 });
+const originalGeneral = reactive({
+  name: "",
+  slug: "",
+  description: "",
+  theme: "light" as "light" | "dark" | "system",
+  logoUrl: "",
+});
 const generalDirty = ref(false);
 const hasPopulatedGeneral = ref(false);
 const slugManuallyEdited = ref(false);
@@ -104,6 +111,11 @@ watch(
     generalForm.description = ws.description || "";
     generalForm.theme = ws.theme;
     generalForm.logoUrl = ws.logoUrl || "";
+    originalGeneral.name = ws.name;
+    originalGeneral.slug = ws.slug;
+    originalGeneral.description = ws.description || "";
+    originalGeneral.theme = ws.theme;
+    originalGeneral.logoUrl = ws.logoUrl || "";
     generalDirty.value = false;
     slugManuallyEdited.value = false;
     hasPopulatedGeneral.value = true;
@@ -144,6 +156,34 @@ watch(
   }
 );
 
+/* ─── Live preview: theme ─────────────────────────────────────── */
+function applyPreviewTheme(theme: string | undefined) {
+  const html = document.documentElement;
+  if (theme === "dark") {
+    html.classList.add("dark");
+  } else if (theme === "light") {
+    html.classList.remove("dark");
+  } else if (theme === "system") {
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    html.classList.toggle("dark", prefersDark);
+  } else {
+    html.classList.remove("dark");
+  }
+}
+
+watch(() => generalForm.theme, (theme) => {
+  applyPreviewTheme(theme);
+  onGeneralChange();
+});
+
+/* ─── Live preview: logo ────────────────────────────────────── */
+watch(() => generalForm.logoUrl, (url) => {
+  if (workspace.value) {
+    workspace.value.logoUrl = url || null;
+  }
+  onGeneralChange();
+});
+
 async function saveGeneral() {
   await updateWorkspace({
     name: generalForm.name,
@@ -152,20 +192,36 @@ async function saveGeneral() {
     theme: generalForm.theme,
     logoUrl: generalForm.logoUrl === "" ? null : generalForm.logoUrl || undefined,
   });
+  // Sync originals so reset doesn't revert after a successful save
+  originalGeneral.name = generalForm.name;
+  originalGeneral.slug = generalForm.slug;
+  originalGeneral.description = generalForm.description;
+  originalGeneral.theme = generalForm.theme;
+  originalGeneral.logoUrl = generalForm.logoUrl;
   generalDirty.value = false;
 }
 
 function resetGeneral() {
-  const ws = workspace.value;
-  if (!ws) return;
-  generalForm.name = ws.name;
-  generalForm.slug = ws.slug;
-  generalForm.description = ws.description || "";
-  generalForm.theme = ws.theme;
-  generalForm.logoUrl = ws.logoUrl || "";
+  generalForm.name = originalGeneral.name;
+  generalForm.slug = originalGeneral.slug;
+  generalForm.description = originalGeneral.description;
+  generalForm.theme = originalGeneral.theme;
+  generalForm.logoUrl = originalGeneral.logoUrl;
+  if (workspace.value) {
+    workspace.value.logoUrl = originalGeneral.logoUrl || null;
+  }
+  applyPreviewTheme(originalGeneral.theme);
   generalDirty.value = false;
   slugManuallyEdited.value = false;
 }
+
+// Restore original theme & logo when leaving settings if unsaved
+onUnmounted(() => {
+  applyPreviewTheme(originalGeneral.theme);
+  if (workspace.value) {
+    workspace.value.logoUrl = originalGeneral.logoUrl || null;
+  }
+});
 
 async function togglePublicDocs() {
   const next = !workspace.value?.publicDocsAccess;
@@ -392,7 +448,7 @@ async function revokeAllKeys() {
               <div class="form-row">
                 <div class="form-group">
                   <label for="theme">Default Theme</label>
-                  <select id="theme" v-model="generalForm.theme" @change="onGeneralChange">
+                  <select id="theme" v-model="generalForm.theme">
                     <option value="light">Light</option>
                     <option value="dark">Dark</option>
                     <option value="system">System</option>
@@ -405,8 +461,22 @@ async function revokeAllKeys() {
                     v-model="generalForm.logoUrl"
                     type="url"
                     placeholder="https://cdn.example.com/logo.svg"
-                    @input="onGeneralChange"
                   />
+                </div>
+              </div>
+              <div class="form-group" style="margin-top: 8px;">
+                <label>Logo Preview</label>
+                <div class="logo-preview">
+                  <img
+                    v-if="generalForm.logoUrl"
+                    :src="generalForm.logoUrl"
+                    alt="Logo preview"
+                    class="logo-preview-img"
+                    @error="(e) => { const t = e.target as HTMLImageElement | null; if (t) t.style.display = 'none'; }"
+                  />
+                  <span v-if="!generalForm.logoUrl" class="logo-preview-placeholder">
+                    No logo set — default orbit icon will be used in the sidebar.
+                  </span>
                 </div>
               </div>
               <div class="toggle" style="margin-top: 8px;">
@@ -1240,6 +1310,27 @@ async function revokeAllKeys() {
   gap: 10px;
   padding: 16px 24px;
   border-top: 1px solid var(--border);
+}
+
+.logo-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 56px;
+}
+.logo-preview-img {
+  max-height: 40px;
+  max-width: 160px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+.logo-preview-placeholder {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .slug-auto-badge {
