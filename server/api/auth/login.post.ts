@@ -8,6 +8,8 @@ import crypto from "crypto";
 import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { $fetch } from "ofetch";
 import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
+import { ensureTeamMember } from "~/server/utils/team-access";
+import { getAuthUser } from "~/server/utils/auth";
 
 interface LoginResponse {
   status: string;
@@ -107,6 +109,15 @@ export default defineEventHandler(async (event) => {
     if (isPreviewMode(config)) {
       const mockToken = 'preview-mock-token-' + Date.now();
       setCookie(event, 'session_token', mockToken, { httpOnly: true, path: '/' });
+
+      // Auto-provision the user as workspace admin if they don't have a member record
+      try {
+        const user = await getAuthUser(event);
+        await ensureTeamMember(user);
+      } catch (e) {
+        console.error("Failed to auto-provision team member on login (preview):", e);
+      }
+
       return {
         status: 'success',
         data: {
@@ -137,6 +148,14 @@ export default defineEventHandler(async (event) => {
         httpOnly: true,
         path: "/",
       });
+    }
+
+    // Auto-provision the user as workspace admin if they don't have a member record
+    try {
+      const user = await getAuthUser(event);
+      await ensureTeamMember(user);
+    } catch (e) {
+      console.error("Failed to auto-provision team member on login:", e);
     }
 
     // Return the response from the third-party API
