@@ -53,7 +53,8 @@ export function hashPassword(password: string): string {
 /**
  * Verify a password against a stored scrypt hash.
  */
-export function verifyPassword(password: string, hash: string): boolean {
+export function verifyPassword(password: string, hash: string | null | undefined): boolean {
+  if (!hash) return false;
   const [salt, key] = hash.split(":");
   if (!salt || !key) return false;
   const derivedKey = scryptSync(password, salt, 64);
