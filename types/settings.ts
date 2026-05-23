@@ -64,7 +64,7 @@ export interface UpdateWorkspacePayload {
   slug?: string;
   description?: string;
   theme?: "light" | "dark" | "system";
-  logoUrl?: string;
+  logoUrl?: string | null;
   publicDocsAccess?: boolean;
 }
 
