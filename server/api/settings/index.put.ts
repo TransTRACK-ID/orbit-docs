@@ -3,6 +3,7 @@ import { getDb } from "~/server/database";
 import { workspaceSettings } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
+import { slugify, generateUniqueSlug } from "~/server/utils/slug";
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
@@ -21,8 +22,20 @@ export default defineEventHandler(async (event) => {
   }
 
   const updateData: Partial<typeof workspaceSettings.$inferInsert> = {};
-  if (body.name !== undefined) updateData.name = body.name.trim();
-  if (body.slug !== undefined) updateData.slug = body.slug.trim();
+
+  if (body.name !== undefined) {
+    updateData.name = body.name.trim();
+  }
+
+  // Auto-generate slug from name if slug is not provided but name is
+  if (body.slug !== undefined) {
+    const normalizedSlug = slugify(body.slug.trim());
+    updateData.slug = await generateUniqueSlug(db, workspaceSettings, normalizedSlug, id);
+  } else if (body.name !== undefined && !body.slug) {
+    // Auto-generate from name when slug field is empty/not provided
+    updateData.slug = await generateUniqueSlug(db, workspaceSettings, body.name.trim(), id);
+  }
+
   if (body.description !== undefined) updateData.description = body.description || null;
   if (body.theme !== undefined) updateData.theme = body.theme;
   if (body.logoUrl !== undefined) updateData.logoUrl = body.logoUrl || null;

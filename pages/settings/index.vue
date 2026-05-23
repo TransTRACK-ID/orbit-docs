@@ -63,6 +63,7 @@ const generalForm = reactive({
 });
 const generalDirty = ref(false);
 const hasPopulatedGeneral = ref(false);
+const slugManuallyEdited = ref(false);
 
 watch(
   () => workspace.value,
@@ -74,14 +75,44 @@ watch(
     generalForm.theme = ws.theme;
     generalForm.logoUrl = ws.logoUrl || "";
     generalDirty.value = false;
+    slugManuallyEdited.value = false;
     hasPopulatedGeneral.value = true;
   },
   { immediate: true }
 );
 
+/**
+ * Generate a URL-friendly slug from a workspace name.
+ * Mirrors the server-side slugify logic.
+ */
+function generateSlugFromName(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function onGeneralChange() {
   generalDirty.value = true;
 }
+
+function onSlugInput() {
+  slugManuallyEdited.value = true;
+  onGeneralChange();
+}
+
+// Auto-generate slug from name when slug hasn't been manually edited
+watch(
+  () => generalForm.name,
+  (newName) => {
+    if (!slugManuallyEdited.value && hasPopulatedGeneral.value) {
+      generalForm.slug = generateSlugFromName(newName);
+      generalDirty.value = true;
+    }
+  }
+);
 
 async function saveGeneral() {
   await updateWorkspace({
@@ -103,6 +134,7 @@ function resetGeneral() {
   generalForm.theme = ws.theme;
   generalForm.logoUrl = ws.logoUrl || "";
   generalDirty.value = false;
+  slugManuallyEdited.value = false;
 }
 
 async function togglePublicDocs() {
@@ -272,13 +304,17 @@ async function revokeAllKeys() {
                 />
               </div>
               <div class="form-group">
-                <label for="wsSlug">Slug</label>
+                <label for="wsSlug">
+                  Slug
+                  <span v-if="!slugManuallyEdited" class="slug-auto-badge">auto</span>
+                </label>
                 <input
                   id="wsSlug"
                   v-model="generalForm.slug"
                   type="text"
-                  @input="onGeneralChange"
+                  @input="onSlugInput"
                 />
+                <span class="slug-hint">Used in URLs. Edit to customize.</span>
               </div>
               <div class="form-group">
                 <label for="wsDesc">Description</label>
@@ -1132,6 +1168,26 @@ async function revokeAllKeys() {
   border-top: 1px solid var(--border);
 }
 
+.slug-auto-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 100px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.slug-hint {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 4px;
+}
 .error-msg {
   display: none;
   color: oklch(50% 0.16 25);
