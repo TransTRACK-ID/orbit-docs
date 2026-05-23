@@ -14,17 +14,26 @@ import type {
 export const useSettings = () => {
   const workspace = ref<WorkspaceSettings | null>(null);
   const teamMembers = ref<TeamMember[]>([]);
+  const currentMember = ref<TeamMember | null>(null);
+  const pendingInvitations = ref<TeamMember[]>([]);
   const integrations = ref<IntegrationSettings | null>(null);
   const notifications = ref<NotificationSettings | null>(null);
   const apiKeys = ref<ApiKeys | null>(null);
 
   const isLoadingWorkspace = ref(false);
   const isLoadingTeam = ref(false);
+  const isLoadingCurrentMember = ref(false);
   const isLoadingIntegrations = ref(false);
   const isLoadingNotifications = ref(false);
   const isLoadingApiKeys = ref(false);
   const isSaving = ref(false);
   const isInviting = ref(false);
+  const isAccepting = ref(false);
+
+  const canManageTeam = computed(() => {
+    if (!currentMember.value) return false;
+    return ["admin", "product_manager"].includes(currentMember.value.role);
+  });
 
   async function fetchWorkspace() {
     isLoadingWorkspace.value = true;
@@ -86,6 +95,31 @@ export const useSettings = () => {
     }
   }
 
+  async function fetchCurrentMember() {
+    isLoadingCurrentMember.value = true;
+    try {
+      const data = await $fetch<{ data: TeamMember | null }>("/api/settings/team/me");
+      currentMember.value = data.data;
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      }
+      console.error(e);
+    } finally {
+      isLoadingCurrentMember.value = false;
+    }
+  }
+
+  async function fetchPendingInvitations() {
+    try {
+      const data = await $fetch<{ data: TeamMember[] }>("/api/settings/team/invitations");
+      pendingInvitations.value = data.data;
+    } catch (e: any) {
+      console.error("Failed to load invitations", e);
+    }
+  }
+
   async function inviteMember(payload: CreateTeamMemberPayload) {
     isInviting.value = true;
     try {
@@ -107,6 +141,34 @@ export const useSettings = () => {
       throw e;
     } finally {
       isInviting.value = false;
+    }
+  }
+
+  async function acceptInvitation(memberId: string) {
+    isAccepting.value = true;
+    try {
+      const data = await $fetch<{ data: TeamMember }>(`/api/settings/team/${memberId}/accept`, {
+        method: "POST",
+      });
+      const idx = teamMembers.value.findIndex((m) => m.id === memberId);
+      if (idx !== -1) {
+        teamMembers.value[idx] = { ...teamMembers.value[idx], ...data.data };
+      }
+      pendingInvitations.value = pendingInvitations.value.filter((m) => m.id !== memberId);
+      currentMember.value = data.data;
+      toast.success("Invitation accepted. Welcome to the workspace!");
+      return data.data;
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to accept invitation";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
+      throw e;
+    } finally {
+      isAccepting.value = false;
     }
   }
 
@@ -275,20 +337,28 @@ export const useSettings = () => {
   return {
     workspace,
     teamMembers,
+    currentMember,
+    pendingInvitations,
     integrations,
     notifications,
     apiKeys,
     isLoadingWorkspace,
     isLoadingTeam,
+    isLoadingCurrentMember,
     isLoadingIntegrations,
     isLoadingNotifications,
     isLoadingApiKeys,
     isSaving,
     isInviting,
+    isAccepting,
+    canManageTeam,
     fetchWorkspace,
     updateWorkspace,
     fetchTeam,
+    fetchCurrentMember,
+    fetchPendingInvitations,
     inviteMember,
+    acceptInvitation,
     updateMember,
     deleteMember,
     fetchIntegrations,

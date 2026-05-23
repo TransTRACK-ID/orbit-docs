@@ -73,11 +73,19 @@ export default defineNitroPlugin(async () => {
       email TEXT,
       initials TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'viewer',
+      status TEXT NOT NULL DEFAULT 'active',
+      invited_by TEXT,
+      user_id TEXT,
       last_active TEXT NOT NULL DEFAULT 'just now',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+
+  // Migrate existing tables that may lack new columns
+  await pool.query(`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'`);
+  await pool.query(`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS invited_by TEXT`);
+  await pool.query(`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS user_id TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS integration_settings (
@@ -185,10 +193,14 @@ export default defineNitroPlugin(async () => {
   const teamCount = await db.select({ count: count() }).from(teamMembers);
   if (teamCount[0]?.count === 0) {
     await db.insert(teamMembers).values([
-      { id: crypto.randomUUID(), name: "Sarah Chen", email: "sarah.chen@example.com", initials: "SC", role: "admin", lastActive: "2 hours ago" },
-      { id: crypto.randomUUID(), name: "Mike Ross", email: "mike.ross@example.com", initials: "MR", role: "product_manager", lastActive: "1 day ago" },
-      { id: crypto.randomUUID(), name: "Jen Park", email: "jen.park@example.com", initials: "JP", role: "tech_writer", lastActive: "3 days ago" },
-      { id: crypto.randomUUID(), name: "Tom Lee", email: "tom.lee@example.com", initials: "TL", role: "viewer", lastActive: "1 week ago" },
+      { id: crypto.randomUUID(), name: "Sarah Chen", email: "sarah.chen@example.com", initials: "SC", role: "admin", status: "active", lastActive: "2 hours ago" },
+      { id: crypto.randomUUID(), name: "Mike Ross", email: "mike.ross@example.com", initials: "MR", role: "product_manager", status: "active", lastActive: "1 day ago" },
+      { id: crypto.randomUUID(), name: "Jen Park", email: "jen.park@example.com", initials: "JP", role: "tech_writer", status: "active", lastActive: "3 days ago" },
+      { id: crypto.randomUUID(), name: "Tom Lee", email: "tom.lee@example.com", initials: "TL", role: "viewer", status: "active", lastActive: "1 week ago" },
+      // Preview-mode admin so local testing works out of the box
+      { id: crypto.randomUUID(), name: "Preview User", email: "preview@example.com", userId: "preview-user", initials: "PU", role: "admin", status: "active", lastActive: "just now" },
+      // Pending invitation for demo / testing
+      { id: crypto.randomUUID(), name: "Alex Rivera", email: "alex@example.com", initials: "AR", role: "tech_writer", status: "pending", invitedBy: "Sarah Chen", lastActive: "invited" },
     ]);
   }
 

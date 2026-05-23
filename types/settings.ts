@@ -11,6 +11,7 @@ export interface WorkspaceSettings {
 }
 
 export type TeamRole = "admin" | "product_manager" | "tech_writer" | "viewer";
+export type TeamMemberStatus = "pending" | "active";
 
 export interface TeamMember {
   id: string;
@@ -18,6 +19,9 @@ export interface TeamMember {
   email: string | null;
   initials: string;
   role: TeamRole;
+  status: TeamMemberStatus;
+  invitedBy: string | null;
+  userId: string | null;
   lastActive: string;
   createdAt: string | null;
   updatedAt: string | null;
@@ -57,6 +61,10 @@ export interface CreateTeamMemberPayload {
   initials?: string;
   role?: TeamRole;
   lastActive?: string;
+}
+
+export interface AcceptInvitationPayload {
+  memberId: string;
 }
 
 export interface UpdateWorkspacePayload {
