@@ -43,6 +43,17 @@ interface ErrorResponse {
 
 export default defineEventHandler(async (event) => {
     try {
+        // Preview mode: return mock session immediately without checking cookies/headers
+        if (process.env.ORBIT_PREVIEW === 'true') {
+            return {
+                status: "success",
+                data: {
+                    user: { id: "preview-user", email: "preview@orbit.local", name: "Preview User" },
+                    companies: [{ id: "local", name: "Local Workspace" }],
+                },
+            };
+        }
+
         let sessionToken = getCookie(event, "session_token");
 
         if (!sessionToken) {
