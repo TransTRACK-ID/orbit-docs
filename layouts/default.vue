@@ -1,7 +1,13 @@
+<script setup lang="ts">
+import { usePageStore } from "~/store/page";
+const $page = usePageStore();
+</script>
+
 <template>
   <div class="app-shell">
     <LayoutsSidebar />
     <div class="main">
+      <LayoutsHeader :title="$page.title" />
       <div class="content">
         <slot />
       </div>
