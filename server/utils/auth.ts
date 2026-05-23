@@ -2,6 +2,10 @@ import { type H3Event, getCookie, getHeader, createError } from "h3";
 import { $fetch } from "ofetch";
 import { useRuntimeConfig } from "#imports";
 import { resolveApiBaseUrl, isPreviewMode } from "./api-url";
+import { getDb } from "~/server/database";
+import { users } from "~/server/database/schema";
+import { eq } from "drizzle-orm";
+import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
 
 export interface SessionUser {
   id: string;
@@ -38,6 +42,27 @@ interface ErrorResponse {
 }
 
 /**
+ * Hash a password using scrypt with a random salt.
+ */
+export function hashPassword(password: string): string {
+  const salt = randomBytes(16).toString("hex");
+  const derivedKey = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${derivedKey}`;
+}
+
+/**
+ * Verify a password against a stored scrypt hash.
+ */
+export function verifyPassword(password: string, hash: string): boolean {
+  const [salt, key] = hash.split(":");
+  if (!salt || !key) return false;
+  const derivedKey = scryptSync(password, salt, 64);
+  const keyBuffer = Buffer.from(key, "hex");
+  if (derivedKey.length !== keyBuffer.length) return false;
+  return timingSafeEqual(derivedKey, keyBuffer);
+}
+
+/**
  * Extract the session token from the request.
  * Checks the httpOnly `session_token` cookie first, then falls back
  * to the `Authorization: Bearer <token>` header.
@@ -56,7 +81,7 @@ export function getSessionToken(event: H3Event): string | undefined {
 }
 
 /**
- * Validate the session token against the third-party auth API.
+ * Validate the session token against the local database or third-party auth API.
  * Returns the user object when the session is valid.
  * Throws a 401 error if the session is invalid or missing.
  */
@@ -74,20 +99,24 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
   const config = useRuntimeConfig();
   const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
 
-  if (!apiBaseUrl) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: "Server Error",
-      message: "API base URL not configured",
-    });
-  }
+  // In preview mode (or when no external API is configured), validate against local DB
+  if (isPreviewMode(config) || !apiBaseUrl) {
+    const db = getDb();
+    const rows = await db.select().from(users).where(eq(users.id, token)).limit(1);
+    const user = rows[0];
 
-  // Preview mode: no external API available, return mock user
-  if (isPreviewMode(config)) {
+    if (!user) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: "Unauthorized",
+        message: "Invalid session token",
+      });
+    }
+
     return {
-      id: 'preview-user',
-      email: 'preview@example.com',
-      name: 'Preview User',
+      id: user.id,
+      email: user.email,
+      name: user.name,
     };
   }
 

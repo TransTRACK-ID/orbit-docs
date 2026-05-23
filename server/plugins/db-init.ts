@@ -1,6 +1,6 @@
 import { pool } from "~/server/database";
 import { getDb } from "~/server/database";
-import { apps, appVersions, activityLogs, owners, workspaceSettings, teamMembers, integrationSettings, notificationSettings, apiKeys } from "~/server/database/schema";
+import { apps, appVersions, activityLogs, owners, workspaceSettings, teamMembers, integrationSettings, notificationSettings, apiKeys, users } from "~/server/database/schema";
 import { count } from "drizzle-orm";
 
 export default defineNitroPlugin(async () => {
@@ -121,6 +121,17 @@ export default defineNitroPlugin(async () => {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
   // Seed demo data if apps table is empty
   const db = getDb();
   const appsCount = await db.select({ count: count() }).from(apps);
@@ -232,6 +243,18 @@ export default defineNitroPlugin(async () => {
       id: crypto.randomUUID(),
       productionKey: "od_live_••••••••••••••••••••••••",
       webhookSecret: "whsec_••••••••••••••••••••••••••",
+    });
+  }
+
+  // Seed a default local admin user for out-of-the-box authentication
+  const usersCount = await db.select({ count: count() }).from(users);
+  if (usersCount[0]?.count === 0) {
+    const { hashPassword } = await import("~/server/utils/auth");
+    await db.insert(users).values({
+      id: "preview-user",
+      name: "Preview User",
+      email: "preview@example.com",
+      password: hashPassword("password123"),
     });
   }
 });
