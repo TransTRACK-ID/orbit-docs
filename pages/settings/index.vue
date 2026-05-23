@@ -98,7 +98,8 @@ const originalGeneral = reactive({
   theme: "light" as "light" | "dark" | "system",
   logoUrl: "",
 });
-const generalDirty = ref(false);
+const workspaceDirty = ref(false);
+const appearanceDirty = ref(false);
 const hasPopulatedGeneral = ref(false);
 const slugManuallyEdited = ref(false);
 
@@ -116,7 +117,8 @@ watch(
     originalGeneral.description = ws.description || "";
     originalGeneral.theme = ws.theme;
     originalGeneral.logoUrl = ws.logoUrl || "";
-    generalDirty.value = false;
+    workspaceDirty.value = false;
+    appearanceDirty.value = false;
     slugManuallyEdited.value = false;
     hasPopulatedGeneral.value = true;
   },
@@ -136,13 +138,13 @@ function generateSlugFromName(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function onGeneralChange() {
-  generalDirty.value = true;
+function markWorkspaceDirty() {
+  workspaceDirty.value = true;
 }
 
 function onSlugInput() {
   slugManuallyEdited.value = true;
-  onGeneralChange();
+  markWorkspaceDirty();
 }
 
 // Auto-generate slug from name when slug hasn't been manually edited
@@ -151,7 +153,9 @@ watch(
   (newName) => {
     if (!slugManuallyEdited.value && hasPopulatedGeneral.value) {
       generalForm.slug = generateSlugFromName(newName);
-      generalDirty.value = true;
+    }
+    if (hasPopulatedGeneral.value) {
+      workspaceDirty.value = true;
     }
   }
 );
@@ -173,7 +177,7 @@ function applyPreviewTheme(theme: string | undefined) {
 
 watch(() => generalForm.theme, (theme) => {
   applyPreviewTheme(theme);
-  onGeneralChange();
+  appearanceDirty.value = true;
 });
 
 /* ─── Live preview: logo ────────────────────────────────────── */
@@ -181,7 +185,7 @@ watch(() => generalForm.logoUrl, (url) => {
   if (workspace.value) {
     workspace.value.logoUrl = url || null;
   }
-  onGeneralChange();
+  appearanceDirty.value = true;
 });
 
 async function saveGeneral() {
@@ -198,7 +202,8 @@ async function saveGeneral() {
   originalGeneral.description = generalForm.description;
   originalGeneral.theme = generalForm.theme;
   originalGeneral.logoUrl = generalForm.logoUrl;
-  generalDirty.value = false;
+  workspaceDirty.value = false;
+  appearanceDirty.value = false;
 }
 
 function resetGeneral() {
@@ -211,7 +216,8 @@ function resetGeneral() {
     workspace.value.logoUrl = originalGeneral.logoUrl || null;
   }
   applyPreviewTheme(originalGeneral.theme);
-  generalDirty.value = false;
+  workspaceDirty.value = false;
+  appearanceDirty.value = false;
   slugManuallyEdited.value = false;
 }
 
@@ -399,7 +405,7 @@ async function revokeAllKeys() {
                   id="wsName"
                   v-model="generalForm.name"
                   type="text"
-                  @input="onGeneralChange"
+                  @input="markWorkspaceDirty"
                 />
               </div>
               <div class="form-group">
@@ -420,14 +426,14 @@ async function revokeAllKeys() {
                 <textarea
                   id="wsDesc"
                   v-model="generalForm.description"
-                  @input="onGeneralChange"
+                  @input="markWorkspaceDirty"
                 />
               </div>
               <div class="form-actions">
-                <button class="btn btn-secondary" :disabled="isSaving || !generalDirty" @click="resetGeneral">
+                <button class="btn btn-secondary" :disabled="isSaving || !workspaceDirty" @click="resetGeneral">
                   Reset
                 </button>
-                <button class="btn btn-primary" :disabled="isSaving || !generalDirty" @click="saveGeneral">
+                <button class="btn btn-primary" :disabled="isSaving || !workspaceDirty" @click="saveGeneral">
                   <span v-if="isSaving">Saving…</span>
                   <span v-else>Save Changes</span>
                 </button>
@@ -490,6 +496,15 @@ async function revokeAllKeys() {
                   <div class="toggle-label">Public Docs Access</div>
                   <div class="toggle-desc">Allow anyone with the link to view published docs</div>
                 </div>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-secondary" :disabled="isSaving || !appearanceDirty" @click="resetGeneral">
+                  Reset
+                </button>
+                <button class="btn btn-primary" :disabled="isSaving || !appearanceDirty" @click="saveGeneral">
+                  <span v-if="isSaving">Saving…</span>
+                  <span v-else>Save Changes</span>
+                </button>
               </div>
             </template>
           </div>
