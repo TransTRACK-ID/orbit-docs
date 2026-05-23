@@ -20,6 +20,11 @@ export const teamMembers = pgTable("team_members", {
   role: text("role", { enum: ["admin", "product_manager", "tech_writer", "viewer"] })
     .notNull()
     .default("viewer"),
+  status: text("status", { enum: ["pending", "active"] })
+    .notNull()
+    .default("active"),
+  invitedBy: text("invited_by"),
+  userId: text("user_id"),
   lastActive: text("last_active").notNull().default("just now"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),

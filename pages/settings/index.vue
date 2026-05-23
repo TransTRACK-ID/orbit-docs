@@ -20,6 +20,8 @@ onBeforeMount(() => {
 const {
   workspace,
   teamMembers,
+  currentMember,
+  pendingInvitations,
   integrations,
   notifications,
   apiKeys,
@@ -30,10 +32,15 @@ const {
   isLoadingApiKeys,
   isSaving,
   isInviting,
+  isAccepting,
+  canManageTeam,
   fetchWorkspace,
   updateWorkspace,
   fetchTeam,
+  fetchCurrentMember,
+  fetchPendingInvitations,
   inviteMember,
+  acceptInvitation,
   deleteMember,
   fetchIntegrations,
   updateIntegrations,
@@ -43,11 +50,34 @@ const {
   regenerateApiKeys,
 } = useSettings();
 
+const { data: authData } = useAuth();
+
+const currentUserEmail = computed(() => {
+  const d = authData.value as any;
+  return d?.data?.user?.email || d?.user?.email || null;
+});
+
+const myPendingInvitation = computed(() => {
+  if (!currentUserEmail.value) return null;
+  return pendingInvitations.value.find(
+    (m) => m.status === "pending" && m.email === currentUserEmail.value
+  ) || null;
+});
+
+const hasPendingInvitationForMe = computed(() => !!myPendingInvitation.value);
+
+async function acceptMyInvitation() {
+  if (!myPendingInvitation.value) return;
+  await acceptInvitation(myPendingInvitation.value.id);
+}
+
 const activeTab = ref<"general" | "team" | "integrations" | "notifications" | "api">("general");
 
 onMounted(() => {
   fetchWorkspace();
   fetchTeam();
+  fetchCurrentMember();
+  fetchPendingInvitations();
   fetchIntegrations();
   fetchNotifications();
   fetchApiKeys();
@@ -210,6 +240,19 @@ const rolePillClass: Record<TeamRole, string> = {
   tech_writer: "pill-blue",
   viewer: "pill-amber",
 };
+
+const statusPillClass: Record<string, string> = {
+  pending: "pill-amber",
+  active: "pill-green",
+};
+
+const inviteableRoles = computed(() => {
+  const roles: TeamRole[] = ["viewer", "tech_writer", "product_manager", "admin"];
+  if (!currentMember.value) return roles;
+  if (currentMember.value.role === "admin") return roles;
+  if (currentMember.value.role === "product_manager") return ["viewer", "tech_writer"];
+  return [];
+});
 
 // ─── Integrations toggles ───────────────────────────────────────
 async function toggleIntegration(key: keyof UpdateIntegrationsPayload) {
@@ -385,12 +428,38 @@ async function revokeAllKeys() {
         <!-- Team -->
         <div v-show="activeTab === 'team'" class="settings-panel">
           <div class="setting-section">
+            <!-- Pending invitation banner for current user -->
+            <div
+              v-if="hasPendingInvitationForMe"
+              class="invite-banner"
+              style="margin-bottom: 20px;"
+            >
+              <div>
+                <strong>You have a pending workspace invitation</strong>
+                <p style="margin: 4px 0 0; font-size: 13px; color: var(--muted);">
+                  Accept to join the team and access workspace features.
+                </p>
+              </div>
+              <button
+                class="btn btn-primary btn-sm"
+                :disabled="isAccepting"
+                @click="acceptMyInvitation"
+              >
+                <span v-if="isAccepting">Accepting…</span>
+                <span v-else>Accept Invitation</span>
+              </button>
+            </div>
+
             <div class="row-between" style="margin-bottom: 20px;">
               <div>
                 <h3>Team Members</h3>
                 <p class="desc">Manage who can publish versions and edit docs.</p>
               </div>
-              <button class="btn btn-primary btn-sm" @click="openInviteModal">
+              <button
+                v-if="canManageTeam"
+                class="btn btn-primary btn-sm"
+                @click="openInviteModal"
+              >
                 + Invite Member
               </button>
             </div>
@@ -403,7 +472,7 @@ async function revokeAllKeys() {
 
             <table v-else class="ds-table">
               <thead>
-                <tr><th>User</th><th>Role</th><th>Last Active</th><th></th></tr>
+                <tr><th>User</th><th>Role</th><th>Status</th><th>Last Active</th><th></th></tr>
               </thead>
               <tbody>
                 <tr v-for="member in teamMembers" :key="member.id">
@@ -416,9 +485,15 @@ async function revokeAllKeys() {
                       {{ roleLabel[member.role] }}
                     </span>
                   </td>
+                  <td>
+                    <span class="pill" :class="statusPillClass[member.status]">
+                      {{ member.status === "pending" ? "Pending" : "Active" }}
+                    </span>
+                  </td>
                   <td class="num">{{ member.lastActive }}</td>
                   <td style="text-align: right;">
                     <button
+                      v-if="canManageTeam && member.status === 'active'"
                       class="btn btn-ghost btn-sm"
                       title="Remove member"
                       @click="confirmDeleteMember(member)"
@@ -428,7 +503,7 @@ async function revokeAllKeys() {
                   </td>
                 </tr>
                 <tr v-if="teamMembers.length === 0">
-                  <td colspan="4" class="text-center" style="color: var(--muted); padding: 24px;">
+                  <td colspan="5" class="text-center" style="color: var(--muted); padding: 24px;">
                     No team members yet.
                   </td>
                 </tr>
@@ -677,10 +752,9 @@ async function revokeAllKeys() {
             <div class="form-group">
               <label for="inviteRole">Role</label>
               <select id="inviteRole" v-model="inviteForm.role">
-                <option value="admin">Admin</option>
-                <option value="product_manager">Product Manager</option>
-                <option value="tech_writer">Tech Writer</option>
-                <option value="viewer">Viewer</option>
+                <option v-for="role in inviteableRoles" :key="role" :value="role">
+                  {{ roleLabel[role as TeamRole] }}
+                </option>
               </select>
             </div>
           </div>
@@ -1217,6 +1291,18 @@ async function revokeAllKeys() {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+.invite-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft);
+  border-radius: var(--radius-lg);
+  color: var(--fg);
 }
 
 @media (max-width: 768px) {

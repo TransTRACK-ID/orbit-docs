@@ -3,7 +3,7 @@ import { $fetch } from "ofetch";
 import { useRuntimeConfig } from "#imports";
 import { resolveApiBaseUrl, isPreviewMode } from "./api-url";
 
-interface SessionUser {
+export interface SessionUser {
   id: string;
   email: string;
   name?: string;
