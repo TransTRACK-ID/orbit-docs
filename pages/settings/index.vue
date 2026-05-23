@@ -62,17 +62,19 @@ const generalForm = reactive({
   logoUrl: "",
 });
 const generalDirty = ref(false);
+const hasPopulatedGeneral = ref(false);
 
 watch(
   () => workspace.value,
   (ws) => {
-    if (!ws) return;
+    if (!ws || hasPopulatedGeneral.value) return;
     generalForm.name = ws.name;
     generalForm.slug = ws.slug;
     generalForm.description = ws.description || "";
     generalForm.theme = ws.theme;
     generalForm.logoUrl = ws.logoUrl || "";
     generalDirty.value = false;
+    hasPopulatedGeneral.value = true;
   },
   { immediate: true }
 );
@@ -301,38 +303,46 @@ async function revokeAllKeys() {
           <div class="setting-section">
             <h3>Appearance</h3>
             <p class="desc">Customize how your published docs look to readers.</p>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="theme">Default Theme</label>
-                <select id="theme" v-model="generalForm.theme" @change="onGeneralChange">
-                  <option value="light">Light</option>
-                  <option value="dark">Dark</option>
-                  <option value="system">System</option>
-                </select>
+
+            <div v-if="isLoadingWorkspace" class="skeleton-wrap">
+              <div class="skeleton-line w-1/2" />
+              <div class="skeleton-line w-3/4" />
+            </div>
+
+            <template v-else>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="theme">Default Theme</label>
+                  <select id="theme" v-model="generalForm.theme" @change="onGeneralChange">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="system">System</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="logo">Logo URL</label>
+                  <input
+                    id="logo"
+                    v-model="generalForm.logoUrl"
+                    type="url"
+                    placeholder="https://cdn.example.com/logo.svg"
+                    @input="onGeneralChange"
+                  />
+                </div>
               </div>
-              <div class="form-group">
-                <label for="logo">Logo URL</label>
-                <input
-                  id="logo"
-                  v-model="generalForm.logoUrl"
-                  type="url"
-                  placeholder="https://cdn.example.com/logo.svg"
-                  @input="onGeneralChange"
+              <div class="toggle" style="margin-top: 8px;">
+                <button
+                  class="toggle-switch"
+                  :class="{ on: workspace?.publicDocsAccess }"
+                  aria-label="Toggle public docs access"
+                  @click="togglePublicDocs"
                 />
+                <div>
+                  <div class="toggle-label">Public Docs Access</div>
+                  <div class="toggle-desc">Allow anyone with the link to view published docs</div>
+                </div>
               </div>
-            </div>
-            <div class="toggle" style="margin-top: 8px;">
-              <button
-                class="toggle-switch"
-                :class="{ on: workspace?.publicDocsAccess }"
-                aria-label="Toggle public docs access"
-                @click="togglePublicDocs"
-              />
-              <div>
-                <div class="toggle-label">Public Docs Access</div>
-                <div class="toggle-desc">Allow anyone with the link to view published docs</div>
-              </div>
-            </div>
+            </template>
           </div>
         </div>
 
