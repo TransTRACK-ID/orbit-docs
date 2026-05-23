@@ -135,6 +135,13 @@ export default defineNitroPlugin(async () => {
   // Migrate existing users table that may lack the password column
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT`);
 
+  // Remove legacy columns from an older schema so the table aligns
+  // with the current Drizzle schema (which only uses `password`)
+  await pool.query(`ALTER TABLE users DROP COLUMN IF EXISTS password_hash`);
+  await pool.query(`ALTER TABLE users DROP COLUMN IF EXISTS salt`);
+  await pool.query(`ALTER TABLE users DROP COLUMN IF EXISTS role`);
+  await pool.query(`ALTER TABLE users DROP COLUMN IF EXISTS email_verified`);
+
   // Seed demo data if apps table is empty
   const db = getDb();
   const appsCount = await db.select({ count: count() }).from(apps);
