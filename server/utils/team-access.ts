@@ -107,3 +107,92 @@ export function canInviteRole(inviterRole: TeamRole, targetRole: TeamRole): bool
   }
   return false;
 }
+
+/**
+ * Ensure the authenticated user has an active team member record.
+ * If a pending invitation exists for their email/userId, it is activated.
+ * Otherwise a new admin member is created so the registering user
+ * becomes the workspace owner.
+ */
+export async function ensureTeamMember(user: SessionUser) {
+  const db = getDb();
+  const name = user.name || user.email || "Unknown";
+  const initials = name
+    .split(" ")
+    .map((n) => n[0])
+    .filter(Boolean)
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  // Already active?
+  if (user.id) {
+    const byUserId = await db
+      .select()
+      .from(teamMembers)
+      .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.status, "active")))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (byUserId) return byUserId;
+  }
+  if (user.email) {
+    const byEmail = await db
+      .select()
+      .from(teamMembers)
+      .where(and(eq(teamMembers.email, user.email), eq(teamMembers.status, "active")))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (byEmail) return byEmail;
+  }
+
+  // Pending invitation waiting for them?
+  let pending = null;
+  if (user.id) {
+    pending = await db
+      .select()
+      .from(teamMembers)
+      .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.status, "pending")))
+      .limit(1)
+      .then((rows) => rows[0]);
+  }
+  if (!pending && user.email) {
+    pending = await db
+      .select()
+      .from(teamMembers)
+      .where(and(eq(teamMembers.email, user.email), eq(teamMembers.status, "pending")))
+      .limit(1)
+      .then((rows) => rows[0]);
+  }
+
+  if (pending) {
+    const [updated] = await db
+      .update(teamMembers)
+      .set({
+        status: "active",
+        name,
+        initials,
+        userId: user.id || pending.userId,
+        lastActive: "just now",
+      })
+      .where(eq(teamMembers.id, pending.id))
+      .returning();
+    return updated;
+  }
+
+  // Create new admin — first user to join becomes workspace owner
+  const [member] = await db
+    .insert(teamMembers)
+    .values({
+      id: crypto.randomUUID(),
+      name,
+      email: user.email || null,
+      initials,
+      role: "admin",
+      status: "active",
+      userId: user.id || null,
+      lastActive: "just now",
+    })
+    .returning();
+
+  return member;
+}

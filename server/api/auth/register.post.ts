@@ -8,6 +8,8 @@ import crypto from "crypto";
 import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { $fetch } from "ofetch";
 import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
+import { ensureTeamMember } from "~/server/utils/team-access";
+import { getAuthUser } from "~/server/utils/auth";
 
 interface RegisterResponse {
   status: string;
@@ -111,6 +113,15 @@ export default defineEventHandler(async (event) => {
     if (isPreviewMode(config)) {
       const mockToken = 'preview-mock-token-' + Date.now();
       setCookie(event, 'session_token', mockToken, { httpOnly: true, path: '/' });
+
+      // Auto-provision the registering user as workspace admin
+      try {
+        const user = await getAuthUser(event);
+        await ensureTeamMember(user);
+      } catch (e) {
+        console.error("Failed to auto-provision team member on register (preview):", e);
+      }
+
       return {
         status: 'success',
         data: {
@@ -137,6 +148,14 @@ export default defineEventHandler(async (event) => {
         httpOnly: true,
         path: "/",
       });
+    }
+
+    // Auto-provision the new user as a workspace admin
+    try {
+      const user = await getAuthUser(event);
+      await ensureTeamMember(user);
+    } catch (e) {
+      console.error("Failed to auto-provision team member on register:", e);
     }
 
     return response;
