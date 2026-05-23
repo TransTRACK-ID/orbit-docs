@@ -1,5 +1,14 @@
 import { pgTable, text, timestamp, boolean } from "drizzle-orm/pg-core";
 
+export const users = pgTable("users", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export const workspaceSettings = pgTable("workspace_settings", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   name: text("name").notNull().default("Acme Engineering"),

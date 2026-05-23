@@ -1,7 +1,6 @@
-// This endpoint receives login credentials from the client, encrypts them using the server's appKey,
-// and forwards the encrypted payload to the third-party API
-// The third-party API endpoint is ${process.env.NUXT_PUBLIC_API_BASE_URL}/api/v1/auth/login
-// The payload format sent to the third-party API is: { "payload": "[encrypted-data]" }
+// Login endpoint — validates credentials against the local database.
+// When an external API is configured and the app is NOT in preview mode,
+// it also forwards encrypted credentials to the third-party API.
 
 import { useRuntimeConfig } from "#imports";
 import crypto from "crypto";
@@ -9,7 +8,10 @@ import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { $fetch } from "ofetch";
 import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
 import { ensureTeamMember } from "~/server/utils/team-access";
-import { getAuthUser } from "~/server/utils/auth";
+import { getAuthUser, verifyPassword } from "~/server/utils/auth";
+import { getDb } from "~/server/database";
+import { users } from "~/server/database/schema";
+import { eq } from "drizzle-orm";
 
 interface LoginResponse {
   status: string;
@@ -43,28 +45,22 @@ async function encryptAES(plainText: string, key: string): Promise<string> {
   const nonce = crypto.randomBytes(12);
   const plainTextBuffer = Buffer.from(plainText, "utf-8");
 
-  // Create cipher
   const cipher = crypto.createCipheriv("aes-256-gcm", keyBuffer, nonce);
 
-  // Encrypt the data
   const encryptedBuffer = Buffer.concat([
     cipher.update(plainTextBuffer),
     cipher.final(),
   ]);
 
-  // Get the auth tag
   const authTag = cipher.getAuthTag();
 
-  // Combine nonce, encrypted data, and auth tag
   const result = Buffer.concat([nonce, encryptedBuffer, authTag]);
 
-  // Return as base64
   return result.toString("base64");
 }
 
 export default defineEventHandler(async (event) => {
   try {
-    // Get the login credentials from the request body
     const body = await readBody(event);
     const { email, password } = body;
 
@@ -76,7 +72,6 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // Get the appKey from runtime config
     const config = useRuntimeConfig();
     const appKey = config.appKey;
 
@@ -88,88 +83,82 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // Create the plain text JSON with email and password
-    const plainText = JSON.stringify({ email, password });
-
-    // Encrypt the plain text
-    const encryptedPayload = await encryptAES(plainText, appKey);
-
-    // Server-only base URL — can be absolute in preview mode so $fetch works
     const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
 
-    if (!apiBaseUrl) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: "Server Error",
-        message: "API base URL not configured",
-      });
-    }
+    // External API path (only when not in preview mode and URL is configured)
+    if (!isPreviewMode(config) && apiBaseUrl) {
+      const plainText = JSON.stringify({ email, password });
+      const encryptedPayload = await encryptAES(plainText, appKey);
 
-    // Preview mode: no external API available, return mock response
-    if (isPreviewMode(config)) {
-      const mockToken = 'preview-mock-token-' + Date.now();
-      setCookie(event, 'session_token', mockToken, { httpOnly: true, path: '/' });
+      const response = await $fetch<LoginResponse>(
+        `${apiBaseUrl}/api/v1/auth/login`,
+        {
+          method: "POST",
+          body: { payload: encryptedPayload },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (response.data?.access_token) {
+        setCookie(event, "session_token", response.data.access_token, {
+          httpOnly: true,
+          path: "/",
+        });
+      }
 
       // Auto-provision the user as workspace admin if they don't have a member record
       try {
         const user = await getAuthUser(event);
         await ensureTeamMember(user);
       } catch (e) {
-        console.error("Failed to auto-provision team member on login (preview):", e);
+        console.error("Failed to auto-provision team member on login:", e);
       }
 
-      return {
-        status: 'success',
-        data: {
-          access_token: mockToken,
-          user: { id: 'preview-user', email: body.email, name: 'Preview User' }
-        }
-      };
+      return response;
     }
 
-    // Make the request to the third-party API
-    const response = await $fetch<LoginResponse>(
-      `${apiBaseUrl}/api/v1/auth/login`,
-      {
-        method: "POST",
-        body: { payload: encryptedPayload },
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-      }
-    );
+    // Local database path (preview mode or no external API)
+    const db = getDb();
 
-    // If we get here, the login was successful
-    // Set any necessary cookies based on the response
+    const rows = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const user = rows[0];
 
-    if (response.data?.access_token) {
-      setCookie(event, "session_token", response.data.access_token, {
-        httpOnly: true,
-        path: "/",
+    if (!user || !verifyPassword(password, user.password)) {
+      throw createError({
+        statusCode: 401,
+        statusMessage: "Unauthorized",
+        message: "Invalid email or password",
       });
     }
 
+    setCookie(event, "session_token", user.id, { httpOnly: true, path: "/" });
+
     // Auto-provision the user as workspace admin if they don't have a member record
     try {
-      const user = await getAuthUser(event);
-      await ensureTeamMember(user);
+      const authUser = await getAuthUser(event);
+      await ensureTeamMember(authUser);
     } catch (e) {
-      console.error("Failed to auto-provision team member on login:", e);
+      console.error("Failed to auto-provision team member on login (local):", e);
     }
 
-    // Return the response from the third-party API
-    return response;
+    return {
+      status: "success",
+      data: {
+        access_token: user.id,
+        user: { id: user.id, email: user.email, name: user.name },
+      },
+    };
   } catch (error: unknown) {
-    // Handle errors from the third-party API
     console.error("Login error:", error);
 
-    // Forward the error status and message
     const err = error as ErrorResponse;
     throw createError({
-      statusCode: err.response?.status || 500,
-      statusMessage: err.response?.statusText || "Internal Server Error",
-      message: err.response?.data?.message || "An error occurred during login",
+      statusCode: err.response?.status || (err as any).statusCode || 500,
+      statusMessage: err.response?.statusText || (err as any).statusMessage || "Internal Server Error",
+      message: err.response?.data?.message || (err as any).message || "An error occurred during login",
     });
   }
 });
