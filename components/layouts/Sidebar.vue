@@ -59,6 +59,11 @@ const isActive = (path: string) => route.path === path || route.path.startsWith(
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100vh;
+  overflow-y: auto;
 }
 .sidebar-brand {
   display: flex;
