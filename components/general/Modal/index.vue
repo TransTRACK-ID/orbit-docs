@@ -26,9 +26,9 @@
             <div class="flex flex-col items-start space-y-4">
               <div
                 v-if="$slots.icon"
-                class="p-2 mr-3 aspect-square w-min rounded-full bg-[#FEF3F2]"
+                class="p-2 mr-3 aspect-square w-min rounded-full bg-[var(--od-error-bg)]"
               >
-                <div class="p-2 aspect-square w-min rounded-full bg-[#FFEBEB]">
+                <div class="p-2 aspect-square w-min rounded-full bg-[var(--od-error-soft)]">
                   <slot name="icon" />
                 </div>
               </div>
@@ -36,13 +36,13 @@
               <div class="space-y-2">
                 <h3
                   v-if="props.title"
-                  class="text-lg font-semibold text-gray-900 dark:text-gray-300"
+                  class="text-lg font-semibold text-[var(--fg)]"
                 >
                   {{ props.title }}
                 </h3>
                 <h5
                   v-if="props.subtitle"
-                  class="text-sm text-gray-500 dark:text-gray-300"
+                  class="text-sm text-[var(--muted)]"
                 >
                   {{ props.subtitle }}
                 </h5>
@@ -52,10 +52,10 @@
             <button
               v-if="props.isHasClose"
               type="button"
-              class="top-9 right-8 text-gray-400 bg-transparent transition hover:bg-gray-200 hover:text-gray-900 rounded-full text-sm p-1.5 ml-auto inline-flex items-center dark:hover:bg-gray-800 dark:hover:text-white"
+              class="top-9 right-8 text-[var(--muted)] bg-transparent transition hover:bg-[var(--fg-soft)] hover:text-[var(--fg)] rounded-full text-sm p-1.5 ml-auto inline-flex items-center"
               @click.prevent="toggleModal(false)"
             >
-              <Close class="stroke-gray-700" />
+              <Close class="stroke-[var(--fg)]" />
               <span class="sr-only">Close modal</span>
             </button>
           </div>

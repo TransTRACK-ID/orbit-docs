@@ -1,6 +1,6 @@
 import { pool } from "~/server/database";
 import { getDb } from "~/server/database";
-import { apps, appVersions, activityLogs, owners } from "~/server/database/schema";
+import { apps, appVersions, activityLogs, owners, workspaceSettings, teamMembers, integrationSettings, notificationSettings, apiKeys, users } from "~/server/database/schema";
 import { count } from "drizzle-orm";
 
 export default defineNitroPlugin(async () => {
@@ -51,6 +51,96 @@ export default defineNitroPlugin(async () => {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS workspace_settings (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT 'Acme Engineering',
+      slug TEXT NOT NULL DEFAULT 'acme-engineering',
+      description TEXT DEFAULT 'Internal documentation platform for product and engineering teams.',
+      theme TEXT NOT NULL DEFAULT 'light',
+      logo_url TEXT,
+      public_docs_access BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS team_members (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT,
+      initials TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'viewer',
+      status TEXT NOT NULL DEFAULT 'active',
+      invited_by TEXT,
+      user_id TEXT,
+      last_active TEXT NOT NULL DEFAULT 'just now',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Migrate existing tables that may lack new columns
+  await pool.query(`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'`);
+  await pool.query(`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS invited_by TEXT`);
+  await pool.query(`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS user_id TEXT`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS integration_settings (
+      id TEXT PRIMARY KEY,
+      github_actions BOOLEAN NOT NULL DEFAULT false,
+      gitlab_ci BOOLEAN NOT NULL DEFAULT false,
+      jenkins BOOLEAN NOT NULL DEFAULT false,
+      circle_ci BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notification_settings (
+      id TEXT PRIMARY KEY,
+      email_digest BOOLEAN NOT NULL DEFAULT true,
+      release_alerts BOOLEAN NOT NULL DEFAULT true,
+      doc_comments BOOLEAN NOT NULL DEFAULT false,
+      slack_notifications BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id TEXT PRIMARY KEY,
+      production_key TEXT NOT NULL DEFAULT 'od_live_••••••••••••••••••••••••',
+      webhook_secret TEXT NOT NULL DEFAULT 'whsec_••••••••••••••••••••••••••',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // Migrate existing users table that may lack the password column
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT`);
+
+  // Remove legacy columns from an older schema so the table aligns
+  // with the current Drizzle schema (which only uses `password`)
+  await pool.query(`ALTER TABLE users DROP COLUMN IF EXISTS password_hash`);
+  await pool.query(`ALTER TABLE users DROP COLUMN IF EXISTS salt`);
+  await pool.query(`ALTER TABLE users DROP COLUMN IF EXISTS role`);
+  await pool.query(`ALTER TABLE users DROP COLUMN IF EXISTS email_verified`);
 
   // Seed demo data if apps table is empty
   const db = getDb();
@@ -105,5 +195,76 @@ export default defineNitroPlugin(async () => {
       { id: activityIds[3], appId: appIds[1], appName: "Auth Service", action: "Published changelog", actor: "Jen Park" },
       { id: activityIds[4], appId: appIds[3], appName: "Notification Service", action: "Draft doc created", actor: "Tom Lee" },
     ]);
+  }
+
+  // Seed settings defaults if empty
+  const wsCount = await db.select({ count: count() }).from(workspaceSettings);
+  if (wsCount[0]?.count === 0) {
+    await db.insert(workspaceSettings).values({
+      id: crypto.randomUUID(),
+      name: "Acme Engineering",
+      slug: "acme-engineering",
+      description: "Internal documentation platform for product and engineering teams.",
+      theme: "light",
+      logoUrl: null,
+      publicDocsAccess: true,
+    });
+  }
+
+  const teamCount = await db.select({ count: count() }).from(teamMembers);
+  if (teamCount[0]?.count === 0) {
+    await db.insert(teamMembers).values([
+      { id: crypto.randomUUID(), name: "Sarah Chen", email: "sarah.chen@example.com", initials: "SC", role: "admin", status: "active", lastActive: "2 hours ago" },
+      { id: crypto.randomUUID(), name: "Mike Ross", email: "mike.ross@example.com", initials: "MR", role: "product_manager", status: "active", lastActive: "1 day ago" },
+      { id: crypto.randomUUID(), name: "Jen Park", email: "jen.park@example.com", initials: "JP", role: "tech_writer", status: "active", lastActive: "3 days ago" },
+      { id: crypto.randomUUID(), name: "Tom Lee", email: "tom.lee@example.com", initials: "TL", role: "viewer", status: "active", lastActive: "1 week ago" },
+      // Preview-mode admin so local testing works out of the box
+      { id: crypto.randomUUID(), name: "Preview User", email: "preview@example.com", userId: "preview-user", initials: "PU", role: "admin", status: "active", lastActive: "just now" },
+      // Pending invitation for demo / testing
+      { id: crypto.randomUUID(), name: "Alex Rivera", email: "alex@example.com", initials: "AR", role: "tech_writer", status: "pending", invitedBy: "Sarah Chen", lastActive: "invited" },
+    ]);
+  }
+
+  const integrationCount = await db.select({ count: count() }).from(integrationSettings);
+  if (integrationCount[0]?.count === 0) {
+    await db.insert(integrationSettings).values({
+      id: crypto.randomUUID(),
+      githubActions: false,
+      gitlabCI: false,
+      jenkins: false,
+      circleCI: false,
+    });
+  }
+
+  const notificationCount = await db.select({ count: count() }).from(notificationSettings);
+  if (notificationCount[0]?.count === 0) {
+    await db.insert(notificationSettings).values({
+      id: crypto.randomUUID(),
+      emailDigest: true,
+      releaseAlerts: true,
+      docComments: false,
+      slackNotifications: false,
+    });
+  }
+
+  const apiKeysCount = await db.select({ count: count() }).from(apiKeys);
+  if (apiKeysCount[0]?.count === 0) {
+    await db.insert(apiKeys).values({
+      id: crypto.randomUUID(),
+      productionKey: "od_live_••••••••••••••••••••••••",
+      webhookSecret: "whsec_••••••••••••••••••••••••••",
+    });
+  }
+
+  // Seed a default local admin user for out-of-the-box authentication
+  const usersCount = await db.select({ count: count() }).from(users);
+  if (usersCount[0]?.count === 0) {
+    const { hashPassword } = await import("~/server/utils/auth");
+    await db.insert(users).values({
+      id: "preview-user",
+      name: "Preview User",
+      email: "preview@example.com",
+      password: hashPassword("password123"),
+    });
   }
 });

@@ -3,6 +3,7 @@
 import flowbitePlugin from "flowbite/plugin";
 
 export default {
+  darkMode: "class",
   content: [
     "./components/**/*.{js,vue,ts}",
     "./layouts/**/*.vue",

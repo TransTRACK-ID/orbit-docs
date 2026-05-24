@@ -90,17 +90,7 @@ export const useAuthStore = defineStore("auth", {
         const { signOut } = useAuth();
         this.clearCookies();
 
-        // Clear cache by making a request with cache-control: no-cache
-        await $fetch("/api/auth/session", {
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        }).catch(() => {}); // Ignore errors
-
-        await signOut({ callbackUrl: "/login", external: true });
-        window.location.href = "/login";
+        await signOut({ callbackUrl: "/login" });
 
         return true;
       } catch (e) {

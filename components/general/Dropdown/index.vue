@@ -26,8 +26,8 @@ onMounted(() => {
   </div>
 
   <div :id="`${props.id}`" class="z-10 px-3 hidden">
-    <div class="bg-white rounded-lg border shadow-sm">
-      <div :aria-labelledby="`${props.id}-activator`" class="divide-y">
+    <div class="rounded-lg border shadow-sm" style="background: var(--surface, oklch(100% 0 0)); border-color: var(--border, oklch(90% 0.006 250));">
+      <div :aria-labelledby="`${props.id}-activator`" class="divide-y" style="border-color: var(--border, oklch(90% 0.006 250));">
         <slot
           name="content"
           :close="
