@@ -38,24 +38,28 @@ export default defineNuxtConfig({
   ssr: false,
 
   auth: {
+    baseURL: process.env.NUXT_APP_BASE_URL
+      ? `${process.env.NUXT_APP_BASE_URL}api/auth`
+      : '/api/auth',
     provider: {
       type: "local",
       endpoints: {
         signIn: {
-          path: `/login`,
+          path: "login",
           method: "post",
         },
         signOut: {
-          path: "/logout",
+          path: "logout",
           method: "post",
         },
         getSession: {
-          path: "/session",
+          path: "session",
           method: "get",
         },
       },
       pages: {
         login: "/login",
+        navigateUnauthenticatedTo: "/login",
       },
       token: {
         signInResponseTokenPointer: "/data/access_token",

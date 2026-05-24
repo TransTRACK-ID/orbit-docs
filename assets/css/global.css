@@ -120,6 +120,33 @@
   --orange-700: #c4320a;
   --orange-800: #9c2a10;
   --orange-900: #7e2410;
+
+  /* Global semantic aliases */
+  --bg: var(--od-bg);
+  --surface: var(--od-surface);
+  --fg: var(--od-fg);
+  --muted: var(--od-muted);
+  --border: var(--od-border);
+  --accent: var(--od-accent);
+  --accent-soft: var(--od-accent-soft);
+  --fg-soft: var(--od-fg-soft);
+  --font-display: var(--od-font-display);
+  --font-body: var(--od-font-body);
+  --font-mono: var(--od-font-mono);
+  --radius: var(--od-radius);
+  --radius-lg: var(--od-radius-lg);
+}
+
+.dark {
+  --od-bg: oklch(18% 0.02 250);
+  --od-surface: oklch(24% 0.02 250);
+  --od-fg: oklch(96% 0.005 250);
+  --od-muted: oklch(60% 0.02 250);
+  --od-border: oklch(35% 0.02 250);
+  --od-accent: oklch(60% 0.18 25);
+  --od-accent-soft: color-mix(in oklch, var(--od-accent) 15%, transparent);
+  --od-fg-soft: color-mix(in oklch, var(--od-fg) 10%, transparent);
+  color-scheme: dark;
 }
 
 body {

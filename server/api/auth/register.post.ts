@@ -1,13 +1,17 @@
-// This endpoint receives registration data from the client, encrypts it using the server's appKey,
-// and forwards the encrypted payload to the third-party API.
-// The third-party API endpoint is ${process.env.NUXT_PUBLIC_API_BASE_URL}/api/v1/auth/register
-// The payload format sent to the third-party API is: { "payload": "[encrypted-data]" }
+// Register endpoint — creates a real local user in the database.
+// When an external API is configured and the app is NOT in preview mode,
+// it also forwards encrypted credentials to the third-party API.
 
 import { useRuntimeConfig } from "#imports";
 import crypto from "crypto";
 import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { $fetch } from "ofetch";
 import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
+import { ensureTeamMember } from "~/server/utils/team-access";
+import { getAuthUser, hashPassword } from "~/server/utils/auth";
+import { getDb } from "~/server/database";
+import { users } from "~/server/database/schema";
+import { eq } from "drizzle-orm";
 
 interface RegisterResponse {
   status: string;
@@ -95,59 +99,90 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    const plainText = JSON.stringify({ name, email, password, passwordConfirmation });
-    const encryptedPayload = await encryptAES(plainText, appKey);
-
     const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
-    if (!apiBaseUrl) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: "Server Error",
-        message: "API base URL not configured",
-      });
-    }
 
-    // Preview mode: no external API available, return mock response
-    if (isPreviewMode(config)) {
-      const mockToken = 'preview-mock-token-' + Date.now();
-      setCookie(event, 'session_token', mockToken, { httpOnly: true, path: '/' });
-      return {
-        status: 'success',
-        data: {
-          access_token: mockToken,
-          user: { id: 'preview-user', email: body.email, name: 'Preview User' }
+    // External API path (only when not in preview mode and URL is configured)
+    if (!isPreviewMode(config) && apiBaseUrl) {
+      const plainText = JSON.stringify({ name, email, password, passwordConfirmation });
+      const encryptedPayload = await encryptAES(plainText, appKey);
+
+      const response = await $fetch<RegisterResponse>(
+        `${apiBaseUrl}/api/v1/auth/register`,
+        {
+          method: "POST",
+          body: { payload: encryptedPayload },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
         }
-      };
+      );
+
+      if (response.data?.access_token) {
+        setCookie(event, "session_token", response.data.access_token, {
+          httpOnly: true,
+          path: "/",
+        });
+      }
+
+      // Auto-provision the new user as a workspace admin
+      try {
+        const user = await getAuthUser(event);
+        await ensureTeamMember(user);
+      } catch (e) {
+        console.error("Failed to auto-provision team member on register:", e);
+      }
+
+      return response;
     }
 
-    const response = await $fetch<RegisterResponse>(
-      `${apiBaseUrl}/api/v1/auth/register`,
-      {
-        method: "POST",
-        body: { payload: encryptedPayload },
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-      }
-    );
+    // Local database path (preview mode or no external API)
+    const db = getDb();
 
-    if (response.data?.access_token) {
-      setCookie(event, "session_token", response.data.access_token, {
-        httpOnly: true,
-        path: "/",
+    const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    if (existing.length > 0) {
+      throw createError({
+        statusCode: 409,
+        statusMessage: "Conflict",
+        message: "Email is already registered",
       });
     }
 
-    return response;
+    const userId = crypto.randomUUID();
+    const hashedPassword = hashPassword(password);
+
+    await db.insert(users).values({
+      id: userId,
+      name,
+      email,
+      password: hashedPassword,
+    });
+
+    setCookie(event, "session_token", userId, { httpOnly: true, path: "/" });
+
+    // Auto-provision the registering user as workspace admin
+    try {
+      const user = await getAuthUser(event);
+      await ensureTeamMember(user);
+    } catch (e) {
+      console.error("Failed to auto-provision team member on register (local):", e);
+    }
+
+    return {
+      status: "success",
+      data: {
+        access_token: userId,
+        user: { id: userId, email, name },
+      },
+    };
   } catch (error: unknown) {
     console.error("Registration error:", error);
 
     const err = error as ErrorResponse;
     throw createError({
-      statusCode: err.response?.status || 500,
-      statusMessage: err.response?.statusText || "Internal Server Error",
-      message: err.response?.data?.message || "An error occurred during registration",
+      statusCode: err.response?.status || (err as any).statusCode || 500,
+      statusMessage: err.response?.statusText || (err as any).statusMessage || "Internal Server Error",
+      message: err.response?.data?.message || (err as any).message || "An error occurred during registration",
     });
   }
 });
