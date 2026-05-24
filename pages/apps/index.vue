@@ -525,7 +525,7 @@ const statusLabel: Record<string, string> = {
           <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm">
             Versions
           </NuxtLink>
-          <NuxtLink :to="`/apps/${app.id}/docs`" class="btn btn-ghost btn-sm">
+          <NuxtLink :to="`/docs-editor?app=${app.id}`" class="btn btn-ghost btn-sm">
             Docs &rarr;
           </NuxtLink>
         </div>
