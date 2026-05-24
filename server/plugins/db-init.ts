@@ -1,6 +1,6 @@
 import { pool } from "~/server/database";
 import { getDb } from "~/server/database";
-import { apps, appVersions, activityLogs, owners, workspaceSettings, teamMembers, integrationSettings, notificationSettings, apiKeys, users } from "~/server/database/schema";
+import { apps, appVersions, activityLogs, docs, owners, workspaceSettings, teamMembers, integrationSettings, notificationSettings, apiKeys, users } from "~/server/database/schema";
 import { count } from "drizzle-orm";
 
 export default defineNitroPlugin(async () => {
@@ -54,6 +54,21 @@ export default defineNitroPlugin(async () => {
       action TEXT NOT NULL,
       actor TEXT NOT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS docs (
+      id TEXT PRIMARY KEY,
+      app_id TEXT REFERENCES apps(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      content TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft',
+      version_id TEXT REFERENCES app_versions(id) ON DELETE SET NULL,
+      tags TEXT[] DEFAULT ARRAY[]::TEXT[],
+      author TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
 
@@ -211,6 +226,43 @@ export default defineNitroPlugin(async () => {
       { id: activityIds[3], appId: appIds[1], appName: "Auth Service", action: "Published changelog", actor: "Jen Park" },
       { id: activityIds[4], appId: appIds[3], appName: "Notification Service", action: "Draft doc created", actor: "Tom Lee" },
     ]);
+
+    const docsCountResult = await db.select({ count: count() }).from(docs);
+    if (docsCountResult[0]?.count === 0) {
+      const docIds = Array.from({ length: 3 }, () => crypto.randomUUID());
+      await db.insert(docs).values([
+        {
+          id: docIds[0],
+          appId: appIds[0],
+          title: "API Gateway — Developer Docs",
+          content: `# Getting Started\n\n## Installation\n\nInstall the API Gateway SDK via npm:\n\n\`\`\`bash\nnpm install @orbit/api-gateway\n\`\`\`\n\n## Quick Start\n\n1. Create an API key from the dashboard\n2. Initialize the client\n3. Make your first request\n\n---\n\n# Authentication\n\nAll requests must include a valid API key in the \`Authorization\` header.\n\n## API Keys\n\n- Production keys start with \`orbit_live_\`\n- Sandbox keys start with \`orbit_test_\`\n- Rotate keys every 90 days\n\n---\n\n# Endpoints\n\n## POST /v2/batch\n\nExecute multiple operations in a single request.\n\n| Parameter | Type | Required | Description |\n|-----------|------|----------|-------------|\n| operations | array | Yes | Max 100 per batch |\n| atomic | boolean | No | Rollback all on failure |\n\n---\n\n# Error Handling\n\nThe API uses standard HTTP status codes:\n\n- \`200\` — Success\n- \`400\` — Bad Request\n- \`401\` — Unauthorized\n- \`429\` — Rate Limited\n- \`500\` — Server Error\n`,
+          status: "draft",
+          versionId: versionIds[0],
+          tags: ["api", "gateway", "v2.4"],
+          author: "Sarah Chen",
+        },
+        {
+          id: docIds[1],
+          appId: appIds[1],
+          title: "Auth Service — SSO Guide",
+          content: `# SSO Guide\n\n## Overview\n\nThis guide covers integrating the Auth Service for single sign-on.\n\n## OAuth 2.0 Flow\n\n1. Redirect user to \`/oauth/authorize\`\n2. Exchange code for token\n3. Use token to access protected resources\n\n---\n\n# Configuration\n\nSet the following environment variables:\n\n\`\`\`bash\nAUTH_CLIENT_ID=your_client_id\nAUTH_CLIENT_SECRET=your_client_secret\nAUTH_REDIRECT_URI=https://app.example.com/callback\n\`\`\`\n`,
+          status: "published",
+          versionId: versionIds[2],
+          tags: ["auth", "sso", "oauth"],
+          author: "Mike Ross",
+        },
+        {
+          id: docIds[2],
+          appId: appIds[3],
+          title: "Notification Service — Webhooks",
+          content: `# Webhooks\n\n## Setup\n\nRegister webhook URLs in the dashboard.\n\n## Payload Format\n\n\`\`\`json\n{\n  "event": "message.sent",\n  "payload": { ... }\n}\n\`\`\`\n\n## Retry Policy\n\n- 3 retries with exponential backoff\n- Max retry interval: 5 minutes\n`,
+          status: "in_review",
+          versionId: versionIds[4],
+          tags: ["notifications", "webhooks"],
+          author: "Jen Park",
+        },
+      ]);
+    }
   }
 
   // Seed settings defaults if empty
