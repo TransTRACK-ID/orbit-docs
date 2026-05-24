@@ -58,6 +58,32 @@ export const appVersionsRelations = relations(appVersions, ({ one }) => ({
   }),
 }));
 
+export const docs = pgTable("docs", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  appId: text("app_id").references(() => apps.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  content: text("content").default(""),
+  status: text("status", { enum: ["draft", "in_review", "published", "archived"] })
+    .notNull()
+    .default("draft"),
+  versionId: text("version_id").references(() => appVersions.id, { onDelete: "set null" }),
+  tags: text("tags").array().default([]),
+  author: text("author"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
+export const docsRelations = relations(docs, ({ one }) => ({
+  app: one(apps, {
+    fields: [docs.appId],
+    references: [apps.id],
+  }),
+  version: one(appVersions, {
+    fields: [docs.versionId],
+    references: [appVersions.id],
+  }),
+}));
+
 export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   app: one(apps, {
     fields: [activityLogs.appId],
