@@ -1,4 +1,10 @@
 <script setup lang="ts">
+definePageMeta({
+  auth: {
+    required: true,
+  },
+});
+
 const router = useRouter();
 
 onMounted(() => {

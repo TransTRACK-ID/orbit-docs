@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
 
+definePageMeta({
+  auth: {
+    required: true,
+  },
+});
+
 const $page = usePageStore();
 onBeforeMount(() => {
   $page.setTitle("Dashboard");

@@ -61,22 +61,36 @@ export const useAuthStore = defineStore("auth", {
       }
     },
 
+    async register(payload: {
+      name: string;
+      email: string;
+      password: string;
+      passwordConfirmation: string;
+    }) {
+      this.isLoading = true;
+      try {
+        const response = await $fetch("/api/auth/register", {
+          method: "POST",
+          body: payload,
+        });
+        return response;
+      } catch (error: unknown) {
+        const err = error as any;
+        toast.error(err.data?.message || "Registration failed. Please try again.", {
+          toastClassName: "toastify-error",
+        });
+        throw error;
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
     async logout() {
       try {
         const { signOut } = useAuth();
         this.clearCookies();
 
-        // Clear cache by making a request with cache-control: no-cache
-        await $fetch("/api/auth/getSession", {
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        }).catch(() => {}); // Ignore errors
-
-        await signOut({ callbackUrl: "/login", external: true });
-        window.location.href = "/login";
+        await signOut({ callbackUrl: "/login" });
 
         return true;
       } catch (e) {

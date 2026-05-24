@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 @import "@vuepic/vue-datepicker/dist/main.css";
 
 @tailwind base;
@@ -6,8 +6,37 @@
 @tailwind utilities;
 
 :root {
-  --dp-font-family: "Poppins", sans-serif !important;
+  --dp-font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif !important;
 
+  /* Orbit Docs Design Tokens (OKLch) */
+  --od-bg: oklch(98% 0.004 250);
+  --od-surface: oklch(100% 0 0);
+  --od-fg: oklch(20% 0.02 250);
+  --od-muted: oklch(55% 0.015 250);
+  --od-border: oklch(90% 0.006 250);
+  --od-accent: oklch(55% 0.16 25);
+  --od-accent-soft: color-mix(in oklch, var(--od-accent) 12%, transparent);
+  --od-fg-soft: color-mix(in oklch, var(--od-fg) 6%, transparent);
+  --od-radius: 8px;
+  --od-radius-lg: 12px;
+  --od-font-display: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  --od-font-body: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  --od-font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  /* Semantic status tokens — used across forms, pills, and feedback surfaces */
+  --od-error: oklch(55% 0.18 25);
+  --od-error-text: oklch(50% 0.16 25);
+  --od-error-soft: color-mix(in oklch, var(--od-error) 20%, transparent);
+  --od-error-bg: color-mix(in oklch, var(--od-error) 8%, transparent);
+  --od-success: oklch(60% 0.18 145);
+  --od-success-text: oklch(50% 0.14 145);
+  --od-success-soft: color-mix(in oklch, var(--od-success) 10%, transparent);
+  --od-warning: oklch(75% 0.14 85);
+  --od-warning-text: oklch(60% 0.12 85);
+  --od-info: oklch(60% 0.16 255);
+  --od-info-text: oklch(55% 0.14 255);
+
+  /* Legacy tokens retained for backward compatibility */
   --primary-25: #fffafa;
   --primary-50: #fff1f2;
   --primary-100: #ffe0e2;
@@ -92,21 +121,51 @@
   --orange-800: #9c2a10;
   --orange-900: #7e2410;
 
-  --bg: oklch(98% 0.004 250);
-  --surface: oklch(100% 0 0);
-  --fg: oklch(20% 0.02 250);
-  --muted: oklch(55% 0.015 250);
-  --border: oklch(90% 0.006 250);
-  --accent: oklch(55% 0.16 25);
-  --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
-  --fg-soft: color-mix(in oklch, var(--fg) 6%, transparent);
-  --font-display: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
-  --font-body: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
-  --radius: 8px;
-  --radius-lg: 12px;
+  /* Global semantic aliases */
+  --bg: var(--od-bg);
+  --surface: var(--od-surface);
+  --fg: var(--od-fg);
+  --muted: var(--od-muted);
+  --border: var(--od-border);
+  --accent: var(--od-accent);
+  --accent-soft: var(--od-accent-soft);
+  --fg-soft: var(--od-fg-soft);
+  --font-display: var(--od-font-display);
+  --font-body: var(--od-font-body);
+  --font-mono: var(--od-font-mono);
+  --radius: var(--od-radius);
+  --radius-lg: var(--od-radius-lg);
+}
+
+.dark {
+  --od-bg: oklch(18% 0.02 250);
+  --od-surface: oklch(24% 0.02 250);
+  --od-fg: oklch(96% 0.005 250);
+  --od-muted: oklch(60% 0.02 250);
+  --od-border: oklch(35% 0.02 250);
+  --od-accent: oklch(60% 0.18 25);
+  --od-accent-soft: color-mix(in oklch, var(--od-accent) 15%, transparent);
+  --od-fg-soft: color-mix(in oklch, var(--od-fg) 10%, transparent);
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--od-font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 ::-ms-reveal {
   display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

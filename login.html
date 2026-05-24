@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orbit Docs · Sign In</title>
+  <style>
+    :root {
+      --od-bg:      oklch(98% 0.004 250);
+      --od-surface: oklch(100% 0 0);
+      --od-fg:      oklch(20% 0.02 250);
+      --od-muted:   oklch(55% 0.015 250);
+      --od-border:  oklch(90% 0.006 250);
+      --od-accent:  oklch(55% 0.16 25);
+      --od-accent-soft: color-mix(in oklch, var(--od-accent) 12%, transparent);
+      --od-fg-soft:     color-mix(in oklch, var(--od-fg) 6%, transparent);
+      --od-error:       oklch(55% 0.18 25);
+      --od-error-text:  oklch(50% 0.16 25);
+      --od-error-soft:  color-mix(in oklch, var(--od-error) 20%, transparent);
+      --od-error-bg:    color-mix(in oklch, var(--od-error) 8%, transparent);
+      --od-success:     oklch(60% 0.18 145);
+      --od-success-text: oklch(50% 0.14 145);
+      --od-font-display: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --od-font-body:    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --od-font-mono:    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+      --od-fs-h2: 20px;
+      --od-fs-body: 14px;
+      --od-fs-meta: 12px;
+      --od-gap-sm: 12px;
+      --od-gap-md: 16px;
+      --od-gap-lg: 24px;
+      --od-radius: 8px;
+      --od-radius-lg: 12px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      margin: 0; background: var(--od-bg); color: var(--od-fg);
+      font-family: var(--od-font-body); font-size: var(--od-fs-body);
+      line-height: 1.5; text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3 { margin: 0; font-weight: 600; }
+
+    /* ─── auth shell ────────────────────────────────────────────── */
+    .auth-shell {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      min-height: 100vh; padding: var(--od-gap-lg);
+    }
+    .auth-brand {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: var(--od-gap-lg);
+      font-family: var(--od-font-display); font-size: 22px; font-weight: 600;
+    }
+    .auth-brand svg { width: 26px; height: 26px; color: var(--od-accent); flex-shrink: 0; }
+
+    /* ─── card ──────────────────────────────────────────────────── */
+    .auth-card {
+      background: var(--od-surface); border: 1px solid var(--od-border);
+      border-radius: var(--od-radius-lg);
+      width: 100%; max-width: 400px;
+      padding: var(--od-gap-lg);
+    }
+    .auth-card h2 {
+      font-size: var(--od-fs-h2); margin-bottom: var(--od-gap-md);
+    }
+    .auth-card .subtitle {
+      color: var(--od-muted); font-size: var(--od-fs-body);
+      margin-bottom: var(--od-gap-lg);
+    }
+
+    /* ─── form ──────────────────────────────────────────────────── */
+    .form-group { margin-bottom: var(--od-gap-md); }
+    .form-group label {
+      display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px;
+    }
+    .form-group input[type="email"],
+    .form-group input[type="password"],
+    .form-group input[type="text"] {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid var(--od-border); border-radius: var(--od-radius);
+      background: var(--od-bg); font: inherit; font-size: 14px; color: var(--od-fg);
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .form-group input:focus {
+      outline: none; border-color: var(--od-accent);
+      box-shadow: 0 0 0 3px var(--od-accent-soft);
+    }
+    .input-error {
+      border-color: var(--od-error) !important;
+      box-shadow: 0 0 0 3px var(--od-error-soft) !important;
+    }
+    .error-msg {
+      display: none; color: var(--od-error-text); font-size: 12px; margin-top: 4px;
+    }
+    .error-msg.show { display: block; }
+
+    .form-row-between {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: var(--od-gap-lg);
+    }
+    .checkbox-label {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--od-muted); cursor: pointer;
+    }
+    .checkbox-label input[type="checkbox"] {
+      width: 16px; height: 16px; accent-color: var(--od-accent); cursor: pointer;
+    }
+    .link { color: var(--od-accent); font-weight: 500; font-size: 13px; }
+    .link:hover { text-decoration: underline; }
+
+    /* ─── buttons ─────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 10px 16px; border-radius: var(--od-radius);
+      border: 1px solid transparent; font-size: 14px; font-weight: 500;
+      transition: background .15s cubic-bezier(.4,0,.2,1), border-color .15s cubic-bezier(.4,0,.2,1);
+    }
+    .btn-block { width: 100%; }
+    .btn-primary { background: var(--od-accent); color: var(--od-surface); border-color: var(--od-accent); }
+    .btn-primary:hover { background: color-mix(in oklch, var(--od-accent) 88%, black); }
+    .btn-secondary { background: transparent; color: var(--od-fg); border-color: var(--od-border); }
+    .btn-secondary:hover { border-color: var(--od-fg); }
+
+    /* ─── focus ─────────────────────────────────────────────────── */
+    .btn:focus-visible,
+    .form-group input:focus-visible,
+    .checkbox-label:focus-visible,
+    .link:focus-visible {
+      outline: 2px solid var(--od-accent); outline-offset: 2px; border-radius: var(--od-radius);
+    }
+
+    /* ─── divider ───────────────────────────────────────────────── */
+    .divider {
+      display: flex; align-items: center; gap: var(--od-gap-md);
+      margin: var(--od-gap-lg) 0; color: var(--od-muted); font-size: 12px;
+    }
+    .divider::before, .divider::after {
+      content: ""; flex: 1; height: 1px; background: var(--od-border);
+    }
+
+    /* ─── auth footer ───────────────────────────────────────────── */
+    .auth-footer {
+      margin-top: var(--od-gap-lg); text-align: center;
+      color: var(--od-muted); font-size: 13px;
+    }
+    .auth-footer a { color: var(--od-accent); font-weight: 500; }
+    .auth-footer a:hover { text-decoration: underline; }
+
+    /* ─── pagefoot ──────────────────────────────────────────────── */
+    .pagefoot {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 16px var(--od-gap-lg); color: var(--od-muted); font-size: 12px;
+      border-top: 1px solid var(--od-border); background: var(--od-surface);
+      display: flex; justify-content: space-between;
+    }
+    .num { font-family: var(--od-font-mono); font-variant-numeric: tabular-nums; }
+
+    /* ─── toast ─────────────────────────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 24px; right: 32px; z-index: 200;
+      background: var(--od-fg); color: var(--od-surface);
+      padding: 12px 20px; border-radius: var(--od-radius);
+      font-size: 14px; font-weight: 500;
+      box-shadow: 0 8px 24px color-mix(in oklch, var(--od-fg) 20%, transparent);
+      opacity: 0; transform: translateY(8px);
+      transition: opacity .2s cubic-bezier(.4,0,.2,1), transform .2s cubic-bezier(.4,0,.2,1);
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+    @media (max-width: 480px) {
+      .auth-shell { padding: var(--od-gap-md); }
+      .auth-card { padding: var(--od-gap-md); }
+      .pagefoot { flex-direction: column; gap: 4px; align-items: center; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-shell">
+    <div class="auth-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+      Orbit Docs
+    </div>
+
+    <div class="auth-card">
+      <h2>Sign in</h2>
+      <p class="subtitle">Enter your credentials to access your workspace.</p>
+
+      <form novalidate id="loginForm">
+        <div class="form-group">
+          <label for="email">Email address</label>
+          <input type="email" id="email" placeholder="you@company.com" required autocomplete="email" aria-describedby="emailError" />
+          <span class="error-msg" id="emailError">Please enter a valid email address.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" placeholder="••••••••" required autocomplete="current-password" aria-describedby="passwordError" />
+          <span class="error-msg" id="passwordError">Password is required.</span>
+        </div>
+
+        <div class="form-row-between">
+          <label class="checkbox-label">
+            <input type="checkbox" id="remember" />
+            Remember me
+          </label>
+          <a href="#" class="link">Forgot password?</a>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Sign In</button>
+      </form>
+
+      <div class="divider">or</div>
+
+      <a href="register.html" class="btn btn-secondary btn-block">Create an account</a>
+    </div>
+
+    <div class="auth-footer">
+      <span>Need help? <a href="#">Contact support</a></span>
+    </div>
+  </div>
+
+  <footer class="pagefoot">
+    <span>Orbit Docs · Internal documentation platform</span>
+    <span class="num">v2026.05</span>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const emailInput = document.getElementById('email');
+    const passwordInput = document.getElementById('password');
+    const emailError = document.getElementById('emailError');
+    const passwordError = document.getElementById('passwordError');
+
+    function showFieldError(input, errorEl, show) {
+      if (show) {
+        input.classList.add('input-error');
+        input.setAttribute('aria-invalid', 'true');
+        errorEl.classList.add('show');
+      } else {
+        input.classList.remove('input-error');
+        input.setAttribute('aria-invalid', 'false');
+        errorEl.classList.remove('show');
+      }
+    }
+
+    function isValidEmail(str) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      let valid = true;
+
+      const email = emailInput.value.trim();
+      if (!email || !isValidEmail(email)) {
+        showFieldError(emailInput, emailError, true);
+        valid = false;
+      } else {
+        showFieldError(emailInput, emailError, false);
+      }
+
+      const password = passwordInput.value;
+      if (!password) {
+        showFieldError(passwordInput, passwordError, true);
+        valid = false;
+      } else {
+        showFieldError(passwordInput, passwordError, false);
+      }
+
+      if (!valid) {
+        const firstInvalid = form.querySelector('.input-error');
+        if (firstInvalid) firstInvalid.focus();
+        return;
+      }
+
+      showToast('Signed in successfully');
+      // In a real app: redirect to dashboard
+      // window.location.href = 'index.html';
+    });
+
+    emailInput.addEventListener('input', () => showFieldError(emailInput, emailError, false));
+    passwordInput.addEventListener('input', () => showFieldError(passwordInput, passwordError, false));
+  </script>
+</body>
+</html>
