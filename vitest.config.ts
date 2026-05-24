@@ -5,8 +5,10 @@ export default defineConfig({
   plugins: [vue()],
   test: {
     environment: "happy-dom",
+    setupFiles: ["./vitest.setup.ts"],
     coverage: {
-      include: ["utils/**/*.{js,ts}"],
+      include: ["utils/**/*.{js,ts}", "composables/**/*.{js,ts}"],
     },
+    globals: true,
   },
 });
