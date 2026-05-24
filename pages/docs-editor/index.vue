@@ -2,6 +2,12 @@
 import { usePageStore } from "~/store/page";
 import type { DocItem } from "~/composables/useDocs";
 
+definePageMeta({
+  auth: {
+    required: true,
+  },
+});
+
 const $page = usePageStore();
 onBeforeMount(() => {
   $page.setTitle("Doc Editor");
@@ -266,17 +272,7 @@ const statusLabel: Record<string, string> = {
 
 <style scoped>
 .docs-page {
-  --bg: oklch(98% 0.004 250);
-  --surface: oklch(100% 0 0);
-  --fg: oklch(20% 0.02 250);
-  --muted: oklch(55% 0.015 250);
-  --border: oklch(90% 0.006 250);
-  --accent: oklch(55% 0.16 25);
-  --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
-  --fg-soft: color-mix(in oklch, var(--fg) 6%, transparent);
-  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
-  --radius: 8px;
-  --radius-lg: 12px;
+  /* Inherits global semantic tokens from :root — no local overrides so dark mode works */
 }
 
 .topbar {
