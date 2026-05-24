@@ -344,7 +344,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         >
           {{ compareBtnText }}
         </button>
-        <button class="btn btn-ghost" @click="clearSelection">Archive</button>
       </div>
     </div>
 
