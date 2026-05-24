@@ -10,6 +10,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "#imports": path.resolve(__dirname, "./vitest-imports-mock.ts"),
+      "~": path.resolve(__dirname, "."),
     },
   },
   test: {

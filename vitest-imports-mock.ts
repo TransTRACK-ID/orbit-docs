@@ -1,9 +1,14 @@
-import { vi, ref } from "vitest";
+import { vi } from "vitest";
+import { ref } from "vue";
+
+export const mockSignIn = vi.fn();
+export const mockSignOut = vi.fn();
+export const mockAuthData = ref(null);
 
 export const useAuth = vi.fn(() => ({
-  signIn: vi.fn(),
-  signOut: vi.fn(),
-  data: ref(null),
+  signIn: mockSignIn,
+  signOut: mockSignOut,
+  data: mockAuthData,
 }));
 
 export const useCookie = vi.fn((_key: string, _opts?: any) => {
