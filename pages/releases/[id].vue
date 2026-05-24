@@ -168,7 +168,7 @@ onBeforeUnmount(() => {
 // Media helpers
 // ═══════════════════════════════════════════════════════════════
 const playingMedia = ref<Record<string, boolean>>({});
-const videoEls = ref<Record<string, HTMLVideoElement>>({});
+const videoEls = ref<Record<string, any>>({});
 
 function mediaKey(featureId: string, idx: number) {
   return `${featureId}-${idx}`;
@@ -223,12 +223,12 @@ async function submitEdit() {
   if (!release.value) return;
   editError.value = "";
 
-  let features: ReleaseFeature[] | null = null;
-  let categories: ReleaseCategories | null = null;
+  let features: ReleaseFeature[] | undefined = undefined;
+  let categories: ReleaseCategories | undefined = undefined;
 
   try {
-    features = editForm.featuresJson.trim() ? JSON.parse(editForm.featuresJson) : null;
-    categories = editForm.categoriesJson.trim() ? JSON.parse(editForm.categoriesJson) : null;
+    features = editForm.featuresJson.trim() ? JSON.parse(editForm.featuresJson) : undefined;
+    categories = editForm.categoriesJson.trim() ? JSON.parse(editForm.categoriesJson) : undefined;
   } catch (e) {
     editError.value = "Invalid JSON in features or categories. Please check syntax.";
     return;

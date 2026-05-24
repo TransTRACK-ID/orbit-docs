@@ -248,7 +248,7 @@ async function doDeleteVersion() {
 }
 
 // Helpers
-function formatDate(dateStr: string | null) {
+function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });

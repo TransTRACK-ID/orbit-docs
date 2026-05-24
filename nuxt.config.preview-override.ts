@@ -6,7 +6,7 @@ export default defineNuxtConfig({
   },
   vite: {
     server: {
-      allowedHosts: 'all',
+      allowedHosts: true,
     },
   },
 })
