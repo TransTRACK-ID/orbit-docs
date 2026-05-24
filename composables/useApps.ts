@@ -37,8 +37,15 @@ export interface AppVersion {
   id: string;
   appId: string;
   version: string;
-  status: "draft" | "published" | "rc";
+  status: "draft" | "published" | "rc" | "archived";
   createdBy: string | null;
+  releaseDate: string | null;
+  releaseNotes: string | null;
+  branch: string | null;
+  tags: string | null;
+  commitHash: string | null;
+  approver: string | null;
+  ciStatus: "passed" | "failed" | "pending" | "unknown";
   createdAt: string | null;
   updatedAt: string | null;
 }
