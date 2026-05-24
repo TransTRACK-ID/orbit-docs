@@ -1,37 +1,58 @@
 <script setup lang="ts">
 definePageMeta({
   auth: false,
-  layout: false,
+  layout: "login",
 });
 
-const $router = useRouter();
+const router = useRouter();
 </script>
 
 <template>
-  <div class="min-h-screen flex justify-center items-center p-10">
+  <AppLayoutsAuth>
+    <!-- Card -->
     <div
-      class="flex flex-col-reverse items-center max-w-[960px] md:flex-row md:space-x-10"
+      class="bg-[var(--od-surface)] border border-[var(--od-border)] rounded-[var(--od-radius-lg)] p-6 text-center"
     >
-      <div class="flex flex-col items-center md:items-start">
-        <p
-          class="text-6xl font-semibold text-gray-900 text-center mb-6 md:text-left"
+      <div
+        class="w-12 h-12 mx-auto mb-4 rounded-full flex items-center justify-center"
+        style="background: var(--od-error-bg)"
+      >
+        <svg
+          class="w-6 h-6"
+          style="color: var(--od-error-text)"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
         >
-          Internal Server Error
-        </p>
-
-        <p class="text-lg text-gray-700 mb-10 text-center md:text-left">
-          Our servers are currently undergoing maintenance to ensure the ebst
-          experience for you. Please be patient, we'll be back soon!
-        </p>
-
-        <GeneralButton label="Refresh Page" @on-click="$router.back()" />
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
       </div>
 
-      <div class="mb-10 md:mb-0">
-        <IlustrationInternalServerError />
+      <h1 class="text-[18px] font-semibold text-[var(--od-fg)] mb-2">
+        Something went wrong
+      </h1>
+      <p class="text-[14px] text-[var(--od-muted)] mb-6">
+        We're experiencing technical difficulties. Please try again in a moment or contact your system administrator if the problem persists.
+      </p>
+
+      <div class="flex flex-col gap-3">
+        <button
+          type="button"
+          class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-surface)] bg-[var(--od-accent)] border border-[var(--od-accent)] rounded-[var(--od-radius)] transition-colors hover:bg-[color-mix(in_oklch,var(--od-accent)_88%,black)]"
+          @click="router.back()"
+        >
+          Go back
+        </button>
+        <NuxtLink
+          to="/login"
+          class="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-fg)] bg-transparent border border-[var(--od-border)] rounded-[var(--od-radius)] transition-colors hover:border-[var(--od-fg)]"
+        >
+          Back to sign in
+        </NuxtLink>
       </div>
     </div>
-  </div>
+  </AppLayoutsAuth>
 </template>
-
-<style scoped></style>

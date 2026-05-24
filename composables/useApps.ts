@@ -29,8 +29,25 @@ export interface ActivityLog {
   appId: string | null;
   appName: string | null;
   action: string;
-  user: string;
+  actor: string;
   createdAt: string | null;
+}
+
+export interface AppVersion {
+  id: string;
+  appId: string;
+  version: string;
+  status: "draft" | "published" | "rc" | "archived";
+  createdBy: string | null;
+  releaseDate: string | null;
+  releaseNotes: string | null;
+  branch: string | null;
+  tags: string | null;
+  commitHash: string | null;
+  approver: string | null;
+  ciStatus: "passed" | "failed" | "pending" | "unknown";
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface CreateAppPayload {
@@ -56,11 +73,48 @@ export const useApps = () => {
         query: search.value ? { search: search.value } : undefined,
       });
       apps.value = data.data;
-    } catch (e) {
-      toast.error("Failed to load apps");
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load apps");
+      }
       console.error(e);
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  async function fetchApp(id: string) {
+    try {
+      const data = await $fetch<{ data: AppItem }>(`/api/apps/${id}`);
+      return data.data;
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load app");
+      }
+      console.error(e);
+      throw e;
+    }
+  }
+
+  async function fetchAppVersions(id: string) {
+    try {
+      const data = await $fetch<{ data: AppVersion[] }>(`/api/apps/${id}/versions`);
+      return data.data;
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load versions");
+      }
+      console.error(e);
+      throw e;
     }
   }
 
@@ -68,7 +122,10 @@ export const useApps = () => {
     try {
       const data = await $fetch<{ data: AppStats }>("/api/apps/stats");
       stats.value = data.data;
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        navigateTo("/login");
+      }
       console.error(e);
     }
   }
@@ -79,7 +136,10 @@ export const useApps = () => {
         query: { limit: "10" },
       });
       activities.value = data.data;
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        navigateTo("/login");
+      }
       console.error(e);
     }
   }
@@ -99,8 +159,13 @@ export const useApps = () => {
       await Promise.all([fetchStats(), fetchActivities()]);
       return data.data;
     } catch (e: any) {
-      const msg = e?.message || "Failed to create app";
-      toast.error(msg);
+      const msg = e?.data?.message || e?.message || "Failed to create app";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
       throw e;
     } finally {
       isCreating.value = false;
@@ -121,8 +186,13 @@ export const useApps = () => {
       await Promise.all([fetchStats(), fetchActivities()]);
       return data.data;
     } catch (e: any) {
-      const msg = e?.message || "Failed to update app";
-      toast.error(msg);
+      const msg = e?.data?.message || e?.message || "Failed to update app";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
       throw e;
     }
   }
@@ -135,8 +205,14 @@ export const useApps = () => {
       apps.value = apps.value.filter((a) => a.id !== id);
       toast.success("App deleted");
       await Promise.all([fetchStats(), fetchActivities()]);
-    } catch (e) {
-      toast.error("Failed to delete app");
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to delete app";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
       throw e;
     }
   }
@@ -149,6 +225,8 @@ export const useApps = () => {
     isCreating,
     search,
     fetchApps,
+    fetchApp,
+    fetchAppVersions,
     fetchStats,
     fetchActivities,
     createApp,

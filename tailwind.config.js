@@ -3,6 +3,7 @@
 import flowbitePlugin from "flowbite/plugin";
 
 export default {
+  darkMode: "class",
   content: [
     "./components/**/*.{js,vue,ts}",
     "./layouts/**/*.vue",
@@ -192,9 +193,10 @@ export default {
       },
     },
     fontFamily: {
-      sans: ["Poppins", "sans-serif"],
-      serif: ["Poppins", "serif"],
-      body: ["Poppins", "sans-serif"],
+      sans: ['-apple-system', 'BlinkMacSystemFont', '"Inter"', '"Segoe UI"', 'system-ui', 'sans-serif'],
+      serif: ['-apple-system', 'BlinkMacSystemFont', '"Inter"', '"Segoe UI"', 'system-ui', 'sans-serif'],
+      body: ['-apple-system', 'BlinkMacSystemFont', '"Inter"', '"Segoe UI"', 'system-ui', 'sans-serif'],
+      mono: ['"JetBrains Mono"', '"IBM Plex Mono"', 'ui-monospace', 'Menlo', 'monospace'],
     },
   },
   plugins: [flowbitePlugin],

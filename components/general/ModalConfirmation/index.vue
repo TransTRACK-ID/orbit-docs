@@ -36,10 +36,10 @@ const props = defineProps({
         <slot name="icon" />
 
         <div class="space-y-2 mb-5">
-          <p class="text-lg text-gray-900 font-[600] text-center">
+          <p class="text-lg text-[var(--fg)] font-[600] text-center">
             {{ title }}
           </p>
-          <p class="text-sm text-gray-500 font-[400] text-center">
+          <p class="text-sm text-[var(--muted)] font-[400] text-center">
             {{ subtitle }}
           </p>
         </div>
