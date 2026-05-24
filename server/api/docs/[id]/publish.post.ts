@@ -2,8 +2,10 @@ import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { docs, activityLogs, apps, appVersions } from "~/server/database/schema";
 import { eq, desc } from "drizzle-orm";
+import { requireAuth, getActorName } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
+  const user = await requireAuth(event);
   const db = getDb();
   const id = getRouterParam(event, "id");
 
@@ -73,7 +75,7 @@ export default defineEventHandler(async (event) => {
     appId: updatedRow.appId,
     appName: updatedRow.title,
     action: "Doc published",
-    actor: updatedRow.author || "System",
+    actor: updatedRow.author || getActorName(user),
   });
 
   return {
