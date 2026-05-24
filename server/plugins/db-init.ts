@@ -25,10 +25,26 @@ export default defineNitroPlugin(async () => {
       version TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'draft',
       created_by TEXT,
+      release_date TIMESTAMP WITH TIME ZONE,
+      release_notes TEXT,
+      branch TEXT,
+      tags TEXT,
+      commit_hash TEXT,
+      approver TEXT,
+      ci_status TEXT NOT NULL DEFAULT 'unknown',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+
+  // Migrate existing app_versions table with new columns
+  await pool.query(`ALTER TABLE app_versions ADD COLUMN IF NOT EXISTS release_date TIMESTAMP WITH TIME ZONE`);
+  await pool.query(`ALTER TABLE app_versions ADD COLUMN IF NOT EXISTS release_notes TEXT`);
+  await pool.query(`ALTER TABLE app_versions ADD COLUMN IF NOT EXISTS branch TEXT`);
+  await pool.query(`ALTER TABLE app_versions ADD COLUMN IF NOT EXISTS tags TEXT`);
+  await pool.query(`ALTER TABLE app_versions ADD COLUMN IF NOT EXISTS commit_hash TEXT`);
+  await pool.query(`ALTER TABLE app_versions ADD COLUMN IF NOT EXISTS approver TEXT`);
+  await pool.query(`ALTER TABLE app_versions ADD COLUMN IF NOT EXISTS ci_status TEXT NOT NULL DEFAULT 'unknown'`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS activity_logs (
@@ -176,14 +192,14 @@ export default defineNitroPlugin(async () => {
     const versionIds = Array.from({ length: 8 }, () => crypto.randomUUID());
 
     await db.insert(appVersions).values([
-      { id: versionIds[0], appId: appIds[0], version: "2.4.1", status: "published", createdBy: "Sarah Chen" },
-      { id: versionIds[1], appId: appIds[0], version: "2.4.0", status: "published", createdBy: "Sarah Chen" },
-      { id: versionIds[2], appId: appIds[1], version: "1.8.0", status: "published", createdBy: "Mike Ross" },
-      { id: versionIds[3], appId: appIds[2], version: "3.0.2", status: "published", createdBy: "Sarah Chen" },
-      { id: versionIds[4], appId: appIds[3], version: "1.2.5", status: "published", createdBy: "Jen Park" },
-      { id: versionIds[5], appId: appIds[4], version: "4.1.0-rc", status: "rc", createdBy: "Sarah Chen" },
-      { id: versionIds[6], appId: appIds[0], version: "2.5.0", status: "draft", createdBy: "Sarah Chen" },
-      { id: versionIds[7], appId: appIds[2], version: "3.1.0", status: "draft", createdBy: "Mike Ross" },
+      { id: versionIds[0], appId: appIds[0], version: "2.4.1", status: "published", createdBy: "Sarah Chen", releaseDate: new Date("2026-05-18"), releaseNotes: "Patch release addressing webhook retry logic and adding support for custom header forwarding in edge routes. No breaking changes.", branch: "release/2.4.1", commitHash: "a7f3c2d", approver: "Sarah Chen", ciStatus: "passed" },
+      { id: versionIds[1], appId: appIds[0], version: "2.4.0", status: "published", createdBy: "Sarah Chen", releaseDate: new Date("2026-05-10"), releaseNotes: "Major feature release with rate limiting improvements and JWT validation middleware.", branch: "release/2.4.0", commitHash: "b8e4d5f", approver: "Sarah Chen", ciStatus: "passed" },
+      { id: versionIds[2], appId: appIds[1], version: "1.8.0", status: "published", createdBy: "Mike Ross", releaseDate: new Date("2026-04-28"), releaseNotes: "OAuth2 provider upgrades and SSO session management fixes.", branch: "release/1.8.0", commitHash: "c9f6e8a", approver: "Mike Ross", ciStatus: "passed" },
+      { id: versionIds[3], appId: appIds[2], version: "3.0.2", status: "published", createdBy: "Sarah Chen", releaseDate: new Date("2026-04-15"), releaseNotes: "Subscription proration bug fix and invoice PDF generation improvements.", branch: "release/3.0.2", commitHash: "d0g7h9b", approver: "Sarah Chen", ciStatus: "passed" },
+      { id: versionIds[4], appId: appIds[3], version: "1.2.5", status: "published", createdBy: "Jen Park", releaseDate: new Date("2026-04-02"), releaseNotes: "Push notification delivery reliability improvements.", branch: "release/1.2.5", commitHash: "e1h8i0c", approver: "Jen Park", ciStatus: "passed" },
+      { id: versionIds[5], appId: appIds[4], version: "4.1.0-rc", status: "rc", createdBy: "Sarah Chen", releaseDate: new Date("2026-03-20"), releaseNotes: "Streaming data processing pipeline v2 with backpressure handling.", branch: "release/4.1.0", commitHash: "f2i9j1d", approver: "Sarah Chen", ciStatus: "pending" },
+      { id: versionIds[6], appId: appIds[0], version: "2.5.0", status: "draft", createdBy: "Sarah Chen", releaseNotes: "Upcoming: GraphQL federation support and caching layer rewrite.", branch: "feat/2.5.0", commitHash: "g3j0k2e", ciStatus: "unknown" },
+      { id: versionIds[7], appId: appIds[2], version: "3.1.0", status: "draft", createdBy: "Mike Ross", releaseNotes: "Upcoming: Multi-currency support and tax engine v2.", branch: "feat/3.1.0", commitHash: "h4k1l3f", ciStatus: "unknown" },
     ]);
 
     const activityIds = Array.from({ length: 5 }, () => crypto.randomUUID());

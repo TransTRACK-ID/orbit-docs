@@ -20,10 +20,19 @@ export const appVersions = pgTable("app_versions", {
     .notNull()
     .references(() => apps.id, { onDelete: "cascade" }),
   version: text("version").notNull(),
-  status: text("status", { enum: ["draft", "published", "rc"] })
+  status: text("status", { enum: ["draft", "published", "rc", "archived"] })
     .notNull()
     .default("draft"),
   createdBy: text("created_by"),
+  releaseDate: timestamp("release_date", { withTimezone: true }),
+  releaseNotes: text("release_notes"),
+  branch: text("branch"),
+  tags: text("tags"),
+  commitHash: text("commit_hash"),
+  approver: text("approver"),
+  ciStatus: text("ci_status", { enum: ["passed", "failed", "pending", "unknown"] })
+    .notNull()
+    .default("unknown"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
