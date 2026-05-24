@@ -27,7 +27,7 @@ const userInitials = computed(() => {
     .slice(0, 2);
 });
 
-let modalLogout: ElementEvent | null = null;
+const modalLogout = ref<ElementEvent | null>(null);
 async function logout() {
   await $auth.logout();
 }

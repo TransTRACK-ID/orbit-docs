@@ -32,6 +32,7 @@ export interface CreateEmbedDocPayload {
   title: string;
   appId?: string | null;
   versionId?: string | null;
+  slug?: string;
   subtitle?: string;
   navItems?: EmbedNavItem[];
   content?: string;

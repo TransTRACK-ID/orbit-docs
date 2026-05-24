@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
     conditions.push(eq(docs.appId, appId));
   }
   if (status) {
-    conditions.push(eq(docs.status, status));
+    conditions.push(eq(docs.status, status as "draft" | "in_review" | "published" | "archived"));
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

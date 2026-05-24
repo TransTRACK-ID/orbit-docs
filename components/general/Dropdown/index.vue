@@ -32,7 +32,7 @@ onMounted(() => {
           name="content"
           :close="
             () => {
-              dropdown?.hide();
+              (dropdown as any)?.hide();
             }
           "
         />

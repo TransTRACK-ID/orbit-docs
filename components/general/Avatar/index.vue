@@ -49,7 +49,7 @@ const initials = computed(() => {
       <slot name="placeholder"/>
       <template v-if="!$slots.placeholder">
         <span v-if="initials">{{ initials }}</span>
-        <User v-else :size="Math.max(12, props.size * 0.5)" />
+        <User v-else :size="String(Math.max(12, props.size * 0.5))" />
       </template>
     </div>
   </div>

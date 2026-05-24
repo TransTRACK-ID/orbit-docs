@@ -125,7 +125,7 @@ export const useDocs = () => {
         docs.value[idx] = { ...docs.value[idx], ...data.data };
       }
       if (currentDoc.value && currentDoc.value.id === id) {
-        currentDoc.value = { ...currentDoc.value, status: "published", ...data.data };
+        currentDoc.value = { ...currentDoc.value, ...data.data, status: "published" };
       }
       toast.success(`Published: ${data.data.title}`);
       return data.data;
