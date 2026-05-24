@@ -73,7 +73,7 @@ export default defineEventHandler(async (event) => {
     appId: updatedRow.appId,
     appName: updatedRow.title,
     action: "Doc published",
-    user: updatedRow.author || "System",
+    actor: updatedRow.author || "System",
   });
 
   return {
