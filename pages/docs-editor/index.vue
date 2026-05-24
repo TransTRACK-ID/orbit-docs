@@ -8,9 +8,11 @@ onBeforeMount(() => {
 });
 
 const { docs, isLoading, search, fetchDocs, createDoc, deleteDoc } = useDocs();
+const { apps, fetchApps } = useApps();
 
 onMounted(() => {
   fetchDocs();
+  fetchApps();
 });
 
 const showCreateModal = ref(false);
@@ -137,6 +139,9 @@ const statusLabel: Record<string, string> = {
 
     <div v-else-if="docs.length === 0" class="empty-state">
       <p>No docs found.</p>
+      <button type="button" class="btn btn-primary" style="margin-top:12px;" @click="openCreateModal">
+        Create your first doc
+      </button>
     </div>
 
     <div v-else class="grid-3">
@@ -160,9 +165,14 @@ const statusLabel: Record<string, string> = {
         </div>
         <div class="card-foot">
           <span style="color:var(--muted);font-size:12px;">{{ doc.author || 'Unknown' }}</span>
-          <NuxtLink :to="`/docs-editor/${doc.id}`" class="btn btn-ghost btn-sm">
-            Edit &rarr;
-          </NuxtLink>
+          <div class="flex-gap-sm">
+            <button type="button" class="btn btn-ghost btn-sm" @click="confirmDelete(doc)">
+              Delete
+            </button>
+            <NuxtLink :to="`/docs-editor/${doc.id}`" class="btn btn-ghost btn-sm">
+              Edit &rarr;
+            </NuxtLink>
+          </div>
         </div>
       </div>
     </div>
@@ -197,8 +207,9 @@ const statusLabel: Record<string, string> = {
               <label for="docApp">App</label>
               <select id="docApp" v-model="createForm.appId">
                 <option value="">Unbound (latest)</option>
-                <option value="api-gateway">API Gateway</option>
-                <option value="auth-service">Auth Service</option>
+                <option v-for="app in apps" :key="app.id" :value="app.id">
+                  {{ app.name }}
+                </option>
               </select>
             </div>
             <div class="form-group">

@@ -7,6 +7,10 @@ export function renderMarkdown(md: string): string {
   let tableHead: string[] = [];
   let tableBody: string[][] = [];
 
+  // List tracking
+  let listBuffer: string[] = [];
+  let listType: "ul" | "ol" | null = null;
+
   function flushCode() {
     if (codeBuffer.length) {
       const code = escapeHtml(codeBuffer.join("\n"));
@@ -37,6 +41,20 @@ export function renderMarkdown(md: string): string {
     inTable = false;
   }
 
+  function flushList() {
+    if (listBuffer.length && listType) {
+      const tag = listType;
+      out.push(`<${tag}>\n${listBuffer.join("\n")}\n</${tag}>`);
+    }
+    listBuffer = [];
+    listType = null;
+  }
+
+  function pushBlock(html: string) {
+    flushList();
+    out.push(html);
+  }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
@@ -45,6 +63,7 @@ export function renderMarkdown(md: string): string {
         flushCode();
         inCodeBlock = false;
       } else {
+        flushList();
         inCodeBlock = true;
       }
       continue;
@@ -56,6 +75,7 @@ export function renderMarkdown(md: string): string {
     }
 
     if (line.trim() === "---" || line.trim() === "***" || line.trim() === "___") {
+      flushList();
       flushTable();
       out.push("<hr>");
       continue;
@@ -73,6 +93,7 @@ export function renderMarkdown(md: string): string {
         continue;
       }
       if (!inTable) {
+        flushList();
         tableHead = cells;
         inTable = true;
       } else {
@@ -80,40 +101,53 @@ export function renderMarkdown(md: string): string {
       }
       continue;
     } else if (inTable) {
+      flushList();
       flushTable();
     }
 
+    // Headings
     if (line.startsWith("# ")) {
-      out.push(`<h1>${inlineMd(escapeHtml(line.slice(2)))}</h1>`);
+      pushBlock(`<h1>${inlineMd(escapeHtml(line.slice(2)))}</h1>`);
     } else if (line.startsWith("## ")) {
-      out.push(`<h2>${inlineMd(escapeHtml(line.slice(3)))}</h2>`);
+      pushBlock(`<h2>${inlineMd(escapeHtml(line.slice(3)))}</h2>`);
     } else if (line.startsWith("### ")) {
-      out.push(`<h3>${inlineMd(escapeHtml(line.slice(4)))}</h3>`);
+      pushBlock(`<h3>${inlineMd(escapeHtml(line.slice(4)))}</h3>`);
     } else if (line.startsWith("> ")) {
-      out.push(
+      pushBlock(
         `<blockquote>${inlineMd(escapeHtml(line.slice(2)))}</blockquote>`
       );
     } else if (line.startsWith("- [ ] ")) {
-      out.push(
+      if (listType !== "ul") flushList();
+      listType = "ul";
+      listBuffer.push(
         `<li style="list-style:none;"><input type="checkbox" disabled style="margin-right:6px;">${inlineMd(escapeHtml(line.slice(6)))}</li>`
       );
     } else if (line.startsWith("- [x] ") || line.startsWith("- [X] ")) {
-      out.push(
+      if (listType !== "ul") flushList();
+      listType = "ul";
+      listBuffer.push(
         `<li style="list-style:none;"><input type="checkbox" checked disabled style="margin-right:6px;">${inlineMd(escapeHtml(line.slice(6)))}</li>`
       );
     } else if (line.startsWith("- ")) {
-      out.push(`<li>${inlineMd(escapeHtml(line.slice(2)))}</li>`);
-    } else if (/^\d+\. /.test(line)) {
-      out.push(
-        `<li>${inlineMd(escapeHtml(line.replace(/^\d+\. /, "")))}</li>`
+      if (listType !== "ul") flushList();
+      listType = "ul";
+      listBuffer.push(`<li>${inlineMd(escapeHtml(line.slice(2)))}</li>`);
+    } else if (/^\d+\.\s/.test(line)) {
+      if (listType !== "ol") flushList();
+      listType = "ol";
+      listBuffer.push(
+        `<li>${inlineMd(escapeHtml(line.replace(/^\d+\.\s/, "")))}</li>`
       );
     } else if (line.trim() === "") {
+      flushList();
       // empty line
     } else {
+      flushList();
       out.push(`<p>${inlineMd(escapeHtml(line))}</p>`);
     }
   }
 
+  flushList();
   flushCode();
   flushTable();
 

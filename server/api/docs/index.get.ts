@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
 
   const conditions = [];
   if (search) {
-    conditions.push(sql`${docs.title} LIKE ${"%" + search + "%"}`);
+    conditions.push(sql`${docs.title} ILIKE ${"%" + search + "%"}`);
   }
   if (appId) {
     conditions.push(eq(docs.appId, appId));
@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const allDocs = await db
+  const rows = await db
     .select({
       id: docs.id,
       appId: docs.appId,
@@ -35,38 +35,29 @@ export default defineEventHandler(async (event) => {
       author: docs.author,
       createdAt: docs.createdAt,
       updatedAt: docs.updatedAt,
+      appName: apps.name,
+      version: appVersions.version,
     })
     .from(docs)
+    .leftJoin(apps, eq(docs.appId, apps.id))
+    .leftJoin(appVersions, eq(docs.versionId, appVersions.id))
     .where(whereClause)
     .orderBy(desc(docs.updatedAt));
 
-  const docsWithRelations = await Promise.all(
-    allDocs.map(async (doc) => {
-      const app = doc.appId
-        ? await db
-            .select({ id: apps.id, name: apps.name })
-            .from(apps)
-            .where(eq(apps.id, doc.appId))
-            .limit(1)
-            .then((rows) => rows[0] || null)
-        : null;
+  const data = rows.map((row) => ({
+    id: row.id,
+    appId: row.appId,
+    title: row.title,
+    content: row.content,
+    status: row.status,
+    versionId: row.versionId,
+    tags: row.tags,
+    author: row.author,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    app: row.appName ? { id: row.appId, name: row.appName } : null,
+    version: row.version ? { id: row.versionId, version: row.version } : null,
+  }));
 
-      const version = doc.versionId
-        ? await db
-            .select({ id: appVersions.id, version: appVersions.version })
-            .from(appVersions)
-            .where(eq(appVersions.id, doc.versionId))
-            .limit(1)
-            .then((rows) => rows[0] || null)
-        : null;
-
-      return {
-        ...doc,
-        app: app ? { id: app.id, name: app.name } : null,
-        version: version ? { id: version.id, version: version.version } : null,
-      };
-    })
-  );
-
-  return { data: docsWithRelations };
+  return { data };
 });
