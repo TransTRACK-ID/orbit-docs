@@ -28,6 +28,7 @@ const previewOnly = ref(false);
 const toastMsg = ref("");
 const toastVisible = ref(false);
 const shortcutsVisible = ref(false);
+const activeHeading = ref("");
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -69,6 +70,7 @@ function generatePDF() {
 }
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const previewRef = ref<HTMLDivElement | null>(null);
 
 function wrapText(before: string, after?: string) {
   after = after || before;
@@ -146,8 +148,26 @@ const headings = computed(() => extractHeadings(editorContent.value));
 const renderedHtml = computed(() => renderMarkdown(editorContent.value));
 
 function scrollToHeading(text: string) {
-  // In preview pane, find heading by text content
-  // For now just show toast
+  activeHeading.value = text;
+  // Try to find the heading line in the textarea and move cursor there
+  const ta = textareaRef.value;
+  if (ta) {
+    const lines = ta.value.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const match = line.match(/^(#{1,3})\s+(.+)$/);
+      if (match && match[2].trim() === text) {
+        let pos = 0;
+        for (let j = 0; j < i; j++) pos += lines[j].length + 1;
+        ta.focus();
+        ta.setSelectionRange(pos, pos);
+        // Scroll the line into view roughly
+        const lineHeight = 22; // approximate
+        ta.scrollTop = Math.max(0, i * lineHeight - ta.clientHeight / 2);
+        break;
+      }
+    }
+  }
   showToast("Jumped to: " + text);
 }
 
@@ -160,33 +180,61 @@ function toggleShortcuts() {
   }
 }
 
-onMounted(async () => {
-  $page.setTitle("Technical Editor");
-  if (docId.value) {
-    await fetchDoc(docId.value);
-    if (currentDoc.value) {
-      editorContent.value = currentDoc.value.content || "";
-      editorTitle.value = currentDoc.value.title || "";
-      editorStatus.value = currentDoc.value.status || "draft";
-      editorVersionId.value = currentDoc.value.versionId || null;
-      editorTags.value = currentDoc.value.tags ? [...currentDoc.value.tags] : [];
+function onKeydown(e: KeyboardEvent) {
+  // Ctrl+S / Cmd+S — Save
+  if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+    e.preventDefault();
+    saveDraft();
+  }
+  // Ctrl+P / Cmd+P — Preview toggle
+  if ((e.ctrlKey || e.metaKey) && e.key === "p") {
+    e.preventDefault();
+    togglePreview();
+  }
+  // Ctrl+? / Cmd+? — Shortcuts
+  if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+    e.preventDefault();
+    toggleShortcuts();
+  }
+}
+
+function onTagRemoveKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter" && (e.target as HTMLElement).classList.contains("tag-remove")) {
+    e.preventDefault();
+    const idxAttr = (e.target as HTMLElement).getAttribute("data-idx");
+    if (idxAttr !== null) {
+      removeTag(Number(idxAttr));
     }
   }
+}
 
-  document.addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "s") {
-      e.preventDefault();
-      saveDraft();
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === "p") {
-      e.preventDefault();
-      togglePreview();
-    }
-    if ((e.ctrlKey || e.metaKey) && e.key === "/") {
-      e.preventDefault();
-      toggleShortcuts();
-    }
-  });
+async function loadDoc() {
+  if (!docId.value) return;
+  await fetchDoc(docId.value);
+  if (currentDoc.value) {
+    editorContent.value = currentDoc.value.content || "";
+    editorTitle.value = currentDoc.value.title || "";
+    editorStatus.value = currentDoc.value.status || "draft";
+    editorVersionId.value = currentDoc.value.versionId || null;
+    editorTags.value = currentDoc.value.tags ? [...currentDoc.value.tags] : [];
+  }
+}
+
+onMounted(() => {
+  $page.setTitle("Technical Editor");
+  loadDoc();
+  document.addEventListener("keydown", onKeydown);
+  document.addEventListener("keydown", onTagRemoveKeydown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", onKeydown);
+  document.removeEventListener("keydown", onTagRemoveKeydown);
+  if (toastTimer) clearTimeout(toastTimer);
+});
+
+watch(() => docId.value, () => {
+  loadDoc();
 });
 
 const appName = computed(() => currentDoc.value?.app?.name || "Unbound");
@@ -202,6 +250,16 @@ const lastModified = computed(() => {
   <div class="editor-page">
     <header class="topbar">
       <div class="flex-gap-md">
+        <button
+          type="button"
+          class="btn btn-ghost back-btn"
+          title="Back to docs"
+          @click="router.push('/docs-editor')"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 12H5M12 19l-7-7 7-7"/>
+          </svg>
+        </button>
         <h1>Technical Editor</h1>
         <span class="pill pill-blue">{{ appName }}</span>
       </div>
@@ -238,7 +296,7 @@ const lastModified = computed(() => {
             <li
               v-for="(h, idx) in headings"
               :key="idx"
-              :class="{ indent: h.level > 1 }"
+              :class="{ indent: h.level > 1, active: activeHeading === h.text }"
               role="listitem"
               tabindex="0"
               @click="scrollToHeading(h.text)"
@@ -371,6 +429,7 @@ const lastModified = computed(() => {
             />
             <div
               v-else
+              ref="previewRef"
               class="preview-body"
               v-html="renderedHtml"
             />
@@ -429,6 +488,7 @@ const lastModified = computed(() => {
                 <span
                   class="tag-remove"
                   tabindex="0"
+                  :data-idx="idx"
                   :aria-label="`Remove tag ${tag}`"
                   @click="removeTag(idx)"
                   @keydown.enter.prevent="removeTag(idx)"
@@ -531,6 +591,10 @@ const lastModified = computed(() => {
   font-size: 20px;
   font-weight: 600;
   color: var(--fg);
+}
+
+.back-btn {
+  padding: 6px;
 }
 
 .flex-gap-md {
@@ -674,6 +738,11 @@ const lastModified = computed(() => {
 .outline-tree li:hover {
   background: var(--fg-soft);
   color: var(--fg);
+}
+.outline-tree li.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
 }
 .outline-tree .indent {
   padding-left: 20px;

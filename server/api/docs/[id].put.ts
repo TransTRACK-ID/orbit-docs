@@ -33,7 +33,9 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const updateData: Partial<typeof docs.$inferInsert> = {};
+  const updateData: Partial<typeof docs.$inferInsert> = {
+    updatedAt: new Date(),
+  };
   if (title !== undefined) updateData.title = title.trim();
   if (appId !== undefined) updateData.appId = appId || null;
   if (content !== undefined) updateData.content = content || "";

@@ -15,12 +15,28 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const doc = await db
-    .select()
+  const rows = await db
+    .select({
+      id: docs.id,
+      appId: docs.appId,
+      title: docs.title,
+      content: docs.content,
+      status: docs.status,
+      versionId: docs.versionId,
+      tags: docs.tags,
+      author: docs.author,
+      createdAt: docs.createdAt,
+      updatedAt: docs.updatedAt,
+      appName: apps.name,
+      version: appVersions.version,
+    })
     .from(docs)
+    .leftJoin(apps, eq(docs.appId, apps.id))
+    .leftJoin(appVersions, eq(docs.versionId, appVersions.id))
     .where(eq(docs.id, id))
-    .limit(1)
-    .then((rows) => rows[0] || null);
+    .limit(1);
+
+  const doc = rows[0] || null;
 
   if (!doc) {
     throw createError({
@@ -30,37 +46,19 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const app = doc.appId
-    ? await db
-        .select({ id: apps.id, name: apps.name })
-        .from(apps)
-        .where(eq(apps.id, doc.appId))
-        .limit(1)
-        .then((rows) => rows[0] || null)
-    : null;
-
-  const version = doc.versionId
-    ? await db
-        .select({ id: appVersions.id, version: appVersions.version })
-        .from(appVersions)
-        .where(eq(appVersions.id, doc.versionId))
-        .limit(1)
-        .then((rows) => rows[0] || null)
-    : null;
-
   const allVersions = doc.appId
     ? await db
         .select({ id: appVersions.id, version: appVersions.version, status: appVersions.status })
         .from(appVersions)
         .where(eq(appVersions.appId, doc.appId))
-        .orderBy(eq(appVersions.createdAt))
+        .orderBy(desc(appVersions.createdAt))
     : [];
 
   return {
     data: {
       ...doc,
-      app: app ? { id: app.id, name: app.name } : null,
-      version: version ? { id: version.id, version: version.version } : null,
+      app: doc.appName ? { id: doc.appId, name: doc.appName } : null,
+      version: doc.version ? { id: doc.versionId, version: doc.version } : null,
       appVersions: allVersions,
     },
   };
