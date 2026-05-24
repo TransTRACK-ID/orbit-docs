@@ -1,7 +1,7 @@
 import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { docs, activityLogs } from "~/server/database/schema";
-import { eq } from "drizzle-orm";
+import { docs, activityLogs, apps, appVersions } from "~/server/database/schema";
+import { eq, desc } from "drizzle-orm";
 
 export default defineEventHandler(async (event) => {
   const db = getDb();
@@ -30,19 +30,58 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const doc = await db
+  const updatedRow = await db
     .update(docs)
     .set({ status: "published" })
     .where(eq(docs.id, id))
     .returning()
     .then((rows) => rows[0]);
 
+  // Fetch joined data to return consistent shape
+  const enrichedRows = await db
+    .select({
+      id: docs.id,
+      appId: docs.appId,
+      title: docs.title,
+      content: docs.content,
+      status: docs.status,
+      versionId: docs.versionId,
+      tags: docs.tags,
+      author: docs.author,
+      createdAt: docs.createdAt,
+      updatedAt: docs.updatedAt,
+      appName: apps.name,
+      version: appVersions.version,
+    })
+    .from(docs)
+    .leftJoin(apps, eq(docs.appId, apps.id))
+    .leftJoin(appVersions, eq(docs.versionId, appVersions.id))
+    .where(eq(docs.id, id))
+    .limit(1);
+
+  const enriched = enrichedRows[0];
+
+  const allVersions = enriched.appId
+    ? await db
+        .select({ id: appVersions.id, version: appVersions.version, status: appVersions.status })
+        .from(appVersions)
+        .where(eq(appVersions.appId, enriched.appId))
+        .orderBy(desc(appVersions.createdAt))
+    : [];
+
   await db.insert(activityLogs).values({
-    appId: doc.appId,
-    appName: doc.title,
+    appId: updatedRow.appId,
+    appName: updatedRow.title,
     action: "Doc published",
-    user: doc.author || "System",
+    user: updatedRow.author || "System",
   });
 
-  return { data: doc };
+  return {
+    data: {
+      ...updatedRow,
+      app: enriched.appName ? { id: enriched.appId, name: enriched.appName } : null,
+      version: enriched.version ? { id: enriched.versionId, version: enriched.version } : null,
+      appVersions: allVersions,
+    },
+  };
 });

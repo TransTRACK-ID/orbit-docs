@@ -1,7 +1,9 @@
 import { defineEventHandler, readBody, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { docs, activityLogs } from "~/server/database/schema";
-import { eq } from "drizzle-orm";
+import { docs, activityLogs, apps, appVersions } from "~/server/database/schema";
+import { eq, desc } from "drizzle-orm";
+
+const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
 export default defineEventHandler(async (event) => {
   const db = getDb();
@@ -33,6 +35,31 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // Validate status if provided
+  if (status !== undefined && !VALID_STATUSES.includes(status)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`,
+    });
+  }
+
+  // Validate tags if provided
+  if (tags !== undefined && !Array.isArray(tags)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: "Tags must be an array of strings",
+    });
+  }
+  if (tags !== undefined && tags.length > 0 && tags.some((t: unknown) => typeof t !== "string")) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: "All tags must be strings",
+    });
+  }
+
   const updateData: Partial<typeof docs.$inferInsert> = {
     updatedAt: new Date(),
   };
@@ -41,22 +68,61 @@ export default defineEventHandler(async (event) => {
   if (content !== undefined) updateData.content = content || "";
   if (status !== undefined) updateData.status = status;
   if (versionId !== undefined) updateData.versionId = versionId || null;
-  if (tags !== undefined) updateData.tags = Array.isArray(tags) ? tags : [];
+  if (tags !== undefined) updateData.tags = tags.filter((t: string) => t.trim() !== "").map((t: string) => t.trim());
   if (author !== undefined) updateData.author = author || null;
 
-  const doc = await db
+  const updatedRow = await db
     .update(docs)
     .set(updateData)
     .where(eq(docs.id, id))
     .returning()
     .then((rows) => rows[0]);
 
+  // Fetch joined data to return consistent shape with GET
+  const enrichedRows = await db
+    .select({
+      id: docs.id,
+      appId: docs.appId,
+      title: docs.title,
+      content: docs.content,
+      status: docs.status,
+      versionId: docs.versionId,
+      tags: docs.tags,
+      author: docs.author,
+      createdAt: docs.createdAt,
+      updatedAt: docs.updatedAt,
+      appName: apps.name,
+      version: appVersions.version,
+    })
+    .from(docs)
+    .leftJoin(apps, eq(docs.appId, apps.id))
+    .leftJoin(appVersions, eq(docs.versionId, appVersions.id))
+    .where(eq(docs.id, id))
+    .limit(1);
+
+  const enriched = enrichedRows[0];
+
+  const allVersions = enriched.appId
+    ? await db
+        .select({ id: appVersions.id, version: appVersions.version, status: appVersions.status })
+        .from(appVersions)
+        .where(eq(appVersions.appId, enriched.appId))
+        .orderBy(desc(appVersions.createdAt))
+    : [];
+
   await db.insert(activityLogs).values({
-    appId: doc.appId,
-    appName: doc.title,
+    appId: updatedRow.appId,
+    appName: updatedRow.title,
     action: "Doc updated",
-    user: doc.author || "System",
+    user: updatedRow.author || "System",
   });
 
-  return { data: doc };
+  return {
+    data: {
+      ...updatedRow,
+      app: enriched.appName ? { id: enriched.appId, name: enriched.appName } : null,
+      version: enriched.version ? { id: enriched.versionId, version: enriched.version } : null,
+      appVersions: allVersions,
+    },
+  };
 });
