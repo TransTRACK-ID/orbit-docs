@@ -20,7 +20,7 @@ export const api = {
     if (token) {
       headers = {
         ...headers,
-        Authorization: `${token.value}`,
+        Authorization: `Bearer ${token.value}`,
       };
     }
 

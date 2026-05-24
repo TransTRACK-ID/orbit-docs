@@ -13,7 +13,7 @@ onBeforeMount(() => {
 });
 
 const { apps, fetchApps } = useApps();
-const { versions, isLoading, isCreating, fetchVersions, createVersion, updateVersion, deleteVersion } = useVersions();
+const { versions, isLoading, isCreating, isUpdating, isDeleting, fetchVersions, createVersion, updateVersion, deleteVersion } = useVersions();
 
 const route = useRoute();
 const router = useRouter();
