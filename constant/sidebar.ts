@@ -34,13 +34,6 @@ export const sidebarMenu: ISidebar[] = [
     active: false,
   },
   {
-    id: "menu__changelogs",
-    label: "Changelogs",
-    route: "/changelogs",
-    icon: markRaw(IconsChangelogs),
-    active: false,
-  },
-  {
     id: "menu__doc_editor",
     label: "Doc Editor",
     route: "/docs-editor",
