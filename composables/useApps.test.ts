@@ -26,7 +26,7 @@ describe("useApps composable", () => {
   it("should fetch apps", async () => {
     const appsData = {
       data: [
-        { id: "1", name: "App One", description: null, owner: null, status: "active", repoUrl: null, createdAt: null, updatedAt: null, latestVersion: null },
+        { id: "1", name: "App One", description: null, owner: null, status: "active" as const, repoUrl: null, createdAt: null, updatedAt: null, latestVersion: null },
       ],
     };
     mockFetch.mockResolvedValueOnce(appsData);
@@ -54,7 +54,7 @@ describe("useApps composable", () => {
   });
 
   it("should create an app", async () => {
-    const newApp = { id: "2", name: "New App", description: null, owner: null, status: "active", repoUrl: null, createdAt: null, updatedAt: null };
+    const newApp = { id: "2", name: "New App", description: null, owner: null, status: "active" as const, repoUrl: null, createdAt: null, updatedAt: null };
     mockFetch
       .mockResolvedValueOnce({ data: newApp })
       .mockResolvedValueOnce({ data: { activeApps: 1, totalVersions: 0, publishedDocs: 0, draftVersions: 0 } })
@@ -70,8 +70,8 @@ describe("useApps composable", () => {
   });
 
   it("should update an app", async () => {
-    const existing = { id: "1", name: "Old", description: null, owner: null, status: "active", repoUrl: null, createdAt: null, updatedAt: null, latestVersion: null };
-    const updated = { id: "1", name: "Updated", description: "desc", owner: null, status: "active", repoUrl: null, createdAt: null, updatedAt: null };
+    const existing = { id: "1", name: "Old", description: null, owner: null, status: "active" as const, repoUrl: null, createdAt: null, updatedAt: null, latestVersion: null };
+    const updated = { id: "1", name: "Updated", description: "desc", owner: null, status: "active" as const, repoUrl: null, createdAt: null, updatedAt: null };
 
     mockFetch
       .mockResolvedValueOnce({ data: updated })
@@ -93,7 +93,7 @@ describe("useApps composable", () => {
       .mockResolvedValueOnce({ data: [] });
 
     const { apps, deleteApp } = useApps();
-    apps.value = [{ id: "1", name: "App", description: null, owner: null, status: "active", repoUrl: null, createdAt: null, updatedAt: null, latestVersion: null }];
+    apps.value = [{ id: "1", name: "App", description: null, owner: null, status: "active" as const, repoUrl: null, createdAt: null, updatedAt: null, latestVersion: null }];
 
     await deleteApp("1");
     expect(apps.value).toHaveLength(0);

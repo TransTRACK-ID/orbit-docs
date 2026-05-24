@@ -23,6 +23,9 @@ vi.mock("vue3-toastify", () => ({
   return ref(initial);
 });
 
+// Mock useIsUnauthorized composable
+(globalThis as any).useIsUnauthorized = vi.fn(() => ref(false));
+
 // Mock useRoute
 (globalThis as any).useRoute = vi.fn(() =>
   ref({ path: "/", params: {}, query: {}, name: "index" })

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
 import { useAuthStore } from "./index";
-import { mockSignIn, mockSignOut, mockAuthData } from "#imports";
+import { mockSignIn, mockSignOut, mockAuthData } from "../../vitest-imports-mock";
 import { setupCookies } from "~/utils/cookies";
 
 const mockToastError = vi.fn();
