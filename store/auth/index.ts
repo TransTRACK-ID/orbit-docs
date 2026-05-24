@@ -103,14 +103,18 @@ export const useAuthStore = defineStore("auth", {
     clearCookies() {
       const authCookie = useCookie("auth.token");
       const sessionToken = useCookie("session_token");
+      const initialized = useCookie("auth.initialized");
 
       if (authCookie.value !== undefined) {
         authCookie.value = null;
       }
-      console.log(sessionToken, "session token");
 
       if (sessionToken.value !== undefined) {
         sessionToken.value = null;
+      }
+
+      if (initialized.value !== undefined) {
+        initialized.value = null;
       }
     },
   },

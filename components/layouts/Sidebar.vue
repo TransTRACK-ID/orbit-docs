@@ -18,7 +18,8 @@ const userName = computed(() => user.value?.name || "");
 const userEmail = computed(() => user.value?.email || "");
 
 function logout() {
-  $auth.logout().then(() => {
+  $auth.logout().catch(() => {
+    // signOut handles navigation; only force-redirect on error
     window.location.href = "/login";
   });
 }
