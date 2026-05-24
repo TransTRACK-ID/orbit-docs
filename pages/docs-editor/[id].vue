@@ -29,6 +29,8 @@ const toastMsg = ref("");
 const toastVisible = ref(false);
 const shortcutsVisible = ref(false);
 const activeHeading = ref("");
+const docLoading = ref(false);
+const docNotFound = ref(false);
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -52,7 +54,7 @@ async function saveDraft() {
     title: editorTitle.value,
     content: editorContent.value,
     status: editorStatus.value,
-    versionId: editorVersionId.value || undefined,
+    versionId: editorVersionId.value ?? null,
     tags: editorTags.value,
   });
 }
@@ -208,15 +210,35 @@ function onTagRemoveKeydown(e: KeyboardEvent) {
   }
 }
 
+function resetEditorFields() {
+  editorContent.value = "";
+  editorTitle.value = "";
+  editorStatus.value = "draft";
+  editorVersionId.value = null;
+  editorTags.value = [];
+  activeHeading.value = "";
+}
+
 async function loadDoc() {
   if (!docId.value) return;
-  await fetchDoc(docId.value);
-  if (currentDoc.value) {
-    editorContent.value = currentDoc.value.content || "";
-    editorTitle.value = currentDoc.value.title || "";
-    editorStatus.value = currentDoc.value.status || "draft";
-    editorVersionId.value = currentDoc.value.versionId || null;
-    editorTags.value = currentDoc.value.tags ? [...currentDoc.value.tags] : [];
+  docLoading.value = true;
+  docNotFound.value = false;
+  resetEditorFields();
+  try {
+    await fetchDoc(docId.value);
+    if (currentDoc.value) {
+      editorContent.value = currentDoc.value.content || "";
+      editorTitle.value = currentDoc.value.title || "";
+      editorStatus.value = currentDoc.value.status || "draft";
+      editorVersionId.value = currentDoc.value.versionId || null;
+      editorTags.value = currentDoc.value.tags ? [...currentDoc.value.tags] : [];
+    } else {
+      docNotFound.value = true;
+    }
+  } catch {
+    docNotFound.value = true;
+  } finally {
+    docLoading.value = false;
   }
 }
 
@@ -288,7 +310,34 @@ const lastModified = computed(() => {
     </header>
 
     <main class="content-area">
-      <div class="doc-shell" :class="{ 'preview-only': previewOnly }">
+      <!-- Loading state -->
+      <div v-if="docLoading" class="editor-loading">
+        <div class="skeleton-pane" style="width: 220px; height: 100%;">
+          <div class="skeleton-title" />
+          <div v-for="n in 8" :key="n" class="skeleton-line" />
+        </div>
+        <div class="skeleton-pane" style="flex: 1; height: 100%;">
+          <div class="skeleton-toolbar">
+            <div v-for="n in 10" :key="n" class="skeleton-chip" />
+          </div>
+          <div v-for="n in 24" :key="n" class="skeleton-line" />
+        </div>
+        <div class="skeleton-pane" style="width: 280px; height: 100%;">
+          <div class="skeleton-title" />
+          <div v-for="n in 6" :key="n" class="skeleton-field" />
+        </div>
+      </div>
+
+      <!-- Not found state -->
+      <div v-else-if="docNotFound" class="not-found">
+        <h2>Doc not found</h2>
+        <p>The document you are looking for does not exist or has been deleted.</p>
+        <button type="button" class="btn btn-primary" @click="router.push('/docs-editor')">
+          Back to Docs
+        </button>
+      </div>
+
+      <div v-else class="doc-shell" :class="{ 'preview-only': previewOnly }">
         <!-- Outline -->
         <div v-if="!previewOnly" class="outline-pane">
           <div class="outline-title">Document Outline</div>
@@ -1067,6 +1116,80 @@ const lastModified = computed(() => {
 .shortcuts-hint.show {
   opacity: 1;
   transform: translateY(0);
+}
+
+.editor-loading {
+  display: grid;
+  grid-template-columns: 220px 1fr 280px;
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
+}
+.skeleton-pane {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.skeleton-title {
+  height: 14px;
+  width: 60%;
+  background: var(--border);
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+.skeleton-line {
+  height: 12px;
+  width: 100%;
+  background: var(--border);
+  border-radius: 4px;
+  opacity: 0.7;
+}
+.skeleton-line:nth-child(3n) { width: 75%; }
+.skeleton-line:nth-child(3n + 1) { width: 90%; }
+.skeleton-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.skeleton-chip {
+  height: 26px;
+  width: 36px;
+  background: var(--border);
+  border-radius: 4px;
+}
+.skeleton-field {
+  height: 32px;
+  width: 100%;
+  background: var(--border);
+  border-radius: var(--radius);
+  opacity: 0.6;
+}
+
+.not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex: 1;
+  text-align: center;
+  color: var(--muted);
+}
+.not-found h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.not-found p {
+  margin: 0;
+  font-size: 14px;
+  max-width: 400px;
 }
 
 @media (prefers-reduced-motion: reduce) {

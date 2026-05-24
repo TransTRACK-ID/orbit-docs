@@ -27,10 +27,10 @@ export interface DocDetail extends DocItem {
 
 export interface CreateDocPayload {
   title: string;
-  appId?: string;
+  appId?: string | null;
   content?: string;
   status?: string;
-  versionId?: string;
+  versionId?: string | null;
   tags?: string[];
   author?: string;
 }
@@ -62,6 +62,7 @@ export const useDocs = () => {
   }
 
   async function fetchDoc(id: string) {
+    currentDoc.value = null;
     try {
       const data = await $fetch<{ data: DocDetail }>(`/api/docs/${id}`);
       currentDoc.value = data.data;
@@ -92,7 +93,7 @@ export const useDocs = () => {
   async function updateDoc(id: string, payload: CreateDocPayload) {
     isSaving.value = true;
     try {
-      const data = await $fetch<{ data: DocItem }>(`/api/docs/${id}`, {
+      const data = await $fetch<{ data: DocDetail }>(`/api/docs/${id}`, {
         method: "PUT",
         body: payload,
       });
@@ -116,7 +117,7 @@ export const useDocs = () => {
 
   async function publishDoc(id: string) {
     try {
-      const data = await $fetch<{ data: DocItem }>(`/api/docs/${id}/publish`, {
+      const data = await $fetch<{ data: DocDetail }>(`/api/docs/${id}/publish`, {
         method: "POST",
       });
       const idx = docs.value.findIndex((d) => d.id === id);
@@ -124,7 +125,7 @@ export const useDocs = () => {
         docs.value[idx] = { ...docs.value[idx], ...data.data };
       }
       if (currentDoc.value && currentDoc.value.id === id) {
-        currentDoc.value = { ...currentDoc.value, status: "published" };
+        currentDoc.value = { ...currentDoc.value, status: "published", ...data.data };
       }
       toast.success(`Published: ${data.data.title}`);
       return data.data;
@@ -141,6 +142,9 @@ export const useDocs = () => {
         method: "DELETE",
       });
       docs.value = docs.value.filter((d) => d.id !== id);
+      if (currentDoc.value && currentDoc.value.id === id) {
+        currentDoc.value = null;
+      }
       toast.success("Doc deleted");
     } catch (e) {
       toast.error("Failed to delete doc");

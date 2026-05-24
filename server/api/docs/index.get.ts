@@ -1,4 +1,4 @@
-import { defineEventHandler, getQuery, createError } from "h3";
+import { defineEventHandler, getQuery } from "h3";
 import { getDb } from "~/server/database";
 import { docs, apps, appVersions } from "~/server/database/schema";
 import { desc, eq, sql, and } from "drizzle-orm";

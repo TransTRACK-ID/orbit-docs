@@ -2,6 +2,8 @@ import { defineEventHandler, readBody, createError } from "h3";
 import { getDb } from "~/server/database";
 import { docs, activityLogs } from "~/server/database/schema";
 
+const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
+
 export default defineEventHandler(async (event) => {
   const db = getDb();
   const body = await readBody(event);
@@ -16,6 +18,22 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  if (status !== undefined && !VALID_STATUSES.includes(status)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`,
+    });
+  }
+
+  if (tags !== undefined && !Array.isArray(tags)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: "Tags must be an array of strings",
+    });
+  }
+
   const doc = await db
     .insert(docs)
     .values({
@@ -24,7 +42,7 @@ export default defineEventHandler(async (event) => {
       content: content || "",
       status: status || "draft",
       versionId: versionId || null,
-      tags: Array.isArray(tags) ? tags : [],
+      tags: Array.isArray(tags) ? tags.filter((t: string) => typeof t === "string" && t.trim() !== "").map((t: string) => t.trim()) : [],
       author: author || "System",
     })
     .returning()

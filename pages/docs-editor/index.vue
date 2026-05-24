@@ -48,16 +48,20 @@ async function submitCreate() {
     return;
   }
   createTitleError.value = false;
-  const doc = await createDoc({
-    title: createForm.title.trim(),
-    appId: createForm.appId || undefined,
-    content: createForm.content,
-    status: createForm.status,
-    tags: createForm.tags,
-    author: createForm.author || undefined,
-  });
-  closeCreateModal();
-  await navigateTo(`/docs-editor/${doc.id}`);
+  try {
+    const doc = await createDoc({
+      title: createForm.title.trim(),
+      appId: createForm.appId || undefined,
+      content: createForm.content,
+      status: createForm.status,
+      tags: createForm.tags,
+      author: createForm.author || undefined,
+    });
+    closeCreateModal();
+    await navigateTo(`/docs-editor/${doc.id}`);
+  } catch {
+    // Error toast shown by createDoc composable
+  }
 }
 
 const docToDelete = ref<DocItem | null>(null);
@@ -68,8 +72,12 @@ function confirmDelete(doc: DocItem) {
 
 async function doDelete() {
   if (!docToDelete.value) return;
-  await deleteDoc(docToDelete.value.id);
-  docToDelete.value = null;
+  try {
+    await deleteDoc(docToDelete.value.id);
+    docToDelete.value = null;
+  } catch {
+    // Error toast shown by deleteDoc composable
+  }
 }
 
 function onSearch() {
