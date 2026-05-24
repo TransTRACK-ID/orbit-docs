@@ -48,6 +48,8 @@ export interface AppVersion {
   ciStatus: "passed" | "failed" | "pending" | "unknown";
   createdAt: string | null;
   updatedAt: string | null;
+  releaseId?: string | null;
+  releasePublished?: boolean | null;
 }
 
 export interface CreateAppPayload {
