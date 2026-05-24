@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
     appId: doc.appId,
     appName: doc.title,
     action: "Doc created",
-    user: doc.author || "System",
+    actor: doc.author || "System",
   });
 
   return { data: doc };
