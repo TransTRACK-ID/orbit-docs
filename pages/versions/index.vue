@@ -403,9 +403,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               </span>
             </td>
             <td>
-              <NuxtLink v-if="v.releaseNotes" :to="`/releases?version=${v.id}`" class="btn btn-ghost btn-sm" @click.stop>
+              <NuxtLink v-if="v.releaseId && v.releasePublished" :to="`/releases/${v.releaseId}`" class="btn btn-ghost btn-sm" @click.stop>
                 View
               </NuxtLink>
+              <span v-else-if="v.releaseId" class="text-muted-sm">Draft</span>
               <span v-else class="text-muted-sm">—</span>
             </td>
             <td @click.stop>
