@@ -1,18 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { setActivePinia, createPinia } from "pinia";
 import { useAuthStore } from "./index";
-
-const mockSignIn = vi.fn();
-const mockSignOut = vi.fn();
-const mockUseAuth = vi.fn(() => ({
-  signIn: mockSignIn,
-  signOut: mockSignOut,
-  data: ref(null),
-}));
-
-vi.mock("#imports", () => ({
-  useAuth: mockUseAuth,
-}));
+import { mockSignIn, mockSignOut, mockAuthData } from "#imports";
+import { setupCookies } from "~/utils/cookies";
 
 const mockToastError = vi.fn();
 const mockToastSuccess = vi.fn();
@@ -23,9 +13,8 @@ vi.mock("vue3-toastify", () => ({
   },
 }));
 
-const mockSetupCookies = vi.fn();
 vi.mock("~/utils/cookies", () => ({
-  setupCookies: mockSetupCookies,
+  setupCookies: vi.fn(),
 }));
 
 const mockFetch = vi.fn();
@@ -37,8 +26,9 @@ describe("useAuthStore", () => {
     vi.clearAllMocks();
     mockSignIn.mockReset();
     mockSignOut.mockReset();
+    mockAuthData.value = null;
     mockFetch.mockReset();
-    mockSetupCookies.mockReset();
+    vi.mocked(setupCookies).mockReset();
   });
 
   describe("login", () => {
@@ -55,7 +45,7 @@ describe("useAuthStore", () => {
         { email: "test@example.com", password: "password123" },
         { callbackUrl: "/" }
       );
-      expect(mockSetupCookies).toHaveBeenCalled();
+      expect(setupCookies).toHaveBeenCalled();
       expect(result).toBe(true);
       expect(store.isLoading).toBe(false);
     });
