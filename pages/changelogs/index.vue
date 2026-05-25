@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { toast } from "vue3-toastify";
 import { usePageStore } from "~/store/page";
 import type { ChangelogItem } from "~/types";
 

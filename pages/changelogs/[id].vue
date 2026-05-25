@@ -2,6 +2,7 @@
 import { nextTick } from "vue";
 import { usePageStore } from "~/store/page";
 import { renderMarkdown } from "~/composables/useMarkdown";
+import type { AppVersion } from "~/composables/useApps";
 
 definePageMeta({
   auth: true,
@@ -22,7 +23,12 @@ const {
 } = useChangelogs();
 
 const { apps, fetchApps } = useApps();
-const { versions, fetchVersions } = useVersions();
+const { versions, fetchVersions, fetchVersionById, updateVersion } = useVersions();
+
+// Version-centric mode: when ?versionId is present, the version is the single source of truth
+const versionIdQuery = computed(() => route.query.versionId as string | undefined);
+const isVersionMode = computed(() => !!versionIdQuery.value);
+const currentVersion = ref<AppVersion | null>(null);
 
 // Editor state
 const content = ref("");
@@ -51,10 +57,38 @@ const featureDesc = ref("");
 
 onMounted(async () => {
   await fetchApps();
-  if (changelogId.value) {
+  await loadData();
+});
+
+async function loadData() {
+  if (isVersionMode.value && versionIdQuery.value) {
+    await loadVersion();
+  } else if (changelogId.value) {
     await loadChangelog();
   }
-});
+}
+
+async function loadVersion() {
+  try {
+    const versionId = versionIdQuery.value!;
+    const version = await fetchVersionById(versionId);
+    if (version) {
+      currentVersion.value = version;
+      selectedAppId.value = version.appId;
+      selectedVersionId.value = version.id;
+      content.value = version.releaseNotes || "";
+      status.value = version.status === "published" ? "published" : "draft";
+      $page.setTitle(`Changelog: ${version.appName || ""} ${version.version}`);
+      hasChanges.value = false;
+      lastSavedAt.value = version.updatedAt ? new Date(version.updatedAt) : new Date();
+      if (version.appId) {
+        await fetchVersions(version.appId);
+      }
+    }
+  } catch {
+    router.push("/changelogs");
+  }
+}
 
 async function loadChangelog() {
   try {
@@ -100,6 +134,15 @@ watch(selectedAppId, async (newAppId) => {
   }
 });
 
+// In version mode, changing the selected version navigates to that version's changelog
+watch(selectedVersionId, (newVersionId) => {
+  if (isVersionMode.value && newVersionId && newVersionId !== versionIdQuery.value) {
+    router.replace({ path: route.path, query: { ...route.query, versionId: newVersionId } });
+    // reload after navigation
+    nextTick(() => loadData());
+  }
+});
+
 // Markdown preview
 const renderedPreview = computed(() => renderMarkdown(content.value));
 
@@ -139,6 +182,15 @@ function togglePreview() {
 
 // Save / Publish
 async function saveDraft() {
+  if (isVersionMode.value && currentVersion.value) {
+    const v = currentVersion.value;
+    await updateVersion(v.appId, v.id, {
+      releaseNotes: content.value,
+    });
+    hasChanges.value = false;
+    lastSavedAt.value = new Date();
+    return;
+  }
   if (!changelogId.value) return;
   await updateChangelog(changelogId.value, {
     title: title.value,
@@ -151,6 +203,17 @@ async function saveDraft() {
 }
 
 async function publishChangelog() {
+  if (isVersionMode.value && currentVersion.value) {
+    const v = currentVersion.value;
+    await updateVersion(v.appId, v.id, {
+      releaseNotes: content.value,
+      status: "published",
+    });
+    status.value = "published";
+    hasChanges.value = false;
+    lastSavedAt.value = new Date();
+    return;
+  }
   if (!changelogId.value) return;
   await updateChangelog(changelogId.value, {
     title: title.value,
@@ -363,8 +426,11 @@ const filteredHistory = computed(() => {
         <button class="btn btn-ghost" @click="goBack">
           <IconsChevronLeft size="16" />
         </button>
-        <h1>{{ title || "Changelog Editor" }}</h1>
-        <span class="pill" :class="status === 'published' ? 'pill-green' : 'pill-blue'">
+        <h1>Changelog Editor</h1>
+        <span v-if="isVersionMode && currentVersion" class="pill pill-blue">
+          {{ currentVersion?.appName || apps.find(a => a.id === currentVersion?.appId)?.name || "" }} {{ currentVersion?.version }}
+        </span>
+        <span v-else class="pill" :class="status === 'published' ? 'pill-green' : 'pill-blue'">
           {{ status === 'published' ? 'Published' : 'Draft' }}
         </span>
       </div>
@@ -398,7 +464,9 @@ const filteredHistory = computed(() => {
     <div class="row-between" style="margin-bottom:16px;">
       <div class="flex-gap-md">
         <span class="text-muted-sm">Editing:</span>
+        <strong v-if="isVersionMode">CHANGELOG.md</strong>
         <input
+          v-else
           v-model="title"
           class="title-input"
           placeholder="Changelog title…"

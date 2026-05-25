@@ -51,6 +51,7 @@ export interface AppVersion {
   updatedAt: string | null;
   releaseId?: string | null;
   releasePublished?: boolean | null;
+  appName?: string | null;
 }
 
 export interface CreateAppPayload {

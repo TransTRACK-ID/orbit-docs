@@ -178,7 +178,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               {{ countCategories(r.categories).security }} security
             </span>
             <NuxtLink
-              :to="`/changelogs?app=${r.appId}`"
+              :to="`/changelogs/${r.versionId}?versionId=${r.versionId}`"
               class="btn btn-ghost btn-sm"
               style="margin-left: auto;"
               @click.stop
