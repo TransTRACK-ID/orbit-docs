@@ -134,7 +134,13 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               {{ r.appName }} {{ r.version }}
             </NuxtLink>
             <span v-if="mediaCount(r) > 0" class="pill pill-muted">{{ mediaCount(r) }} media</span>
-            <span class="pill" :class="statusClass[r.versionStatus] || 'pill-blue'">
+            <span class="release-status">
+              <span class="status-dot" :class="{
+                'status-published': r.versionStatus === 'published',
+                'status-draft': r.versionStatus === 'draft',
+                'status-rc': r.versionStatus === 'rc',
+                'status-archived': r.versionStatus === 'archived'
+              }" />
               {{ statusLabel[r.versionStatus] || r.versionStatus }}
             </span>
           </div>
@@ -426,6 +432,33 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 .meta-label {
   font-size: 12px;
   color: var(--muted);
+}
+
+/* Release status indicator */
+.release-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.status-published {
+  background: oklch(55% 0.14 145);
+}
+.status-draft {
+  background: oklch(70% 0.14 85);
+}
+.status-rc {
+  background: oklch(70% 0.14 85);
+}
+.status-archived {
+  background: var(--muted);
 }
 
 @media (max-width: 768px) {

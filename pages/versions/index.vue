@@ -14,6 +14,8 @@ onBeforeMount(() => {
 
 const { apps, fetchApps } = useApps();
 const { versions, isLoading, isCreating, isUpdating, isDeleting, fetchVersions, createVersion, updateVersion, deleteVersion } = useVersions();
+
+const isArchiving = ref(false);
 const { createRelease } = useReleases();
 
 const route = useRoute();
@@ -89,6 +91,21 @@ const compareBtnText = computed(() => {
   }
   return "Compare versions";
 });
+
+// Bulk archive selected versions
+async function archiveSelectedVersions() {
+  if (!selectedAppId.value || selectedVersions.value.length === 0 || isArchiving.value) return;
+  isArchiving.value = true;
+  try {
+    for (const versionId of selectedVersions.value) {
+      await updateVersion(selectedAppId.value, versionId, { status: "archived" });
+    }
+    selectedVersions.value = [];
+    await fetchVersions(selectedAppId.value);
+  } finally {
+    isArchiving.value = false;
+  }
+}
 
 // Detail view
 const activeDetailVersion = ref<AppVersion | null>(null);
@@ -404,10 +421,18 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
       <div class="flex-gap-sm">
         <button
           class="btn btn-secondary"
-          :disabled="selectedVersions.length !== 2"
+          :disabled="selectedVersions.length !== 2 || isArchiving"
           @click="openCompare"
         >
           {{ compareBtnText }}
+        </button>
+        <button
+          class="btn btn-ghost"
+          :disabled="selectedVersions.length === 0 || isArchiving"
+          @click="archiveSelectedVersions"
+        >
+          <span v-if="isArchiving">Archiving…</span>
+          <span v-else>Archive</span>
         </button>
       </div>
     </div>
