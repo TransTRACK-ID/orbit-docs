@@ -302,7 +302,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         </div>
         <div class="flex-gap-sm">
           <NuxtLink to="/releases" class="btn btn-ghost btn-sm">All releases</NuxtLink>
-          <NuxtLink :to="`/versions?app=${release.appId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
+          <NuxtLink :to="`/changelogs?app=${release.appId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
           <button type="button" class="btn btn-secondary btn-sm" @click="openEditModal">Edit release</button>
           <button type="button" class="btn btn-danger btn-sm" @click="confirmDelete">Delete</button>
         </div>
