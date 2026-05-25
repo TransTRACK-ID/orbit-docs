@@ -88,8 +88,11 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   <div class="releases-page">
     <!-- Topbar -->
     <header class="topbar">
-      <h1>Releases</h1>
-      <div style="display:flex;align-items:center;gap:16px;">
+      <div class="flex-gap-md">
+        <h1>Releases</h1>
+        <span class="text-muted-sm">Published release notes across all apps</span>
+      </div>
+      <div class="flex-gap-md">
         <input
           v-model="searchQuery"
           class="search"
@@ -169,7 +172,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               {{ countCategories(r.categories).security }} security
             </span>
             <NuxtLink
-              :to="`/versions?app=${r.appId}`"
+              :to="`/changelogs?app=${r.appId}`"
               class="btn btn-ghost btn-sm"
               style="margin-left: auto;"
               @click.stop
