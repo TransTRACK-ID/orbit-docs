@@ -10,42 +10,43 @@ export default defineEventHandler(async (event) => {
   const appId = getRouterParam(event, "id");
   const versionId = getRouterParam(event, "versionId");
 
-  if (!appId || !versionId) {
+  if (!appId) {
     throw createError({
       statusCode: 400,
       statusMessage: "Bad Request",
-      message: "App ID and Version ID are required",
+      message: "App ID is required",
     });
   }
 
-  // Verify app exists
-  const app = await db
-    .select({ id: apps.id, name: apps.name })
-    .from(apps)
-    .where(eq(apps.id, appId))
-    .limit(1)
-    .then((rows) => rows[0]);
-
-  if (!app) {
+  if (!versionId) {
     throw createError({
-      statusCode: 404,
-      statusMessage: "Not Found",
-      message: "App not found",
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: "Version ID is required",
     });
   }
 
+  // Verify version exists and belongs to app
   const existing = await db
-    .select()
+    .select({ id: appVersions.id, appId: appVersions.appId, version: appVersions.version })
     .from(appVersions)
     .where(eq(appVersions.id, versionId))
     .limit(1)
     .then((rows) => rows[0]);
 
-  if (!existing || existing.appId !== appId) {
+  if (!existing) {
     throw createError({
       statusCode: 404,
       statusMessage: "Not Found",
       message: "Version not found",
+    });
+  }
+
+  if (existing.appId !== appId) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: "Not Found",
+      message: "Version does not belong to this app",
     });
   }
 
@@ -62,32 +63,63 @@ export default defineEventHandler(async (event) => {
     ciStatus,
   } = body || {};
 
-  const actor = getActorName(user);
+  const updates: Record<string, any> = {};
 
-  const updateData: Partial<typeof appVersions.$inferInsert> = {
-    updatedAt: new Date(),
-  };
+  if (version !== undefined) {
+    if (typeof version !== "string" || version.trim().length === 0) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Bad Request",
+        message: "Version number is required",
+      });
+    }
+    updates.version = version.trim();
+  }
 
-  if (version !== undefined) updateData.version = version.trim();
-  if (status !== undefined) updateData.status = status;
-  if (releaseDate !== undefined) updateData.releaseDate = releaseDate ? new Date(releaseDate) : null;
-  if (releaseNotes !== undefined) updateData.releaseNotes = releaseNotes || null;
-  if (branch !== undefined) updateData.branch = branch || null;
-  if (tags !== undefined) updateData.tags = tags || null;
-  if (commitHash !== undefined) updateData.commitHash = commitHash || null;
-  if (approver !== undefined) updateData.approver = approver || null;
-  if (ciStatus !== undefined) updateData.ciStatus = ciStatus;
+  if (status !== undefined) {
+    updates.status = status;
+  }
+
+  if (releaseDate !== undefined) {
+    updates.releaseDate = releaseDate ? new Date(releaseDate) : null;
+  }
+
+  if (releaseNotes !== undefined) {
+    updates.releaseNotes = releaseNotes || null;
+  }
+
+  if (branch !== undefined) {
+    updates.branch = branch || null;
+  }
+
+  if (tags !== undefined) {
+    updates.tags = tags || null;
+  }
+
+  if (commitHash !== undefined) {
+    updates.commitHash = commitHash || null;
+  }
+
+  if (approver !== undefined) {
+    updates.approver = approver || null;
+  }
+
+  if (ciStatus !== undefined) {
+    updates.ciStatus = ciStatus;
+  }
 
   const updated = await db
     .update(appVersions)
-    .set(updateData)
+    .set(updates)
     .where(eq(appVersions.id, versionId))
     .returning()
     .then((rows) => rows[0]);
 
+  const actor = getActorName(user);
+
   await db.insert(activityLogs).values({
-    appId: appId,
-    appName: app.name,
+    appId,
+    appName: existing.version,
     action: `Updated ${existing.version}`,
     actor,
   });

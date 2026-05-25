@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
     conditions.push(eq(changelogs.appId, appFilter));
   }
   if (statusFilter) {
-    conditions.push(eq(changelogs.status, statusFilter));
+    conditions.push(eq(changelogs.status, statusFilter as "draft" | "published"));
   }
 
   const rows = await db
