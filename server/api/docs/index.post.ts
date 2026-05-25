@@ -1,10 +1,12 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { getDb } from "~/server/database";
 import { docs, activityLogs } from "~/server/database/schema";
+import { requireAuth, getActorName } from "~/server/utils/auth";
 
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
 export default defineEventHandler(async (event) => {
+  const user = await requireAuth(event);
   const db = getDb();
   const body = await readBody(event);
 
@@ -43,7 +45,7 @@ export default defineEventHandler(async (event) => {
       status: status || "draft",
       versionId: versionId || null,
       tags: Array.isArray(tags) ? tags.filter((t: string) => typeof t === "string" && t.trim() !== "").map((t: string) => t.trim()) : [],
-      author: author || "System",
+      author: author || getActorName(user),
     })
     .returning()
     .then((rows) => rows[0]);
@@ -52,7 +54,7 @@ export default defineEventHandler(async (event) => {
     appId: doc.appId,
     appName: doc.title,
     action: "Doc created",
-    user: doc.author || "System",
+    actor: doc.author || getActorName(user),
   });
 
   return { data: doc };

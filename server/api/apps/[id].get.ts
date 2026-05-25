@@ -58,6 +58,7 @@ export default defineEventHandler(async (event) => {
             version: latestVersion.version,
             status: latestVersion.status,
             createdBy: latestVersion.createdBy,
+            createdAt: latestVersion.createdAt,
           }
         : null,
     },

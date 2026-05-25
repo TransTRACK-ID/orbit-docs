@@ -3,6 +3,7 @@ import type { EmbedDocItem, EmbedNavItem } from "~/composables/useEmbedDocs";
 
 definePageMeta({
   layout: false,
+  auth: false,
 });
 
 const route = useRoute();

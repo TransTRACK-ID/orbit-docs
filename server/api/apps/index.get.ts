@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
     .from(apps)
     .where(
       search
-        ? sql`${apps.name} LIKE ${"%" + search + "%"}`
+        ? sql`${apps.name} ILIKE ${"%" + search + "%"}`
         : undefined
     )
     .orderBy(desc(apps.updatedAt));
@@ -47,6 +47,7 @@ export default defineEventHandler(async (event) => {
               version: latestVersion.version,
               status: latestVersion.status,
               createdBy: latestVersion.createdBy,
+              createdAt: latestVersion.createdAt,
             }
           : null,
       };

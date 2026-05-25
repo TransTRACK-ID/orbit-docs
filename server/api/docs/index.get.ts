@@ -2,8 +2,10 @@ import { defineEventHandler, getQuery } from "h3";
 import { getDb } from "~/server/database";
 import { docs, apps, appVersions } from "~/server/database/schema";
 import { desc, eq, sql, and } from "drizzle-orm";
+import { requireAuth } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
+  await requireAuth(event);
   const db = getDb();
   const query = getQuery(event);
   const search = typeof query.search === "string" ? query.search : "";
@@ -18,7 +20,7 @@ export default defineEventHandler(async (event) => {
     conditions.push(eq(docs.appId, appId));
   }
   if (status) {
-    conditions.push(eq(docs.status, status));
+    conditions.push(eq(docs.status, status as "draft" | "in_review" | "published" | "archived"));
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
