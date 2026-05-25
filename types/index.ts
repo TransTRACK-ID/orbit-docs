@@ -51,3 +51,26 @@ export interface CreateReleasePayload {
   categories?: ReleaseCategories;
   published?: boolean;
 }
+
+// Changelog types
+export interface ChangelogItem {
+  id: string;
+  appId: string;
+  versionId: string | null;
+  title: string;
+  content: string | null;
+  status: "draft" | "published";
+  createdBy: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  appName?: string;
+  version?: string | null;
+}
+
+export interface CreateChangelogPayload {
+  appId: string;
+  versionId?: string;
+  title: string;
+  content?: string;
+  status?: "draft" | "published";
+}
