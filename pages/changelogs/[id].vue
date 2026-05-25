@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick } from "vue";
 import { usePageStore } from "~/store/page";
 import { renderMarkdown } from "~/composables/useMarkdown";
 
@@ -31,10 +32,16 @@ const selectedVersionId = ref("");
 const status = ref<"draft" | "published">("draft");
 const previewOnly = ref(false);
 const hasChanges = ref(false);
+const lastSavedAt = ref<Date | null>(null);
+
+// Editor search
+const editorSearch = ref("");
 
 // History panel
 const showHistoryPanel = ref(false);
 const historySearch = ref("");
+const historyFocusIndex = ref(0);
+let lastFocusedElement: HTMLElement | null = null;
 
 // Release panel
 const showReleasePanel = ref(false);
@@ -62,6 +69,7 @@ async function loadChangelog() {
       await fetchVersions(data.appId);
     }
     hasChanges.value = false;
+    lastSavedAt.value = data.updatedAt ? new Date(data.updatedAt) : new Date();
   } catch {
     // Navigate back if changelog not found
     router.push("/changelogs");
@@ -71,6 +79,17 @@ async function loadChangelog() {
 watch([content, title, selectedVersionId, status], () => {
   hasChanges.value = true;
 }, { deep: true });
+
+const saveStatusLabel = computed(() => {
+  if (hasChanges.value) return "Unsaved changes";
+  if (!lastSavedAt.value) return "";
+  const now = new Date();
+  const diff = Math.floor((now.getTime() - lastSavedAt.value.getTime()) / 1000);
+  if (diff < 60) return "Auto-saved just now";
+  if (diff < 3600) return `Auto-saved ${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `Auto-saved ${Math.floor(diff / 3600)}h ago`;
+  return "Auto-saved";
+});
 
 watch(selectedAppId, async (newAppId) => {
   if (newAppId) {
@@ -128,6 +147,7 @@ async function saveDraft() {
     status: status.value,
   });
   hasChanges.value = false;
+  lastSavedAt.value = new Date();
 }
 
 async function publishChangelog() {
@@ -140,29 +160,110 @@ async function publishChangelog() {
   });
   status.value = "published";
   hasChanges.value = false;
+  lastSavedAt.value = new Date();
 }
 
 // History panel
 function openHistory() {
+  lastFocusedElement = document.activeElement as HTMLElement;
   showHistoryPanel.value = true;
   document.body.style.overflow = "hidden";
+  nextTick(() => {
+    const searchInput = document.querySelector<HTMLInputElement>(".history-search");
+    if (searchInput) searchInput.focus();
+  });
 }
 
 function closeHistory() {
   showHistoryPanel.value = false;
   document.body.style.overflow = "";
+  if (lastFocusedElement) {
+    nextTick(() => lastFocusedElement?.focus());
+  }
+}
+
+function selectHistoryItem(item: typeof historyItems.value[0]) {
+  historyItems.value.forEach((h) => (h.active = false));
+  item.active = true;
+}
+
+function focusHistoryItem(index: number) {
+  const items = filteredHistory.value;
+  if (items.length === 0) return;
+  historyFocusIndex.value = Math.max(0, Math.min(index, items.length - 1));
+  const el = document.querySelectorAll(".history-item")[historyFocusIndex.value] as HTMLElement;
+  if (el) el.focus();
+}
+
+function onHistoryListKeydown(e: KeyboardEvent) {
+  const items = filteredHistory.value;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    focusHistoryItem(historyFocusIndex.value + 1);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    focusHistoryItem(historyFocusIndex.value - 1);
+  } else if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    const activeItem = items[historyFocusIndex.value];
+    if (activeItem) selectHistoryItem(activeItem);
+  }
+}
+
+function onHistoryPanelKeydown(e: KeyboardEvent) {
+  if (e.key !== "Tab") return;
+  const panel = document.querySelector(".history-panel.open");
+  if (!panel) return;
+  const focusable = panel.querySelectorAll<HTMLElement>(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
 }
 
 // Release panel
 function openReleasePanel() {
+  lastFocusedElement = document.activeElement as HTMLElement;
   showReleasePanel.value = true;
   document.body.style.overflow = "hidden";
   parseChangelogCategories();
+  nextTick(() => {
+    const heroInput = document.getElementById("heroTitle") as HTMLInputElement;
+    if (heroInput) heroInput.focus();
+  });
 }
 
 function closeReleasePanel() {
   showReleasePanel.value = false;
   document.body.style.overflow = "";
+  if (lastFocusedElement) {
+    nextTick(() => lastFocusedElement?.focus());
+  }
+}
+
+function onReleasePanelKeydown(e: KeyboardEvent) {
+  if (e.key !== "Tab") return;
+  const panel = document.querySelector(".release-panel.open");
+  if (!panel) return;
+  const focusable = panel.querySelectorAll<HTMLElement>(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
 }
 
 const releaseCategories = ref<Array<{ label: string; checked: boolean; colorClass: string }>>([]);
@@ -227,6 +328,9 @@ function onKeydown(e: KeyboardEvent) {
     if (showHistoryPanel.value) closeHistory();
     if (showReleasePanel.value) closeReleasePanel();
   }
+  // Delegate to panel focus traps when open
+  if (showHistoryPanel.value) onHistoryPanelKeydown(e);
+  if (showReleasePanel.value) onReleasePanelKeydown(e);
 }
 
 // Back navigation
@@ -299,9 +403,15 @@ const filteredHistory = computed(() => {
           class="title-input"
           placeholder="Changelog title…"
         />
-        <span v-if="hasChanges" class="pill pill-green">Unsaved changes</span>
+        <span v-if="saveStatusLabel" class="pill" :class="hasChanges ? 'pill-amber' : 'pill-green'">{{ saveStatusLabel }}</span>
       </div>
       <div class="flex-gap-sm">
+        <input
+          v-model="editorSearch"
+          class="search search-changelog"
+          placeholder="Search changelog…"
+          aria-label="Search changelog content"
+        />
         <button type="button" class="btn btn-ghost" @click="togglePreview">
           {{ previewOnly ? "Editor" : "Preview" }}
         </button>
@@ -360,7 +470,7 @@ const filteredHistory = computed(() => {
         <div class="history-search-wrap">
           <input v-model="historySearch" type="search" class="history-search" placeholder="Filter by author or action…" aria-label="Filter version history" />
         </div>
-        <div class="history-list" role="list">
+        <div class="history-list" role="list" @keydown="onHistoryListKeydown">
           <div
             v-for="(item, index) in filteredHistory"
             :key="index"
@@ -368,6 +478,7 @@ const filteredHistory = computed(() => {
             :class="{ active: item.active }"
             role="listitem"
             tabindex="0"
+            @click="selectHistoryItem(item); historyFocusIndex = index"
           >
             <div class="time">{{ item.time }}</div>
             <div class="author">{{ item.author }}</div>
@@ -393,7 +504,7 @@ const filteredHistory = computed(() => {
         <div class="release-body">
           <div class="release-section">
             <div class="release-section-title">Headline</div>
-            <input v-model="heroTitle" type="text" class="release-input" placeholder="e.g. Request tracing, deep health checks, and retry reliability" />
+            <input id="heroTitle" v-model="heroTitle" type="text" class="release-input" placeholder="e.g. Request tracing, deep health checks, and retry reliability" />
           </div>
           <div class="release-section">
             <div class="release-section-title">Feature Highlights</div>
@@ -526,6 +637,24 @@ const filteredHistory = computed(() => {
 .title-input:focus {
   outline: 2px solid var(--accent-soft);
   border-color: var(--accent);
+}
+
+.search {
+  width: 240px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font: inherit;
+  font-size: 14px;
+  color: var(--fg);
+}
+.search:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+.search-changelog {
+  width: 200px;
 }
 
 .pill {
