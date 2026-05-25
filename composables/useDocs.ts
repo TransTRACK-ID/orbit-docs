@@ -53,8 +53,13 @@ export const useDocs = () => {
         },
       });
       docs.value = data.data;
-    } catch (e) {
-      toast.error("Failed to load docs");
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load docs");
+      }
       console.error(e);
     } finally {
       isLoading.value = false;
@@ -67,8 +72,13 @@ export const useDocs = () => {
       const data = await $fetch<{ data: DocDetail }>(`/api/docs/${id}`);
       currentDoc.value = data.data;
       return data.data;
-    } catch (e) {
-      toast.error("Failed to load doc");
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load doc");
+      }
       console.error(e);
       throw e;
     }
@@ -84,8 +94,13 @@ export const useDocs = () => {
       toast.success(`Doc "${data.data.title}" created`);
       return data.data;
     } catch (e: any) {
-      const msg = e?.message || "Failed to create doc";
-      toast.error(msg);
+      const msg = e?.data?.message || e?.message || "Failed to create doc";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
       throw e;
     }
   }
@@ -107,8 +122,13 @@ export const useDocs = () => {
       toast.success("Draft saved");
       return data.data;
     } catch (e: any) {
-      const msg = e?.message || "Failed to update doc";
-      toast.error(msg);
+      const msg = e?.data?.message || e?.message || "Failed to update doc";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
       throw e;
     } finally {
       isSaving.value = false;
@@ -125,13 +145,18 @@ export const useDocs = () => {
         docs.value[idx] = { ...docs.value[idx], ...data.data };
       }
       if (currentDoc.value && currentDoc.value.id === id) {
-        currentDoc.value = { ...currentDoc.value, status: "published", ...data.data };
+        currentDoc.value = { ...currentDoc.value, ...data.data, status: "published" };
       }
       toast.success(`Published: ${data.data.title}`);
       return data.data;
     } catch (e: any) {
-      const msg = e?.message || "Failed to publish doc";
-      toast.error(msg);
+      const msg = e?.data?.message || e?.message || "Failed to publish doc";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
       throw e;
     }
   }
@@ -146,8 +171,14 @@ export const useDocs = () => {
         currentDoc.value = null;
       }
       toast.success("Doc deleted");
-    } catch (e) {
-      toast.error("Failed to delete doc");
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to delete doc";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
       throw e;
     }
   }

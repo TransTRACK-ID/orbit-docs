@@ -3,6 +3,7 @@ import { usePageStore } from "~/store/page";
 
 const $page = usePageStore();
 const { workspace, fetchWorkspace } = useSettings();
+const { status: authStatus } = useAuth();
 
 const updateHead = (title: string) => {
   useHead({
@@ -33,8 +34,16 @@ function applyTheme(theme: string | undefined) {
 
 watch(() => workspace.value?.theme, applyTheme, { immediate: true });
 
+watch(authStatus, (s) => {
+  if (s === "authenticated") {
+    fetchWorkspace();
+  }
+});
+
 onMounted(() => {
-  fetchWorkspace();
+  if (authStatus.value === "authenticated") {
+    fetchWorkspace();
+  }
 
   const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
   mediaQuery.addEventListener("change", (e) => {

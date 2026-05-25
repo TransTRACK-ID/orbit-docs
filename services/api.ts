@@ -20,7 +20,7 @@ export const api = {
     if (token) {
       headers = {
         ...headers,
-        Authorization: `${token.value}`,
+        Authorization: `Bearer ${token.value}`,
       };
     }
 
@@ -29,14 +29,14 @@ export const api = {
     if (!(body instanceof FormData)) {
       newHeaders = {
         "Content-Type": isByte
-          ? "application/octret-stream"
+          ? "application/octet-stream"
           : "application/json",
         ...headers,
       };
     }
 
     newHeaders = {
-      Accept: isByte ? "application/octret-stream" : "application/json",
+      Accept: isByte ? "application/octet-stream" : "application/json",
       ...newHeaders,
     };
 

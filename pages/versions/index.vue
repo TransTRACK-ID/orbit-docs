@@ -13,7 +13,7 @@ onBeforeMount(() => {
 });
 
 const { apps, fetchApps } = useApps();
-const { versions, isLoading, isCreating, fetchVersions, createVersion, updateVersion, deleteVersion } = useVersions();
+const { versions, isLoading, isCreating, isUpdating, isDeleting, fetchVersions, createVersion, updateVersion, deleteVersion } = useVersions();
 
 const route = useRoute();
 const router = useRouter();
@@ -248,7 +248,7 @@ async function doDeleteVersion() {
 }
 
 // Helpers
-function formatDate(dateStr: string | null) {
+function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -344,7 +344,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         >
           {{ compareBtnText }}
         </button>
-        <button class="btn btn-ghost" @click="clearSelection">Archive</button>
       </div>
     </div>
 

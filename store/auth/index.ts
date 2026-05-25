@@ -2,6 +2,7 @@ import { useAuth } from "#imports";
 import { defineStore } from "pinia";
 import { toast } from "vue3-toastify";
 import { ValidationError } from "yup";
+import { setupCookies } from "~/utils/cookies";
 
 export const useAuthStore = defineStore("auth", {
   state: () => ({
@@ -103,14 +104,18 @@ export const useAuthStore = defineStore("auth", {
     clearCookies() {
       const authCookie = useCookie("auth.token");
       const sessionToken = useCookie("session_token");
+      const initialized = useCookie("auth.initialized");
 
       if (authCookie.value !== undefined) {
         authCookie.value = null;
       }
-      console.log(sessionToken, "session token");
 
       if (sessionToken.value !== undefined) {
         sessionToken.value = null;
+      }
+
+      if (initialized.value !== undefined) {
+        initialized.value = null;
       }
     },
   },

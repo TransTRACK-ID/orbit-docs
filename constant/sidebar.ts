@@ -2,7 +2,6 @@ import {
   IconsApps,
   IconsVersions,
   IconsReleases,
-  IconsChangelogs,
   IconsDocEditor,
   IconsPublishedDocs,
   IconsEmbedDocs,

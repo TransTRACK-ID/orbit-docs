@@ -116,6 +116,10 @@ export const useSettings = () => {
       const data = await $fetch<{ data: TeamMember[] }>("/api/settings/team/invitations");
       pendingInvitations.value = data.data;
     } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      }
       console.error("Failed to load invitations", e);
     }
   }

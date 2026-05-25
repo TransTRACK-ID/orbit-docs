@@ -27,7 +27,7 @@ const userInitials = computed(() => {
     .slice(0, 2);
 });
 
-let modalLogout: ElementEvent | null = null;
+const modalLogout = ref<ElementEvent | null>(null);
 async function logout() {
   await $auth.logout();
 }
@@ -68,9 +68,9 @@ async function logout() {
             </div>
           </div>
           <ul class="dropdown-menu">
-            <li class="dropdown-item" @click="$router.push('/change-password')">
+            <li class="dropdown-item" @click="$router.push('/settings')">
               <IconsSettings size="16" />
-              <span>Change Password</span>
+              <span>Settings</span>
             </li>
             <li class="dropdown-item text-[var(--od-error)]" @click="modalLogout?.show()">
               <IconsLogout size="16" class="stroke-[var(--od-error)]" />

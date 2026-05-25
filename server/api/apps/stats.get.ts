@@ -1,6 +1,6 @@
 import { defineEventHandler } from "h3";
 import { getDb } from "~/server/database";
-import { apps, appVersions } from "~/server/database/schema";
+import { apps, appVersions, docs } from "~/server/database/schema";
 import { eq, count } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
 
@@ -19,8 +19,8 @@ export default defineEventHandler(async (event) => {
 
   const publishedDocsResult = await db
     .select({ count: count() })
-    .from(appVersions)
-    .where(eq(appVersions.status, "published"));
+    .from(docs)
+    .where(eq(docs.status, "published"));
 
   const draftVersionsResult = await db
     .select({ count: count() })

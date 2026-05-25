@@ -14,6 +14,7 @@ export interface AppItem {
     version: string;
     status: string;
     createdBy: string | null;
+    createdAt: string | null;
   } | null;
 }
 
@@ -202,7 +203,7 @@ export const useApps = () => {
   async function deleteApp(id: string) {
     try {
       await $fetch(`/api/apps/${id}`, {
-        method: "DELETE",
+        method: "DELETE" as any,
       });
       apps.value = apps.value.filter((a) => a.id !== id);
       toast.success("App deleted");

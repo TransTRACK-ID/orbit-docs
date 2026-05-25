@@ -1,0 +1,103 @@
+import { describe, expect, it } from "vitest";
+import { renderMarkdown, extractHeadings } from "./useMarkdown";
+
+describe("renderMarkdown", () => {
+  it("should render headings", () => {
+    const md = "# Hello\n## World";
+    const html = renderMarkdown(md);
+    expect(html).toContain("<h1>Hello</h1>");
+    expect(html).toContain("<h2>World</h2>");
+  });
+
+  it("should render paragraphs", () => {
+    const md = "Hello world";
+    const html = renderMarkdown(md);
+    expect(html).toContain("<p>Hello world</p>");
+  });
+
+  it("should render bold and italic", () => {
+    const md = "**bold** and *italic*";
+    const html = renderMarkdown(md);
+    expect(html).toContain("<strong>bold</strong>");
+    expect(html).toContain("<em>italic</em>");
+  });
+
+  it("should render code blocks", () => {
+    const md = "```\nconst x = 1;\n```";
+    const html = renderMarkdown(md);
+    expect(html).toContain("<pre><code>");
+    expect(html).toContain("const x = 1;");
+  });
+
+  it("should render unordered lists", () => {
+    const md = "- Item 1\n- Item 2";
+    const html = renderMarkdown(md);
+    expect(html).toContain("<ul>");
+    expect(html).toContain("<li>Item 1</li>");
+    expect(html).toContain("<li>Item 2</li>");
+  });
+
+  it("should render ordered lists", () => {
+    const md = "1. First\n2. Second";
+    const html = renderMarkdown(md);
+    expect(html).toContain("<ol>");
+    expect(html).toContain("<li>First</li>");
+    expect(html).toContain("<li>Second</li>");
+  });
+
+  it("should render links", () => {
+    const md = "[link](https://example.com)";
+    const html = renderMarkdown(md);
+    expect(html).toContain('<a href="https://example.com">link</a>');
+  });
+
+  it("should render horizontal rules", () => {
+    expect(renderMarkdown("---")).toContain("<hr>");
+    expect(renderMarkdown("***")).toContain("<hr>");
+  });
+
+  it("should render blockquotes", () => {
+    const md = "> quote";
+    const html = renderMarkdown(md);
+    expect(html).toContain("<blockquote>quote</blockquote>");
+  });
+
+  it("should render tables", () => {
+    const md = "| A | B |\n|---|---|\n| 1 | 2 |";
+    const html = renderMarkdown(md);
+    expect(html).toContain("<table>");
+    expect(html).toContain("<th>A</th>");
+    expect(html).toContain("<td>1</td>");
+  });
+
+  it("should render checkboxes", () => {
+    const md = "- [ ] Todo\n- [x] Done";
+    const html = renderMarkdown(md);
+    expect(html).toContain('type="checkbox"');
+    expect(html).toContain("Todo");
+    expect(html).toContain("Done");
+  });
+
+  it("should escape html characters", () => {
+    const md = "<script>alert(1)</script>";
+    const html = renderMarkdown(md);
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("extractHeadings", () => {
+  it("should extract headings with levels", () => {
+    const md = "# H1\n## H2\n### H3\nparagraph";
+    const headings = extractHeadings(md);
+    expect(headings).toEqual([
+      { level: 1, text: "H1" },
+      { level: 2, text: "H2" },
+      { level: 3, text: "H3" },
+    ]);
+  });
+
+  it("should return empty array for no headings", () => {
+    expect(extractHeadings("no headings here")).toEqual([]);
+  });
+});
