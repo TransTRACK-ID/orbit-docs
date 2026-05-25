@@ -8,7 +8,7 @@ import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { $fetch } from "ofetch";
 import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
 import { ensureTeamMember } from "~/server/utils/team-access";
-import { getAuthUser, verifyPassword } from "~/server/utils/auth";
+import { verifyPassword, type SessionUser } from "~/server/utils/auth";
 import { getDb } from "~/server/database";
 import { users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
@@ -116,8 +116,24 @@ export default defineEventHandler(async (event) => {
 
       // Auto-provision the user as workspace admin if they don't have a member record
       try {
-        const user = await getAuthUser(event);
-        await ensureTeamMember(user);
+        const token = response.data.access_token;
+        const sessionResp = await $fetch<{
+          data?: { user?: SessionUser };
+        }>(
+          `${apiBaseUrl}/api/v1/auth/session`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
+          }
+        );
+        const user = sessionResp.data?.user;
+        if (user) {
+          await ensureTeamMember(user);
+        }
       } catch (e) {
         console.error("Failed to auto-provision team member on login:", e);
       }
@@ -147,8 +163,7 @@ export default defineEventHandler(async (event) => {
 
     // Auto-provision the user as workspace admin if they don't have a member record
     try {
-      const authUser = await getAuthUser(event);
-      await ensureTeamMember(authUser);
+      await ensureTeamMember({ id: user.id, email: user.email, name: user.name });
     } catch (e) {
       console.error("Failed to auto-provision team member on login (local):", e);
     }

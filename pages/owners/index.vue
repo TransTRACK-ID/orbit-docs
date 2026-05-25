@@ -11,7 +11,7 @@ interface Owner {
 }
 
 definePageMeta({
-  auth: { required: true },
+  auth: true,
 });
 
 const $page = usePageStore();

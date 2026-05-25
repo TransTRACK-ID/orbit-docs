@@ -3,7 +3,7 @@ import { usePageStore } from "~/store/page";
 import type { ReleaseItem } from "~/composables/useReleases";
 
 definePageMeta({
-  auth: { required: true },
+  auth: true,
 });
 
 const $page = usePageStore();
@@ -88,11 +88,8 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   <div class="releases-page">
     <!-- Topbar -->
     <header class="topbar">
-      <div class="flex-gap-md">
-        <h1>Releases</h1>
-        <span class="text-muted-sm">Published release notes across all apps</span>
-      </div>
-      <div class="flex-gap-md">
+      <h1>Releases</h1>
+      <div style="display:flex;align-items:center;gap:16px;">
         <input
           v-model="searchQuery"
           class="search"
@@ -193,7 +190,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 
 <style scoped>
 .releases-page {
-  max-width: 960px;
+  /* inherits global tokens */
 }
 
 .topbar {
@@ -430,7 +427,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 
 @media (max-width: 768px) {
   .search {
-    width: 100%;
+    width: 180px;
   }
   .topbar {
     flex-wrap: wrap;

@@ -3,9 +3,7 @@ import { usePageStore } from "~/store/page";
 import { renderMarkdown, extractHeadings } from "~/composables/useMarkdown";
 
 definePageMeta({
-  auth: {
-    required: true,
-  },
+  auth: true,
 });
 
 const route = useRoute();

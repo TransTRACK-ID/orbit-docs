@@ -3,9 +3,7 @@ import { usePageStore } from "~/store/page";
 import type { EmbedNavItem, EmbedDocDetail } from "~/composables/useEmbedDocs";
 
 definePageMeta({
-  auth: {
-    required: true,
-  },
+  auth: true,
 });
 
 const route = useRoute();

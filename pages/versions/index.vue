@@ -4,7 +4,7 @@ import type { AppItem } from "~/composables/useApps";
 import type { AppVersion } from "~/composables/useApps";
 
 definePageMeta({
-  auth: { required: true },
+  auth: true,
 });
 
 const $page = usePageStore();
@@ -298,7 +298,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 <template>
   <div class="versions-page">
     <!-- Topbar -->
-    <div class="topbar" style="margin-bottom: 16px;">
+    <header class="topbar">
       <h1>Versions</h1>
       <div class="flex-gap-md">
         <input
@@ -319,7 +319,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
           New Version
         </button>
       </div>
-    </div>
+    </header>
 
     <!-- App info -->
     <div class="row-between" style="margin-bottom: 16px;">
@@ -720,6 +720,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  margin-bottom: 24px;
 }
 .topbar h1 {
   margin: 0;

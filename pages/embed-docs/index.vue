@@ -3,9 +3,7 @@ import { usePageStore } from "~/store/page";
 import type { EmbedDocItem } from "~/composables/useEmbedDocs";
 
 definePageMeta({
-  auth: {
-    required: true,
-  },
+  auth: true,
 });
 
 const $page = usePageStore();
@@ -575,6 +573,12 @@ const statusLabel: Record<string, string> = {
   gap: 10px;
   padding: 16px 24px;
   border-top: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .search {
+    width: 180px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
