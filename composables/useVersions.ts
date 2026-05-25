@@ -38,6 +38,44 @@ export const useVersions = () => {
     }
   }
 
+  async function fetchVersion(appId: string, versionId: string) {
+    isLoading.value = true;
+    try {
+      const data = await $fetch<{ data: AppVersion }>(`/api/apps/${appId}/versions/${versionId}`);
+      return data.data;
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load version");
+      }
+      console.error(e);
+      throw e;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function fetchVersionById(versionId: string) {
+    isLoading.value = true;
+    try {
+      const data = await $fetch<{ data: AppVersion }>(`/api/versions/${versionId}`);
+      return data.data;
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load version");
+      }
+      console.error(e);
+      throw e;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
   async function createVersion(appId: string, payload: CreateVersionPayload) {
     isCreating.value = true;
     try {
@@ -118,6 +156,8 @@ export const useVersions = () => {
     isUpdating,
     isDeleting,
     fetchVersions,
+    fetchVersion,
+    fetchVersionById,
     createVersion,
     updateVersion,
     deleteVersion,
