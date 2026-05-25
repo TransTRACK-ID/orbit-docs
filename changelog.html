@@ -1,0 +1,950 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orbit Docs · Changelog Editor</title>
+  <style>
+    :root {
+      --bg:      oklch(98% 0.004 250);
+      --surface: oklch(100% 0 0);
+      --fg:      oklch(20% 0.02 250);
+      --muted:   oklch(55% 0.015 250);
+      --border:  oklch(90% 0.006 250);
+      --accent:  oklch(55% 0.16 25);
+      --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
+      --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+      --font-display: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --font-mono:    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+      --fs-body: 14px;
+      --gap-xs: 8px; --gap-sm: 12px; --gap-md: 16px; --gap-lg: 24px;
+      --radius: 8px; --radius-lg: 12px;
+      --sidebar: 240px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: var(--fs-body); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3 { margin: 0; font-weight: 600; }
+
+    .app-shell { display: flex; min-height: 100vh; }
+    .sidebar { width: var(--sidebar); flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); padding: 24px 0; display: flex; flex-direction: column; }
+    .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 20px 24px; font-family: var(--font-display); font-size: 18px; font-weight: 600; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+    .sidebar-brand svg { width: 22px; height: 22px; color: var(--accent); }
+    .nav-group { padding: 8px 0; }
+    .nav-group-title { padding: 8px 20px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; margin: 2px 12px; border-radius: var(--radius); font-size: 14px; color: var(--muted); transition: background .1s cubic-bezier(.4,0,.2,1), color .1s cubic-bezier(.4,0,.2,1); }
+    .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .nav-item:hover { background: var(--fg-soft); color: var(--fg); }
+    .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+    .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .topbar { height: 56px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; background: var(--surface); border-bottom: 1px solid var(--border); gap: 16px; }
+    .topbar h1 { font-size: 20px; font-weight: 600; white-space: nowrap; }
+    .topbar-title-group { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .topbar-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+    .btn-group { display: flex; align-items: center; }
+    .btn-group .btn { border-radius: 0; margin-left: -1px; }
+    .btn-group .btn:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
+    .btn-group .btn:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+    .search-changelog { width: 240px; }
+
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); border: 1px solid transparent; font-size: 14px; font-weight: 500; transition: background .15s cubic-bezier(.4,0,.2,1), border-color .15s cubic-bezier(.4,0,.2,1), color .15s cubic-bezier(.4,0,.2,1); }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+    .btn-primary:hover { background: color-mix(in oklch, var(--accent) 88%, black); }
+    .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+    .btn-secondary:hover { border-color: var(--fg); }
+    .btn-ghost { background: transparent; color: var(--muted); border-color: transparent; }
+    .btn-ghost:hover { color: var(--fg); }
+
+    /* Breadcrumb */
+    .breadcrumb {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; color: var(--muted); margin-bottom: 4px;
+    }
+    .breadcrumb a { color: var(--accent); }
+    .breadcrumb a:hover { text-decoration: underline; }
+    .breadcrumb .sep { color: var(--border); }
+
+    .content { padding: 32px; flex: 1; display: flex; flex-direction: column; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+
+    .editor-shell { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; flex: 1; min-height: 0; }
+    .editor-shell.preview-only { grid-template-columns: 1fr; }
+    .editor-shell.preview-only .editor-pane:first-child { display: none; }
+    @media (max-width: 960px) { .editor-shell { grid-template-columns: 1fr; } }
+
+    .editor-pane { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); display: flex; flex-direction: column; overflow: hidden; }
+    .pane-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); font-weight: 500; }
+    .pane-body { flex: 1; padding: 16px; overflow: auto; }
+
+    .toolbar { display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg); }
+    .tool-btn { padding: 6px 8px; border-radius: var(--radius); border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; transition: background .15s cubic-bezier(.4,0,.2,1), color .15s cubic-bezier(.4,0,.2,1), border-color .15s cubic-bezier(.4,0,.2,1); }
+    .tool-btn:hover { background: var(--fg-soft); color: var(--fg); }
+    .tool-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .textarea {
+      width: 100%; height: 100%; border: none; resize: none;
+      font-family: var(--font-mono); font-size: 14px; line-height: 1.6;
+      color: var(--fg); background: transparent; outline: none;
+    }
+
+    .preview-body { font-size: 14px; line-height: 1.6; }
+    .preview-body h1 { font-size: 24px; margin-bottom: 16px; }
+    .preview-body h2 { font-size: 18px; margin: 24px 0 12px; }
+    .preview-body ul { padding-left: 20px; }
+    .preview-body li { margin: 4px 0; }
+    .preview-body code { background: var(--bg); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 13px; }
+    .preview-body pre { background: var(--bg); padding: 12px; border-radius: var(--radius); overflow: auto; }
+    .preview-body pre code { background: none; padding: 0; }
+
+    .pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+    .pill-blue { background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent); color: oklch(55% 0.14 255); }
+    .pill-green { background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent); color: oklch(50% 0.14 145); }
+    .pill-amber { background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent); color: oklch(60% 0.12 85); }
+    .pill-purple { background: color-mix(in oklch, oklch(60% 0.16 300) 12%, transparent); color: oklch(55% 0.14 300); }
+    .pill-red { background: color-mix(in oklch, oklch(55% 0.2 25) 12%, transparent); color: oklch(50% 0.16 25); }
+    .pill-muted { background: var(--fg-soft); color: var(--muted); }
+
+    .select { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font: inherit; font-size: 14px; color: var(--fg); }
+    .select:focus { outline: 2px solid var(--accent-soft); outline-offset: 0; border-color: var(--accent); }
+    .search {
+      width: 320px; padding: 8px 12px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--bg); font: inherit; font-size: 14px;
+    }
+    .search:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
+    .pagefoot { padding: 20px 32px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; right: 32px; z-index: 200;
+      background: var(--fg); color: var(--surface);
+      padding: 12px 20px; border-radius: var(--radius);
+      font-size: 14px; font-weight: 500;
+      box-shadow: 0 8px 24px color-mix(in oklch, var(--fg) 20%, transparent);
+      opacity: 0; transform: translateY(8px);
+      transition: opacity .2s cubic-bezier(.4,0,.2,1), transform .2s cubic-bezier(.4,0,.2,1);
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+    /* Utilities */
+    .flex-gap-sm { display: flex; gap: 8px; }
+    .flex-gap-md { display: flex; gap: 16px; align-items: center; }
+    .text-muted-sm { color: var(--muted); font-size: 13px; }
+    .meta-label { font-size: 12px; color: var(--muted); }
+
+    /* History panel */
+    .history-panel {
+      position: fixed; inset: 0; z-index: 100;
+      background: color-mix(in oklch, var(--fg) 35%, transparent);
+      display: flex; justify-content: flex-end;
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s cubic-bezier(.4,0,.2,1);
+    }
+    .history-panel.open { opacity: 1; pointer-events: auto; }
+    .history-drawer {
+      width: 420px; max-width: 90vw; height: 100%;
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .2s cubic-bezier(.4,0,.2,1);
+    }
+    .history-panel.open .history-drawer { transform: translateX(0); }
+    .history-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .history-header h3 { font-size: 16px; }
+    .history-close {
+      width: 36px; height: 36px;
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 0; border-radius: var(--radius);
+    }
+    .history-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .history-search-wrap {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .history-search {
+      width: 100%; padding: 8px 12px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--bg); font: inherit; font-size: 14px;
+      color: var(--fg);
+    }
+    .history-search:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+    .history-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .history-item {
+      padding: 12px 16px; border-radius: var(--radius); margin-bottom: 4px;
+      cursor: pointer;
+      transition: background .15s cubic-bezier(.4,0,.2,1), box-shadow .15s cubic-bezier(.4,0,.2,1);
+      outline: none; position: relative;
+    }
+    .history-item:focus-visible {
+      box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+    }
+    .history-item:hover { background: var(--fg-soft); }
+    .history-item:active { background: color-mix(in oklch, var(--fg-soft) 70%, transparent); transform: scale(0.995); }
+    .history-item.active {
+      background: var(--accent-soft);
+      box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--accent) 20%, transparent);
+    }
+    .history-item.active .author { color: var(--accent); font-weight: 500; }
+    .history-item .time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+    .history-item .author { font-size: 13px; color: var(--fg); margin-top: 4px; }
+    .history-item .action { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .history-empty {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 12px; padding: 48px 24px; color: var(--muted); text-align: center;
+    }
+    .history-empty svg { color: var(--border); }
+    .history-empty p { margin: 0; font-size: 14px; font-weight: 500; color: var(--fg); }
+
+    /* Release panel */
+    .release-panel {
+      position: fixed; inset: 0; z-index: 100;
+      background: color-mix(in oklch, var(--fg) 35%, transparent);
+      display: flex; justify-content: flex-end;
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s cubic-bezier(.4,0,.2,1);
+    }
+    .release-panel.open { opacity: 1; pointer-events: auto; }
+    .release-drawer {
+      width: 520px; max-width: 90vw; height: 100%;
+      background: var(--surface); border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transform: translateX(100%);
+      transition: transform .2s cubic-bezier(.4,0,.2,1);
+    }
+    .release-panel.open .release-drawer { transform: translateX(0); }
+    .release-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .release-header h3 { font-size: 16px; }
+    .release-close {
+      width: 36px; height: 36px;
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 0; border-radius: var(--radius);
+    }
+    .release-body {
+      flex: 1; overflow-y: auto; padding: 20px;
+    }
+    .release-section {
+      margin-bottom: 24px;
+    }
+    .release-section-title {
+      font-size: 11px; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--muted); font-weight: 500;
+      margin-bottom: 12px;
+    }
+    .release-input {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--bg); font: inherit; font-size: 14px;
+      color: var(--fg); margin-bottom: 12px;
+    }
+    .release-input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+    .release-textarea {
+      width: 100%; min-height: 80px; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--bg); font: inherit; font-size: 14px;
+      color: var(--fg); line-height: 1.5; resize: vertical;
+    }
+    .release-textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+    .release-categories {
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .release-cat-tag {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: var(--radius);
+      border: 1px solid var(--border);
+      font-size: 13px; color: var(--fg);
+      background: var(--bg);
+    }
+    .release-cat-tag input { margin: 0; }
+    .release-preview-box {
+      padding: 16px; border-radius: var(--radius);
+      border: 1px solid var(--border); background: var(--bg);
+      font-size: 14px; line-height: 1.5;
+    }
+    .release-preview-box h4 {
+      font-size: 14px; margin: 0 0 8px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .release-preview-box p { margin: 0 0 12px; }
+    .release-footer {
+      padding: 16px 20px; border-top: 1px solid var(--border);
+      display: flex; gap: 12px; justify-content: flex-end;
+      flex-shrink: 0;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" data-od-id="sidebar">
+      <div class="sidebar-brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+        Orbit Docs
+      </div>
+      <nav>
+        <div class="nav-group">
+          <div class="nav-group-title">Workspace</div>
+          <a href="index.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Apps
+          </a>
+          <a href="versions.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/></svg>
+            Versions
+          </a>
+          <a href="releases.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            Releases
+          </a>
+          <a href="changelog.html" class="nav-item active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Changelogs
+          </a>
+          <a href="docs-editor.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Doc Editor
+          </a>
+          <a href="docs-viewer.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            Published Docs
+          </a>
+          <a href="embed-docs.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Embed Docs
+          </a>
+        </div>
+        <div class="nav-group" style="margin-top:auto;">
+          <div class="nav-group-title">Account</div>
+          <a href="settings.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Settings
+          </a>
+        </div>
+      </nav>
+    </aside>
+
+    <div class="main">
+      <header class="topbar" data-od-id="topbar">
+        <div class="topbar-title-group">
+          <h1>Changelog Editor</h1>
+          <span class="pill pill-blue" id="versionBadge">—</span>
+        </div>
+        <div class="topbar-actions">
+          <div class="btn-group">
+            <button type="button" class="btn btn-ghost" onclick="saveDraft()">Save</button>
+            <button type="button" class="btn btn-secondary" onclick="publishChangelog()">Publish</button>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="openReleasePanel()">Publish Release</button>
+        </div>
+      </header>
+
+      <main class="content" data-od-id="content">
+        <!-- Breadcrumb -->
+        <div class="breadcrumb" id="breadcrumb">
+          <a href="versions.html">Versions</a>
+          <span class="sep">›</span>
+          <a href="versions.html" id="breadcrumbApp">API Gateway</a>
+          <span class="sep">›</span>
+          <span id="breadcrumbVersion">v2.4.1</span>
+        </div>
+
+        <div class="row-between" style="margin-bottom:16px;">
+          <div class="flex-gap-md">
+            <span class="text-muted-sm">Editing:</span>
+            <strong>CHANGELOG.md</strong>
+            <span class="pill pill-green" id="autoSaveBadge">Auto-saved 2m ago</span>
+            <span class="pill pill-amber" id="changelogStatusBadge" style="display:none;">Draft</span>
+          </div>
+          <div class="flex-gap-sm">
+            <input class="search search-changelog" placeholder="Search changelogs…" aria-label="Search changelogs" />
+            <button type="button" class="btn btn-ghost" id="previewBtn" onclick="togglePreview()">Preview</button>
+            <button type="button" class="btn btn-ghost" onclick="openHistory()">History</button>
+          </div>
+        </div>
+
+        <div class="editor-shell">
+          <!-- Editor -->
+          <div class="editor-pane">
+            <div class="toolbar">
+              <button type="button" class="tool-btn" onclick="wrapText('## ')">H2</button>
+              <button type="button" class="tool-btn" onclick="wrapText('### ')">H3</button>
+              <button type="button" class="tool-btn" onclick="wrapText('**','**')">B</button>
+              <button type="button" class="tool-btn" onclick="wrapText('*','*')">I</button>
+              <button type="button" class="tool-btn" onclick="wrapText('`','`')">`code`</button>
+              <button type="button" class="tool-btn" onclick="insertLine('- ')">• list</button>
+              <button type="button" class="tool-btn" onclick="insertLine('1. ')">1. list</button>
+              <button type="button" class="tool-btn" onclick="insertLine('- [ ] ')">[] task</button>
+              <button type="button" class="tool-btn" onclick="wrapText('[',']()')">link</button>
+              <button type="button" class="tool-btn" onclick="insertLine('> ')">quote</button>
+            </div>
+            <div class="pane-body">
+              <textarea class="textarea" id="changelogTextarea" spellcheck="false"></textarea>
+            </div>
+          </div>
+
+          <!-- Preview -->
+          <div class="editor-pane">
+            <div class="pane-header">
+              <span>Preview</span>
+              <span class="meta-label">Rendered from markdown</span>
+            </div>
+            <div class="pane-body preview-body" id="previewBody">
+              <!-- Rendered by JS -->
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <footer class="pagefoot" data-od-id="footer">
+        <span>Orbit Docs · Internal documentation platform</span>
+        <span class="num">v2026.05</span>
+      </footer>
+    </div>
+  </div>
+
+  <!-- History Panel -->
+  <div class="history-panel" id="historyPanel" role="dialog" aria-modal="true" aria-labelledby="historyTitle" tabindex="-1">
+    <div class="history-drawer">
+      <div class="history-header">
+        <h3 id="historyTitle">Version history</h3>
+        <button type="button" class="btn btn-ghost history-close" onclick="closeHistory()" aria-label="Close version history">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="history-search-wrap">
+        <input type="search" class="history-search" id="historySearch" placeholder="Filter by author or action…" aria-label="Filter version history" />
+      </div>
+      <div class="history-list" id="historyList" role="list">
+        <div class="history-item active" role="listitem" tabindex="0" data-index="0">
+          <div class="time">May 18, 2026 · 09:42 UTC</div>
+          <div class="author">Sarah Chen</div>
+          <div class="action">Current version</div>
+        </div>
+        <div class="history-item" role="listitem" tabindex="0" data-index="1">
+          <div class="time">May 18, 2026 · 08:15 UTC</div>
+          <div class="author">Sarah Chen</div>
+          <div class="action">Added Security section</div>
+        </div>
+        <div class="history-item" role="listitem" tabindex="0" data-index="2">
+          <div class="time">May 17, 2026 · 16:30 UTC</div>
+          <div class="author">Mike Ross</div>
+          <div class="action">Fixed webhook retry wording</div>
+        </div>
+        <div class="history-item" role="listitem" tabindex="0" data-index="3">
+          <div class="time">May 17, 2026 · 14:00 UTC</div>
+          <div class="author">Sarah Chen</div>
+          <div class="action">Initial draft</div>
+        </div>
+      </div>
+      <div class="history-empty" id="historyEmpty" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" aria-hidden="true"><path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+        <p>No version history yet</p>
+        <span class="meta-label">Changes will appear here once you start editing</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Release Panel -->
+  <div class="release-panel" id="releasePanel" role="dialog" aria-modal="true" aria-labelledby="releaseTitle" tabindex="-1">
+    <div class="release-drawer">
+      <div class="release-header">
+        <h3 id="releaseTitle">Publish as Release Notes</h3>
+        <button type="button" class="btn btn-ghost release-close" onclick="closeReleasePanel()" aria-label="Close release panel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="release-body" id="releaseBody">
+        <div class="release-section">
+          <div class="release-section-title">Headline</div>
+          <input type="text" class="release-input" id="heroTitle" placeholder="e.g. Request tracing, deep health checks, and retry reliability" />
+        </div>
+        <div class="release-section">
+          <div class="release-section-title">Feature Highlights</div>
+          <input type="text" class="release-input" id="featureHeading" placeholder="Feature heading (optional)" />
+          <textarea class="release-textarea" id="featureDesc" placeholder="Describe the feature for the release article…"></textarea>
+        </div>
+        <div class="release-section">
+          <div class="release-section-title">Categories from Changelog</div>
+          <div class="release-categories" id="releaseCategories">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+        <div class="release-section">
+          <div class="release-section-title">Preview</div>
+          <div class="release-preview-box" id="releasePreview">
+            <p style="color:var(--muted);">Enter a headline to see preview</p>
+          </div>
+        </div>
+      </div>
+      <div class="release-footer">
+        <button type="button" class="btn btn-secondary" onclick="closeReleasePanel()">Cancel</button>
+        <button type="button" class="btn btn-primary" id="publishReleaseBtn" onclick="publishRelease()">Publish Release</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="data.js"></script>
+  <script>
+    const textarea = document.getElementById('changelogTextarea');
+    const previewBody = document.getElementById('previewBody');
+    const versionBadge = document.getElementById('versionBadge');
+    const breadcrumbApp = document.getElementById('breadcrumbApp');
+    const breadcrumbVersion = document.getElementById('breadcrumbVersion');
+    const autoSaveBadge = document.getElementById('autoSaveBadge');
+    const changelogStatusBadge = document.getElementById('changelogStatusBadge');
+
+    let apps = OrbitDocs.loadApps();
+    let currentApp = null;
+    let currentVersion = null;
+
+    function init() {
+      const params = OrbitDocs.parseUrlParams();
+      const appId = params.app;
+      const versionStr = params.version;
+
+      if (!appId || !versionStr) {
+        // No params: redirect to versions page
+        window.location.href = 'versions.html';
+        return;
+      }
+
+      currentApp = OrbitDocs.getApp(apps, appId);
+      if (!currentApp) {
+        showToast('App not found');
+        return;
+      }
+
+      currentVersion = currentApp.versions.find(v => v.version === versionStr);
+      if (!currentVersion) {
+        showToast('Version not found');
+        return;
+      }
+
+      // Update UI
+      versionBadge.textContent = `${currentApp.name} ${currentVersion.version}`;
+      breadcrumbApp.textContent = currentApp.name;
+      breadcrumbApp.href = `versions.html?app=${currentApp.id}`;
+      breadcrumbVersion.textContent = currentVersion.version;
+
+      // Load changelog content
+      if (currentVersion.changelogContent) {
+        textarea.value = currentVersion.changelogContent;
+      } else {
+        // Provide template for new changelog
+        textarea.value = `## [${currentVersion.version.replace(/^v/, '')}] - ${currentVersion.date}
+
+### Added
+-
+
+### Fixed
+-
+
+### Changed
+-
+
+### Deprecated
+-
+
+### Security
+-`;
+      }
+
+      updateChangelogStatusBadge();
+      renderPreview();
+
+      // Auto-open release panel if requested
+      if (params.publish === '1') {
+        setTimeout(() => openReleasePanel(), 300);
+      }
+    }
+
+    function updateChangelogStatusBadge() {
+      if (currentVersion.changelogStatus === 'draft') {
+        changelogStatusBadge.style.display = 'inline-flex';
+        changelogStatusBadge.textContent = 'Draft';
+        changelogStatusBadge.className = 'pill pill-amber';
+      } else if (currentVersion.changelogStatus === 'published') {
+        changelogStatusBadge.style.display = 'inline-flex';
+        changelogStatusBadge.textContent = 'Published';
+        changelogStatusBadge.className = 'pill pill-green';
+      } else {
+        changelogStatusBadge.style.display = 'inline-flex';
+        changelogStatusBadge.textContent = 'New';
+        changelogStatusBadge.className = 'pill pill-blue';
+      }
+    }
+
+    function renderPreview() {
+      const text = textarea.value;
+      // Simple markdown to HTML
+      let html = text
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code>$1</code>')
+        .replace(/^\- (.*$)/gim, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>\n?)+/g, '<ul>$&</ul>')
+        .replace(/<\/ul>\s*<ul>/g, '')
+        .replace(/^> (.*$)/gim, '<blockquote>$1</blockquote>')
+        .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>');
+      previewBody.innerHTML = html || '<p style="color:var(--muted);">Start typing to see preview</p>';
+    }
+
+    textarea.addEventListener('input', () => {
+      renderPreview();
+      autoSaveBadge.textContent = 'Auto-saved just now';
+    });
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function saveDraft() {
+      if (!currentVersion) return;
+      currentVersion.changelogContent = textarea.value;
+      if (currentVersion.changelogStatus === 'missing') {
+        currentVersion.changelogStatus = 'draft';
+      }
+      OrbitDocs.saveApps(apps);
+      updateChangelogStatusBadge();
+      showToast('Draft saved');
+    }
+
+    function publishChangelog() {
+      if (!currentVersion) return;
+      currentVersion.changelogContent = textarea.value;
+      currentVersion.changelogStatus = 'published';
+      OrbitDocs.saveApps(apps);
+      updateChangelogStatusBadge();
+      showToast(`Changelog published for ${currentApp.name} ${currentVersion.version}`);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Release panel: changelog → release notes
+    // ═══════════════════════════════════════════════════════════════
+    const releasePanel = document.getElementById('releasePanel');
+    let releaseLastFocused = null;
+
+    function openReleasePanel() {
+      releaseLastFocused = document.activeElement;
+      releasePanel.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      parseChangelog();
+      setTimeout(() => document.getElementById('heroTitle').focus(), 100);
+    }
+
+    function closeReleasePanel() {
+      releasePanel.classList.remove('open');
+      document.body.style.overflow = '';
+      if (releaseLastFocused) {
+        setTimeout(() => releaseLastFocused.focus(), 50);
+      }
+    }
+
+    function publishRelease() {
+      if (!currentVersion) return;
+      const title = document.getElementById('heroTitle').value.trim();
+      if (!title) {
+        showToast('Please enter a headline');
+        document.getElementById('heroTitle').focus();
+        return;
+      }
+
+      // Build categories from checked inputs
+      const checkedCats = Array.from(document.querySelectorAll('.release-cat-tag input:checked')).map(cb => cb.parentElement.querySelector('.pill').textContent);
+      const text = textarea.value;
+      const categories = { fixed: [], added: [], changed: [], deprecated: [], security: [] };
+
+      // Parse changelog content into categories
+      let currentCat = null;
+      text.split('\n').forEach(line => {
+        const catMatch = line.match(/^###\s+(Added|Fixed|Changed|Deprecated|Security)/i);
+        if (catMatch) {
+          currentCat = catMatch[1].toLowerCase();
+        } else if (currentCat && line.match(/^-\s+(.+)/)) {
+          const item = line.replace(/^-\s+/, '');
+          if (categories[currentCat]) categories[currentCat].push(item);
+        }
+      });
+
+      // Filter categories based on checked tags
+      const filteredCategories = {};
+      checkedCats.forEach(cat => {
+        const key = cat.toLowerCase();
+        if (categories[key] && categories[key].length > 0) {
+          filteredCategories[key] = categories[key];
+        }
+      });
+
+      const heading = document.getElementById('featureHeading').value.trim();
+      const desc = document.getElementById('featureDesc').value.trim();
+
+      currentVersion.release = {
+        published: true,
+        heroTitle: title,
+        summary: heading ? `${heading}. ${desc}` : desc || title,
+        features: heading ? [{ id: 'feature-1', heading: heading, description: desc, media: [] }] : [],
+        categories: filteredCategories
+      };
+
+      currentVersion.changelogStatus = 'published';
+      OrbitDocs.saveApps(apps);
+      updateChangelogStatusBadge();
+      showToast(`Release published: ${title}`);
+      closeReleasePanel();
+    }
+
+    function parseChangelog() {
+      const text = textarea.value;
+      const cats = [];
+      const seen = new Set();
+      const regex = /^###\s+(Added|Fixed|Changed|Deprecated|Security)/gim;
+      let match;
+      while ((match = regex.exec(text)) !== null) {
+        const label = match[1];
+        if (!seen.has(label)) {
+          seen.add(label);
+          cats.push(label);
+        }
+      }
+      const container = document.getElementById('releaseCategories');
+      if (cats.length === 0) {
+        container.innerHTML = '<span class="meta-label">No categories detected</span>';
+      } else {
+        container.innerHTML = cats.map(c => {
+          const colorClass = c === 'Added' ? 'pill-green' :
+            c === 'Fixed' ? 'pill-blue' :
+            c === 'Changed' ? 'pill-amber' :
+            c === 'Deprecated' ? 'pill-purple' : 'pill-red';
+          return `<label class="release-cat-tag"><input type="checkbox" checked /> <span class="pill ${colorClass}">${c}</span></label>`;
+        }).join('');
+      }
+      // Auto-suggest hero title from first h2
+      const h2Match = text.match(/^##\s+\[?([^\n\]]+)/m);
+      const heroInput = document.getElementById('heroTitle');
+      if (h2Match && !heroInput.value) {
+        heroInput.value = h2Match[1].trim();
+      }
+      updateReleasePreview();
+    }
+
+    function updateReleasePreview() {
+      const title = document.getElementById('heroTitle').value.trim();
+      const heading = document.getElementById('featureHeading').value.trim();
+      const desc = document.getElementById('featureDesc').value.trim();
+      const preview = document.getElementById('releasePreview');
+      if (!title) {
+        preview.innerHTML = '<p style="color:var(--muted);">Enter a headline to see preview</p>';
+        return;
+      }
+      let html = `<h4>Release Preview</h4><p style="font-size:18px;font-weight:600;margin-bottom:12px;">${title}</p>`;
+      if (heading) {
+        html += `<p style="font-weight:600;margin:16px 0 4px;">${heading}</p>`;
+        if (desc) html += `<p style="color:var(--muted);margin:0 0 12px;">${desc}</p>`;
+      }
+      const checkedCats = Array.from(document.querySelectorAll('.release-cat-tag input:checked')).map(cb => cb.parentElement.querySelector('.pill').textContent);
+      if (checkedCats.length > 0) {
+        html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">${checkedCats.map(c => `<span class="pill pill-muted">${c}</span>`).join('')}</div>`;
+      }
+      preview.innerHTML = html;
+    }
+
+    // Live preview updates
+    document.getElementById('heroTitle').addEventListener('input', updateReleasePreview);
+    document.getElementById('featureHeading').addEventListener('input', updateReleasePreview);
+    document.getElementById('featureDesc').addEventListener('input', updateReleasePreview);
+
+    // Close on backdrop click / Escape
+    releasePanel.addEventListener('click', e => {
+      if (e.target === releasePanel) closeReleasePanel();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && releasePanel.classList.contains('open')) closeReleasePanel();
+    });
+
+    // Focus trap
+    releasePanel.addEventListener('keydown', e => {
+      if (e.key !== 'Tab') return;
+      const focusable = releasePanel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
+
+    function wrapText(before, after) {
+      after = after || before;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      const selected = text.slice(start, end);
+      const replacement = before + selected + after;
+      textarea.setRangeText(replacement, start, end, 'end');
+      textarea.focus();
+      textarea.setSelectionRange(start + before.length, start + before.length + selected.length);
+      renderPreview();
+    }
+
+    function insertLine(prefix) {
+      const start = textarea.selectionStart;
+      const text = textarea.value;
+      const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+      textarea.setRangeText(prefix, lineStart, lineStart, 'end');
+      textarea.focus();
+      textarea.setSelectionRange(lineStart + prefix.length, lineStart + prefix.length);
+      renderPreview();
+    }
+
+    // Preview toggle
+    let previewOnly = false;
+    function togglePreview() {
+      const shell = document.querySelector('.editor-shell');
+      const btn = document.getElementById('previewBtn');
+      previewOnly = !previewOnly;
+      shell.classList.toggle('preview-only', previewOnly);
+      btn.textContent = previewOnly ? 'Editor' : 'Preview';
+      btn.classList.toggle('active', previewOnly);
+      showToast(previewOnly ? 'Preview mode' : 'Split view');
+    }
+
+    // History panel
+    const historyPanel = document.getElementById('historyPanel');
+    const historyList = document.getElementById('historyList');
+    const historySearch = document.getElementById('historySearch');
+    let historyFocusIndex = 0;
+    let lastFocusedElement = null;
+
+    function getHistoryItems() {
+      return Array.from(historyList.querySelectorAll('.history-item:not([hidden])'));
+    }
+
+    function focusHistoryItem(index) {
+      const items = getHistoryItems();
+      if (items.length === 0) return;
+      historyFocusIndex = Math.max(0, Math.min(index, items.length - 1));
+      items[historyFocusIndex].focus();
+    }
+
+    function openHistory() {
+      lastFocusedElement = document.activeElement;
+      historyPanel.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => {
+        if (historySearch) historySearch.focus();
+      }, 50);
+    }
+
+    function closeHistory() {
+      historyPanel.classList.remove('open');
+      document.body.style.overflow = '';
+      if (lastFocusedElement) {
+        setTimeout(() => lastFocusedElement.focus(), 50);
+      }
+    }
+
+    // Focus trap: Tab cycles within panel
+    historyPanel.addEventListener('keydown', e => {
+      if (e.key !== 'Tab') return;
+      const focusable = historyPanel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
+
+    // Arrow key navigation within list
+    historyList.addEventListener('keydown', e => {
+      const items = getHistoryItems();
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        focusHistoryItem(historyFocusIndex + 1);
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        focusHistoryItem(historyFocusIndex - 1);
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const activeItem = items[historyFocusIndex];
+        if (activeItem) selectHistoryItem(activeItem);
+      }
+    });
+
+    function selectHistoryItem(item) {
+      historyList.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
+      item.classList.add('active');
+      const author = item.querySelector('.author')?.textContent || '';
+      const time = item.querySelector('.time')?.textContent || '';
+      showToast(`Restored version by ${author} · ${time}`);
+    }
+
+    // Click handlers
+    historyList.querySelectorAll('.history-item').forEach((item, index) => {
+      item.addEventListener('click', () => {
+        historyFocusIndex = index;
+        selectHistoryItem(item);
+      });
+    });
+
+    // Search/filter
+    if (historySearch) {
+      historySearch.addEventListener('input', e => {
+        const query = e.target.value.toLowerCase().trim();
+        const items = historyList.querySelectorAll('.history-item');
+        let visibleCount = 0;
+        items.forEach(item => {
+          const text = (item.querySelector('.author')?.textContent + ' ' + item.querySelector('.action')?.textContent).toLowerCase();
+          const match = !query || text.includes(query);
+          item.hidden = !match;
+          if (match) visibleCount++;
+        });
+        const emptyState = document.getElementById('historyEmpty');
+        if (emptyState) emptyState.hidden = visibleCount > 0;
+        historyList.hidden = visibleCount === 0;
+        historyFocusIndex = 0;
+      });
+    }
+
+    historyPanel.addEventListener('click', e => {
+      if (e.target === historyPanel) closeHistory();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeHistory();
+    });
+
+    init();
+  </script>
+</body>
+</html>
