@@ -14,6 +14,7 @@ onBeforeMount(() => {
 
 const { apps, fetchApps } = useApps();
 const { versions, isLoading, isCreating, isUpdating, isDeleting, fetchVersions, createVersion, updateVersion, deleteVersion } = useVersions();
+const { createRelease } = useReleases();
 
 const route = useRoute();
 const router = useRouter();
@@ -247,6 +248,69 @@ async function doDeleteVersion() {
   versionToDelete.value = null;
 }
 
+// Create Release Modal
+const showCreateReleaseModal = ref(false);
+const versionForRelease = ref<AppVersion | null>(null);
+const releaseForm = reactive({
+  heroTitle: "",
+  summary: "",
+  featuresJson: "[]",
+  categoriesJson: "{}",
+  published: false,
+});
+const releaseFormError = ref("");
+const isCreatingRelease = ref(false);
+
+function openCreateReleaseModal(version: AppVersion) {
+  versionForRelease.value = version;
+  releaseForm.heroTitle = version.releaseNotes ? version.releaseNotes.split("\n")[0].slice(0, 120) : "";
+  releaseForm.summary = version.releaseNotes || "";
+  releaseForm.featuresJson = "[]";
+  releaseForm.categoriesJson = "{}";
+  releaseForm.published = false;
+  releaseFormError.value = "";
+  showCreateReleaseModal.value = true;
+}
+
+function closeCreateReleaseModal() {
+  showCreateReleaseModal.value = false;
+  versionForRelease.value = null;
+  releaseFormError.value = "";
+}
+
+async function submitCreateRelease() {
+  if (!versionForRelease.value || !selectedAppId.value || isCreatingRelease.value) return;
+  releaseFormError.value = "";
+
+  let features: any[] | undefined = undefined;
+  let categories: Record<string, string[]> | undefined = undefined;
+
+  try {
+    features = releaseForm.featuresJson.trim() ? JSON.parse(releaseForm.featuresJson) : undefined;
+    categories = releaseForm.categoriesJson.trim() ? JSON.parse(releaseForm.categoriesJson) : undefined;
+  } catch (e) {
+    releaseFormError.value = "Invalid JSON in features or categories. Please check syntax.";
+    return;
+  }
+
+  isCreatingRelease.value = true;
+  try {
+    await createRelease({
+      appId: selectedAppId.value,
+      versionId: versionForRelease.value.id,
+      heroTitle: releaseForm.heroTitle,
+      summary: releaseForm.summary,
+      features,
+      categories,
+      published: releaseForm.published,
+    });
+    closeCreateReleaseModal();
+    await fetchVersions(selectedAppId.value);
+  } finally {
+    isCreatingRelease.value = false;
+  }
+}
+
 // Helpers
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return "—";
@@ -287,6 +351,7 @@ function onKeydown(e: KeyboardEvent) {
     closeCompare();
     closeNewVersionModal();
     closeEditVersionModal();
+    closeCreateReleaseModal();
     versionToDelete.value = null;
   }
 }
@@ -405,8 +470,12 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               <NuxtLink v-if="v.releaseId && v.releasePublished" :to="`/releases/${v.releaseId}`" class="btn btn-ghost btn-sm" @click.stop>
                 View
               </NuxtLink>
-              <span v-else-if="v.releaseId" class="text-muted-sm">Draft</span>
-              <span v-else class="text-muted-sm">—</span>
+              <NuxtLink v-else-if="v.releaseId" :to="`/releases/${v.releaseId}`" class="btn btn-ghost btn-sm" @click.stop>
+                Draft
+              </NuxtLink>
+              <button v-else type="button" class="btn btn-primary btn-sm" @click.stop="openCreateReleaseModal(v)">
+                Create Release
+              </button>
             </td>
             <td @click.stop>
               <div class="flex-gap-sm">
@@ -683,6 +752,52 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- Create Release Modal -->
+    <div class="modal-overlay" :class="{ open: showCreateReleaseModal }" @click.self="closeCreateReleaseModal">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2>Create Release · v{{ versionForRelease?.version }}</h2>
+          <button type="button" class="modal-close" aria-label="Close modal" @click="closeCreateReleaseModal">✕</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="releaseFormError" class="error-banner">{{ releaseFormError }}</div>
+          <div class="form-group">
+            <label for="releaseHeroTitle">Hero Title</label>
+            <input id="releaseHeroTitle" v-model="releaseForm.heroTitle" type="text" placeholder="e.g. Request tracing and deep health checks" />
+          </div>
+          <div class="form-group">
+            <label for="releaseSummary">Summary</label>
+            <textarea id="releaseSummary" v-model="releaseForm.summary" rows="3" placeholder="Short summary of this release…" />
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="flex-gap-sm" style="cursor:pointer;">
+                <input v-model="releaseForm.published" type="checkbox" />
+                Published
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="releaseFeatures">Features JSON</label>
+            <textarea id="releaseFeatures" v-model="releaseForm.featuresJson" rows="6" placeholder='[{ &quot;id&quot;: &quot;...&quot;, &quot;heading&quot;: &quot;...&quot;, &quot;description&quot;: &quot;...&quot;, &quot;media&quot;: [...] }]' />
+            <span class="help-text">Array of feature objects. Use JSON syntax.</span>
+          </div>
+          <div class="form-group">
+            <label for="releaseCategories">Categories JSON</label>
+            <textarea id="releaseCategories" v-model="releaseForm.categoriesJson" rows="4" placeholder='{ &quot;added&quot;: [...], &quot;fixed&quot;: [...], ... }' />
+            <span class="help-text">Object with keys: added, fixed, changed, deprecated, security.</span>
+          </div>
+        </div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-secondary" @click="closeCreateReleaseModal">Cancel</button>
+          <button type="button" class="btn btn-primary" :disabled="isCreatingRelease" @click="submitCreateRelease">
+            <span v-if="isCreatingRelease">Creating…</span>
+            <span v-else>Create Release</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1262,6 +1377,21 @@ h2 {
   gap: 10px;
   padding: 16px 24px;
   border-top: 1px solid var(--border);
+}
+.error-banner {
+  background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent);
+  color: oklch(50% 0.16 25);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  margin-bottom: 16px;
+  border: 1px solid color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent);
+}
+.help-text {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
 }
 
 @media (prefers-reduced-motion: reduce) {

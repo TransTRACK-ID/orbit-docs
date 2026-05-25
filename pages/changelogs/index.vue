@@ -23,6 +23,8 @@ const {
 const { apps, fetchApps } = useApps();
 
 // Search, filter & sort
+const route = useRoute();
+
 const searchQuery = ref("");
 const statusFilter = ref("");
 const appFilter = ref("");
@@ -31,9 +33,13 @@ const sortOrder = ref<"asc" | "desc">("desc");
 const showFilterMenu = ref(false);
 const showSortMenu = ref(false);
 
-onMounted(() => {
+onMounted(async () => {
+  await fetchApps();
+  const appQuery = route.query.app as string;
+  if (appQuery && apps.value.find((a) => a.id === appQuery)) {
+    appFilter.value = appQuery;
+  }
   fetchChangelogs();
-  fetchApps();
   document.addEventListener("click", onDocClick);
 });
 onBeforeUnmount(() => {
