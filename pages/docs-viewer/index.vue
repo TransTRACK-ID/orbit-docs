@@ -2,9 +2,7 @@
 import { usePageStore } from "~/store/page";
 
 definePageMeta({
-  auth: {
-    required: true,
-  },
+  auth: true,
 });
 
 const $page = usePageStore();
@@ -138,7 +136,7 @@ function timeAgo(dateStr: string | null) {
 }
 
 .search {
-  width: 280px;
+  width: 320px;
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -270,6 +268,12 @@ function timeAgo(dateStr: string | null) {
 }
 .btn-primary:hover {
   background: color-mix(in oklch, var(--accent) 88%, black);
+}
+
+@media (max-width: 768px) {
+  .search {
+    width: 180px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

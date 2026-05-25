@@ -3,9 +3,7 @@ import { usePageStore } from "~/store/page";
 import type { AppItem } from "~/composables/useApps";
 
 definePageMeta({
-  auth: {
-    required: true,
-  },
+  auth: true,
 });
 
 const $page = usePageStore();

@@ -49,11 +49,28 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    if (targetLevel >= currentLevel) {
+    if (targetLevel > currentLevel) {
       throw createError({
         statusCode: 403,
         statusMessage: "Forbidden",
-        message: "You cannot remove a team member with equal or higher role.",
+        message: "You cannot remove a team member with a higher role.",
+      });
+    }
+  }
+
+  // Prevent removing the last admin
+  if (targetMember.role === "admin") {
+    const adminCount = await db
+      .select()
+      .from(teamMembers)
+      .where(eq(teamMembers.role, "admin"))
+      .then((rows) => rows.length);
+
+    if (adminCount <= 1) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: "Forbidden",
+        message: "Cannot remove the last admin. Promote another member first.",
       });
     }
   }

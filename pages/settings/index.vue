@@ -9,7 +9,7 @@ import type {
 } from "~/types/settings";
 
 definePageMeta({
-  auth: { required: true },
+  auth: true,
 });
 
 const $page = usePageStore();

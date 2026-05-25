@@ -2,9 +2,7 @@
 import { usePageStore } from "~/store/page";
 
 definePageMeta({
-  auth: {
-    required: true,
-  },
+  auth: true,
 });
 
 const $page = usePageStore();

@@ -3,7 +3,7 @@ import { usePageStore } from "~/store/page";
 import type { ReleaseItem, ReleaseFeature, ReleaseMedia, ReleaseCategories } from "~/types";
 
 definePageMeta({
-  auth: { required: true },
+  auth: true,
 });
 
 const $page = usePageStore();
