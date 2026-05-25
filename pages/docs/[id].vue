@@ -247,7 +247,7 @@ async function loadDoc() {
 }
 
 onMounted(() => {
-  $page.setTitle("Technical Editor");
+  $page.setTitle("Doc Editor");
   loadDoc();
   document.addEventListener("keydown", onKeydown);
   document.addEventListener("keydown", onTagRemoveKeydown);
@@ -280,7 +280,7 @@ const lastModified = computed(() => {
           type="button"
           class="btn btn-ghost back-btn"
           title="Back to docs"
-          @click="router.push('/docs-editor')"
+          @click="router.push('/docs')"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
@@ -290,6 +290,14 @@ const lastModified = computed(() => {
         <span class="pill pill-blue">{{ appName }}</span>
       </div>
       <div class="flex-gap-sm">
+        <NuxtLink
+          v-if="editorStatus === 'published'"
+          :to="`/embed-docs/view?id=${docId}`"
+          target="_blank"
+          class="btn btn-ghost"
+        >
+          Preview Embed
+        </NuxtLink>
         <button
           type="button"
           class="btn btn-ghost"
@@ -336,7 +344,7 @@ const lastModified = computed(() => {
       <div v-else-if="docNotFound" class="not-found">
         <h2>Doc not found</h2>
         <p>The document you are looking for does not exist or has been deleted.</p>
-        <button type="button" class="btn btn-primary" @click="router.push('/docs-editor')">
+        <button type="button" class="btn btn-primary" @click="router.push('/docs')">
           Back to Docs
         </button>
       </div>

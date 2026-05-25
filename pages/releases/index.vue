@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
+import { renderMarkdown } from "~/composables/useMarkdown";
 import type { ReleaseItem } from "~/composables/useReleases";
 
 definePageMeta({
@@ -33,6 +34,11 @@ watch([searchQuery, appFilter], async () => {
 const filteredReleases = computed(() => {
   return releases.value;
 });
+
+const appFilterOptions = computed(() => [
+  { id: "", label: "All apps" },
+  ...apps.value.map((a) => ({ id: a.name, label: a.name })),
+]);
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "—";
@@ -99,13 +105,13 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
           placeholder="Search releases…"
           aria-label="Search releases"
         />
-        <select v-model="appFilter" class="select" aria-label="Filter by app">
-          <option value="">All apps</option>
-          <option v-for="app in apps" :key="app.id" :value="app.name">
-            {{ app.name }}
-          </option>
-        </select>
-        <NuxtLink to="/versions" class="btn btn-primary">New Release</NuxtLink>
+        <GeneralSearchableDropdown
+          v-model="appFilter"
+          :options="appFilterOptions"
+          placeholder="Filter by app…"
+          search-placeholder="Search apps…"
+        />
+
       </div>
     </header>
 
@@ -133,6 +139,9 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             <NuxtLink :to="`/releases/${r.id}`" class="release-title">
               {{ r.appName }} {{ r.version }}
             </NuxtLink>
+            <span class="pill" :class="r.type === 'article' ? 'pill-purple' : 'pill-muted'">
+              {{ r.type === 'article' ? 'Article' : 'Normal' }}
+            </span>
             <span v-if="mediaCount(r) > 0" class="pill pill-muted">{{ mediaCount(r) }} media</span>
             <span class="release-status">
               <span class="status-dot" :class="{
@@ -144,7 +153,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               {{ statusLabel[r.versionStatus] || r.versionStatus }}
             </span>
           </div>
-          <p class="release-summary">{{ r.summary || r.heroTitle || 'No summary provided.' }}</p>
+          <div class="release-summary" v-html="renderMarkdown(r.summary || r.heroTitle || '')" />
           <div class="release-meta-row">
             <span class="release-app">{{ r.appName }}</span>
             <span
@@ -178,12 +187,22 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               {{ countCategories(r.categories).security }} security
             </span>
             <NuxtLink
-              :to="`/changelogs/${r.versionId}?versionId=${r.versionId}`"
+              v-if="r.type === 'normal'"
+              :to="`/changelogs?versionId=${r.versionId}`"
               class="btn btn-ghost btn-sm"
               style="margin-left: auto;"
               @click.stop
             >
               Edit changelog
+            </NuxtLink>
+            <NuxtLink
+              v-else
+              :to="`/releases/${r.id}?edit=1`"
+              class="btn btn-ghost btn-sm"
+              style="margin-left: auto;"
+              @click.stop
+            >
+              Edit release
             </NuxtLink>
           </div>
         </div>
@@ -358,6 +377,57 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   color: var(--muted);
   line-height: 1.5;
   margin: 4px 0 10px;
+  max-height: 120px;
+  overflow: hidden;
+}
+.release-summary:empty::before {
+  content: "No summary provided.";
+}
+.release-summary > * {
+  margin-bottom: 8px;
+}
+.release-summary > *:last-child {
+  margin-bottom: 0;
+}
+.release-summary h2,
+.release-summary h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 8px 0 4px;
+}
+.release-summary img {
+  max-width: 100%;
+  max-height: 80px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+.release-summary ul {
+  padding-left: 18px;
+  margin: 4px 0;
+}
+.release-summary li {
+  margin-bottom: 2px;
+}
+.release-summary blockquote {
+  border-left: 2px solid var(--accent);
+  padding-left: 10px;
+  margin: 4px 0;
+  font-style: italic;
+}
+.release-summary pre {
+  background: var(--bg);
+  padding: 8px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+.release-summary code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  background: var(--bg);
+  padding: 1px 4px;
+  border-radius: 3px;
 }
 
 .release-meta-row {

@@ -38,8 +38,26 @@ export default defineEventHandler(async (event) => {
     summary,
     features,
     categories,
+    type,
     published,
   } = body || {};
+
+  // Normal releases auto-sync summary/categories from the changelog.
+  // Only article releases can be edited directly for rich content.
+  if (existing.type === "normal") {
+    const disallowed = [
+      { field: heroTitle, name: "heroTitle" },
+      { field: summary, name: "summary" },
+      { field: features, name: "features" },
+    ].filter((d) => d.field !== undefined);
+    if (disallowed.length > 0) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: "Forbidden",
+        message: `Normal releases cannot be edited directly for ${disallowed.map((d) => d.name).join(", ")}. Edit the changelog instead.`,
+      });
+    }
+  }
 
   const updateData: Partial<typeof releases.$inferInsert> = {
     updatedAt: new Date(),
@@ -49,6 +67,7 @@ export default defineEventHandler(async (event) => {
   if (summary !== undefined) updateData.summary = summary || null;
   if (features !== undefined) updateData.features = features || null;
   if (categories !== undefined) updateData.categories = categories || null;
+  if (type !== undefined) updateData.type = type === "article" ? "article" : "normal";
   if (published !== undefined) updateData.published = published === true;
 
   const updated = await db

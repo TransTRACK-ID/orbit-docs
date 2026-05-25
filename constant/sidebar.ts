@@ -4,8 +4,6 @@ import {
   IconsReleases,
   IconsChangelogs,
   IconsDocEditor,
-  IconsPublishedDocs,
-  IconsEmbedDocs,
   IconsSettings,
 } from "#components";
 import type { ISidebar } from "@/types/sidebar";
@@ -41,24 +39,10 @@ export const sidebarMenu: ISidebar[] = [
     active: false,
   },
   {
-    id: "menu__doc_editor",
-    label: "Doc Editor",
-    route: "/docs-editor",
+    id: "menu__docs",
+    label: "Docs",
+    route: "/docs",
     icon: markRaw(IconsDocEditor),
-    active: false,
-  },
-  {
-    id: "menu__published_docs",
-    label: "Published Docs",
-    route: "/docs-viewer",
-    icon: markRaw(IconsPublishedDocs),
-    active: false,
-  },
-  {
-    id: "menu__embed_docs",
-    label: "Embed Docs",
-    route: "/embed-docs",
-    icon: markRaw(IconsEmbedDocs),
     active: false,
   },
   {

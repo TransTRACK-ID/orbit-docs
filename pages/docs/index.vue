@@ -8,11 +8,16 @@ definePageMeta({
 
 const $page = usePageStore();
 onBeforeMount(() => {
-  $page.setTitle("Doc Editor");
+  $page.setTitle("Docs");
 });
 
 const { docs, isLoading, search, fetchDocs, createDoc, deleteDoc } = useDocs();
 const { apps, fetchApps } = useApps();
+
+const appOptions = computed(() => [
+  { id: "", label: "Unbound (latest)" },
+  ...apps.value.map((a) => ({ id: a.id, label: a.name })),
+]);
 
 onMounted(() => {
   fetchDocs();
@@ -62,7 +67,7 @@ async function submitCreate() {
       author: createForm.author || undefined,
     });
     closeCreateModal();
-    await navigateTo(`/docs-editor/${doc.id}`);
+    await navigateTo(`/docs/${doc.id}`);
   } catch {
     // Error toast shown by createDoc composable
   }
@@ -124,7 +129,7 @@ const statusLabel: Record<string, string> = {
 <template>
   <div class="docs-page">
     <header class="topbar">
-      <h1>Doc Editor</h1>
+      <h1>Docs</h1>
       <div style="display:flex;align-items:center;gap:16px;">
         <input
           v-model="search"
@@ -181,7 +186,15 @@ const statusLabel: Record<string, string> = {
             <button type="button" class="btn btn-ghost btn-sm" @click="confirmDelete(doc)">
               Delete
             </button>
-            <NuxtLink :to="`/docs-editor/${doc.id}`" class="btn btn-ghost btn-sm">
+            <NuxtLink
+              v-if="doc.status === 'published'"
+              :to="`/embed-docs/view?id=${doc.id}`"
+              target="_blank"
+              class="btn btn-ghost btn-sm"
+            >
+              Preview Embed
+            </NuxtLink>
+            <NuxtLink :to="`/docs/${doc.id}`" class="btn btn-ghost btn-sm">
               Edit &rarr;
             </NuxtLink>
           </div>
@@ -217,16 +230,17 @@ const statusLabel: Record<string, string> = {
             </div>
             <div class="form-group">
               <label for="docApp">App</label>
-              <select id="docApp" v-model="createForm.appId">
-                <option value="">Unbound (latest)</option>
-                <option v-for="app in apps" :key="app.id" :value="app.id">
-                  {{ app.name }}
-                </option>
-              </select>
+              <GeneralSearchableDropdown
+                id="docApp"
+                v-model="createForm.appId"
+                :options="appOptions"
+                placeholder="Select app…"
+                search-placeholder="Search apps…"
+              />
             </div>
             <div class="form-group">
               <label for="docAuthor">Author</label>
-              <input id="docAuthor" v-model="createForm.author" type="text" placeholder="Your name" />
+              <AppOwnerSelect id="docAuthor" v-model="createForm.author" />
             </div>
           </div>
           <div class="modal-foot">

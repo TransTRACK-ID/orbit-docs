@@ -16,19 +16,27 @@ const { apps, fetchApps } = useApps();
 const { versions, isLoading, isCreating, isUpdating, isDeleting, fetchVersions, createVersion, updateVersion, deleteVersion } = useVersions();
 
 const isArchiving = ref(false);
-const { createRelease } = useReleases();
 
 const route = useRoute();
 const router = useRouter();
 
-// App selector
-const selectedAppId = ref<string>("");
+// App selector: shared across pages via store + localStorage
+$page.hydrateSelection();
+const selectedAppId = computed({
+  get: () => $page.selectedAppId,
+  set: (val: string) => $page.setSelectedAppId(val)
+});
 
 onMounted(async () => {
   await fetchApps();
   const appQuery = route.query.app as string;
+  const persistedAppId = $page.selectedAppId;
+
+  // Restore selection: URL param > persisted store > first app
   if (appQuery && apps.value.find((a) => a.id === appQuery)) {
     selectedAppId.value = appQuery;
+  } else if (persistedAppId && apps.value.find((a) => a.id === persistedAppId)) {
+    selectedAppId.value = persistedAppId;
   } else if (apps.value.length > 0) {
     selectedAppId.value = apps.value[0].id;
   }
@@ -46,6 +54,10 @@ watch(selectedAppId, async (id) => {
 });
 
 const selectedApp = computed(() => apps.value.find((a) => a.id === selectedAppId.value));
+
+const appOptions = computed(() =>
+  apps.value.map((a) => ({ id: a.id, label: a.name }))
+);
 
 // Search
 const searchQuery = ref("");
@@ -265,69 +277,6 @@ async function doDeleteVersion() {
   versionToDelete.value = null;
 }
 
-// Create Release Modal
-const showCreateReleaseModal = ref(false);
-const versionForRelease = ref<AppVersion | null>(null);
-const releaseForm = reactive({
-  heroTitle: "",
-  summary: "",
-  featuresJson: "[]",
-  categoriesJson: "{}",
-  published: false,
-});
-const releaseFormError = ref("");
-const isCreatingRelease = ref(false);
-
-function openCreateReleaseModal(version: AppVersion) {
-  versionForRelease.value = version;
-  releaseForm.heroTitle = version.releaseNotes ? version.releaseNotes.split("\n")[0].slice(0, 120) : "";
-  releaseForm.summary = version.releaseNotes || "";
-  releaseForm.featuresJson = "[]";
-  releaseForm.categoriesJson = "{}";
-  releaseForm.published = false;
-  releaseFormError.value = "";
-  showCreateReleaseModal.value = true;
-}
-
-function closeCreateReleaseModal() {
-  showCreateReleaseModal.value = false;
-  versionForRelease.value = null;
-  releaseFormError.value = "";
-}
-
-async function submitCreateRelease() {
-  if (!versionForRelease.value || !selectedAppId.value || isCreatingRelease.value) return;
-  releaseFormError.value = "";
-
-  let features: any[] | undefined = undefined;
-  let categories: Record<string, string[]> | undefined = undefined;
-
-  try {
-    features = releaseForm.featuresJson.trim() ? JSON.parse(releaseForm.featuresJson) : undefined;
-    categories = releaseForm.categoriesJson.trim() ? JSON.parse(releaseForm.categoriesJson) : undefined;
-  } catch (e) {
-    releaseFormError.value = "Invalid JSON in features or categories. Please check syntax.";
-    return;
-  }
-
-  isCreatingRelease.value = true;
-  try {
-    await createRelease({
-      appId: selectedAppId.value,
-      versionId: versionForRelease.value.id,
-      heroTitle: releaseForm.heroTitle,
-      summary: releaseForm.summary,
-      features,
-      categories,
-      published: releaseForm.published,
-    });
-    closeCreateReleaseModal();
-    await fetchVersions(selectedAppId.value);
-  } finally {
-    isCreatingRelease.value = false;
-  }
-}
-
 // Helpers
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return "—";
@@ -368,7 +317,6 @@ function onKeydown(e: KeyboardEvent) {
     closeCompare();
     closeNewVersionModal();
     closeEditVersionModal();
-    closeCreateReleaseModal();
     versionToDelete.value = null;
   }
 }
@@ -389,11 +337,12 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
           placeholder="Search versions…"
           aria-label="Search versions"
         />
-        <select v-model="selectedAppId" class="select">
-          <option v-for="app in apps" :key="app.id" :value="app.id">
-            {{ app.name }}
-          </option>
-        </select>
+        <GeneralSearchableDropdown
+          v-model="selectedAppId"
+          :options="appOptions"
+          placeholder="Select app…"
+          search-placeholder="Search apps…"
+        />
         <button type="button" class="btn btn-primary" @click="openNewVersionModal">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M12 5v14M5 12h14" />
@@ -460,6 +409,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             <th>Status</th>
             <th>CI</th>
             <th>Release</th>
+            <th>Changelog</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -492,15 +442,25 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               </span>
             </td>
             <td>
-              <NuxtLink v-if="v.releaseId && v.releasePublished" :to="`/releases/${v.releaseId}`" class="btn btn-ghost btn-sm" @click.stop>
-                View
+              <div v-if="v.releases && v.releases.length > 0" class="release-stack">
+                <NuxtLink
+                  v-for="r in v.releases"
+                  :key="r.id"
+                  :to="`/releases/${r.id}`"
+                  class="release-pill-link"
+                  @click.stop
+                >
+                  <span class="pill" :class="r.type === 'article' ? 'pill-purple' : 'pill-muted'">
+                    {{ r.type === 'article' ? 'Article' : 'Normal' }}
+                  </span>
+                </NuxtLink>
+              </div>
+              <span v-else class="text-muted-sm">—</span>
+            </td>
+            <td>
+              <NuxtLink :to="`/changelogs?versionId=${v.id}`" class="btn btn-ghost btn-sm" @click.stop>
+                Edit
               </NuxtLink>
-              <NuxtLink v-else-if="v.releaseId" :to="`/releases/${v.releaseId}`" class="btn btn-ghost btn-sm" @click.stop>
-                Draft
-              </NuxtLink>
-              <button v-else type="button" class="btn btn-primary btn-sm" @click.stop="openCreateReleaseModal(v)">
-                Create Release
-              </button>
             </td>
             <td @click.stop>
               <div class="flex-gap-sm">
@@ -514,7 +474,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             </td>
           </tr>
           <tr v-if="filteredVersions.length === 0 && !isLoading">
-            <td colspan="8" class="empty-cell">No versions found.</td>
+            <td colspan="9" class="empty-cell">No versions found.</td>
           </tr>
         </tbody>
       </table>
@@ -780,52 +740,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
       </div>
     </div>
 
-    <!-- Create Release Modal -->
-    <div class="modal-overlay" :class="{ open: showCreateReleaseModal }" @click.self="closeCreateReleaseModal">
-      <div class="modal-panel">
-        <div class="modal-header">
-          <h2>Create Release · v{{ versionForRelease?.version }}</h2>
-          <button type="button" class="modal-close" aria-label="Close modal" @click="closeCreateReleaseModal">✕</button>
-        </div>
-        <div class="modal-body">
-          <div v-if="releaseFormError" class="error-banner">{{ releaseFormError }}</div>
-          <div class="form-group">
-            <label for="releaseHeroTitle">Hero Title</label>
-            <input id="releaseHeroTitle" v-model="releaseForm.heroTitle" type="text" placeholder="e.g. Request tracing and deep health checks" />
-          </div>
-          <div class="form-group">
-            <label for="releaseSummary">Summary</label>
-            <textarea id="releaseSummary" v-model="releaseForm.summary" rows="3" placeholder="Short summary of this release…" />
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="flex-gap-sm" style="cursor:pointer;">
-                <input v-model="releaseForm.published" type="checkbox" />
-                Published
-              </label>
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="releaseFeatures">Features JSON</label>
-            <textarea id="releaseFeatures" v-model="releaseForm.featuresJson" rows="6" placeholder='[{ &quot;id&quot;: &quot;...&quot;, &quot;heading&quot;: &quot;...&quot;, &quot;description&quot;: &quot;...&quot;, &quot;media&quot;: [...] }]' />
-            <span class="help-text">Array of feature objects. Use JSON syntax.</span>
-          </div>
-          <div class="form-group">
-            <label for="releaseCategories">Categories JSON</label>
-            <textarea id="releaseCategories" v-model="releaseForm.categoriesJson" rows="4" placeholder='{ &quot;added&quot;: [...], &quot;fixed&quot;: [...], ... }' />
-            <span class="help-text">Object with keys: added, fixed, changed, deprecated, security.</span>
-          </div>
-        </div>
-        <div class="form-footer">
-          <button type="button" class="btn btn-secondary" @click="closeCreateReleaseModal">Cancel</button>
-          <button type="button" class="btn btn-primary" :disabled="isCreatingRelease" @click="submitCreateRelease">
-            <span v-if="isCreatingRelease">Creating…</span>
-            <span v-else>Create Release</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
     <!-- Delete Confirmation Modal -->
     <div class="modal-overlay" :class="{ open: !!versionToDelete }" @click.self="versionToDelete = null">
       <div class="modal-panel" style="max-width: 420px;">
@@ -1034,6 +948,28 @@ h2 {
 .pill-red {
   background: color-mix(in oklch, oklch(55% 0.2 25) 12%, transparent);
   color: oklch(50% 0.16 25);
+}
+.pill-purple {
+  background: color-mix(in oklch, oklch(60% 0.18 300) 12%, transparent);
+  color: oklch(55% 0.14 300);
+}
+
+.release-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.release-pill-link {
+  text-decoration: none;
+  width: fit-content;
+  display: block;
+}
+.release-pill-link .pill {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.release-pill-link:hover .pill {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px oklch(0% 0 0 / 0.08);
 }
 
 .ds-table {

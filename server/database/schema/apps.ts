@@ -84,6 +84,24 @@ export const docsRelations = relations(docs, ({ one }) => ({
   }),
 }));
 
+export const versionHistory = pgTable("version_history", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  versionId: text("version_id")
+    .notNull()
+    .references(() => appVersions.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  action: text("action").notNull().default("save"),
+  actor: text("actor"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const versionHistoryRelations = relations(versionHistory, ({ one }) => ({
+  version: one(appVersions, {
+    fields: [versionHistory.versionId],
+    references: [appVersions.id],
+  }),
+}));
+
 export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   app: one(apps, {
     fields: [activityLogs.appId],
@@ -91,37 +109,4 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   }),
 }));
 
-export interface EmbedNavItem {
-  type: "section" | "indent";
-  text: string;
-  slug?: string;
-  active?: boolean;
-}
 
-export const docEmbeds = pgTable("doc_embeds", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  appId: text("app_id").references(() => apps.id, { onDelete: "cascade" }),
-  versionId: text("version_id").references(() => appVersions.id, { onDelete: "set null" }),
-  title: text("title").notNull(),
-  slug: text("slug").notNull().unique(),
-  subtitle: text("subtitle"),
-  navItems: jsonb("nav_items").$type<EmbedNavItem[]>().default([]),
-  content: text("content").default(""),
-  status: text("status", { enum: ["draft", "published", "archived"] })
-    .notNull()
-    .default("draft"),
-  author: text("author"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
-
-export const docEmbedsRelations = relations(docEmbeds, ({ one }) => ({
-  app: one(apps, {
-    fields: [docEmbeds.appId],
-    references: [apps.id],
-  }),
-  version: one(appVersions, {
-    fields: [docEmbeds.versionId],
-    references: [appVersions.id],
-  }),
-}));

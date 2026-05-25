@@ -16,8 +16,11 @@ export default defineEventHandler(async (event) => {
     summary,
     features,
     categories,
+    type,
     published,
   } = body || {};
+
+  const releaseType = type === "article" ? "article" : "normal";
 
   if (!appId || typeof appId !== "string") {
     throw createError({
@@ -75,19 +78,20 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Check for duplicate release on this version
+  // Check for duplicate release of the same type on this version
   const existing = await db
-    .select({ id: releases.id })
+    .select({ id: releases.id, type: releases.type })
     .from(releases)
     .where(eq(releases.versionId, versionId))
     .limit(1)
     .then((rows) => rows[0]);
 
-  if (existing) {
+  if (existing && existing.type === releaseType) {
     throw createError({
       statusCode: 409,
       statusMessage: "Conflict",
-      message: "A release already exists for this version",
+      message: `A ${releaseType} release already exists for this version`,
+      data: { existingReleaseId: existing.id, existingType: existing.type },
     });
   }
 
@@ -102,6 +106,7 @@ export default defineEventHandler(async (event) => {
       summary: summary || null,
       features: features || null,
       categories: categories || null,
+      type: releaseType,
       published: published === true,
     })
     .returning()

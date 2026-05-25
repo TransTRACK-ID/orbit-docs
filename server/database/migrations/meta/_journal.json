@@ -29,6 +29,41 @@
       "when": 1779682495265,
       "tag": "0003_uneven_landau",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779695237589,
+      "tag": "0004_parched_bastion",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779695608661,
+      "tag": "0005_long_micromacro",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779696574938,
+      "tag": "0006_add_release_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779698574938,
+      "tag": "0007_version_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779698298967,
+      "tag": "0008_military_darkstar",
+      "breakpoints": true
     }
   ]
 }

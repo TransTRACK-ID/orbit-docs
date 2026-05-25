@@ -24,6 +24,8 @@ export interface ReleaseCategories {
   security?: string[];
 }
 
+export type ReleaseType = "normal" | "article";
+
 export interface ReleaseItem {
   id: string;
   appId: string;
@@ -32,6 +34,7 @@ export interface ReleaseItem {
   summary: string | null;
   features: ReleaseFeature[] | null;
   categories: ReleaseCategories | null;
+  type: ReleaseType;
   published: boolean;
   createdAt: string | null;
   updatedAt: string | null;
@@ -49,6 +52,7 @@ export interface CreateReleasePayload {
   summary?: string;
   features?: ReleaseFeature[];
   categories?: ReleaseCategories;
+  type?: ReleaseType;
   published?: boolean;
 }
 

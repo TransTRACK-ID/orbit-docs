@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
       summary: releases.summary,
       features: releases.features,
       categories: releases.categories,
+      type: releases.type,
       published: releases.published,
       createdAt: releases.createdAt,
       updatedAt: releases.updatedAt,

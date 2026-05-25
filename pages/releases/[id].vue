@@ -21,6 +21,10 @@ const isFetchingList = ref(false);
 onMounted(async () => {
   if (releaseId.value) {
     await fetchRelease(releaseId.value);
+    // Auto-enter edit mode when coming from list "Edit release" link
+    if (route.query.edit === "1" && release.value?.type === "article") {
+      enterEditMode();
+    }
     isFetchingList.value = true;
     try {
       const data = await $fetch<{ data: ReleaseItem[] }>("/api/releases", {
@@ -191,58 +195,339 @@ function isMediaPlaceholder(m: ReleaseMedia) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Edit modal
+// Inline edit mode (block-based rich editor)
 // ═══════════════════════════════════════════════════════════════
-const showEditModal = ref(false);
+const isEditing = ref(false);
 const editError = ref("");
-const editForm = reactive({
+
+const editDraft = reactive<{
+  heroTitle: string;
+  published: boolean;
+}>({
   heroTitle: "",
-  summary: "",
   published: false,
-  featuresJson: "",
-  categoriesJson: "",
 });
 
-function openEditModal() {
-  if (!release.value) return;
-  editForm.heroTitle = release.value.heroTitle || "";
-  editForm.summary = release.value.summary || "";
-  editForm.published = release.value.published;
-  editForm.featuresJson = release.value.features ? JSON.stringify(release.value.features, null, 2) : "[]";
-  editForm.categoriesJson = release.value.categories ? JSON.stringify(release.value.categories, null, 2) : "{}";
-  editError.value = "";
-  showEditModal.value = true;
+interface ArticleBlock {
+  id: string;
+  type: 'heading' | 'paragraph' | 'image' | 'video' | 'list' | 'code' | 'quote' | 'divider';
+  content: string;
+  meta?: {
+    level?: number;
+    language?: string;
+    src?: string;
+    alt?: string;
+    caption?: string;
+    items?: string[];
+  };
 }
 
-function closeEditModal() {
-  showEditModal.value = false;
-  editError.value = "";
-}
+const blocks = ref<ArticleBlock[]>([]);
+const activeBlockId = ref<string | null>(null);
+const showAddMenuAt = ref<number | null>(null);
 
-async function submitEdit() {
-  if (!release.value) return;
-  editError.value = "";
+function parseMarkdownToBlocks(md: string): ArticleBlock[] {
+  if (!md.trim()) return [];
+  const lines = md.split('\n');
+  const result: ArticleBlock[] = [];
+  let i = 0;
 
-  let features: ReleaseFeature[] | undefined = undefined;
-  let categories: ReleaseCategories | undefined = undefined;
-
-  try {
-    features = editForm.featuresJson.trim() ? JSON.parse(editForm.featuresJson) : undefined;
-    categories = editForm.categoriesJson.trim() ? JSON.parse(editForm.categoriesJson) : undefined;
-  } catch (e) {
-    editError.value = "Invalid JSON in features or categories. Please check syntax.";
-    return;
+  function peek(): string | undefined {
+    return lines[i];
   }
 
-  await updateRelease(release.value.id, {
-    heroTitle: editForm.heroTitle,
-    summary: editForm.summary,
-    published: editForm.published,
-    features,
-    categories,
-  });
-  closeEditModal();
+  function consume(): string | undefined {
+    return lines[i++];
+  }
+
+  while (i < lines.length) {
+    const line = peek();
+    if (line === undefined) break;
+
+    // Empty line
+    if (!line.trim()) {
+      i++;
+      continue;
+    }
+
+    // Divider
+    if (/^(---|___|\*\*\*)$/.test(line.trim())) {
+      result.push({ id: crypto.randomUUID(), type: 'divider', content: '' });
+      i++;
+      continue;
+    }
+
+    // Heading
+    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1]?.length || 2;
+      const content = headingMatch[2] || '';
+      result.push({
+        id: crypto.randomUUID(),
+        type: 'heading',
+        content,
+        meta: { level },
+      });
+      i++;
+      continue;
+    }
+
+    // Code block
+    if (line.startsWith('```')) {
+      const lang = line.slice(3).trim();
+      const codeLines: string[] = [];
+      i++;
+      let codeLine = peek();
+      while (codeLine !== undefined && !codeLine.startsWith('```')) {
+        codeLines.push(codeLine);
+        i++;
+        codeLine = peek();
+      }
+      if (codeLine?.startsWith('```')) i++; // skip closing ```
+      result.push({
+        id: crypto.randomUUID(),
+        type: 'code',
+        content: codeLines.join('\n'),
+        meta: { language: lang },
+      });
+      continue;
+    }
+
+    // Image
+    const imageMatch = line.match(/^!\[(.*?)\]\((.*?)\)$/);
+    if (imageMatch) {
+      result.push({
+        id: crypto.randomUUID(),
+        type: 'image',
+        content: '',
+        meta: { alt: imageMatch[1], src: imageMatch[2] },
+      });
+      i++;
+      continue;
+    }
+
+    // Video (HTML tag)
+    const videoMatch = line.match(/<video[^>]*src="([^"]*)"[^>]*>/);
+    if (videoMatch) {
+      result.push({
+        id: crypto.randomUUID(),
+        type: 'video',
+        content: '',
+        meta: { src: videoMatch[1] },
+      });
+      // Skip closing tag if present
+      const nextLine = lines[i + 1];
+      if (nextLine?.includes('</video>')) i++;
+      i++;
+      continue;
+    }
+
+    // Blockquote
+    if (line.startsWith('> ')) {
+      const quoteLines: string[] = [];
+      let quoteLine = peek();
+      while (quoteLine !== undefined && quoteLine.startsWith('> ')) {
+        quoteLines.push(quoteLine.slice(2));
+        i++;
+        quoteLine = peek();
+      }
+      result.push({
+        id: crypto.randomUUID(),
+        type: 'quote',
+        content: quoteLines.join('\n'),
+      });
+      continue;
+    }
+
+    // List
+    const listMatch = line.match(/^(\s*)([-*]|\d+\.)\s+(.+)$/);
+    if (listMatch) {
+      const items: string[] = [];
+      let listLine = peek();
+      while (listLine !== undefined && /^(\s*)([-*]|\d+\.)\s+(.+)$/.test(listLine)) {
+        items.push(listLine.replace(/^(\s*)([-*]|\d+\.)\s+/, ''));
+        i++;
+        listLine = peek();
+      }
+      result.push({
+        id: crypto.randomUUID(),
+        type: 'list',
+        content: '',
+        meta: { items },
+      });
+      continue;
+    }
+
+    // Paragraph (collect until empty line or next block)
+    const paraLines: string[] = [line];
+    i++;
+    let paraLine = peek();
+    while (paraLine !== undefined && paraLine.trim() && !paraLine.match(/^(#{1,3}|>|[-*]|\d+\.|```|!\[|<video|---)/)) {
+      paraLines.push(paraLine);
+      i++;
+      paraLine = peek();
+    }
+    result.push({
+      id: crypto.randomUUID(),
+      type: 'paragraph',
+      content: paraLines.join('\n'),
+    });
+  }
+
+  return result;
 }
+
+function blocksToMarkdown(blocks: ArticleBlock[]): string {
+  return blocks.map((b) => {
+    switch (b.type) {
+      case 'heading':
+        return `${'#'.repeat(b.meta?.level || 2)} ${b.content}`;
+      case 'paragraph':
+        return b.content;
+      case 'image':
+        return `![${b.meta?.alt || ''}](${b.meta?.src || ''})`;
+      case 'video':
+        return `<video src="${b.meta?.src || ''}" controls></video>`;
+      case 'list':
+        return (b.meta?.items || []).map((item) => `- ${item}`).join('\n');
+      case 'code':
+        return `\`\`\`${b.meta?.language || ''}\n${b.content}\n\`\`\``;
+      case 'quote':
+        return b.content.split('\n').map((l) => `> ${l}`).join('\n');
+      case 'divider':
+        return '---';
+      default:
+        return b.content;
+    }
+  }).join('\n\n');
+}
+
+function enterEditMode() {
+  if (!release.value) return;
+  editDraft.heroTitle = release.value.heroTitle || '';
+  editDraft.published = release.value.published;
+  blocks.value = parseMarkdownToBlocks(release.value.summary || '');
+  editError.value = '';
+  isEditing.value = true;
+}
+
+function cancelEdit() {
+  isEditing.value = false;
+  editError.value = '';
+  blocks.value = [];
+  showAddMenuAt.value = null;
+}
+
+async function saveEdit() {
+  if (!release.value) return;
+  editError.value = '';
+  const markdown = blocksToMarkdown(blocks.value);
+
+  await updateRelease(release.value.id, {
+    heroTitle: editDraft.heroTitle,
+    summary: markdown,
+    published: editDraft.published,
+  });
+  isEditing.value = false;
+  blocks.value = [];
+  showAddMenuAt.value = null;
+}
+
+// Block operations
+function addBlock(type: ArticleBlock['type'], afterIndex: number) {
+  const baseBlock: ArticleBlock = {
+    id: crypto.randomUUID(),
+    type,
+    content: '',
+  };
+
+  switch (type) {
+    case 'heading':
+      baseBlock.content = 'New heading';
+      baseBlock.meta = { level: 2 };
+      break;
+    case 'code':
+      baseBlock.meta = { language: '' };
+      break;
+    case 'image':
+      baseBlock.meta = { src: '', alt: '' };
+      break;
+    case 'video':
+      baseBlock.meta = { src: '' };
+      break;
+    case 'list':
+      baseBlock.meta = { items: [''] };
+      break;
+    case 'paragraph':
+    case 'quote':
+    case 'divider':
+      break;
+  }
+
+  blocks.value.splice(afterIndex + 1, 0, baseBlock);
+  showAddMenuAt.value = null;
+  activeBlockId.value = baseBlock.id;
+}
+
+function deleteBlock(index: number) {
+  blocks.value.splice(index, 1);
+}
+
+function moveBlockUp(index: number) {
+  if (index <= 0) return;
+  const current = blocks.value[index];
+  const prev = blocks.value[index - 1];
+  if (!current || !prev) return;
+  blocks.value[index] = prev;
+  blocks.value[index - 1] = current;
+}
+
+function moveBlockDown(index: number) {
+  if (index >= blocks.value.length - 1) return;
+  const current = blocks.value[index];
+  const next = blocks.value[index + 1];
+  if (!current || !next) return;
+  blocks.value[index] = next;
+  blocks.value[index + 1] = current;
+}
+
+function duplicateBlock(index: number) {
+  const original = blocks.value[index];
+  if (!original) return;
+  const clone: ArticleBlock = {
+    id: crypto.randomUUID(),
+    type: original.type,
+    content: original.content,
+    meta: original.meta ? JSON.parse(JSON.stringify(original.meta)) : undefined,
+  };
+  blocks.value.splice(index + 1, 0, clone);
+}
+
+// List helpers
+function addListItem(block: ArticleBlock) {
+  if (!block.meta) block.meta = {};
+  if (!block.meta.items) block.meta.items = [];
+  block.meta.items.push('');
+}
+
+function removeListItem(block: ArticleBlock, itemIndex: number) {
+  if (!block.meta?.items) return;
+  block.meta.items.splice(itemIndex, 1);
+  if (block.meta.items.length === 0) {
+    block.meta.items = [''];
+  }
+}
+
+const blockTypeOptions: { type: ArticleBlock['type']; label: string; icon: string }[] = [
+  { type: 'heading', label: 'Heading', icon: 'H' },
+  { type: 'paragraph', label: 'Paragraph', icon: 'P' },
+  { type: 'image', label: 'Image', icon: '📷' },
+  { type: 'video', label: 'Video', icon: '▶' },
+  { type: 'list', label: 'List', icon: '•' },
+  { type: 'code', label: 'Code', icon: '</>' },
+  { type: 'quote', label: 'Quote', icon: '"' },
+  { type: 'divider', label: 'Divider', icon: '—' },
+];
 
 // ═══════════════════════════════════════════════════════════════
 // Delete modal
@@ -269,7 +554,7 @@ async function doDelete() {
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
     showDeleteModal.value = false;
-    showEditModal.value = false;
+    if (isEditing.value) cancelEdit();
   }
 }
 
@@ -299,11 +584,23 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         <div class="flex-gap-md">
           <h1>Release Notes</h1>
           <span class="pill pill-accent">{{ release.appName }} {{ release.version }}</span>
+          <span class="pill" :class="release.type === 'article' ? 'pill-purple' : 'pill-muted'">
+            {{ release.type === 'article' ? 'Article' : 'Normal' }}
+          </span>
         </div>
         <div class="flex-gap-sm">
           <NuxtLink to="/releases" class="btn btn-ghost btn-sm">All releases</NuxtLink>
-          <NuxtLink :to="`/changelogs/${release.versionId}?versionId=${release.versionId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
-          <button type="button" class="btn btn-secondary btn-sm" @click="openEditModal">Edit release</button>
+          <NuxtLink v-if="release.type === 'normal'" :to="`/changelogs?versionId=${release.versionId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
+          <template v-if="release.type === 'article'">
+            <button v-if="!isEditing" type="button" class="btn btn-secondary btn-sm" @click="enterEditMode">Edit release</button>
+            <template v-else>
+              <button type="button" class="btn btn-secondary btn-sm" @click="cancelEdit">Cancel</button>
+              <button type="button" class="btn btn-primary btn-sm" :disabled="isUpdating" @click="saveEdit">
+                <span v-if="isUpdating">Saving…</span>
+                <span v-else>Save</span>
+              </button>
+            </template>
+          </template>
           <button type="button" class="btn btn-danger btn-sm" @click="confirmDelete">Delete</button>
         </div>
       </header>
@@ -311,108 +608,267 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
       <!-- Article layout -->
       <div class="article-layout">
         <article class="article-wrap">
-          <!-- Hero -->
-          <header class="release-hero">
-            <div class="release-hero-date">{{ formatDate(release.releaseDate) }}</div>
-            <h1 class="release-hero-title">{{ release.heroTitle || `${release.appName} ${release.version}` }}</h1>
-            <div class="release-hero-meta">
-              <span class="release-hero-app">{{ release.appName }}</span>
-              <span class="pill pill-accent">{{ release.version }}</span>
-              <NuxtLink :to="`/versions?app=${release.appId}`" class="text-muted-sm" style="text-decoration:underline;text-underline-offset:2px;">
-                View version timeline
-              </NuxtLink>
-            </div>
-          </header>
+          <!-- VIEW MODE -->
+          <template v-if="!isEditing">
+            <!-- Hero -->
+            <header class="release-hero">
+              <div class="release-hero-date">{{ formatDate(release.releaseDate) }}</div>
+              <h1 class="release-hero-title">{{ release.heroTitle || `${release.appName} ${release.version}` }}</h1>
+              <div class="release-hero-meta">
+                <span class="release-hero-app">{{ release.appName }}</span>
+                <span class="pill pill-accent">{{ release.version }}</span>
+                <NuxtLink :to="`/versions?app=${release.appId}`" class="text-muted-sm" style="text-decoration:underline;text-underline-offset:2px;">
+                  View version timeline
+                </NuxtLink>
+              </div>
+            </header>
 
-          <!-- Summary -->
-          <div v-if="release.summary" class="release-summary-block">
-            <p>{{ release.summary }}</p>
-          </div>
+            <!-- Article-only: Summary + Features + Media -->
+            <template v-if="release.type === 'article'">
+              <!-- Article body (rendered from markdown) -->
+              <div v-if="release.summary" class="article-body" v-html="renderMarkdown(release.summary)" />
 
-          <!-- Features -->
-          <section
-            v-for="feature in release.features || []"
-            :key="feature.id"
-            :id="feature.id"
-            class="feature-section"
-          >
-            <h2 class="feature-heading">{{ feature.heading }}</h2>
-            <p class="feature-desc">{{ feature.description }}</p>
-
-            <!-- Media -->
-            <div
-              v-if="feature.media && feature.media.length > 0"
-              class="media-grid"
-              :class="feature.media.length === 2 ? 'media-grid-2' : feature.media.length >= 3 ? 'media-grid-3' : ''"
-            >
-              <div
-                v-for="(m, idx) in feature.media"
-                :key="idx"
-                class="media-container"
-                :class="{ 'video-wrapper': m.type === 'video' && m.src, playing: playingMedia[mediaKey(feature.id, idx)] }"
-                @click="m.type === 'video' && m.src ? toggleVideo(mediaKey(feature.id, idx)) : undefined"
+              <!-- Features -->
+              <section
+                v-for="feature in release.features || []"
+                :key="feature.id"
+                :id="feature.id"
+                class="feature-section"
               >
-                <!-- Video placeholder -->
-                <template v-if="m.type === 'video' && isMediaPlaceholder(m)">
-                  <div class="media-placeholder-inner">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-right:12px;opacity:.5;">
-                      <polygon points="5 3 19 12 5 21 5 3" />
-                    </svg>
-                    {{ m.alt || "Video" }}
-                  </div>
-                  <div v-if="m.alt" class="media-caption">{{ m.alt }}</div>
-                </template>
+                <h2 class="feature-heading">{{ feature.heading }}</h2>
+                <p class="feature-desc">{{ feature.description }}</p>
 
-                <!-- Video player -->
-                <template v-else-if="m.type === 'video' && m.src">
-                  <video
-                    :ref="(el) => { const k = mediaKey(feature.id, idx); if (el) videoEls.value[k] = el as HTMLVideoElement; else delete videoEls.value[k]; }"
-                    :src="m.src"
-                    preload="metadata"
-                    playsinline
-                    muted
-                    loop
-                    @click.stop
-                  />
-                  <div class="video-overlay">
-                    <div class="play-btn">
-                      <svg viewBox="0 0 24 24" fill="currentColor">
-                        <polygon points="5 3 19 12 5 21 5 3" />
-                      </svg>
+                <!-- Media -->
+                <div
+                  v-if="feature.media && feature.media.length > 0"
+                  class="media-grid"
+                  :class="feature.media.length === 2 ? 'media-grid-2' : feature.media.length >= 3 ? 'media-grid-3' : ''"
+                >
+                  <div
+                    v-for="(m, idx) in feature.media"
+                    :key="idx"
+                    class="media-container"
+                    :class="{ 'video-wrapper': m.type === 'video' && m.src, playing: playingMedia[mediaKey(feature.id, idx)] }"
+                    @click="m.type === 'video' && m.src ? toggleVideo(mediaKey(feature.id, idx)) : undefined"
+                  >
+                    <!-- Video placeholder -->
+                    <template v-if="m.type === 'video' && isMediaPlaceholder(m)">
+                      <div class="media-placeholder-inner">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-right:12px;opacity:.5;">
+                          <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                        {{ m.alt || "Video" }}
+                      </div>
+                      <div v-if="m.alt" class="media-caption">{{ m.alt }}</div>
+                    </template>
+
+                    <!-- Video player -->
+                    <template v-else-if="m.type === 'video' && m.src">
+                      <video
+                        :ref="(el) => { const k = mediaKey(feature.id, idx); if (el) videoEls.value[k] = el as HTMLVideoElement; else delete videoEls.value[k]; }"
+                        :src="m.src"
+                        preload="metadata"
+                        playsinline
+                        muted
+                        loop
+                        @click.stop
+                      />
+                      <div class="video-overlay">
+                        <div class="play-btn">
+                          <svg viewBox="0 0 24 24" fill="currentColor">
+                            <polygon points="5 3 19 12 5 21 5 3" />
+                          </svg>
+                        </div>
+                      </div>
+                      <div v-if="m.alt" class="media-caption">{{ m.alt }}</div>
+                    </template>
+
+                    <!-- Image placeholder -->
+                    <template v-else-if="m.type === 'image' && isMediaPlaceholder(m)">
+                      <div class="media-placeholder-inner">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-right:12px;opacity:.5;">
+                          <rect x="3" y="3" width="18" height="18" rx="2" />
+                          <circle cx="8.5" cy="8.5" r="1.5" />
+                          <path d="M21 15l-5-5L5 21" />
+                        </svg>
+                        {{ m.alt || "Image" }}
+                      </div>
+                      <div v-if="m.alt" class="media-caption">{{ m.alt }}</div>
+                    </template>
+
+                    <!-- Image -->
+                    <template v-else>
+                      <img :src="m.src" :alt="m.alt || ''" loading="lazy" />
+                      <div v-if="m.alt" class="media-caption">{{ m.alt }}</div>
+                    </template>
+                  </div>
+                </div>
+              </section>
+            </template>
+          </template>
+
+          <!-- EDIT MODE (block-based rich editor) -->
+          <template v-else>
+            <div class="edit-form">
+              <div v-if="editError" class="error-banner">{{ editError }}</div>
+
+              <!-- Hero Title -->
+              <div class="form-group">
+                <label>Hero Title</label>
+                <input v-model="editDraft.heroTitle" type="text" placeholder="e.g. Request tracing and deep health checks" />
+              </div>
+
+              <!-- Published Toggle -->
+              <div class="form-row">
+                <label class="flex-gap-sm" style="cursor:pointer;">
+                  <input v-model="editDraft.published" type="checkbox" />
+                  Published
+                </label>
+              </div>
+
+              <!-- Block Editor -->
+              <div class="block-editor">
+                <!-- Empty state -->
+                <div v-if="blocks.length === 0" class="block-empty-state">
+                  <p class="text-muted-sm">No content yet. Add your first block below.</p>
+                </div>
+
+                <div
+                  v-for="(block, index) in blocks"
+                  :key="block.id"
+                  class="block-card"
+                  :class="{ 'block-active': activeBlockId === block.id }"
+                  @click="activeBlockId = block.id"
+                >
+                  <!-- Block toolbar -->
+                  <div class="block-toolbar">
+                    <div class="block-type-badge">{{ blockTypeOptions.find((o) => o.type === block.type)?.label || block.type }}</div>
+                    <div class="block-actions">
+                      <button type="button" class="block-action-btn" title="Move up" :disabled="index === 0" @click.stop="moveBlockUp(index)">↑</button>
+                      <button type="button" class="block-action-btn" title="Move down" :disabled="index === blocks.length - 1" @click.stop="moveBlockDown(index)">↓</button>
+                      <button type="button" class="block-action-btn" title="Duplicate" @click.stop="duplicateBlock(index)">⎘</button>
+                      <button type="button" class="block-action-btn block-action-danger" title="Delete" @click.stop="deleteBlock(index)">×</button>
                     </div>
                   </div>
-                  <div v-if="m.alt" class="media-caption">{{ m.alt }}</div>
-                </template>
 
-                <!-- Image placeholder -->
-                <template v-else-if="m.type === 'image' && isMediaPlaceholder(m)">
-                  <div class="media-placeholder-inner">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-right:12px;opacity:.5;">
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                      <circle cx="8.5" cy="8.5" r="1.5" />
-                      <path d="M21 15l-5-5L5 21" />
-                    </svg>
-                    {{ m.alt || "Image" }}
+                  <!-- Block content editor -->
+                  <div class="block-content">
+                    <!-- Heading -->
+                    <template v-if="block.type === 'heading' && block.meta">
+                      <div class="block-heading-row">
+                        <select v-model="block.meta.level" class="block-level-select">
+                          <option :value="2">H2</option>
+                          <option :value="3">H3</option>
+                        </select>
+                        <input v-model="block.content" type="text" class="block-heading-input" placeholder="Heading text…" />
+                      </div>
+                    </template>
+
+                    <!-- Paragraph -->
+                    <template v-if="block.type === 'paragraph'">
+                      <textarea v-model="block.content" class="block-paragraph-textarea" rows="4" placeholder="Write something…" />
+                    </template>
+
+                    <!-- Image -->
+                    <template v-if="block.type === 'image' && block.meta">
+                      <div class="block-media-form">
+                        <input v-model="block.meta.src" type="text" placeholder="Image URL…" />
+                        <input v-model="block.meta.alt" type="text" placeholder="Alt text / caption…" />
+                        <div v-if="block.meta.src" class="block-media-preview">
+                          <img :src="block.meta.src" :alt="block.meta.alt || ''" loading="lazy" />
+                        </div>
+                      </div>
+                    </template>
+
+                    <!-- Video -->
+                    <template v-if="block.type === 'video' && block.meta">
+                      <div class="block-media-form">
+                        <input v-model="block.meta.src" type="text" placeholder="Video URL…" />
+                        <div v-if="block.meta.src" class="block-media-preview">
+                          <video :src="block.meta.src" controls preload="metadata" />
+                        </div>
+                      </div>
+                    </template>
+
+                    <!-- List -->
+                    <template v-if="block.type === 'list' && block.meta">
+                      <div class="block-list-items">
+                        <div v-for="(item, itemIdx) in block.meta.items" :key="itemIdx" class="block-list-row">
+                          <span class="block-list-bullet">•</span>
+                          <input :value="item" type="text" placeholder="List item…" @input="(e) => { const items = block.meta!.items || []; items[itemIdx] = (e.target as HTMLInputElement).value; }" />
+                          <button type="button" class="block-action-btn" @click="removeListItem(block, itemIdx)">×</button>
+                        </div>
+                        <button type="button" class="btn btn-ghost btn-sm" @click="addListItem(block)">+ Add item</button>
+                      </div>
+                    </template>
+
+                    <!-- Code -->
+                    <template v-if="block.type === 'code' && block.meta">
+                      <div class="block-code-header">
+                        <input v-model="block.meta.language" type="text" placeholder="language (e.g. typescript)" class="block-code-lang" />
+                      </div>
+                      <textarea v-model="block.content" class="block-code-textarea" rows="8" placeholder="Paste code here…" />
+                    </template>
+
+                    <!-- Quote -->
+                    <template v-if="block.type === 'quote'">
+                      <textarea v-model="block.content" class="block-quote-textarea" rows="4" placeholder="Quote text…" />
+                    </template>
+
+                    <!-- Divider -->
+                    <template v-if="block.type === 'divider'">
+                      <div class="block-divider-preview">—</div>
+                    </template>
                   </div>
-                  <div v-if="m.alt" class="media-caption">{{ m.alt }}</div>
-                </template>
+                </div>
 
-                <!-- Image -->
-                <template v-else>
-                  <img :src="m.src" :alt="m.alt || ''" loading="lazy" />
-                  <div v-if="m.alt" class="media-caption">{{ m.alt }}</div>
-                </template>
+                <!-- Add block menu -->
+                <div class="add-block-area">
+                  <button
+                    v-if="showAddMenuAt === null"
+                    type="button"
+                    class="add-block-trigger"
+                    @click="showAddMenuAt = blocks.length"
+                  >
+                    + Add block
+                  </button>
+                  <div v-else class="add-block-menu">
+                    <div class="add-block-grid">
+                      <button
+                        v-for="opt in blockTypeOptions"
+                        :key="opt.type"
+                        type="button"
+                        class="add-block-option"
+                        @click="addBlock(opt.type, showAddMenuAt - 1)"
+                      >
+                        <span class="add-block-icon">{{ opt.icon }}</span>
+                        <span class="add-block-label">{{ opt.label }}</span>
+                      </button>
+                    </div>
+                    <button type="button" class="add-block-cancel" @click="showAddMenuAt = null">Cancel</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Actions -->
+              <div class="form-footer">
+                <button type="button" class="btn btn-secondary" @click="cancelEdit">Cancel</button>
+                <button type="button" class="btn btn-primary" :disabled="isUpdating" @click="saveEdit">
+                  <span v-if="isUpdating">Saving…</span>
+                  <span v-else>Save Changes</span>
+                </button>
               </div>
             </div>
-          </section>
+          </template>
 
-          <!-- Categories -->
+          <!-- Categories: shown for both normal and article -->
           <template v-if="release.categories">
             <section
               v-for="[key, items] in Object.entries(countCategories(release.categories)).filter(([, v]) => v.length > 0)"
               :key="key"
               :id="key"
               class="changes-section"
+              :class="{ 'changes-section-compact': release.type === 'normal' }"
             >
               <h3 class="changes-heading">
                 <span class="pill" :class="categoryConfig[key]?.pillClass || 'pill-muted'">
@@ -442,8 +898,8 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
           </nav>
         </article>
 
-        <!-- Sticky nav -->
-        <nav v-if="navItems.length > 0" class="release-nav" aria-label="On this page">
+        <!-- Sticky nav: article only -->
+        <nav v-if="release.type === 'article' && navItems.length > 0" class="release-nav" aria-label="On this page">
           <div class="release-nav-title">On this page</div>
           <ul class="release-nav-list">
             <li v-for="(item, idx) in navItems" :key="item.id">
@@ -453,52 +909,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             </li>
           </ul>
         </nav>
-      </div>
-    </div>
-
-    <!-- Edit Modal -->
-    <div class="modal-overlay" :class="{ open: showEditModal }" @click.self="closeEditModal">
-      <div class="modal-panel">
-        <div class="modal-header">
-          <h2>Edit Release</h2>
-          <button type="button" class="modal-close" aria-label="Close modal" @click="closeEditModal">✕</button>
-        </div>
-        <div class="modal-body">
-          <div v-if="editError" class="error-banner">{{ editError }}</div>
-          <div class="form-group">
-            <label>Hero Title</label>
-            <input v-model="editForm.heroTitle" type="text" placeholder="e.g. Request tracing and deep health checks" />
-          </div>
-          <div class="form-group">
-            <label>Summary</label>
-            <textarea v-model="editForm.summary" rows="3" placeholder="Short summary of this release…" />
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="flex-gap-sm" style="cursor:pointer;">
-                <input v-model="editForm.published" type="checkbox" />
-                Published
-              </label>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Features JSON</label>
-            <textarea v-model="editForm.featuresJson" rows="6" placeholder="[{ &quot;id&quot;: &quot;...&quot;, &quot;heading&quot;: &quot;...&quot;, &quot;description&quot;: &quot;...&quot;, &quot;media&quot;: [...] }]" />
-            <span class="help-text">Array of feature objects. Use JSON syntax.</span>
-          </div>
-          <div class="form-group">
-            <label>Categories JSON</label>
-            <textarea v-model="editForm.categoriesJson" rows="4" placeholder="{ &quot;added&quot;: [...], &quot;fixed&quot;: [...], ... }" />
-            <span class="help-text">Object with keys: added, fixed, changed, deprecated, security.</span>
-          </div>
-        </div>
-        <div class="form-footer">
-          <button type="button" class="btn btn-secondary" @click="closeEditModal">Cancel</button>
-          <button type="button" class="btn btn-primary" :disabled="isUpdating" @click="submitEdit">
-            <span v-if="isUpdating">Saving…</span>
-            <span v-else>Save Changes</span>
-          </button>
-        </div>
       </div>
     </div>
 
@@ -546,6 +956,317 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   margin: 0;
   font-weight: 600;
   font-size: 20px;
+}
+
+/* ═══ Inline Edit Form ═══════════════════════════════════════════ */
+.edit-form {
+  max-width: 720px;
+}
+.edit-form .form-group {
+  margin-bottom: 20px;
+}
+.edit-form .form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--text);
+}
+.edit-form .form-group input,
+.edit-form .form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.edit-form .form-group input:focus,
+.edit-form .form-group textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.edit-form .form-row {
+  margin-bottom: 20px;
+}
+.block-editor {
+  max-width: 720px;
+}
+.block-empty-state {
+  padding: 40px;
+  text-align: center;
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+.block-card {
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.block-card.block-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px oklch(60% 0.1 250 / 0.15);
+}
+.block-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 10px 10px 0 0;
+}
+.block-type-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.block-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.block-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.block-action-btn:hover {
+  background: var(--border);
+  color: var(--text);
+}
+.block-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.block-action-danger:hover {
+  background: oklch(95% 0.02 25);
+  color: oklch(50% 0.15 25);
+}
+.block-content {
+  padding: 12px;
+}
+.block-content input,
+.block-content textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.block-content input:focus,
+.block-content textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.block-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.block-level-select {
+  width: 60px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+}
+.block-heading-input {
+  flex: 1;
+}
+.block-paragraph-textarea {
+  min-height: 80px;
+  resize: vertical;
+}
+.block-media-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.block-media-form input {
+  width: 100%;
+}
+.block-media-preview {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.block-media-preview img,
+.block-media-preview video {
+  max-width: 100%;
+  border-radius: 6px;
+}
+.block-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.block-list-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.block-list-bullet {
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+}
+.block-list-row input {
+  flex: 1;
+}
+.block-code-header {
+  margin-bottom: 8px;
+}
+.block-code-lang {
+  width: 180px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+.block-code-textarea {
+  min-height: 120px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.block-quote-textarea {
+  min-height: 60px;
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+}
+.block-divider-preview {
+  text-align: center;
+  padding: 16px;
+  color: var(--muted);
+  font-size: 18px;
+  letter-spacing: 8px;
+}
+.add-block-area {
+  margin-top: 12px;
+  margin-bottom: 24px;
+}
+.add-block-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px;
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.add-block-trigger:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: oklch(60% 0.05 250 / 0.05);
+}
+.add-block-menu {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.add-block-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.add-block-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.add-block-option:hover {
+  border-color: var(--accent);
+  background: oklch(60% 0.05 250 / 0.05);
+}
+.add-block-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.add-block-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+.add-block-cancel {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.add-block-cancel:hover {
+  background: var(--border);
+}
+@media (max-width: 600px) {
+  .add-block-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .block-heading-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .block-level-select {
+    width: 100%;
+  }
+}
+.error-banner {
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  background: oklch(95% 0.02 25);
+  border: 1px solid oklch(85% 0.05 25);
+  border-radius: 8px;
+  color: oklch(50% 0.15 25);
+  font-size: 13px;
+}
+.form-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
   color: var(--fg);
 }
 
@@ -726,16 +1447,85 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   background: var(--accent);
 }
 
-/* Summary */
-.release-summary-block {
+/* Article body (rendered markdown) */
+.article-body {
   font-size: 15px;
   line-height: 1.7;
   color: var(--fg);
   margin-bottom: 32px;
   max-width: 65ch;
 }
-.release-summary-block p {
-  margin: 0;
+.article-body > * {
+  margin-bottom: 16px;
+}
+.article-body > *:last-child {
+  margin-bottom: 0;
+}
+.article-body h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 32px;
+  margin-bottom: 16px;
+  color: var(--fg);
+}
+.article-body h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-top: 24px;
+  margin-bottom: 12px;
+  color: var(--fg);
+}
+.article-body p {
+  margin-bottom: 16px;
+}
+.article-body ul {
+  margin-bottom: 16px;
+  padding-left: 24px;
+}
+.article-body li {
+  margin-bottom: 6px;
+}
+.article-body blockquote {
+  margin: 24px 0;
+  padding: 12px 20px;
+  border-left: 3px solid var(--accent);
+  background: var(--bg);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+}
+.article-body pre {
+  margin: 24px 0;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.article-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.article-body pre code {
+  background: transparent;
+  padding: 0;
+}
+.article-body img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+.article-body video {
+  max-width: 100%;
+  border-radius: 8px;
+  margin: 16px 0;
+}
+.article-body hr {
+  margin: 32px 0;
+  border: none;
+  border-top: 1px solid var(--border);
 }
 
 /* ═══ Feature sections ═══════════════════════════════════════ */
@@ -874,6 +1664,12 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   margin: 48px 0;
 }
 .changes-section:first-of-type {
+  margin-top: 0;
+}
+.changes-section-compact {
+  margin: 24px 0;
+}
+.changes-section-compact:first-of-type {
   margin-top: 0;
 }
 .changes-heading {

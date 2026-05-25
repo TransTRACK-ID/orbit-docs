@@ -19,30 +19,38 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const rows = await db
-    .select({
-      id: appVersions.id,
-      appId: appVersions.appId,
-      version: appVersions.version,
-      status: appVersions.status,
-      createdBy: appVersions.createdBy,
-      releaseDate: appVersions.releaseDate,
-      releaseNotes: appVersions.releaseNotes,
-      branch: appVersions.branch,
-      tags: appVersions.tags,
-      commitHash: appVersions.commitHash,
-      approver: appVersions.approver,
-      ciStatus: appVersions.ciStatus,
-      createdAt: appVersions.createdAt,
-      updatedAt: appVersions.updatedAt,
-      releaseId: releases.id,
-      releasePublished: releases.published,
-    })
+  // Query 1: fetch versions for the app
+  const versions = await db
+    .select()
     .from(appVersions)
-    .leftJoin(releases, eq(appVersions.id, releases.versionId))
     .where(eq(appVersions.appId, id))
     .orderBy(desc(appVersions.createdAt))
     .limit(limit);
 
-  return { data: rows };
+  // Query 2: fetch all releases for this app
+  const releaseRows = await db
+    .select({
+      versionId: releases.versionId,
+      id: releases.id,
+      type: releases.type,
+      published: releases.published,
+    })
+    .from(releases)
+    .where(eq(releases.appId, id));
+
+  // Group releases by version
+  const releasesByVersion = new Map<string, Array<{ id: string; type: string; published: boolean }>>();
+  for (const r of releaseRows) {
+    const list = releasesByVersion.get(r.versionId) || [];
+    list.push({ id: r.id, type: r.type, published: r.published });
+    releasesByVersion.set(r.versionId, list);
+  }
+
+  const data = versions.map((v) => ({
+    ...v,
+    releases: releasesByVersion.get(v.id) || [],
+    releasePublished: releasesByVersion.get(v.id)?.some((r) => r.published) || false,
+  }));
+
+  return { data };
 });

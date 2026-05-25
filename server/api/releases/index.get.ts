@@ -11,12 +11,16 @@ export default defineEventHandler(async (event) => {
 
   const search = typeof query.search === "string" ? query.search.trim().toLowerCase() : "";
   const appFilter = typeof query.app === "string" ? query.app : "";
+  const versionFilter = typeof query.version === "string" ? query.version : "";
   const limit = Math.min(parseInt(String(query.limit || "50"), 10), 100);
 
   // Build conditions
   const conditions = [eq(releases.published, true)];
   if (appFilter) {
     conditions.push(eq(apps.name, appFilter));
+  }
+  if (versionFilter) {
+    conditions.push(eq(releases.versionId, versionFilter));
   }
 
   const rows = await db
@@ -28,6 +32,7 @@ export default defineEventHandler(async (event) => {
       summary: releases.summary,
       features: releases.features,
       categories: releases.categories,
+      type: releases.type,
       published: releases.published,
       createdAt: releases.createdAt,
       updatedAt: releases.updatedAt,

@@ -1,0 +1,2 @@
+ALTER TABLE "doc_embeds" ADD COLUMN "doc_id" text;--> statement-breakpoint
+ALTER TABLE "doc_embeds" ADD CONSTRAINT "doc_embeds_doc_id_docs_id_fk" FOREIGN KEY ("doc_id") REFERENCES "public"."docs"("id") ON DELETE cascade ON UPDATE no action;

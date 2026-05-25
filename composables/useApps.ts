@@ -49,7 +49,7 @@ export interface AppVersion {
   ciStatus: "passed" | "failed" | "pending" | "unknown";
   createdAt: string | null;
   updatedAt: string | null;
-  releaseId?: string | null;
+  releases?: Array<{ id: string; type: string; published: boolean }>;
   releasePublished?: boolean | null;
   appName?: string | null;
 }

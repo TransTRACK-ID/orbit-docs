@@ -1,504 +1,898 @@
 <script setup lang="ts">
-import { toast } from "vue3-toastify";
+import { nextTick } from "vue";
 import { usePageStore } from "~/store/page";
-import type { ChangelogItem } from "~/types";
+import { renderMarkdown } from "~/composables/useMarkdown";
+import type { AppVersion } from "~/composables/useApps";
 
 definePageMeta({
   auth: true,
 });
 
+const route = useRoute();
+const router = useRouter();
 const $page = usePageStore();
-onBeforeMount(() => {
-  $page.setTitle("Changelogs");
-});
-
-const {
-  changelogs,
-  isLoading,
-  isCreating,
-  fetchChangelogs,
-  createChangelog,
-  deleteChangelog,
-} = useChangelogs();
 
 const { apps, fetchApps } = useApps();
+const { versions, fetchVersions, updateVersion } = useVersions();
+const { createRelease, fetchReleases, updateRelease } = useReleases();
+const releasesForVersion = ref<{ normal?: { id: string }; article?: { id: string } }>({});
 
-// Search, filter & sort
-const route = useRoute();
+onBeforeMount(() => {
+  $page.setTitle("Changelog Editor");
+});
 
-const searchQuery = ref("");
-const statusFilter = ref("");
-const appFilter = ref("");
-const sortBy = ref<"updatedAt" | "title">("updatedAt");
-const sortOrder = ref<"asc" | "desc">("desc");
-const showFilterMenu = ref(false);
-const showSortMenu = ref(false);
+// ── Version state ──────────────────────────────────────────────
+const currentVersion = ref<AppVersion | null>(null);
 
+// Use shared store selection with localStorage persistence
+$page.hydrateSelection();
+const selectedAppId = computed({
+  get: () => $page.selectedAppId,
+  set: (val: string) => $page.setSelectedAppId(val)
+});
+const selectedVersionId = computed({
+  get: () => $page.selectedVersionId,
+  set: (val: string) => $page.setSelectedVersionId(val)
+});
+
+// ── Editor state ───────────────────────────────────────────────
+const content = ref("");
+const status = ref<"draft" | "published">("draft");
+const previewOnly = ref(false);
+const hasChanges = ref(false);
+const lastSavedAt = ref<Date | null>(null);
+const isUpdating = ref(false);
+
+// ── Search ─────────────────────────────────────────────────────
+const editorSearch = ref("");
+
+// ── History panel ────────────────────────────────────────────────
+const showHistoryPanel = ref(false);
+const historySearch = ref("");
+const historyFocusIndex = ref(0);
+let lastFocusedElement: HTMLElement | null = null;
+
+// ── Release panel ───────────────────────────────────────────────
+const showReleasePanel = ref(false);
+const heroTitle = ref("");
+const featureHeading = ref("");
+const featureDesc = ref("");
+
+// ── Init ─────────────────────────────────────────────────────────
 onMounted(async () => {
   await fetchApps();
-  const appQuery = route.query.app as string;
-  if (appQuery && apps.value.find((a) => a.id === appQuery)) {
-    appFilter.value = appQuery;
+
+  const queryVersionId = route.query.versionId as string | undefined;
+  const queryAppId = route.query.app as string | undefined;
+  const persistedAppId = $page.selectedAppId;
+
+  // Restore selection: URL param > persisted store > first app
+  if (queryAppId && apps.value.find((a) => a.id === queryAppId)) {
+    selectedAppId.value = queryAppId;
+  } else if (persistedAppId && apps.value.find((a) => a.id === persistedAppId)) {
+    selectedAppId.value = persistedAppId;
+  } else if (apps.value.length > 0) {
+    selectedAppId.value = apps.value[0].id;
   }
-  fetchChangelogs();
-  document.addEventListener("click", onDocClick);
-});
-onBeforeUnmount(() => {
-  document.removeEventListener("click", onDocClick);
+
+  if (selectedAppId.value) {
+    await fetchVersions(selectedAppId.value);
+
+    const persistedVersionId = $page.selectedVersionId;
+    if (queryVersionId && versions.value.find((v) => v.id === queryVersionId)) {
+      selectedVersionId.value = queryVersionId;
+    } else if (persistedVersionId && versions.value.find((v) => v.id === persistedVersionId)) {
+      selectedVersionId.value = persistedVersionId;
+    } else if (versions.value.length > 0) {
+      selectedVersionId.value = versions.value[0].id;
+    }
+  }
+
+  if (selectedVersionId.value) {
+    await loadVersion(selectedVersionId.value);
+    await checkExistingRelease(selectedVersionId.value);
+  }
+
+  syncUrlQuery();
 });
 
-const hasActiveFilters = computed(
-  () =>
-    !!searchQuery.value.trim() ||
-    !!statusFilter.value ||
-    !!appFilter.value
+async function loadVersion(versionId: string) {
+  const version = versions.value.find((v) => v.id === versionId);
+  if (!version) return;
+
+  currentVersion.value = version;
+  content.value = version.releaseNotes || "";
+  status.value = version.status === "published" ? "published" : "draft";
+  hasChanges.value = false;
+  lastSavedAt.value = version.updatedAt ? new Date(version.updatedAt) : new Date();
+}
+
+watch([content, status], () => {
+  hasChanges.value = true;
+});
+
+// ── Dropdown options ─────────────────────────────────────────────
+const appOptions = computed(() =>
+  apps.value.map((a) => ({ id: a.id, label: a.name }))
 );
 
-const activeSortLabel = computed(() => {
-  const labels: Record<string, string> = {
-    "updatedAt-desc": "Recently updated",
-    "updatedAt-asc": "Oldest first",
-    "title-asc": "Title A–Z",
-    "title-desc": "Title Z–A",
-  };
-  return labels[`${sortBy.value}-${sortOrder.value}`] || "Sort";
-});
+const versionOptions = computed(() =>
+  versions.value.map((v) => ({ id: v.id, label: v.version }))
+);
 
-const filteredChangelogs = computed(() => {
-  let result = [...changelogs.value];
+function syncUrlQuery() {
+  const query: Record<string, string> = {};
+  if (selectedAppId.value) query.app = selectedAppId.value;
+  if (selectedVersionId.value) query.versionId = selectedVersionId.value;
+  router.replace({ path: "/changelogs", query });
+}
 
-  const q = searchQuery.value.trim().toLowerCase();
-  if (q) {
-    result = result.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        (c.appName && c.appName.toLowerCase().includes(q)) ||
-        (c.version && c.version.toLowerCase().includes(q))
-    );
-  }
-
-  if (statusFilter.value) {
-    result = result.filter((c) => c.status === statusFilter.value);
-  }
-
-  if (appFilter.value) {
-    result = result.filter((c) => c.appId === appFilter.value);
-  }
-
-  result.sort((a, b) => {
-    let cmp = 0;
-    if (sortBy.value === "title") {
-      cmp = a.title.localeCompare(b.title);
-    } else if (sortBy.value === "updatedAt") {
-      cmp =
-        new Date(a.updatedAt || 0).getTime() -
-        new Date(b.updatedAt || 0).getTime();
+watch(selectedAppId, async (newAppId, oldAppId) => {
+  if (!newAppId) return;
+  await fetchVersions(newAppId);
+  if (versions.value.length > 0) {
+    const stillExists = versions.value.find((v) => v.id === selectedVersionId.value);
+    if (!stillExists) {
+      selectedVersionId.value = versions.value[0].id;
+    } else if (oldAppId !== newAppId) {
+      // Version id stayed the same but app changed; still need to sync URL
+      syncUrlQuery();
     }
-    return sortOrder.value === "asc" ? cmp : -cmp;
-  });
-
-  return result;
+  } else {
+    selectedVersionId.value = "";
+    currentVersion.value = null;
+    content.value = "";
+    syncUrlQuery();
+  }
 });
 
-function clearFilters() {
-  searchQuery.value = "";
-  statusFilter.value = "";
-  appFilter.value = "";
-}
-
-function setSort(
-  field: "updatedAt" | "title",
-  order: "asc" | "desc"
-) {
-  sortBy.value = field;
-  sortOrder.value = order;
-  showSortMenu.value = false;
-}
-
-function onDocClick(e: MouseEvent) {
-  const t = e.target as HTMLElement;
-  if (!t.closest(".filter-dropdown-wrap")) showFilterMenu.value = false;
-  if (!t.closest(".sort-dropdown-wrap")) showSortMenu.value = false;
-}
-
-// Create modal
-const showCreateModal = ref(false);
-const createForm = reactive({
-  appId: "",
-  title: "",
-  content: "",
-  status: "draft" as "draft" | "published",
+watch(selectedVersionId, async (newVersionId) => {
+  if (!newVersionId || newVersionId === currentVersion.value?.id) return;
+  await loadVersion(newVersionId);
+  await checkExistingRelease(newVersionId);
+  syncUrlQuery();
 });
-const createTitleError = ref(false);
 
-function openCreateModal() {
-  showCreateModal.value = true;
-  createTitleError.value = false;
-  createForm.appId = apps.value[0]?.id || "";
-  createForm.title = "";
-  createForm.content = "";
-  createForm.status = "draft";
-}
-
-function closeCreateModal() {
-  showCreateModal.value = false;
-  createTitleError.value = false;
-}
-
-async function submitCreate() {
-  if (!createForm.title.trim()) {
-    createTitleError.value = true;
-    return;
-  }
-  if (!createForm.appId) {
-    toast.error("Please select an app");
-    return;
-  }
-  createTitleError.value = false;
-  await createChangelog({
-    appId: createForm.appId,
-    title: createForm.title.trim(),
-    content: createForm.content,
-    status: createForm.status,
-  });
-  closeCreateModal();
-}
-
-// Delete confirmation
-const changelogToDelete = ref<ChangelogItem | null>(null);
-const isDeletingItem = ref(false);
-
-function confirmDelete(changelog: ChangelogItem) {
-  changelogToDelete.value = changelog;
-}
-
-async function doDelete() {
-  if (!changelogToDelete.value || isDeletingItem.value) return;
-  isDeletingItem.value = true;
+async function checkExistingRelease(versionId: string) {
   try {
-    await deleteChangelog(changelogToDelete.value.id);
-  } finally {
-    changelogToDelete.value = null;
-    isDeletingItem.value = false;
+    const data = await $fetch<{ data: Array<{ id: string; type: string }> }>("/api/releases", {
+      query: { version: versionId, limit: "10" },
+    });
+    const map: { normal?: { id: string }; article?: { id: string } } = {};
+    for (const r of data.data) {
+      if (r.type === "normal") map.normal = { id: r.id };
+      if (r.type === "article") map.article = { id: r.id };
+    }
+    releasesForVersion.value = map;
+  } catch {
+    releasesForVersion.value = {};
   }
 }
 
-function formatDate(dateStr: string | null) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function timeAgo(dateStr: string | null) {
-  if (!dateStr) return "";
+const saveStatusLabel = computed(() => {
+  if (hasChanges.value) return "Unsaved changes";
+  if (!lastSavedAt.value) return "";
   const now = new Date();
-  const d = new Date(dateStr);
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
-  if (diff < 2419200) return `${Math.floor(diff / 604800)} weeks ago`;
-  return `${Math.floor(diff / 2419200)} months ago`;
+  const diff = Math.floor((now.getTime() - lastSavedAt.value.getTime()) / 1000);
+  if (diff < 60) return "Auto-saved just now";
+  if (diff < 3600) return `Auto-saved ${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `Auto-saved ${Math.floor(diff / 3600)}h ago`;
+  return "Auto-saved";
+});
+
+// ── Markdown preview ─────────────────────────────────────────────
+const renderedPreview = computed(() => renderMarkdown(content.value));
+
+// ── Toolbar helpers ────────────────────────────────────────────
+const textareaRef = ref<HTMLTextAreaElement | null>(null);
+
+function wrapText(before: string, after?: string) {
+  const textarea = textareaRef.value;
+  if (!textarea) return;
+  after = after || before;
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const text = textarea.value;
+  const selected = text.slice(start, end);
+  const replacement = before + selected + after;
+  textarea.setRangeText(replacement, start, end, "end");
+  textarea.focus();
+  textarea.setSelectionRange(start + before.length, start + before.length + selected.length);
+  content.value = textarea.value;
 }
 
-const statusClass: Record<string, string> = {
-  draft: "pill-blue",
-  published: "pill-green",
-};
+function insertLine(prefix: string) {
+  const textarea = textareaRef.value;
+  if (!textarea) return;
+  const start = textarea.selectionStart;
+  const text = textarea.value;
+  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+  textarea.setRangeText(prefix, lineStart, lineStart, "end");
+  textarea.focus();
+  textarea.setSelectionRange(lineStart + prefix.length, lineStart + prefix.length);
+  content.value = textarea.value;
+}
 
-const statusLabel: Record<string, string> = {
-  draft: "Draft",
-  published: "Published",
-};
+function togglePreview() {
+  previewOnly.value = !previewOnly.value;
+}
+
+// ── Save / Publish ─────────────────────────────────────────────
+async function syncReleasesFromChangelog() {
+  if (!currentVersion.value || !releasesForVersion.value) return;
+  try {
+    const categories = parseChangelogToCategories(content.value);
+    const summary = content.value.slice(0, 500);
+    const releases = releasesForVersion.value;
+    // Only sync the NORMAL release from markdown changelog edits.
+    // Article releases have their own rich content (hero, features, media)
+    // and should NOT be overwritten by markdown saves.
+    if (releases.normal?.id) {
+      await updateRelease(releases.normal.id, { categories, summary });
+    }
+  } catch {
+    // Silently ignore sync failures; the version save is the primary action
+  }
+}
+
+async function saveDraft() {
+  if (!currentVersion.value) return;
+  isUpdating.value = true;
+  try {
+    await updateVersion(currentVersion.value.appId, currentVersion.value.id, {
+      releaseNotes: content.value,
+    });
+    await createHistorySnapshot(currentVersion.value.id, content.value, "save");
+    await syncReleasesFromChangelog();
+    hasChanges.value = false;
+    lastSavedAt.value = new Date();
+  } finally {
+    isUpdating.value = false;
+  }
+}
+
+async function publishChangelog() {
+  if (!currentVersion.value) return;
+  isUpdating.value = true;
+  try {
+    await updateVersion(currentVersion.value.appId, currentVersion.value.id, {
+      releaseNotes: content.value,
+      status: "published",
+    });
+    await createHistorySnapshot(currentVersion.value.id, content.value, "publish");
+    await syncReleasesFromChangelog();
+    status.value = "published";
+    hasChanges.value = false;
+    lastSavedAt.value = new Date();
+  } finally {
+    isUpdating.value = false;
+  }
+}
+
+async function createHistorySnapshot(versionId: string, snapshotContent: string, action: string) {
+  try {
+    await $fetch(`/api/versions/${versionId}/history`, {
+      method: "POST",
+      body: { versionId, content: snapshotContent, action },
+    });
+  } catch {
+    // Silently fail; history is non-critical
+  }
+}
+
+// ── History panel ──────────────────────────────────────────────
+function openHistory() {
+  lastFocusedElement = document.activeElement as HTMLElement;
+  showHistoryPanel.value = true;
+  document.body.style.overflow = "hidden";
+  fetchHistory();
+  nextTick(() => {
+    const searchInput = document.querySelector<HTMLInputElement>(".history-search");
+    if (searchInput) searchInput.focus();
+  });
+}
+
+function closeHistory() {
+  showHistoryPanel.value = false;
+  document.body.style.overflow = "";
+  if (lastFocusedElement) {
+    nextTick(() => lastFocusedElement?.focus());
+  }
+}
+
+function focusHistoryItem(index: number) {
+  const items = filteredHistory.value;
+  if (items.length === 0) return;
+  historyFocusIndex.value = Math.max(0, Math.min(index, items.length - 1));
+  const el = document.querySelectorAll(".history-item")[historyFocusIndex.value] as HTMLElement;
+  if (el) el.focus();
+}
+
+function onHistoryListKeydown(e: KeyboardEvent) {
+  const items = filteredHistory.value;
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    focusHistoryItem(historyFocusIndex.value + 1);
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    focusHistoryItem(historyFocusIndex.value - 1);
+  } else if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    const activeItem = items[historyFocusIndex.value];
+    if (activeItem) restoreHistoryItem(activeItem);
+  }
+}
+
+function onHistoryPanelKeydown(e: KeyboardEvent) {
+  if (e.key !== "Tab") return;
+  const panel = document.querySelector(".history-panel.open");
+  if (!panel) return;
+  const focusable = panel.querySelectorAll<HTMLElement>(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+// ── Release panel ──────────────────────────────────────────────
+function openReleasePanel() {
+  lastFocusedElement = document.activeElement as HTMLElement;
+  showReleasePanel.value = true;
+  document.body.style.overflow = "hidden";
+  parseChangelogCategories();
+  nextTick(() => {
+    const heroInput = document.getElementById("heroTitle") as HTMLInputElement;
+    if (heroInput) heroInput.focus();
+  });
+}
+
+function closeReleasePanel() {
+  showReleasePanel.value = false;
+  document.body.style.overflow = "";
+  if (lastFocusedElement) {
+    nextTick(() => lastFocusedElement?.focus());
+  }
+}
+
+function onReleasePanelKeydown(e: KeyboardEvent) {
+  if (e.key !== "Tab") return;
+  const panel = document.querySelector(".release-panel.open");
+  if (!panel) return;
+  const focusable = panel.querySelectorAll<HTMLElement>(
+    'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+  );
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+const releaseCategories = ref<Array<{ label: string; checked: boolean; colorClass: string }>>([]);
+
+function parseChangelogCategories() {
+  const text = content.value;
+  const cats: Array<{ label: string; checked: boolean; colorClass: string }> = [];
+  const seen = new Set<string>();
+  const regex = /^###\s+(Added|Fixed|Changed|Deprecated|Security)/gim;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const label = match[1];
+    if (!seen.has(label)) {
+      seen.add(label);
+      const colorClass =
+        label === "Added" ? "pill-green" :
+        label === "Fixed" ? "pill-blue" :
+        label === "Changed" ? "pill-amber" :
+        label === "Deprecated" ? "pill-purple" : "pill-red";
+      cats.push({ label, checked: true, colorClass });
+    }
+  }
+  releaseCategories.value = cats;
+  // Auto-suggest hero title from first h2
+  const h2Match = text.match(/^##\s+\[?([^\n\]]+)/m);
+  if (h2Match && !heroTitle.value) {
+    heroTitle.value = h2Match[1].trim();
+  }
+}
+
+const releasePreviewHtml = computed(() => {
+  const title = heroTitle.value.trim();
+  if (!title) {
+    return '<p style="color:var(--muted);">Enter a headline to see preview</p>';
+  }
+  let html = `<h4>Release Preview</h4><p style="font-size:18px;font-weight:600;margin-bottom:12px;">${escapeHtml(title)}</p>`;
+  if (featureHeading.value) {
+    html += `<p style="font-weight:600;margin:16px 0 4px;">${escapeHtml(featureHeading.value)}</p>`;
+    if (featureDesc.value) html += `<p style="color:var(--muted);margin:0 0 12px;">${escapeHtml(featureDesc.value)}</p>`;
+  }
+  const checkedCats = releaseCategories.value.filter((c) => c.checked);
+  if (checkedCats.length > 0) {
+    html += `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">${checkedCats.map((c) => `<span class="pill ${c.colorClass}">${escapeHtml(c.label)}</span>`).join("")}</div>`;
+  }
+  return html;
+});
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// ── Parse changelog markdown into release categories ────────────
+function parseChangelogToCategories(text: string): Record<string, string[]> {
+  const categories: Record<string, string[]> = {};
+  const lines = text.split("\n");
+  let currentCategory: string | null = null;
+
+  for (const line of lines) {
+    const headerMatch = line.match(/^###\s+(Added|Fixed|Changed|Deprecated|Security)/i);
+    if (headerMatch) {
+      currentCategory = headerMatch[1].toLowerCase();
+      if (!categories[currentCategory]) {
+        categories[currentCategory] = [];
+      }
+      continue;
+    }
+
+    if (currentCategory) {
+      const itemMatch = line.match(/^-\s+(.+)$/);
+      if (itemMatch) {
+        categories[currentCategory].push(itemMatch[1].trim());
+      }
+    }
+  }
+
+  return categories;
+}
+
+const isPublishingRelease = ref(false);
+
+async function submitQuickRelease() {
+  if (!currentVersion.value || !selectedAppId.value || isPublishingRelease.value) return;
+
+  isPublishingRelease.value = true;
+  try {
+    const categories = parseChangelogToCategories(content.value);
+    const release = await createRelease({
+      appId: selectedAppId.value,
+      versionId: currentVersion.value.id,
+      heroTitle: `${apps.value.find((a) => a.id === selectedAppId.value)?.name || "Release"} ${currentVersion.value.version}`,
+      summary: content.value.slice(0, 500),
+      categories,
+      type: "normal",
+      published: true,
+    });
+
+    if (release?.id) {
+      await checkExistingRelease(currentVersion.value.id);
+      await navigateTo(`/releases/${release.id}`);
+    }
+  } catch (e: any) {
+    if (e?.statusCode === 409 && e?.data?.existingReleaseId) {
+      await navigateTo(`/releases/${e.data.existingReleaseId}`);
+    }
+    if (e?.statusCode !== 409) throw e;
+  } finally {
+    isPublishingRelease.value = false;
+  }
+}
+
+async function submitPublishRelease() {
+  if (!currentVersion.value || !selectedAppId.value || isPublishingRelease.value) return;
+
+  isPublishingRelease.value = true;
+  try {
+    // Parse categories from markdown
+    const categories = parseChangelogToCategories(content.value);
+
+    // Build features from feature highlights if provided
+    const features: Array<{ id: string; heading: string; description: string }> = [];
+    if (featureHeading.value.trim()) {
+      features.push({
+        id: crypto.randomUUID(),
+        heading: featureHeading.value.trim(),
+        description: featureDesc.value.trim(),
+      });
+    }
+
+    const release = await createRelease({
+      appId: selectedAppId.value,
+      versionId: currentVersion.value.id,
+      heroTitle: heroTitle.value.trim() || content.value.split("\n")[0].slice(0, 120),
+      summary: content.value.slice(0, 500),
+      features: features.length > 0 ? features : undefined,
+      categories,
+      type: "article",
+      published: true,
+    });
+
+    closeReleasePanel();
+
+    // Navigate to the newly created release
+    if (release?.id) {
+      await navigateTo(`/releases/${release.id}`);
+    }
+  } catch (e: any) {
+    if (e?.statusCode === 409 && e?.data?.existingReleaseId) {
+      closeReleasePanel();
+      await navigateTo(`/releases/${e.data.existingReleaseId}`);
+    }
+    // Other errors are already toasted by createRelease; just re-throw non-409s
+    if (e?.statusCode !== 409) throw e;
+  } finally {
+    isPublishingRelease.value = false;
+  }
+}
+
+// ── Keyboard shortcuts ─────────────────────────────────────────
+function onKeydown(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+    e.preventDefault();
+    saveDraft();
+  }
+  if (e.key === "Escape") {
+    if (showHistoryPanel.value) closeHistory();
+    if (showReleasePanel.value) closeReleasePanel();
+  }
+  if (showHistoryPanel.value) onHistoryPanelKeydown(e);
+  if (showReleasePanel.value) onReleasePanelKeydown(e);
+}
+
+// ── History data ────────────────────────────────────────────
+const historyItems = ref<Array<{ id: string; versionId: string; content: string; action: string; actor: string | null; createdAt: string | null }>>([]);
+const isHistoryLoading = ref(false);
+
+async function fetchHistory() {
+  if (!currentVersion.value) return;
+  isHistoryLoading.value = true;
+  try {
+    const data = await $fetch<{ data: Array<{ id: string; versionId: string; content: string; action: string; actor: string | null; createdAt: string | null }> }>(`/api/versions/${currentVersion.value.id}/history`, {
+      query: { limit: "20" },
+    });
+    historyItems.value = data.data;
+  } catch {
+    historyItems.value = [];
+  } finally {
+    isHistoryLoading.value = false;
+  }
+}
+
+const filteredHistory = computed(() => {
+  const q = historySearch.value.toLowerCase().trim();
+  if (!q) return historyItems.value;
+  return historyItems.value.filter(
+    (h) =>
+      (h.actor || "").toLowerCase().includes(q) ||
+      (h.action || "").toLowerCase().includes(q)
+  );
+});
+
+function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
+  content.value = item.content;
+  hasChanges.value = true;
+  closeHistory();
+}
 </script>
 
 <template>
-  <div class="changelogs-page">
+  <div class="changelog-editor-page" @keydown="onKeydown" tabindex="-1">
     <!-- Topbar -->
     <header class="topbar">
-      <h1>Changelogs</h1>
-      <div style="display:flex;align-items:center;gap:16px;">
-        <input
-          v-model="searchQuery"
-          class="search"
-          placeholder="Search changelogs…"
-          aria-label="Search changelogs"
-        />
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
-          + New Changelog
-        </button>
+      <div class="topbar-title-group">
+        <h1>Changelog Editor</h1>
+        <span v-if="currentVersion" class="pill pill-blue">
+          {{ currentVersion.appName || apps.find((a) => a.id === currentVersion?.appId)?.name || "" }} {{ currentVersion.version }}
+        </span>
+      </div>
+      <div class="topbar-actions">
+        <div class="selector-group">
+          <span class="selector-label">App</span>
+          <GeneralSearchableDropdown
+            v-model="selectedAppId"
+            :options="appOptions"
+            placeholder="Select app…"
+            search-placeholder="Search apps…"
+          />
+        </div>
+        <div class="selector-connector" aria-hidden="true">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" width="14" height="14">
+            <path d="M6 3l5 5-5 5"/>
+          </svg>
+        </div>
+        <div class="selector-group" :class="{ 'selector-disabled': !selectedAppId || versions.length === 0 }">
+          <div class="selector-label-row">
+            <span class="selector-label">Version</span>
+            <NuxtLink v-if="selectedAppId && versions.length === 0" to="/versions" class="selector-inline-hint">
+              No versions. Add one
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
+            </NuxtLink>
+          </div>
+          <GeneralSearchableDropdown
+            v-model="selectedVersionId"
+            :options="versionOptions"
+            placeholder="Select version…"
+            search-placeholder="Search versions…"
+          />
+        </div>
+        <div class="release-actions">
+          <button
+            v-if="releasesForVersion.normal"
+            type="button"
+            class="btn btn-sm btn-secondary"
+            @click="navigateTo(`/releases/${releasesForVersion.normal.id}`)"
+          >
+            View Normal
+          </button>
+          <button
+            v-else
+            type="button"
+            class="btn btn-sm btn-secondary"
+            :disabled="!currentVersion || isPublishingRelease"
+            @click="submitQuickRelease"
+          >
+            {{ isPublishingRelease ? "Creating…" : "Quick Release" }}
+          </button>
+          <button
+            v-if="releasesForVersion.article"
+            type="button"
+            class="btn btn-sm btn-primary"
+            @click="navigateTo(`/releases/${releasesForVersion.article.id}`)"
+          >
+            Edit Article
+          </button>
+          <button
+            v-else
+            type="button"
+            class="btn btn-sm btn-primary"
+            :disabled="!currentVersion || isPublishingRelease"
+            @click="openReleasePanel"
+          >
+            Create Article
+          </button>
+        </div>
       </div>
     </header>
 
-    <!-- Filters -->
-    <div class="row-between" style="margin-bottom:20px;">
-      <div style="display:flex;align-items:center;gap:12px;">
-        <h2>Your changelogs</h2>
-        <span v-if="hasActiveFilters" class="result-count">
-          {{ filteredChangelogs.length }} result{{ filteredChangelogs.length === 1 ? '' : 's' }}
+    <!-- Editor meta bar -->
+    <div class="row-between" style="margin-bottom:16px;">
+      <div class="flex-gap-md">
+        <span class="text-muted-sm">CHANGELOG.md</span>
+        <span class="pill" :class="status === 'published' ? 'pill-green' : 'pill-blue'">
+          {{ status === 'published' ? 'Published' : 'Draft' }}
         </span>
+        <span v-if="saveStatusLabel" class="pill" :class="hasChanges ? 'pill-amber' : 'pill-green'">{{ saveStatusLabel }}</span>
+        <button type="button" class="btn btn-ghost btn-sm" :disabled="isUpdating || !currentVersion" @click="saveDraft">
+          {{ isUpdating ? "Saving…" : "Save" }}
+        </button>
       </div>
-      <div style="display:flex;gap:8px;">
-        <div class="filter-dropdown-wrap" style="position:relative;">
-          <button
-            class="btn btn-ghost"
-            :class="{ active: hasActiveFilters }"
-            @click.stop="showFilterMenu = !showFilterMenu"
-          >
-            Filter
-            <span v-if="hasActiveFilters" class="filter-dot" />
-          </button>
-          <div v-if="showFilterMenu" class="dropdown-menu">
-            <div class="dropdown-header">Status</div>
-            <div
-              class="dropdown-item"
-              :class="{ active: !statusFilter }"
-              @click="statusFilter = ''"
-            >
-              <span v-if="!statusFilter" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              All statuses
-            </div>
-            <div
-              v-for="s in ['draft','published']"
-              :key="s"
-              class="dropdown-item"
-              :class="{ active: statusFilter === s }"
-              @click="statusFilter = s"
-            >
-              <span v-if="statusFilter === s" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              {{ statusLabel[s] }}
-            </div>
-
-            <div class="dropdown-divider" />
-            <div class="dropdown-header">App</div>
-            <div
-              class="dropdown-item"
-              :class="{ active: !appFilter }"
-              @click="appFilter = ''"
-            >
-              <span v-if="!appFilter" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              All apps
-            </div>
-            <div
-              v-for="app in apps"
-              :key="app.id"
-              class="dropdown-item"
-              :class="{ active: appFilter === app.id }"
-              @click="appFilter = app.id"
-            >
-              <span v-if="appFilter === app.id" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              {{ app.name }}
-            </div>
-
-            <div class="dropdown-divider" />
-            <div
-              class="dropdown-item"
-              style="color:var(--accent);justify-content:center;"
-              @click="clearFilters"
-            >
-              Clear all filters
-            </div>
-          </div>
-        </div>
-
-        <div class="sort-dropdown-wrap" style="position:relative;">
-          <button
-            class="btn btn-ghost"
-            :class="{ active: sortBy !== 'updatedAt' || sortOrder !== 'desc' }"
-            @click.stop="showSortMenu = !showSortMenu"
-          >
-            {{ activeSortLabel }}
-          </button>
-          <div v-if="showSortMenu" class="dropdown-menu">
-            <div
-              class="dropdown-item"
-              :class="{ active: sortBy === 'updatedAt' && sortOrder === 'desc' }"
-              @click="setSort('updatedAt', 'desc')"
-            >
-              <span v-if="sortBy === 'updatedAt' && sortOrder === 'desc'" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              Recently updated
-            </div>
-            <div
-              class="dropdown-item"
-              :class="{ active: sortBy === 'updatedAt' && sortOrder === 'asc' }"
-              @click="setSort('updatedAt', 'asc')"
-            >
-              <span v-if="sortBy === 'updatedAt' && sortOrder === 'asc'" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              Oldest first
-            </div>
-            <div
-              class="dropdown-item"
-              :class="{ active: sortBy === 'title' && sortOrder === 'asc' }"
-              @click="setSort('title', 'asc')"
-            >
-              <span v-if="sortBy === 'title' && sortOrder === 'asc'" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              Title A–Z
-            </div>
-            <div
-              class="dropdown-item"
-              :class="{ active: sortBy === 'title' && sortOrder === 'desc' }"
-              @click="setSort('title', 'desc')"
-            >
-              <span v-if="sortBy === 'title' && sortOrder === 'desc'" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              Title Z–A
-            </div>
-          </div>
-        </div>
+      <div class="flex-gap-sm">
+        <input
+          v-model="editorSearch"
+          class="search search-changelog"
+          placeholder="Search changelog…"
+          aria-label="Search changelog content"
+        />
+        <button type="button" class="btn btn-ghost btn-sm" @click="togglePreview">
+          {{ previewOnly ? "Editor" : "Preview" }}
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" @click="openHistory">
+          History
+        </button>
       </div>
     </div>
 
-    <!-- Loading -->
-    <div v-if="isLoading" class="grid-3">
-      <div v-for="n in 3" :key="n" class="card" style="height: 140px">
-        <div class="animate-pulse space-y-3">
-          <div class="h-4 bg-gray-200 rounded w-3/4"></div>
-          <div class="h-3 bg-gray-200 rounded w-1/2"></div>
-          <div class="h-3 bg-gray-200 rounded w-1/3"></div>
+    <!-- Empty state: onboarding for new users -->
+    <div v-if="!currentVersion" class="empty-state">
+      <div class="empty-state-content">
+        <div class="empty-state-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <line x1="10" y1="9" x2="8" y2="9"/>
+          </svg>
         </div>
-      </div>
-    </div>
 
-    <!-- Empty state -->
-    <div v-else-if="filteredChangelogs.length === 0" class="empty-state">
-      <p>No changelogs match your filters.</p>
-      <button v-if="hasActiveFilters" class="btn btn-ghost" @click="clearFilters">
-        Clear filters
-      </button>
-    </div>
+        <h2 class="empty-state-title">Changelog Editor</h2>
+        <p class="empty-state-desc">
+          Write structured release notes for each app version. Changelogs use category headers
+          so you can publish formatted release notes with one click.
+        </p>
 
-    <!-- Changelog cards -->
-    <div v-else class="grid-3">
-      <div v-for="c in filteredChangelogs" :key="c.id" class="card">
-        <div class="card-head">
-          <div>
-            <div class="card-title">{{ c.title }}</div>
-            <div class="card-meta">
-              {{ c.appName || "Unknown app" }}
-              <span v-if="c.version">· v{{ c.version }}</span>
-            </div>
-          </div>
-          <div class="card-actions">
-            <span class="pill" :class="statusClass[c.status] || 'pill-blue'">
-              {{ statusLabel[c.status] || c.status }}
-            </span>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-          <span class="text-muted-sm">Updated {{ timeAgo(c.updatedAt) }}</span>
-          <span v-if="c.createdBy" class="text-muted-sm">by {{ c.createdBy }}</span>
-        </div>
-        <div class="card-foot">
-          <NuxtLink :to="`/changelogs/${c.id}`" class="btn btn-ghost btn-sm">
-            Edit &rarr;
-          </NuxtLink>
-          <button
-            class="btn btn-ghost btn-sm action-btn"
-            title="Delete changelog"
-            @click="confirmDelete(c)"
-          >
-            <IconsTrash size="14" />
-          </button>
-        </div>
-      </div>
-    </div>
+        <div class="empty-state-example">
+          <div class="example-header">Expected format</div>
+          <pre class="example-code">### Added
+- New webhook retry logic with exponential backoff
+- Dark mode support for dashboard
 
-    <!-- Create Modal -->
-    <div class="modal-overlay" :class="{ open: showCreateModal }" @click.self="closeCreateModal">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>Create New Changelog</h2>
-          <button type="button" class="modal-close" aria-label="Close modal" @click="closeCreateModal">
-            ✕
-          </button>
-        </div>
-        <form novalidate @submit.prevent="submitCreate">
-          <div class="modal-body">
-            <div class="form-group">
-              <label for="changelogApp">App</label>
-              <select id="changelogApp" v-model="createForm.appId">
-                <option v-for="app in apps" :key="app.id" :value="app.id">
-                  {{ app.name }}
-                </option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="changelogTitle">Title</label>
-              <input
-                id="changelogTitle"
-                v-model="createForm.title"
-                type="text"
-                placeholder="e.g. API Gateway v2.4.1"
-                required
-                :class="{ 'input-error': createTitleError }"
-                aria-describedby="changelogTitleError"
-                @input="createTitleError = false"
-              />
-              <span id="changelogTitleError" class="error-msg" :class="{ show: createTitleError }">
-                Title is required
-              </span>
-            </div>
-            <div class="form-group">
-              <label for="changelogContent">
-                Content <span class="opt">(optional)</span>
-              </label>
-              <textarea
-                id="changelogContent"
-                v-model="createForm.content"
-                placeholder="Enter markdown changelog content…"
-                rows="6"
-              />
-            </div>
-            <div class="form-group">
-              <label for="changelogStatus">Status</label>
-              <select id="changelogStatus" v-model="createForm.status">
-                <option value="draft">Draft</option>
-                <option value="published">Published</option>
-              </select>
-            </div>
-          </div>
-          <div class="modal-foot">
-            <button type="button" class="btn btn-secondary" @click="closeCreateModal">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="isCreating">
-              <span v-if="isCreating">Creating…</span>
-              <span v-else>Create Changelog</span>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+### Fixed
+- Resolved timeout on large file uploads
+- Corrected version sorting in API response
 
-    <!-- Delete Confirmation Modal -->
-    <div class="modal-overlay" :class="{ open: !!changelogToDelete }" @click.self="changelogToDelete = null">
-      <div class="modal" style="width: 400px;">
-        <div class="modal-header">
-          <h2>Delete Changelog</h2>
-          <button type="button" class="modal-close" aria-label="Close modal" @click="changelogToDelete = null">
-            ✕
-          </button>
+### Changed
+- Updated rate limits for enterprise plans</pre>
         </div>
-        <div class="modal-body">
-          <p style="margin:0;color:var(--muted);">
-            Are you sure you want to delete <strong>{{ changelogToDelete?.title }}</strong>? This action cannot be undone.
+
+        <div class="empty-state-workflow">
+          <div class="workflow-step">
+            <span class="workflow-num">1</span>
+            <span class="workflow-label">Select app</span>
+          </div>
+          <div class="workflow-connector" />
+          <div class="workflow-step">
+            <span class="workflow-num">2</span>
+            <span class="workflow-label">Pick version</span>
+          </div>
+          <div class="workflow-connector" />
+          <div class="workflow-step">
+            <span class="workflow-num">3</span>
+            <span class="workflow-label">Write changelog</span>
+          </div>
+          <div class="workflow-connector" />
+          <div class="workflow-step">
+            <span class="workflow-num">4</span>
+            <span class="workflow-label">Create release</span>
+          </div>
+        </div>
+
+        <div class="empty-state-cta">
+          <p v-if="apps.length === 0" class="cta-hint">
+            No apps yet. <NuxtLink to="/apps" class="cta-link">Create your first app</NuxtLink> to get started.
           </p>
+          <p v-else-if="selectedAppId && versions.length === 0" class="cta-hint">
+            This app has no versions. <NuxtLink to="/versions" class="cta-link">Add a version</NuxtLink> first.
+          </p>
+          <p v-else class="cta-hint">Select an app and version from the top bar to start editing.</p>
         </div>
-        <div class="modal-foot">
-          <button type="button" class="btn btn-secondary" @click="changelogToDelete = null">
-            Cancel
+      </div>
+    </div>
+
+    <!-- Editor shell -->
+    <div v-else class="editor-shell" :class="{ 'preview-only': previewOnly }">
+      <!-- Editor -->
+      <div class="editor-pane">
+        <div class="format-hint" v-if="!content.trim()">
+          <span class="format-hint-label">Changelog categories:</span>
+          <div class="format-hint-tags">
+            <span class="format-hint-tag">### Added</span>
+            <span class="format-hint-tag">### Fixed</span>
+            <span class="format-hint-tag">### Changed</span>
+            <span class="format-hint-tag">### Deprecated</span>
+            <span class="format-hint-tag">### Security</span>
+          </div>
+        </div>
+        <div class="toolbar">
+          <button type="button" class="tool-btn" @click="wrapText('## ')">H2</button>
+          <button type="button" class="tool-btn" @click="wrapText('### ')">H3</button>
+          <button type="button" class="tool-btn" @click="wrapText('**','**')">B</button>
+          <button type="button" class="tool-btn" @click="wrapText('*','*')">I</button>
+          <button type="button" class="tool-btn" @click="wrapText('`','`')">`code`</button>
+          <button type="button" class="tool-btn" @click="insertLine('- ')">• list</button>
+          <button type="button" class="tool-btn" @click="insertLine('1. ')">1. list</button>
+          <button type="button" class="tool-btn" @click="insertLine('- [ ] ')">[] task</button>
+          <button type="button" class="tool-btn" @click="wrapText('[',']()')">link</button>
+          <button type="button" class="tool-btn" @click="insertLine('> ')">quote</button>
+        </div>
+        <div class="pane-body">
+          <textarea
+            ref="textareaRef"
+            v-model="content"
+            class="textarea"
+            spellcheck="false"
+            placeholder="Enter changelog markdown…"
+          />
+        </div>
+      </div>
+
+      <!-- Preview -->
+      <div class="editor-pane">
+        <div class="pane-header">
+          <span>Preview</span>
+          <span class="meta-label">Rendered from markdown</span>
+        </div>
+        <div class="pane-body preview-body" v-html="renderedPreview" />
+      </div>
+    </div>
+
+    <!-- History Panel -->
+    <div class="history-panel" :class="{ open: showHistoryPanel }" role="dialog" aria-modal="true" aria-labelledby="historyTitle" tabindex="-1" @click.self="closeHistory">
+      <div class="history-drawer">
+        <div class="history-header">
+          <h3 id="historyTitle">Version history</h3>
+          <button type="button" class="btn btn-ghost history-close" aria-label="Close version history" @click="closeHistory">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
-          <button type="button" class="btn btn-danger" :disabled="isDeletingItem" @click="doDelete">
-            <span v-if="isDeletingItem">Deleting…</span>
-            <span v-else>Delete</span>
+        </div>
+        <div class="history-search-wrap">
+          <input v-model="historySearch" type="search" class="history-search" placeholder="Filter by author or action…" aria-label="Filter version history" />
+        </div>
+        <div class="history-list" role="list" @keydown="onHistoryListKeydown">
+          <div
+            v-for="(item, index) in filteredHistory"
+            :key="item.id"
+            class="history-item"
+            role="listitem"
+            tabindex="0"
+            @click="historyFocusIndex = index"
+            @keydown.enter.prevent="restoreHistoryItem(item)"
+            @keydown.space.prevent="restoreHistoryItem(item)"
+          >
+            <div class="history-item-main">
+              <div class="time">{{ item.createdAt ? new Date(item.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—" }}</div>
+              <div class="history-meta-row">
+                <span class="author">{{ item.actor || "Unknown" }}</span>
+                <span class="pill" :class="item.action === 'publish' ? 'pill-green' : 'pill-muted'">{{ item.action }}</span>
+              </div>
+            </div>
+            <button type="button" class="btn btn-ghost btn-sm history-restore" @click.stop="restoreHistoryItem(item)">
+              Restore
+            </button>
+          </div>
+          <div v-if="isHistoryLoading" class="history-empty">
+            <p>Loading history…</p>
+          </div>
+          <div v-else-if="filteredHistory.length === 0" class="history-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40" aria-hidden="true"><path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+            <p>No history yet</p>
+            <span class="text-muted-sm">Save or publish to create history entries</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Release Panel -->
+    <div class="release-panel" :class="{ open: showReleasePanel }" role="dialog" aria-modal="true" aria-labelledby="releaseTitle" tabindex="-1" @click.self="closeReleasePanel">
+      <div class="release-drawer">
+        <div class="release-header">
+          <h3 id="releaseTitle">Create Article Release</h3>
+          <button type="button" class="btn btn-ghost release-close" aria-label="Close release panel" @click="closeReleasePanel">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="release-body">
+          <div class="release-section">
+            <div class="release-section-title">Headline</div>
+            <input id="heroTitle" v-model="heroTitle" type="text" class="release-input" placeholder="e.g. Request tracing, deep health checks, and retry reliability" />
+          </div>
+          <div class="release-section">
+            <div class="release-section-title">Feature Highlights</div>
+            <input v-model="featureHeading" type="text" class="release-input" placeholder="Feature heading (optional)" />
+            <textarea v-model="featureDesc" class="release-textarea" placeholder="Describe the feature for the release article…" />
+          </div>
+          <div class="release-section">
+            <div class="release-section-title">Categories from Changelog</div>
+            <div class="release-categories">
+              <label v-for="cat in releaseCategories" :key="cat.label" class="release-cat-tag">
+                <input v-model="cat.checked" type="checkbox" />
+                <span class="pill" :class="cat.colorClass">{{ cat.label }}</span>
+              </label>
+              <span v-if="releaseCategories.length === 0" class="meta-label">No categories detected</span>
+            </div>
+          </div>
+          <div class="release-section">
+            <div class="release-section-title">Preview</div>
+            <div class="release-preview-box" v-html="releasePreviewHtml" />
+          </div>
+        </div>
+        <div class="release-footer">
+          <button type="button" class="btn btn-secondary" @click="closeReleasePanel">Cancel</button>
+          <button type="button" class="btn btn-primary" :disabled="isPublishingRelease || !currentVersion" @click="submitPublishRelease">
+            <span v-if="isPublishingRelease">Publishing…</span>
+            <span v-else>Publish Article</span>
           </button>
         </div>
       </div>
@@ -507,8 +901,11 @@ const statusLabel: Record<string, string> = {
 </template>
 
 <style scoped>
-.changelogs-page {
-  /* Inherits global semantic tokens from :root */
+.changelog-editor-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  outline: none;
 }
 
 .topbar {
@@ -516,20 +913,96 @@ const statusLabel: Record<string, string> = {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
 }
 .topbar h1 {
   margin: 0;
   font-weight: 600;
   font-size: 20px;
   color: var(--fg);
+  white-space: nowrap;
+}
+.topbar-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+.topbar-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-h2 {
-  margin: 0;
+/* App/Version selectors */
+.selector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+.selector-label {
+  font-size: 11px;
   font-weight: 600;
-  font-size: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding-left: 2px;
+}
+.selector-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.selector-connector {
+  color: var(--border);
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  align-self: center;
+}
+.selector-disabled {
+  opacity: 0.5;
+}
+.selector-disabled .selector-inline-hint {
+  opacity: 1;
+}
+.selector-inline-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.selector-inline-hint:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.selector-inline-hint svg {
+  flex-shrink: 0;
+}
+
+.select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font: inherit;
+  font-size: 14px;
   color: var(--fg);
+}
+.select:focus {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 0;
+  border-color: var(--accent);
 }
 
 .row-between {
@@ -537,10 +1010,24 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  flex-shrink: 0;
+}
+.flex-gap-sm {
+  display: flex;
+  gap: 8px;
+}
+.flex-gap-md {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+.text-muted-sm {
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .search {
-  width: 320px;
+  width: 240px;
   padding: 8px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -553,63 +1040,8 @@ h2 {
   outline: 2px solid var(--accent-soft);
   border-color: var(--accent);
 }
-
-.grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-@media (max-width: 1100px) {
-  .grid-3 {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 720px) {
-  .grid-3 {
-    grid-template-columns: 1fr;
-  }
-}
-
-.card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  transition: box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.card:hover {
-  box-shadow: 0 1px 3px var(--fg-soft);
-}
-.card-head {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  gap: 12px;
-}
-.card-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--fg);
-}
-.card-meta {
-  color: var(--muted);
-  font-size: 13px;
-  margin-top: 4px;
-}
-.card-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+.search-changelog {
+  width: 200px;
 }
 
 .pill {
@@ -621,26 +1053,194 @@ h2 {
   font-size: 12px;
   font-weight: 500;
 }
-.pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
-}
 .pill-blue {
   background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
   color: oklch(55% 0.14 255);
 }
+.pill-green {
+  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
+  color: oklch(50% 0.14 145);
+}
+.pill-amber {
+  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
+  color: oklch(60% 0.12 85);
+}
 
-.text-muted-sm {
+.editor-shell {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
+}
+.editor-shell.preview-only {
+  grid-template-columns: 1fr;
+}
+.editor-shell.preview-only .editor-pane:first-child {
+  display: none;
+}
+@media (max-width: 960px) {
+  .editor-shell {
+    grid-template-columns: 1fr;
+  }
+}
+
+.editor-pane {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.pane-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.pane-body {
+  flex: 1;
+  padding: 16px;
+  overflow: auto;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.tool-btn {
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--muted);
   font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tool-btn:hover {
+  background: var(--fg-soft);
+  color: var(--fg);
+}
+.tool-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 48px 0;
+.textarea {
+  width: 100%;
+  height: 100%;
+  border: none;
+  resize: none;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg);
+  background: transparent;
+  outline: none;
+}
+
+.preview-body {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.preview-body :deep(h1) {
+  font-size: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+.preview-body :deep(h2) {
+  font-size: 18px;
+  margin: 24px 0 12px;
+  font-weight: 600;
+}
+.preview-body :deep(h3) {
+  font-size: 16px;
+  margin: 20px 0 10px;
+  font-weight: 600;
+}
+.preview-body :deep(ul) {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+.preview-body :deep(ol) {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+.preview-body :deep(li) {
+  margin: 4px 0;
+}
+.preview-body :deep(code) {
+  background: var(--bg);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.preview-body :deep(pre) {
+  background: var(--bg);
+  padding: 12px;
+  border-radius: var(--radius);
+  overflow: auto;
+  margin: 8px 0;
+}
+.preview-body :deep(pre code) {
+  background: none;
+  padding: 0;
+}
+.preview-body :deep(blockquote) {
+  border-left: 3px solid var(--border);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--muted);
+}
+.preview-body :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+.preview-body :deep(a) {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.preview-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 14px;
+}
+.preview-body :deep(th),
+.preview-body :deep(td) {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+.preview-body :deep(th) {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.meta-label {
+  font-size: 12px;
   color: var(--muted);
 }
 
+/* Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -651,9 +1251,15 @@ h2 {
   font-size: 14px;
   font-weight: 500;
   transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   background: transparent;
+  color: var(--fg);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .btn-primary {
   background: var(--accent);
@@ -663,6 +1269,10 @@ h2 {
 .btn-primary:hover {
   background: color-mix(in oklch, var(--accent) 88%, black);
 }
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .btn-secondary {
   background: transparent;
   color: var(--fg);
@@ -670,6 +1280,10 @@ h2 {
 }
 .btn-secondary:hover {
   border-color: var(--fg);
+}
+.btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .btn-ghost {
   background: transparent;
@@ -679,112 +1293,237 @@ h2 {
 .btn-ghost:hover {
   color: var(--fg);
 }
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 .btn-sm {
-  padding: 6px 12px;
+  padding: 5px 12px;
   font-size: 13px;
 }
-.btn-danger {
-  background: oklch(55% 0.16 25);
-  color: var(--surface);
-  border-color: oklch(55% 0.16 25);
-}
-.btn-danger:hover {
-  background: oklch(50% 0.18 25);
-}
-.action-btn {
-  padding: 4px;
-  border-radius: 6px;
+
+.release-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+  margin-left: 4px;
 }
 
-.modal-overlay {
+/* History panel */
+.history-panel {
   position: fixed;
   inset: 0;
   z-index: 100;
   background: color-mix(in oklch, var(--fg) 35%, transparent);
   display: flex;
-  align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.modal-overlay.open {
+.history-panel.open {
   opacity: 1;
   pointer-events: auto;
 }
-.modal {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  width: 520px;
+.history-drawer {
+  width: 420px;
   max-width: 90vw;
-  max-height: 90vh;
-  overflow: auto;
-  box-shadow: 0 20px 60px color-mix(in oklch, var(--fg) 15%, transparent);
-  transform: translateY(12px) scale(0.98);
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.modal-overlay.open .modal {
-  transform: translateY(0) scale(1);
+.history-panel.open .history-drawer {
+  transform: translateX(0);
 }
-.modal-header {
+.history-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
-.modal-header h2 {
-  font-size: 18px;
+.history-header h3 {
+  font-size: 16px;
   margin: 0;
 }
-.modal-close {
-  width: 32px;
-  height: 32px;
-  display: flex;
+.history-close {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
   border-radius: var(--radius);
+}
+.history-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.history-search-wrap {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.history-search {
+  width: 100%;
+  padding: 8px 12px;
   border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font: inherit;
+  font-size: 14px;
+  color: var(--fg);
+}
+.history-search:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+.history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+.history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 4px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  font-size: 16px;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
 }
-.modal-close:hover {
-  color: var(--fg);
-  border-color: var(--fg);
+.history-item:focus-visible {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }
-.modal-body {
-  padding: 20px 24px;
+.history-item:hover {
+  background: var(--fg-soft);
 }
-.form-group {
-  margin-bottom: 16px;
+.history-item:hover .history-restore {
+  opacity: 1;
 }
-.form-group label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 6px;
-  color: var(--fg);
+.history-item-main {
+  flex: 1;
+  min-width: 0;
 }
-.form-group label .opt {
-  color: var(--muted);
-  font-weight: 400;
-}
-.error-msg {
-  display: none;
-  color: oklch(50% 0.16 25);
+.history-item .time {
+  font-family: var(--font-mono);
   font-size: 12px;
+  color: var(--muted);
+}
+.history-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 4px;
 }
-.error-msg.show {
-  display: block;
+.history-item .author {
+  font-size: 13px;
+  color: var(--fg);
 }
-.form-group input,
-.form-group textarea,
-.form-group select {
+.history-restore {
+  opacity: 0;
+  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+}
+.history-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  color: var(--muted);
+  text-align: center;
+}
+.history-empty svg {
+  color: var(--border);
+}
+.history-empty p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+/* Release panel */
+.release-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: color-mix(in oklch, var(--fg) 35%, transparent);
+  display: flex;
+  justify-content: flex-end;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.release-panel.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.release-drawer {
+  width: 520px;
+  max-width: 90vw;
+  height: 100%;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.release-panel.open .release-drawer {
+  transform: translateX(0);
+}
+.release-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.release-header h3 {
+  font-size: 16px;
+  margin: 0;
+}
+.release-close {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius);
+}
+.release-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+.release-section {
+  margin-bottom: 24px;
+}
+.release-section-title {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+.release-input {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
@@ -793,112 +1532,244 @@ h2 {
   font: inherit;
   font-size: 14px;
   color: var(--fg);
-  transition: border-color 0.15s, box-shadow 0.15s;
+  margin-bottom: 12px;
 }
-.form-group input:focus,
-.form-group textarea:focus,
-.form-group select:focus {
-  outline: none;
+.release-input:focus {
+  outline: 2px solid var(--accent-soft);
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
-.form-group textarea {
-  resize: vertical;
+.release-textarea {
+  width: 100%;
   min-height: 80px;
-}
-.input-error {
-  border-color: oklch(55% 0.18 25) !important;
-  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
-}
-.modal-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 16px 24px;
-  border-top: 1px solid var(--border);
-}
-
-.result-count {
-  font-size: 13px;
-  color: var(--muted);
-  font-family: var(--font-mono);
-}
-.dropdown-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  background: var(--surface);
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: 0 4px 16px color-mix(in oklch, var(--fg) 10%, transparent);
-  min-width: 200px;
-  padding: 6px 0;
-  z-index: 50;
+  background: var(--bg);
+  font: inherit;
+  font-size: 14px;
+  color: var(--fg);
+  line-height: 1.5;
+  resize: vertical;
 }
-.dropdown-header {
-  padding: 6px 16px;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.release-textarea:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+.release-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.release-cat-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg);
+  cursor: pointer;
+}
+.release-cat-tag input {
+  margin: 0;
+}
+.release-preview-box {
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.release-preview-box :deep(h4) {
+  font-size: 14px;
+  margin: 0 0 8px;
   color: var(--muted);
-  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
-.dropdown-item {
+.release-preview-box :deep(p) {
+  margin: 0 0 12px;
+}
+.release-footer {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.pill-purple {
+  background: color-mix(in oklch, oklch(60% 0.16 300) 12%, transparent);
+  color: oklch(55% 0.14 300);
+}
+.pill-red {
+  background: color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent);
+  color: oklch(50% 0.14 25);
+}
+
+/* Empty state / onboarding */
+.empty-state {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  overflow-y: auto;
+}
+.empty-state-content {
+  max-width: 560px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.empty-state-icon {
+  color: var(--border);
+  margin-bottom: 4px;
+}
+.empty-state-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--fg);
+  margin: 0;
+}
+.empty-state-desc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  margin: 0;
+  max-width: 440px;
+}
+.empty-state-example {
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-top: 4px;
+}
+.example-header {
+  padding: 10px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.example-code {
+  padding: 16px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--fg);
+  background: transparent;
+  overflow-x: auto;
+}
+.empty-state-workflow {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 14px;
-  font-size: 14px;
-  color: var(--fg);
-  cursor: pointer;
-  transition: background 0.1s;
-  user-select: none;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
-.dropdown-item:hover {
-  background: var(--fg-soft);
-}
-.dropdown-item.active {
-  color: var(--accent);
-  font-weight: 500;
-}
-.check {
-  width: 16px;
-  text-align: center;
+.workflow-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   font-size: 13px;
+  color: var(--fg);
 }
-.check-placeholder {
+.workflow-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+.workflow-connector {
   width: 16px;
-  display: inline-block;
-}
-.dropdown-divider {
   height: 1px;
   background: var(--border);
-  margin: 6px 0;
+  flex-shrink: 0;
 }
-.btn-ghost.active {
+.empty-state-cta {
+  margin-top: 4px;
+}
+.cta-hint {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
+}
+.cta-link {
   color: var(--accent);
-  background: var(--accent-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 500;
 }
-.filter-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  display: inline-block;
+.cta-link:hover {
+  color: color-mix(in oklch, var(--accent) 88%, black);
+}
+
+/* Editor format hint */
+.format-hint {
+  padding: 12px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.format-hint-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.format-hint-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.format-hint-tag {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card,
-  .modal-overlay,
-  .modal,
+  .history-panel,
+  .history-drawer,
+  .release-panel,
+  .release-drawer,
   .btn,
-  .search {
+  .editor-pane,
+  .tool-btn {
     transition: none !important;
-  }
-}
-@media (max-width: 768px) {
-  .search {
-    width: 180px;
   }
 }
 </style>

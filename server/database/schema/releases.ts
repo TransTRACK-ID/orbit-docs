@@ -27,6 +27,7 @@ export const releases = pgTable("releases", {
     deprecated?: string[];
     security?: string[];
   }>(),
+  type: text("type").notNull().default("normal"),
   published: boolean("published").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
