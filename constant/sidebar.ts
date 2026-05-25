@@ -2,6 +2,7 @@ import {
   IconsApps,
   IconsVersions,
   IconsReleases,
+  IconsChangelogs,
   IconsDocEditor,
   IconsPublishedDocs,
   IconsEmbedDocs,
@@ -30,6 +31,13 @@ export const sidebarMenu: ISidebar[] = [
     label: "Releases",
     route: "/releases",
     icon: markRaw(IconsReleases),
+    active: false,
+  },
+  {
+    id: "menu__changelogs",
+    label: "Changelogs",
+    route: "/changelogs",
+    icon: markRaw(IconsChangelogs),
     active: false,
   },
   {
