@@ -1,0 +1,896 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Orbit Docs · Versions</title>
+  <style>
+    :root {
+      --bg:      oklch(98% 0.004 250);
+      --surface: oklch(100% 0 0);
+      --fg:      oklch(20% 0.02 250);
+      --muted:   oklch(55% 0.015 250);
+      --border:  oklch(90% 0.006 250);
+      --accent:  oklch(55% 0.16 25);
+      --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
+      --fg-soft:     color-mix(in oklch, var(--fg) 6%, transparent);
+      --font-display: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --font-body:    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      --font-mono:    'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+      --fs-body: 14px;
+      --gap-xs: 8px; --gap-sm: 12px; --gap-md: 16px; --gap-lg: 24px; --gap-xl: 32px;
+      --radius: 8px; --radius-lg: 12px;
+      --sidebar: 240px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: var(--fs-body); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; cursor: pointer; }
+    h1, h2, h3 { margin: 0; font-weight: 600; }
+
+    .app-shell { display: flex; min-height: 100vh; }
+    .sidebar { width: var(--sidebar); flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); padding: 24px 0; display: flex; flex-direction: column; }
+    .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 20px 24px; font-family: var(--font-display); font-size: 18px; font-weight: 600; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+    .sidebar-brand svg { width: 22px; height: 22px; color: var(--accent); }
+    .nav-group { padding: 8px 0; }
+    .nav-group-title { padding: 8px 20px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; margin: 2px 12px; border-radius: var(--radius); font-size: 14px; color: var(--muted); transition: background .1s cubic-bezier(.4,0,.2,1), color .1s cubic-bezier(.4,0,.2,1); }
+    .nav-item:hover { background: var(--fg-soft); color: var(--fg); }
+    .nav-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+    .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .topbar { height: 56px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; padding: 0 32px; background: var(--surface); border-bottom: 1px solid var(--border); }
+    .topbar h1 { font-size: 20px; font-weight: 600; }
+
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius); border: 1px solid transparent; font-size: 14px; font-weight: 500; transition: background .15s cubic-bezier(.4,0,.2,1), border-color .15s cubic-bezier(.4,0,.2,1), color .15s cubic-bezier(.4,0,.2,1); }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn-primary { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+    .btn-primary:hover { background: color-mix(in oklch, var(--accent) 88%, black); }
+    .btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+    .btn-secondary:hover { border-color: var(--fg); }
+    .btn-ghost { background: transparent; color: var(--muted); border-color: transparent; }
+    .btn-ghost:hover { color: var(--fg); }
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+
+    .content { padding: 32px; flex: 1; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+
+    .select { padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font: inherit; font-size: 14px; color: var(--fg); }
+    .select:focus { outline: 2px solid var(--accent-soft); outline-offset: 0; border-color: var(--accent); }
+    .search {
+      width: 320px; padding: 8px 12px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--bg); font: inherit; font-size: 14px;
+    }
+    .search:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; }
+    .table-card { padding: 0; overflow: hidden; }
+    .section-title { font-size: 20px; font-weight: 600; }
+    .text-muted-sm { color: var(--muted); font-size: 13px; }
+    .flex-gap-sm { display: flex; gap: 8px; }
+    .flex-gap-md { display: flex; gap: 16px; align-items: center; }
+
+    .pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+    .pill-green { background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent); color: oklch(50% 0.14 145); }
+    .pill-blue { background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent); color: oklch(55% 0.14 255); }
+    .pill-amber { background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent); color: oklch(60% 0.12 85); }
+    .pill-muted { background: var(--fg-soft); color: var(--muted); }
+    .pill-red { background: color-mix(in oklch, oklch(55% 0.2 25) 12%, transparent); color: oklch(50% 0.16 25); }
+
+    .ds-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .ds-table th, .ds-table td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+    .ds-table .check-col { width: 40px; padding-right: 0; }
+    .ds-table .version-num { font-weight: 600; }
+    .ds-table th { color: var(--muted); font-weight: 500; font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }
+    .ds-table tbody tr:hover { background: var(--fg-soft); }
+    .ds-table tbody tr.selected { background: var(--accent-soft); }
+    .ds-table tbody tr.selected:hover { background: color-mix(in oklch, var(--accent) 18%, transparent); }
+    .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+    .version-detail { display: grid; grid-template-columns: 1fr 320px; gap: 24px; margin-top: 32px; }
+    @media (max-width: 960px) { .version-detail { grid-template-columns: 1fr; } }
+    .detail-card h3 { font-size: 14px; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .detail-card p { margin: 0 0 8px; font-size: 14px; }
+    .detail-card .num { color: var(--muted); font-size: 12px; }
+
+    .pagefoot { padding: 20px 32px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--border); }
+
+    /* Workflow banner */
+    .workflow-banner {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 16px; margin-bottom: 20px;
+      background: var(--accent-soft); border: 1px solid color-mix(in oklch, var(--accent) 20%, transparent);
+      border-radius: var(--radius); font-size: 14px;
+    }
+    .workflow-banner svg { color: var(--accent); flex-shrink: 0; }
+    .workflow-banner strong { color: var(--accent); }
+
+    /* Status dots */
+    .status-dot {
+      width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 6px;
+    }
+    .status-dot-green { background: oklch(50% 0.14 145); }
+    .status-dot-amber { background: oklch(70% 0.14 85); }
+    .status-dot-red { background: oklch(50% 0.16 25); }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 24px; right: 32px; z-index: 200;
+      background: var(--fg); color: var(--surface);
+      padding: 12px 20px; border-radius: var(--radius);
+      font-size: 14px; font-weight: 500;
+      box-shadow: 0 8px 24px color-mix(in oklch, var(--fg) 20%, transparent);
+      opacity: 0; transform: translateY(8px);
+      transition: opacity .2s cubic-bezier(.4,0,.2,1), transform .2s cubic-bezier(.4,0,.2,1);
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+
+    /* Compare overlay */
+    .compare-overlay {
+      position: fixed;
+      inset: 0;
+      background: color-mix(in oklch, var(--fg) 40%, transparent);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+    }
+    .compare-overlay.active { display: flex; }
+    .compare-panel {
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border);
+      width: 100%;
+      max-width: 1100px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 48px color-mix(in oklch, var(--fg) 12%, transparent);
+    }
+    .compare-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .compare-header h2 { font-size: 18px; }
+    .compare-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    @media (max-width: 800px) { .compare-grid { grid-template-columns: 1fr; } }
+    .compare-col h3 {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .diff-stat {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 20px;
+      padding: 12px 16px;
+      background: var(--bg);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+    .diff-stat-item { text-align: center; }
+    .diff-stat-item .num { font-size: 20px; font-weight: 600; display: block; }
+    .diff-stat-item .label { font-size: 12px; color: var(--muted); }
+    .diff-stat-item .added { color: oklch(50% 0.14 145); }
+    .diff-stat-item .removed { color: oklch(50% 0.16 25); }
+    .diff-stat-item .changed { color: oklch(55% 0.14 255); }
+
+    .diff-list { list-style: none; margin: 0; padding: 0; }
+    .diff-list li {
+      padding: 10px 12px;
+      border-radius: var(--radius);
+      margin-bottom: 6px;
+      font-size: 14px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .diff-list li.added { background: color-mix(in oklch, oklch(60% 0.18 145) 8%, transparent); }
+    .diff-list li.removed { background: color-mix(in oklch, oklch(55% 0.2 25) 8%, transparent); text-decoration: line-through; opacity: .7; }
+    .diff-list li.changed { background: color-mix(in oklch, oklch(60% 0.16 255) 8%, transparent); }
+    .diff-list li .diff-icon {
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .close-btn {
+      background: none; border: 1px solid transparent; padding: 4px;
+      color: var(--muted); cursor: pointer; border-radius: var(--radius);
+      transition: background .15s cubic-bezier(.4,0,.2,1), border-color .15s cubic-bezier(.4,0,.2,1), color .15s cubic-bezier(.4,0,.2,1);
+    }
+    .close-btn:hover { background: var(--fg-soft); color: var(--fg); border-color: var(--border); }
+    .close-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+    .selection-bar {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--accent-soft);
+      border: 1px solid color-mix(in oklch, var(--accent) 20%, transparent);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    .selection-bar.active { display: flex; }
+    .selection-bar .num { font-weight: 600; color: var(--accent); }
+
+    /* New Version Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; z-index: 100;
+      background: color-mix(in oklch, var(--fg) 35%, transparent);
+      display: flex; align-items: center; justify-content: center;
+      padding: 40px;
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s cubic-bezier(.4,0,.2,1);
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: auto; }
+    .modal-panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-lg); width: 100%; max-width: 640px;
+      max-height: 90vh; overflow: auto;
+      box-shadow: 0 20px 60px color-mix(in oklch, var(--fg) 15%, transparent);
+      transform: translateY(12px) scale(0.98);
+      transition: transform .2s cubic-bezier(.4,0,.2,1);
+    }
+    .modal-overlay.open .modal-panel { transform: translateY(0) scale(1); }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 24px; border-bottom: 1px solid var(--border);
+    }
+    .modal-header h2 { font-size: 18px; }
+    .modal-close {
+      width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+      border-radius: var(--radius); border: 1px solid var(--border); background: transparent;
+      color: var(--muted); cursor: pointer;
+      transition: color .15s cubic-bezier(.4,0,.2,1), border-color .15s cubic-bezier(.4,0,.2,1);
+    }
+    .modal-close:hover { color: var(--fg); border-color: var(--fg); }
+    .modal-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .modal-body { padding: 20px 24px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px;
+    }
+    .form-group label .opt { color: var(--muted); font-weight: 400; }
+    .input-error { border-color: oklch(55% 0.18 25) !important; box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important; }
+    .error-msg {
+      display: none; color: oklch(50% 0.16 25); font-size: 12px; margin-top: 4px;
+    }
+    .error-msg.show { display: block; }
+    .form-group input[type="text"],
+    .form-group input[type="date"],
+    .form-group select,
+    .form-group textarea {
+      width: 100%; padding: 10px 12px;
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--surface); font: inherit; font-size: 14px; color: var(--fg);
+      transition: border-color .15s cubic-bezier(.4,0,.2,1), box-shadow .15s cubic-bezier(.4,0,.2,1);
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none; border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .form-group textarea { min-height: 120px; resize: vertical; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+    .form-footer {
+      display: flex; justify-content: flex-end; gap: 10px;
+      padding: 16px 24px; border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" data-od-id="sidebar">
+      <div class="sidebar-brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+        Orbit Docs
+      </div>
+      <nav>
+        <div class="nav-group">
+          <div class="nav-group-title">Workspace</div>
+          <a href="index.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            Apps
+          </a>
+          <a href="versions.html" class="nav-item active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M2 12h20"/></svg>
+            Versions
+          </a>
+          <a href="releases.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            Releases
+          </a>
+          <a href="changelog.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Changelogs
+          </a>
+          <a href="docs-editor.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Doc Editor
+          </a>
+          <a href="docs-viewer.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            Published Docs
+          </a>
+          <a href="embed-docs.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            Embed Docs
+          </a>
+        </div>
+        <div class="nav-group" style="margin-top:auto;">
+          <div class="nav-group-title">Account</div>
+          <a href="settings.html" class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Settings
+          </a>
+        </div>
+      </nav>
+    </aside>
+
+    <div class="main">
+      <header class="topbar" data-od-id="topbar">
+        <h1>Versions</h1>
+        <div class="flex-gap-md">
+          <input class="search" id="versionSearch" placeholder="Search versions…" aria-label="Search versions" />
+          <select class="select" id="appSelect">
+            <!-- Populated by JS -->
+          </select>
+          <button type="button" class="btn btn-primary" onclick="openNewVersionModal()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            New Version
+          </button>
+        </div>
+      </header>
+
+      <main class="content" data-od-id="content">
+        <!-- Workflow banner -->
+        <div class="workflow-banner">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span><strong>Versions are the source of truth.</strong> Create a version, then add a changelog, then publish a release. All changes flow from here.</span>
+        </div>
+
+        <div class="row-between" style="margin-bottom:16px;">
+          <div>
+            <h2 class="section-title" id="appTitle">API Gateway · 8 versions</h2>
+            <p class="text-muted-sm" style="margin:4px 0 0;">Current: <span class="num pill pill-blue" id="currentVersionBadge">v2.4.1</span> · Published <span id="currentVersionDate">May 18, 2026</span></p>
+          </div>
+          <div class="flex-gap-sm">
+            <button class="btn btn-secondary" id="compareBtn" disabled>Compare versions</button>
+            <button class="btn btn-ghost" onclick="archiveSelected()">Archive</button>
+          </div>
+        </div>
+
+        <div class="selection-bar" id="selectionBar">
+          <span><span class="num" id="selectedCount">0</span> versions selected</span>
+          <span class="text-muted-sm">Select 2 to compare</span>
+          <button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="clearSelection()">Clear</button>
+        </div>
+
+        <div class="card table-card">
+          <table class="ds-table" id="versionTable">
+            <thead>
+              <tr>
+                <th class="check-col"></th>
+                <th>Version</th>
+                <th>Date</th>
+                <th>Author</th>
+                <th>Status</th>
+                <th>Changelog</th>
+                <th>Release</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="versionTableBody">
+              <!-- Rendered by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Version detail panel -->
+        <div class="version-detail" id="versionDetail">
+          <div class="card detail-card">
+            <h3>Latest Release Notes · <span id="detailVersion">v2.4.1</span></h3>
+            <p style="line-height:1.6;" id="detailNotes">Patch release addressing webhook retry logic and adding support for custom header forwarding in edge routes. No breaking changes.</p>
+            <div style="margin-top:16px;">
+              <span class="num" id="detailFiles">3 files changed</span> · <span class="num" id="detailLines">+142 −18</span> lines
+            </div>
+          </div>
+          <div class="card detail-card">
+            <h3>Metadata</h3>
+            <p><strong>Commit:</strong> <span class="num" id="detailCommit">a7f3c2d</span></p>
+            <p><strong>Branch:</strong> <span class="num" id="detailBranch">release/2.4.1</span></p>
+            <p><strong>CI/CD:</strong> <span class="pill pill-green" id="detailCI">Passed</span></p>
+            <p><strong>Approver:</strong> <span id="detailApprover">Sarah Chen</span></p>
+            <p style="margin-top:12px;"><button type="button" class="btn btn-secondary" style="width:100%;">Download Release Bundle</button></p>
+          </div>
+        </div>
+      </main>
+
+      <footer class="pagefoot" data-od-id="footer">
+        <span>Orbit Docs · Internal documentation platform</span>
+        <span class="num">v2026.05</span>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Compare overlay -->
+  <div class="compare-overlay" id="compareOverlay">
+    <div class="compare-panel">
+      <div class="compare-header">
+        <h2>Compare versions</h2>
+        <button type="button" class="close-btn" aria-label="Close compare overlay" onclick="closeCompare()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="compare-body">
+        <div class="diff-stat">
+          <div class="diff-stat-item">
+            <span class="num added" id="statAdded">+4</span>
+            <span class="label">Added</span>
+          </div>
+          <div class="diff-stat-item">
+            <span class="num removed" id="statRemoved">−2</span>
+            <span class="label">Removed</span>
+          </div>
+          <div class="diff-stat-item">
+            <span class="num changed" id="statChanged">3</span>
+            <span class="label">Changed</span>
+          </div>
+          <div class="diff-stat-item">
+            <span class="num" id="statFiles">7 files</span>
+            <span class="label">Files</span>
+          </div>
+          <div class="diff-stat-item">
+            <span class="num" id="statLines">+284 −67</span>
+            <span class="label">Lines</span>
+          </div>
+        </div>
+        <div class="compare-grid">
+          <div class="compare-col">
+            <h3 id="oldVersionTitle">v2.4.0 · May 10, 2026</h3>
+            <ul class="diff-list" id="oldVersionList">
+              <li class="removed">
+                <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
+                <span>Legacy webhook retry (exponential backoff v1)</span>
+              </li>
+              <li class="removed">
+                <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/></svg>
+                <span>Header forwarding limited to 10 custom headers</span>
+              </li>
+              <li class="changed">
+                <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                <span>Rate limit: 1000 req/min → 5000 req/min</span>
+              </li>
+              <li>JWT validation middleware</li>
+              <li>Edge route caching (TTL 300s)</li>
+              <li>OpenAPI 3.1 spec generation</li>
+            </ul>
+          </div>
+          <div class="compare-col">
+            <h3 id="newVersionTitle">v2.4.1 · May 18, 2026</h3>
+            <ul class="diff-list" id="newVersionList">
+              <li class="added">
+                <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                <span>Smart webhook retry with circuit breaker</span>
+              </li>
+              <li class="added">
+                <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                <span>Unlimited custom header forwarding</span>
+              </li>
+              <li class="added">
+                <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                <span>Header validation & sanitization</span>
+              </li>
+              <li class="added">
+                <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                <span>Webhook delivery status dashboard</span>
+              </li>
+              <li class="changed">
+                <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                <span>Rate limit: 5000 req/min → 8000 req/min</span>
+              </li>
+              <li>JWT validation middleware</li>
+              <li>Edge route caching (TTL 300s)</li>
+              <li>OpenAPI 3.1 spec generation</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Version Modal -->
+  <div class="modal-overlay" id="newVersionModal">
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2>Create New Version</h2>
+        <button type="button" class="modal-close" aria-label="Close modal" onclick="closeNewVersionModal()">✕</button>
+      </div>
+      <form id="newVersionForm" novalidate onsubmit="submitNewVersion(event)">
+        <div class="modal-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="versionNumber">Version Number</label>
+              <input type="text" id="versionNumber" placeholder="e.g. v2.5.0" required aria-describedby="versionNumberError">
+              <span class="error-msg" id="versionNumberError">Version number is required</span>
+            </div>
+            <div class="form-group">
+              <label for="releaseDate">Release Date</label>
+              <input type="date" id="releaseDate" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="versionStatus">Status</label>
+              <select id="versionStatus" required>
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="versionAuthor">Author</label>
+              <select id="versionAuthor" required>
+                <option value="Sarah Chen">Sarah Chen</option>
+                <option value="Mike Ross">Mike Ross</option>
+                <option value="Jen Park">Jen Park</option>
+                <option value="Alex Kim">Alex Kim</option>
+                <option value="Rachel Torres">Rachel Torres</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="versionBranch">Git Branch / CI Ref <span class="opt">(optional)</span></label>
+            <input type="text" id="versionBranch" placeholder="e.g. release/2.5.0">
+          </div>
+          <div class="form-group">
+            <label for="versionTags">Tags <span class="opt">(optional)</span></label>
+            <input type="text" id="versionTags" placeholder="e.g. breaking-change, security-fix, feature">
+          </div>
+          <div class="form-group">
+            <label for="releaseNotes">Release Notes <span class="opt">(optional)</span></label>
+            <textarea id="releaseNotes" placeholder="Describe what changed in this version...
+- Added: ...
+- Fixed: ...
+- Changed: ...
+- Deprecated: ..."></textarea>
+          </div>
+        </div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeNewVersionModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Version</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script src="data.js"></script>
+  <script>
+    let apps = OrbitDocs.loadApps();
+    let selectedVersions = [];
+    let currentAppId = '';
+
+    const versionSearch = document.getElementById('versionSearch');
+    const appSelect = document.getElementById('appSelect');
+    const appTitle = document.getElementById('appTitle');
+    const currentVersionBadge = document.getElementById('currentVersionBadge');
+    const currentVersionDate = document.getElementById('currentVersionDate');
+    const versionTableBody = document.getElementById('versionTableBody');
+    const compareBtn = document.getElementById('compareBtn');
+    const selectionBar = document.getElementById('selectionBar');
+    const selectedCount = document.getElementById('selectedCount');
+    const compareOverlay = document.getElementById('compareOverlay');
+
+    function init() {
+      // Populate app selector
+      appSelect.innerHTML = apps.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+
+      // Check URL param for app
+      const params = OrbitDocs.parseUrlParams();
+      if (params.app) {
+        currentAppId = params.app;
+        appSelect.value = currentAppId;
+      } else {
+        currentAppId = apps[0].id;
+      }
+
+      renderApp();
+    }
+
+    function renderApp() {
+      const app = OrbitDocs.getApp(apps, currentAppId);
+      if (!app) return;
+
+      const versions = app.versions;
+      const current = versions.find(v => v.version === app.currentVersion) || versions[0];
+
+      appTitle.textContent = `${app.name} · ${versions.length} versions`;
+      currentVersionBadge.textContent = app.currentVersion;
+      currentVersionDate.textContent = current ? OrbitDocs.formatDate(current.date) : '';
+
+      renderVersionTable(versions);
+      updateDetailPanel(current);
+    }
+
+    function renderVersionTable(versions) {
+      const query = versionSearch.value.toLowerCase().trim();
+      const filtered = versions.filter(v =>
+        !query ||
+        v.version.toLowerCase().includes(query) ||
+        v.author.toLowerCase().includes(query) ||
+        v.date.includes(query)
+      );
+
+      versionTableBody.innerHTML = filtered.map(v => {
+        const hasChangelog = v.changelogStatus !== 'missing';
+        const hasRelease = v.release && v.release.published;
+
+        let changelogCell = '';
+        if (v.changelogStatus === 'missing') {
+          changelogCell = `<span class="pill pill-muted">Missing</span>`;
+        } else if (v.changelogStatus === 'draft') {
+          changelogCell = `<span class="pill pill-amber">Draft</span>`;
+        } else {
+          changelogCell = `<span class="pill pill-green">Published</span>`;
+        }
+
+        let releaseCell = '';
+        if (hasRelease) {
+          releaseCell = `<span class="pill pill-green">Published</span>`;
+        } else {
+          releaseCell = `<span class="pill pill-muted">—</span>`;
+        }
+
+        // Actions
+        let actions = '';
+        if (v.changelogStatus === 'missing') {
+          actions = `<a href="changelog.html?app=${currentAppId}&version=${v.version}" class="btn btn-primary btn-sm">Create Changelog</a>`;
+        } else {
+          actions = `<a href="changelog.html?app=${currentAppId}&version=${v.version}" class="btn btn-ghost btn-sm">Edit Changelog</a>`;
+        }
+        if (hasChangelog && !hasRelease) {
+          actions += ` <a href="changelog.html?app=${currentAppId}&version=${v.version}&publish=1" class="btn btn-secondary btn-sm">Publish Release</a>`;
+        } else if (hasRelease) {
+          actions += ` <a href="release.html?id=${v.id}" class="btn btn-ghost btn-sm">View Release</a>`;
+        }
+
+        const statusPill = v.status === 'published'
+          ? `<span class="pill pill-green">Published</span>`
+          : v.status === 'draft'
+          ? `<span class="pill pill-amber">Draft</span>`
+          : `<span class="pill pill-muted">Archived</span>`;
+
+        return `
+          <tr data-version="${v.version}" data-version-id="${v.id}" data-date="${v.date}" data-author="${v.author}">
+            <td><input type="checkbox" class="version-check" aria-label="Select version ${v.version}"></td>
+            <td class="num version-num">${v.version}</td>
+            <td class="num">${OrbitDocs.formatDate(v.date)}</td>
+            <td>${v.author}</td>
+            <td>${statusPill}</td>
+            <td>${changelogCell}</td>
+            <td>${releaseCell}</td>
+            <td><div class="flex-gap-sm">${actions}</div></td>
+          </tr>
+        `;
+      }).join('');
+
+      // Re-bind checkbox listeners
+      document.querySelectorAll('.version-check').forEach(check => {
+        check.addEventListener('change', handleCheckChange);
+      });
+
+      // Row click for detail panel
+      versionTableBody.querySelectorAll('tr').forEach(row => {
+        row.addEventListener('click', function(e) {
+          if (e.target.closest('a') || e.target.closest('button') || e.target.type === 'checkbox') return;
+          const versionId = this.dataset.versionId;
+          const v = versions.find(x => x.id === versionId);
+          if (v) updateDetailPanel(v);
+        });
+      });
+    }
+
+    function handleCheckChange() {
+      const row = this.closest('tr');
+      const version = row.dataset.version;
+
+      if (this.checked) {
+        if (selectedVersions.length >= 2) {
+          const oldest = selectedVersions.shift();
+          const oldestCheck = document.querySelector(`tr[data-version="${oldest}"] .version-check`);
+          if (oldestCheck) {
+            oldestCheck.checked = false;
+            oldestCheck.closest('tr').classList.remove('selected');
+          }
+        }
+        selectedVersions.push(version);
+        row.classList.add('selected');
+      } else {
+        selectedVersions = selectedVersions.filter(v => v !== version);
+        row.classList.remove('selected');
+      }
+
+      updateSelectionUI();
+    }
+
+    function updateSelectionUI() {
+      const count = selectedVersions.length;
+      selectedCount.textContent = count;
+      selectionBar.classList.toggle('active', count > 0);
+      compareBtn.disabled = count !== 2;
+      compareBtn.textContent = count === 2
+        ? `Compare ${selectedVersions[0]} vs ${selectedVersions[1]}`
+        : 'Compare versions';
+    }
+
+    function clearSelection() {
+      selectedVersions = [];
+      document.querySelectorAll('.version-check').forEach(check => {
+        check.checked = false;
+        check.closest('tr').classList.remove('selected');
+      });
+      updateSelectionUI();
+    }
+
+    function archiveSelected() {
+      showToast('Archive functionality would archive selected versions');
+    }
+
+    compareBtn.addEventListener('click', function() {
+      if (selectedVersions.length === 2) {
+        openCompare(selectedVersions[0], selectedVersions[1]);
+      }
+    });
+
+    function openCompare(v1, v2) {
+      document.getElementById('oldVersionTitle').textContent = v1;
+      document.getElementById('newVersionTitle').textContent = v2;
+      compareOverlay.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeCompare() {
+      compareOverlay.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    compareOverlay.addEventListener('click', function(e) {
+      if (e.target === compareOverlay) closeCompare();
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') { closeCompare(); closeNewVersionModal(); }
+    });
+
+    // Search
+    versionSearch.addEventListener('input', () => renderApp());
+
+    // App select
+    appSelect.addEventListener('change', function() {
+      currentAppId = this.value;
+      renderApp();
+      // Update URL without reload
+      const url = new URL(window.location);
+      url.searchParams.set('app', currentAppId);
+      window.history.replaceState({}, '', url);
+    });
+
+    // Detail panel
+    function updateDetailPanel(v) {
+      document.getElementById('detailVersion').textContent = v.version;
+      const notes = v.release && v.release.summary
+        ? v.release.summary
+        : (v.changelogStatus === 'missing' ? 'No changelog or release notes yet. Create a changelog first.' : 'Changelog exists but no release notes published yet.');
+      document.getElementById('detailNotes').textContent = notes;
+      document.getElementById('detailApprover').textContent = v.author;
+      document.getElementById('detailBranch').textContent = `release/${v.version.replace(/^v/, '')}`;
+      document.getElementById('detailCommit').textContent = Math.random().toString(36).substring(2, 9);
+    }
+
+    // New Version Modal
+    const newVersionModal = document.getElementById('newVersionModal');
+    const newVersionForm = document.getElementById('newVersionForm');
+
+    function openNewVersionModal() {
+      document.getElementById('releaseDate').valueAsDate = new Date();
+      newVersionModal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => document.getElementById('versionNumber').focus(), 100);
+    }
+
+    function closeNewVersionModal() {
+      newVersionModal.classList.remove('open');
+      document.body.style.overflow = '';
+      newVersionForm.reset();
+      const vn = document.getElementById('versionNumber');
+      vn.classList.remove('input-error');
+      vn.removeAttribute('aria-invalid');
+      document.getElementById('versionNumberError').classList.remove('show');
+    }
+
+    newVersionModal.addEventListener('click', function(e) {
+      if (e.target === newVersionModal) closeNewVersionModal();
+    });
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg; t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    function submitNewVersion(e) {
+      e.preventDefault();
+      const vn = document.getElementById('versionNumber');
+      const version = vn.value.trim();
+      const err = document.getElementById('versionNumberError');
+      if (!version) {
+        vn.classList.add('input-error');
+        vn.setAttribute('aria-invalid', 'true');
+        err.classList.add('show');
+        vn.focus();
+        return;
+      }
+      vn.classList.remove('input-error');
+      vn.setAttribute('aria-invalid', 'false');
+      err.classList.remove('show');
+
+      const app = OrbitDocs.getApp(apps, currentAppId);
+      if (!app) return;
+
+      const newVersion = {
+        id: `${app.id}-${version.replace(/\./g, '-')}`,
+        version: version,
+        date: document.getElementById('releaseDate').value || new Date().toISOString().split('T')[0],
+        author: document.getElementById('versionAuthor').value,
+        status: document.getElementById('versionStatus').value,
+        changelogStatus: 'missing',
+        changelogContent: '',
+        release: null
+      };
+
+      app.versions.unshift(newVersion);
+      app.currentVersion = version;
+      OrbitDocs.saveApps(apps);
+
+      showToast(`Version ${version} created for ${app.name}`);
+      closeNewVersionModal();
+      renderApp();
+    }
+
+    init();
+  </script>
+</body>
+</html>
