@@ -15,6 +15,7 @@ export interface AppItem {
     status: string;
     createdBy: string | null;
     createdAt: string | null;
+    releaseDate: string | null;
   } | null;
 }
 

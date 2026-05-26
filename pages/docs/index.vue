@@ -11,17 +11,34 @@ onBeforeMount(() => {
   $page.setTitle("Docs");
 });
 
+const route = useRoute();
 const { docs, isLoading, search, fetchDocs, createDoc, deleteDoc } = useDocs();
 const { apps, fetchApps } = useApps();
+
+const appFilter = ref((route.query.app as string) || "");
+
+const appFilterOptions = computed(() => [
+  { id: "", label: "All apps" },
+  ...apps.value.map((a) => ({ id: a.id, label: a.name })),
+]);
 
 const appOptions = computed(() => [
   { id: "", label: "Unbound (latest)" },
   ...apps.value.map((a) => ({ id: a.id, label: a.name })),
 ]);
 
-onMounted(() => {
-  fetchDocs();
-  fetchApps();
+onMounted(async () => {
+  await fetchApps();
+  await fetchDocs({ appId: appFilter.value });
+  document.addEventListener("keydown", onKeydown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", onKeydown);
+});
+
+watch([search, appFilter], async () => {
+  await fetchDocs({ appId: appFilter.value });
 });
 
 const showCreateModal = ref(false);
@@ -90,7 +107,14 @@ async function doDelete() {
 }
 
 function onSearch() {
-  fetchDocs();
+  fetchDocs({ appId: appFilter.value });
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape") {
+    search.value = "";
+    appFilter.value = "";
+  }
 }
 
 function formatDate(dateStr: string | null) {
@@ -129,14 +153,23 @@ const statusLabel: Record<string, string> = {
 <template>
   <div class="docs-page">
     <header class="topbar">
-      <h1>Docs</h1>
-      <div style="display:flex;align-items:center;gap:16px;">
+      <div class="flex-gap-md">
+        <h1>Docs</h1>
+        <span class="text-muted-sm">All documentation across apps</span>
+      </div>
+      <div class="flex-gap-md">
         <input
           v-model="search"
           class="search"
           placeholder="Search docs…"
           aria-label="Search docs"
           @input="onSearch"
+        />
+        <GeneralSearchableDropdown
+          v-model="appFilter"
+          :options="appFilterOptions"
+          placeholder="Filter by app…"
+          search-placeholder="Search apps…"
         />
         <button type="button" class="btn btn-primary" @click="openCreateModal">
           + New Doc
@@ -573,9 +606,29 @@ const statusLabel: Record<string, string> = {
   border-top: 1px solid var(--border);
 }
 
+.flex-gap-md {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.flex-gap-sm {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.text-muted-sm {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 @media (max-width: 768px) {
   .search {
     width: 180px;
+  }
+  .topbar {
+    flex-wrap: wrap;
   }
 }
 

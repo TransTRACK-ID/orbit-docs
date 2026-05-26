@@ -12,16 +12,20 @@ onBeforeMount(() => {
   $page.setTitle("Releases");
 });
 
+const route = useRoute();
 const { apps, fetchApps } = useApps();
 const { releases, isLoading, fetchReleases } = useReleases();
 
 // Filters
 const searchQuery = ref("");
-const appFilter = ref("");
+const appFilter = ref((route.query.app as string) || "");
 
 onMounted(async () => {
   await fetchApps();
-  await fetchReleases();
+  await fetchReleases({
+    search: searchQuery.value,
+    app: appFilter.value,
+  });
 });
 
 watch([searchQuery, appFilter], async () => {

@@ -74,6 +74,12 @@ const filteredVersions = computed(() => {
         (v.branch && v.branch.toLowerCase().includes(q))
     );
   }
+  // Sort by newest first (releaseDate desc, fallback to createdAt desc)
+  result.sort((a, b) => {
+    const dA = new Date(a.releaseDate || a.createdAt || 0).getTime();
+    const dB = new Date(b.releaseDate || b.createdAt || 0).getTime();
+    return dB - dA;
+  });
   return result;
 });
 

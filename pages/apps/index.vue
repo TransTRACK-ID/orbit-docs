@@ -104,9 +104,10 @@ const filteredApps = computed(() => {
     if (sortBy.value === "name") {
       cmp = a.name.localeCompare(b.name);
     } else if (sortBy.value === "updatedAt") {
-      cmp =
-        new Date(a.updatedAt || 0).getTime() -
-        new Date(b.updatedAt || 0).getTime();
+      // Sort by latest version releaseDate when available, fall back to app updatedAt
+      const dateA = a.latestVersion?.releaseDate || a.latestVersion?.createdAt || a.updatedAt || 0;
+      const dateB = b.latestVersion?.releaseDate || b.latestVersion?.createdAt || b.updatedAt || 0;
+      cmp = new Date(dateA).getTime() - new Date(dateB).getTime();
     } else if (sortBy.value === "status") {
       const order = { active: 0, maintenance: 1, draft: 2 };
       cmp = (order[a.status] ?? 99) - (order[b.status] ?? 99);
@@ -466,8 +467,8 @@ const statusLabel: Record<string, string> = {
       </div>
     </div>
 
-    <div v-if="isLoading" class="grid-4">
-      <div v-for="n in 4" :key="n" class="card" style="height: 160px">
+    <div v-if="isLoading" class="app-grid">
+      <div v-for="n in 4" :key="n" class="app-card" style="height: 160px">
         <div class="animate-pulse space-y-3">
           <div class="h-4 bg-gray-200 rounded w-3/4"></div>
           <div class="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -483,17 +484,41 @@ const statusLabel: Record<string, string> = {
       </button>
     </div>
 
-    <div v-else class="grid-4">
-      <div v-for="app in filteredApps" :key="app.id" class="card">
-        <div class="card-head">
-          <div>
-            <div class="card-title">{{ app.name }}</div>
-            <div class="card-meta">Updated {{ timeAgo(app.updatedAt) }}</div>
-          </div>
-          <div class="card-actions">
+    <div v-else class="app-grid">
+      <div v-for="app in filteredApps" :key="app.id" class="app-card">
+        <div class="app-card-header">
+          <div class="app-card-title-row">
+            <h3 class="app-card-title">{{ app.name }}</h3>
             <span class="pill" :class="statusClass[app.status] || 'pill-blue'">
               {{ statusLabel[app.status] || app.status }}
             </span>
+          </div>
+          <div class="app-card-meta">Updated {{ timeAgo(app.updatedAt) }}</div>
+        </div>
+
+        <div class="app-card-version">
+          <span v-if="app.latestVersion" class="num pill pill-blue">
+            v{{ app.latestVersion.version }}
+          </span>
+          <span v-else class="num text-xs text-gray-400">No version</span>
+          <span class="app-card-owner">
+            by {{ app.owner || "Unknown" }}
+          </span>
+        </div>
+
+        <div class="app-card-foot">
+          <div class="app-card-links">
+            <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm">
+              Versions
+            </NuxtLink>
+            <NuxtLink :to="`/releases?app=${app.name}`" class="btn btn-ghost btn-sm">
+              Releases &rarr;
+            </NuxtLink>
+            <NuxtLink :to="`/docs?app=${app.id}`" class="btn btn-ghost btn-sm">
+              Docs &rarr;
+            </NuxtLink>
+          </div>
+          <div class="app-card-actions">
             <button
               class="btn btn-ghost btn-sm action-btn"
               title="Edit app"
@@ -509,23 +534,6 @@ const statusLabel: Record<string, string> = {
               <IconsTrash size="14" />
             </button>
           </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-          <span v-if="app.latestVersion" class="num pill pill-blue">
-            v{{ app.latestVersion.version }}
-          </span>
-          <span v-else class="num text-xs text-gray-400">No version</span>
-          <span style="color:var(--muted);font-size:12px;">
-            by {{ app.owner || "Unknown" }}
-          </span>
-        </div>
-        <div class="card-foot">
-          <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm">
-            Versions
-          </NuxtLink>
-          <NuxtLink :to="`/docs-editor?app=${app.id}`" class="btn btn-ghost btn-sm">
-            Docs &rarr;
-          </NuxtLink>
         </div>
       </div>
     </div>
@@ -772,62 +780,90 @@ h2 {
   border-color: var(--accent);
 }
 
-.grid-4 {
+.app-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-}
-@media (max-width: 1100px) {
-  .grid-4 {
-    grid-template-columns: repeat(2, 1fr);
-  }
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
 }
 @media (max-width: 720px) {
-  .grid-4 {
+  .app-grid {
     grid-template-columns: 1fr;
   }
 }
 
-.card {
+.app-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 20px;
-  transition: box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.card:hover {
-  box-shadow: 0 1px 3px var(--fg-soft);
-}
-.card-head {
+  padding: 24px;
+  transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
-  align-items: start;
+  flex-direction: column;
+  gap: 16px;
+}
+.app-card:hover {
+  border-color: color-mix(in oklch, var(--fg) 20%, var(--border));
+  box-shadow: 0 2px 8px color-mix(in oklch, var(--fg) 6%, transparent);
+}
+
+.app-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.app-card-title-row {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
   gap: 12px;
 }
-.card-title {
+.app-card-title {
+  margin: 0;
   font-size: 16px;
   font-weight: 600;
   color: var(--fg);
+  line-height: 1.3;
 }
-.card-meta {
+.app-card-meta {
   color: var(--muted);
-  font-size: 13px;
-  margin-top: 4px;
+  font-size: 12px;
 }
-.card-actions {
+
+.app-card-version {
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  gap: 10px;
 }
-.card-foot {
+.app-card-owner {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app-card-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 16px;
-  padding-top: 12px;
+  gap: 12px;
+  padding-top: 16px;
   border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+.app-card-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.app-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.app-card:hover .app-card-actions {
+  opacity: 1;
 }
 
 .pill {

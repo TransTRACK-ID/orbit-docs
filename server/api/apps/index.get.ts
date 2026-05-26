@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
         .select()
         .from(appVersions)
         .where(eq(appVersions.appId, app.id))
-        .orderBy(desc(appVersions.createdAt))
+        .orderBy(desc(appVersions.releaseDate), desc(appVersions.createdAt))
         .limit(1)
         .then((rows) => rows[0] || null);
 
@@ -48,6 +48,7 @@ export default defineEventHandler(async (event) => {
               status: latestVersion.status,
               createdBy: latestVersion.createdBy,
               createdAt: latestVersion.createdAt,
+              releaseDate: latestVersion.releaseDate,
             }
           : null,
       };
