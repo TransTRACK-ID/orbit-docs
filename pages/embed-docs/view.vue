@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick } from "vue";
 import { renderMarkdown, extractHeadings } from "~/composables/useMarkdown";
 import type { PublishedDocDetail } from "~/composables/usePublishedDocs";
 
@@ -19,6 +20,10 @@ const feedbackGiven = ref(false);
 const toastMsg = ref("");
 const toastVisible = ref(false);
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+const activeSlug = ref("");
+let scrollSpyPaused = false;
+let scrollSpyPauseTimer: ReturnType<typeof setTimeout> | null = null;
 
 function showToast(msg: string) {
   toastMsg.value = msg;
@@ -70,12 +75,12 @@ onMounted(async () => {
     const data = await fetchPublishedDoc(docId.value);
     doc.value = data;
     nextTick(() => {
-      bindNavClick();
       setupScrollSpy();
       if (route.hash) {
         const target = document.getElementById(route.hash.slice(1));
         if (target) {
           target.scrollIntoView({ behavior: "smooth", block: "start" });
+          activeSlug.value = route.hash.slice(1);
         }
       }
     });
@@ -86,48 +91,53 @@ onMounted(async () => {
   }
 });
 
-function bindNavClick() {
-  const navEl = document.getElementById("docNav");
-  if (!navEl) return;
-  const links = navEl.querySelectorAll<HTMLAnchorElement>("a[data-target]");
-  links.forEach((link) => {
-    link.addEventListener("click", (e) => {
-      e.preventDefault();
-      const targetId = link.dataset.target;
-      if (!targetId) return;
-      const targetEl = document.getElementById(targetId);
-      if (targetEl) {
-        targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
-        links.forEach((a) => a.classList.remove("active"));
-        link.classList.add("active");
-      }
-    });
-  });
+function scrollToSection(targetId: string) {
+  const targetEl = document.getElementById(targetId);
+  if (targetEl) {
+    targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    activeSlug.value = targetId;
+
+    // Pause scroll spy briefly to prevent it from overriding the clicked state during smooth scroll
+    scrollSpyPaused = true;
+    if (scrollSpyPauseTimer) clearTimeout(scrollSpyPauseTimer);
+    scrollSpyPauseTimer = setTimeout(() => {
+      scrollSpyPaused = false;
+    }, 800);
+  }
 }
 
 function setupScrollSpy() {
-  const content = document.getElementById("docContent");
-  if (!content) return;
-  const headings = content.querySelectorAll<HTMLElement>("h2[id], h3[id]");
+  const contentEl = document.querySelector(".content") as HTMLElement | null;
+  const docContent = document.getElementById("docContent");
+  if (!docContent || !contentEl) return;
+
+  const headings = Array.from(docContent.querySelectorAll<HTMLElement>("h2[id], h3[id]"));
   if (headings.length === 0) return;
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const id = entry.target.id;
-          const navEl = document.getElementById("docNav");
-          if (!navEl) return;
-          const links = navEl.querySelectorAll<HTMLAnchorElement>("a[data-target]");
-          links.forEach((a) => {
-            a.classList.toggle("active", a.dataset.target === id);
-          });
-        }
-      });
-    },
-    { rootMargin: "-20% 0px -70% 0px" }
-  );
-  headings.forEach((h) => observer.observe(h));
+  function updateActiveNav() {
+    if (scrollSpyPaused) return;
+
+    const contentRect = contentEl!.getBoundingClientRect();
+    const threshold = contentRect.top + 160; // 160px from top of content area
+
+    let currentId = "";
+    for (const h of headings) {
+      const hRect = h.getBoundingClientRect();
+      if (hRect.top < threshold) {
+        currentId = h.id;
+      }
+    }
+
+    // Default to first heading if none have scrolled past threshold
+    if (!currentId && headings.length > 0) {
+      currentId = headings[0].id;
+    }
+
+    activeSlug.value = currentId;
+  }
+
+  contentEl.addEventListener("scroll", updateActiveNav, { passive: true });
+  updateActiveNav(); // set initial active state
 }
 
 function copyCode(btn: HTMLButtonElement) {
@@ -232,18 +242,19 @@ function itemTarget(item: NavItem): string {
       <ul v-if="navItems.length > 0" id="docNav" class="doc-nav" role="list">
         <li v-for="(item, idx) in navItems" :key="idx">
           <a
-            :class="[item.type, idx === 0 ? 'active' : '']"
+            :class="[item.type, { active: activeSlug === item.slug }]"
             role="listitem"
             :href="itemHref(item)"
             :data-target="itemTarget(item)"
             :tabindex="item.type === 'indent' ? 0 : undefined"
+            @click.prevent="scrollToSection(item.slug)"
           >
             {{ item.text }}
           </a>
         </li>
       </ul>
       <ul v-else id="docNav" class="doc-nav" role="list">
-        <li><a class="section active" role="listitem" href="#docContent" data-target="docContent">{{ doc.app?.name || doc.title }}</a></li>
+        <li><a :class="['section', { active: activeSlug === 'docContent' || !activeSlug }]" role="listitem" href="#docContent" data-target="docContent" @click.prevent="scrollToSection('docContent')">{{ doc.app?.name || doc.title }}</a></li>
       </ul>
     </aside>
 
@@ -365,7 +376,7 @@ h3 {
   transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .doc-sidebar-header:hover {
-  background: color-mix(in oklch, var(--fg) 3%, var(--surface));
+  background: color-mix(in oklch, var(--fg) 5%, var(--surface));
 }
 .doc-sidebar-header:focus-visible {
   outline: 2px solid var(--accent);
@@ -396,14 +407,15 @@ h3 {
 }
 .doc-nav a {
   display: block;
-  padding: 6px 12px;
+  padding: 7px 12px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.45;
   color: var(--muted);
   cursor: pointer;
   outline: none;
   border-radius: 6px;
   transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
 }
 .doc-nav a:focus-visible {
   outline: 2px solid var(--accent);
@@ -411,15 +423,15 @@ h3 {
 }
 .doc-nav a:hover {
   color: var(--fg);
-  background: var(--fg-soft);
+  background: color-mix(in oklch, var(--fg) 7%, transparent);
 }
 .doc-nav a.section {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--fg);
-  font-size: 13px;
+  font-size: 13.5px;
   margin-top: 20px;
   padding-top: 16px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
 }
 .doc-nav a.section:first-child {
   margin-top: 0;
@@ -428,12 +440,31 @@ h3 {
 }
 .doc-nav a.active {
   color: var(--accent);
-  font-weight: 500;
-  background: var(--accent-soft);
+  font-weight: 600;
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
+}
+.doc-nav a.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.5px;
+  height: 18px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
 }
 .doc-nav a.indent {
   padding-left: 28px;
   font-size: 12.5px;
+  color: color-mix(in oklch, var(--muted) 85%, var(--fg));
+}
+.doc-nav a.indent.active {
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
+}
+.doc-nav a.indent.active::before {
+  left: 0;
 }
 
 /* Content */
