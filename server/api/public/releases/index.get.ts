@@ -1,11 +1,21 @@
 import { defineEventHandler, getQuery } from "h3";
 import { getDb } from "~/server/database";
-import { releases, apps, appVersions } from "~/server/database/schema";
+import { releases, apps, appVersions, workspaceSettings } from "~/server/database/schema";
 import { desc, eq, and } from "drizzle-orm";
+import { requireAuth } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
   const db = getDb();
   const query = getQuery(event);
+
+  // Check workspace public docs access setting
+  const settingsRows = await db.select().from(workspaceSettings).limit(1);
+  const settings = settingsRows[0];
+  const isPublic = settings?.publicDocsAccess ?? true;
+
+  if (!isPublic) {
+    await requireAuth(event);
+  }
 
   const search = typeof query.search === "string" ? query.search.trim().toLowerCase() : "";
   const appFilter = typeof query.app === "string" ? query.app : "";
