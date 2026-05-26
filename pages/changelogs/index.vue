@@ -440,7 +440,7 @@ function parseChangelogToCategories(text: string): Record<string, string[]> {
   let currentCategory: string | null = null;
 
   for (const line of lines) {
-    const headerMatch = line.match(/^###\s+(Added|Fixed|Changed|Deprecated|Security)/i);
+    const headerMatch = line.match(/^##\s+(Added|Fixed|Changed|Deprecated|Security)/i);
     if (headerMatch) {
       currentCategory = headerMatch[1].toLowerCase();
       if (!categories[currentCategory]) {
