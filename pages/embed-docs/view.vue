@@ -168,6 +168,11 @@ function handleContentClick(e: MouseEvent) {
   }
 }
 
+function scrollToTop() {
+  const el = document.getElementById("docContent");
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function itemHref(item: NavItem): string {
   return "#" + item.slug;
 }
@@ -217,13 +222,13 @@ function itemTarget(item: NavItem): string {
 
   <div v-else-if="doc" class="embed-shell">
     <aside class="doc-sidebar" data-od-id="doc-sidebar">
-      <div class="doc-sidebar-header">
+      <a class="doc-sidebar-header" href="#docContent" @click.prevent="scrollToTop">
         <div class="doc-sidebar-title">{{ doc.app?.name || doc.title }}</div>
         <div class="doc-sidebar-meta num">
           {{ doc.version?.version ? `v${doc.version.version}` : "" }}
           <span v-if="doc.updatedAt">· Updated {{ new Date(doc.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }}</span>
         </div>
-      </div>
+      </a>
       <ul v-if="navItems.length > 0" id="docNav" class="doc-nav" role="list">
         <li v-for="(item, idx) in navItems" :key="idx">
           <a
@@ -238,7 +243,7 @@ function itemTarget(item: NavItem): string {
         </li>
       </ul>
       <ul v-else id="docNav" class="doc-nav" role="list">
-        <li><a class="section active" role="listitem" href="#docContent" data-target="docContent">Documentation</a></li>
+        <li><a class="section active" role="listitem" href="#docContent" data-target="docContent">{{ doc.app?.name || doc.title }}</a></li>
       </ul>
     </aside>
 
@@ -292,7 +297,7 @@ function itemTarget(item: NavItem): string {
   --gap-lg: 24px;
   --radius: 8px;
   --radius-lg: 12px;
-  --sidebar: 220px;
+  --sidebar: 260px;
 }
 
 *,
@@ -344,19 +349,32 @@ h3 {
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
-  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
 }
 .doc-sidebar-header {
-  padding: 0 20px 16px;
+  display: block;
+  padding: 20px;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.doc-sidebar-header:hover {
+  background: color-mix(in oklch, var(--fg) 3%, var(--surface));
+}
+.doc-sidebar-header:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 .doc-sidebar-title {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 15px;
+  font-weight: 700;
   color: var(--fg);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   line-height: 1.3;
 }
 .doc-sidebar-meta {
@@ -366,42 +384,29 @@ h3 {
 }
 .doc-nav {
   list-style: none;
-  padding: 0;
+  padding: 16px 12px 32px;
   margin: 0;
   display: flex;
   flex-direction: column;
+  gap: 2px;
 }
 .doc-nav li {
   margin: 0;
 }
 .doc-nav a {
   display: block;
-  padding: 5px 20px;
+  padding: 6px 12px;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.5;
   color: var(--muted);
   cursor: pointer;
   outline: none;
-  position: relative;
-  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 0 6px 6px 0;
-  margin-right: 12px;
-}
-.doc-nav a::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 16px;
-  border-radius: 0 2px 2px 0;
-  background: transparent;
-  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 6px;
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .doc-nav a:focus-visible {
-  outline: none;
-  background: var(--fg-soft);
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
 }
 .doc-nav a:hover {
   color: var(--fg);
@@ -410,27 +415,23 @@ h3 {
 .doc-nav a.section {
   font-weight: 600;
   color: var(--fg);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-top: 16px;
-  padding-top: 8px;
-  padding-bottom: 6px;
+  font-size: 13px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
 .doc-nav a.section:first-child {
-  margin-top: 4px;
+  margin-top: 0;
   padding-top: 6px;
+  border-top: none;
 }
 .doc-nav a.active {
   color: var(--accent);
   font-weight: 500;
   background: var(--accent-soft);
 }
-.doc-nav a.active::before {
-  background: var(--accent);
-}
 .doc-nav a.indent {
-  padding-left: 32px;
+  padding-left: 28px;
   font-size: 12.5px;
 }
 
@@ -447,12 +448,20 @@ h3 {
   width: 100%;
   max-width: 720px;
 }
-@media (max-width: 720px) {
+@media (max-width: 820px) {
   .doc-sidebar {
-    width: 180px;
+    width: 220px;
   }
   .content {
     padding: 24px;
+  }
+}
+@media (max-width: 640px) {
+  .doc-sidebar {
+    display: none;
+  }
+  .content {
+    padding: 20px;
   }
 }
 
@@ -734,7 +743,7 @@ h3 {
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
-  padding: 24px 16px;
+  padding: 24px 20px;
 }
 .loading-content {
   flex: 1;
