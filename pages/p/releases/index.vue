@@ -421,10 +421,15 @@ useSeoMeta({
   margin: 0 0 8px;
   color: var(--fg);
 }
-.rl-entry-body :deep(ul),
+.rl-entry-body :deep(ul) {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  list-style-type: disc;
+}
 .rl-entry-body :deep(ol) {
   margin: 0 0 12px;
   padding-left: 20px;
+  list-style-type: decimal;
 }
 .rl-entry-body :deep(li) {
   margin-bottom: 4px;

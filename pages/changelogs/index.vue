@@ -1263,10 +1263,12 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
 .preview-body :deep(ul) {
   padding-left: 20px;
   margin: 8px 0;
+  list-style-type: disc;
 }
 .preview-body :deep(ol) {
   padding-left: 20px;
   margin: 8px 0;
+  list-style-type: decimal;
 }
 .preview-body :deep(li) {
   margin: 4px 0;

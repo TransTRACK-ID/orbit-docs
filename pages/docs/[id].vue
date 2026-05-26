@@ -892,9 +892,13 @@ const lastModified = computed(() => {
   margin: 16px 0 8px;
   font-weight: 600;
 }
-.preview-body :deep(ul),
+.preview-body :deep(ul) {
+  padding-left: 20px;
+  list-style-type: disc;
+}
 .preview-body :deep(ol) {
   padding-left: 20px;
+  list-style-type: decimal;
 }
 .preview-body :deep(li) {
   margin: 4px 0;

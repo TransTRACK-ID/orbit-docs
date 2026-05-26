@@ -350,10 +350,15 @@ async function copyEmbedCode() {
   margin: 32px 0;
   display: block;
 }
-.rd-body :deep(ul),
+.rd-body :deep(ul) {
+  padding-left: 24px;
+  margin-bottom: 16px;
+  list-style-type: disc;
+}
 .rd-body :deep(ol) {
   padding-left: 24px;
   margin-bottom: 16px;
+  list-style-type: decimal;
 }
 .rd-body :deep(li) {
   margin-bottom: 8px;

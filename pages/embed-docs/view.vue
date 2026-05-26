@@ -478,10 +478,15 @@ h3 {
   margin: 0 0 16px;
   line-height: 1.7;
 }
-.doc-body :deep(ul),
+.doc-body :deep(ul) {
+  padding-left: 28px;
+  margin: 0 0 16px;
+  list-style-type: disc;
+}
 .doc-body :deep(ol) {
   padding-left: 28px;
   margin: 0 0 16px;
+  list-style-type: decimal;
 }
 .doc-body :deep(li) {
   margin: 6px 0;

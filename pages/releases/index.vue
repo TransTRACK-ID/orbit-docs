@@ -513,6 +513,12 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 .release-summary ul {
   padding-left: 18px;
   margin: 4px 0;
+  list-style-type: disc;
+}
+.release-summary ol {
+  padding-left: 18px;
+  margin: 4px 0;
+  list-style-type: decimal;
 }
 .release-summary li {
   margin-bottom: 2px;

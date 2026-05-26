@@ -1482,6 +1482,12 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 .article-body ul {
   margin-bottom: 16px;
   padding-left: 24px;
+  list-style-type: disc;
+}
+.article-body ol {
+  margin-bottom: 16px;
+  padding-left: 24px;
+  list-style-type: decimal;
 }
 .article-body li {
   margin-bottom: 6px;
