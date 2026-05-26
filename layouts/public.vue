@@ -1,6 +1,11 @@
+<script setup lang="ts">
+const route = useRoute();
+const isEmbed = computed(() => route.query.embed === "1" || route.query.embed === "true");
+</script>
+
 <template>
-  <div class="public-shell">
-    <header class="public-header">
+  <div class="public-shell" :class="{ 'public-embed': isEmbed }">
+    <header v-if="!isEmbed" class="public-header">
       <NuxtLink to="/p/releases" class="public-brand">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10" />
@@ -13,7 +18,7 @@
     <main class="public-main">
       <slot />
     </main>
-    <footer class="public-footer">
+    <footer v-if="!isEmbed" class="public-footer">
       <span>Powered by Orbit Docs</span>
     </footer>
   </div>
@@ -25,6 +30,13 @@
   display: flex;
   flex-direction: column;
   background: var(--bg);
+}
+.public-embed {
+  min-height: auto;
+}
+.public-embed .public-main {
+  padding: 0;
+  max-width: none;
 }
 .public-header {
   padding: 16px 24px;

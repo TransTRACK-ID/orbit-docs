@@ -13,6 +13,14 @@ const releaseId = computed(() => route.params.id as string);
 const release = ref<ReleaseItem | null>(null);
 const isLoading = ref(true);
 
+const appFilter = computed(() => route.query.app as string || "");
+const isEmbed = computed(() => route.query.embed === "1" || route.query.embed === "true");
+
+const backUrl = computed(() => {
+  if (appFilter.value) return `/p/releases?app=${appFilter.value}`;
+  return "/p/releases";
+});
+
 onMounted(async () => {
   if (!releaseId.value) return;
   isLoading.value = true;
@@ -98,6 +106,22 @@ watch(release, (r) => {
     ],
   });
 }, { immediate: true });
+
+async function copyLink() {
+  const url = `${useRequestURL().origin}/p/releases/${releaseId.value}${appFilter.value ? `?app=${appFilter.value}` : ""}`;
+  try {
+    await navigator.clipboard.writeText(url);
+    alert("Public link copied to clipboard");
+  } catch {
+    const input = document.createElement("input");
+    input.value = url;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    document.body.removeChild(input);
+    alert("Public link copied to clipboard");
+  }
+}
 </script>
 
 <template>
@@ -113,10 +137,16 @@ watch(release, (r) => {
     <article v-else class="public-release-article">
       <header class="public-release-hero">
         <div class="public-release-meta-bar">
-          <NuxtLink to="/p/releases" class="public-back">← All releases</NuxtLink>
-          <span class="pill" :class="release.type === 'article' ? 'pill-purple' : 'pill-muted'">
-            {{ release.type === 'article' ? 'Article' : 'Normal' }}
-          </span>
+          <NuxtLink :to="backUrl" class="public-back">← All releases</NuxtLink>
+          <div class="public-actions">
+            <button v-if="!isEmbed" type="button" class="btn btn-ghost btn-sm" @click="copyLink">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy link
+            </button>
+            <span class="pill" :class="release.type === 'article' ? 'pill-purple' : 'pill-muted'">
+              {{ release.type === 'article' ? 'Article' : 'Normal' }}
+            </span>
+          </div>
         </div>
         <h1>{{ release.heroTitle || `${release.appName} ${release.version}` }}</h1>
         <div class="public-release-sub">
@@ -173,9 +203,9 @@ watch(release, (r) => {
       </template>
 
       <!-- Embed link -->
-      <div class="public-embed-bar">
+      <div v-if="!isEmbed" class="public-embed-bar">
         <span class="text-muted-sm">Embed this release</span>
-        <code class="public-embed-code">&lt;iframe src="{{ useRequestURL().origin }}/p/releases/{{ release.id }}" width="100%" height="600" frameborder="0"&gt;&lt;/iframe&gt;</code>
+        <code class="public-embed-code">&lt;iframe src="{{ useRequestURL().origin }}/p/releases/{{ release.id }}{{ appFilter ? `?app=${appFilter}&amp;embed=1` : `?embed=1` }}" width="100%" height="600" frameborder="0"&gt;&lt;/iframe&gt;</code>
       </div>
     </article>
   </div>
@@ -201,6 +231,11 @@ watch(release, (r) => {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+}
+.public-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 .public-back {
   text-decoration: none;

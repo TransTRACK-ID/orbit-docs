@@ -13,6 +13,7 @@ const releases = ref<ReleaseItem[]>([]);
 const isLoading = ref(true);
 
 const appFilter = computed(() => route.query.app as string || "");
+const isEmbed = computed(() => route.query.embed === "1" || route.query.embed === "true");
 
 async function load() {
   isLoading.value = true;
@@ -71,13 +72,13 @@ function mediaCount(r: ReleaseItem) {
 
 // SEO
 const pageTitle = computed(() => {
-  if (appFilter.value) return `Releases for ${appFilter.value}`;
+  if (appFilter.value) return `${appFilter.value} Release Notes`;
   return "Release Notes";
 });
 
 const pageDescription = computed(() => {
   const count = releases.value.length;
-  if (appFilter.value) return `${count} published releases for ${appFilter.value}.`;
+  if (appFilter.value) return `${count} published release${count === 1 ? "" : "s"} for ${appFilter.value}.`;
   return `Browse ${count} published release notes.`;
 });
 
@@ -124,13 +125,13 @@ watch(releases, (list) => {
 <template>
   <div class="public-releases">
     <div class="public-hero">
-      <h1>{{ appFilter ? `${appFilter} Releases` : "Release Notes" }}</h1>
+      <h1>{{ appFilter ? `${appFilter} Release Notes` : "Release Notes" }}</h1>
       <p class="public-subtitle">
         {{ releases.length }} published release{{ releases.length === 1 ? "" : "s" }}
       </p>
     </div>
 
-    <div class="public-search">
+    <div v-if="!isEmbed" class="public-search">
       <input
         v-model="search"
         type="text"
@@ -148,19 +149,14 @@ watch(releases, (list) => {
     </div>
 
     <div v-else class="public-app-groups">
-      <section
-        v-for="[appName, appReleases] in groupedByApp"
-        :key="appName"
-        class="public-app-section"
-      >
-        <h2 class="public-app-name">{{ appName }}</h2>
-        <div class="public-release-list">
+      <template v-if="appFilter">
+        <div class="public-release-list public-release-list-scoped">
           <article
-            v-for="r in appReleases"
+            v-for="r in filteredReleases"
             :key="r.id"
             class="public-release-card"
           >
-            <NuxtLink :to="`/p/releases/${r.id}`" class="public-release-link">
+            <NuxtLink :to="`/p/releases/${r.id}?app=${appFilter}`" class="public-release-link">
               <div class="public-release-header">
                 <span class="public-version">{{ r.version }}</span>
                 <span v-if="r.type === 'article'" class="pill pill-purple">Article</span>
@@ -185,14 +181,63 @@ watch(releases, (list) => {
                 <span v-if="countCategories(r.categories).security" class="pill pill-red">
                   {{ countCategories(r.categories).security }} security
                 </span>
-                <span v-if="mediaCount(r) > 0" class="pill pill-muted">
-                  {{ mediaCount(r) }} media
-                </span>
               </div>
             </NuxtLink>
           </article>
         </div>
-      </section>
+      </template>
+      <template v-else>
+        <section
+          v-for="[appName, appReleases] in groupedByApp"
+          :key="appName"
+          class="public-app-section"
+        >
+          <h2 class="public-app-name">{{ appName }}</h2>
+          <div class="public-release-list">
+            <article
+              v-for="r in appReleases"
+              :key="r.id"
+              class="public-release-card"
+            >
+              <NuxtLink :to="`/p/releases/${r.id}`" class="public-release-link">
+                <div class="public-release-header">
+                  <span class="public-version">{{ r.version }}</span>
+                  <span v-if="r.type === 'article'" class="pill pill-purple">Article</span>
+                  <span class="public-date">{{ formatDate(r.releaseDate) }}</span>
+                </div>
+                <h3 class="public-release-title">{{ r.heroTitle || `${r.appName} ${r.version}` }}</h3>
+                <div
+                  v-if="r.summary"
+                  class="public-release-summary"
+                  v-html="renderMarkdown(r.summary)"
+                />
+                <div class="public-release-meta">
+                  <span v-if="countCategories(r.categories).added" class="pill pill-green">
+                    {{ countCategories(r.categories).added }} added
+                  </span>
+                  <span v-if="countCategories(r.categories).fixed" class="pill pill-blue">
+                    {{ countCategories(r.categories).fixed }} fixed
+                  </span>
+                  <span v-if="countCategories(r.categories).changed" class="pill pill-amber">
+                    {{ countCategories(r.categories).changed }} changed
+                  </span>
+                  <span v-if="countCategories(r.categories).security" class="pill pill-red">
+                    {{ countCategories(r.categories).security }} security
+                  </span>
+                  <span v-if="mediaCount(r) > 0" class="pill pill-muted">
+                    {{ mediaCount(r) }} media
+                  </span>
+                </div>
+              </NuxtLink>
+            </article>
+          </div>
+        </section>
+      </template>
+    </div>
+
+    <div v-if="!isEmbed && appFilter" class="public-embed-snippet">
+      <span class="public-embed-label">Embed this release list</span>
+      <code class="public-embed-code">&lt;iframe src="{{ useRequestURL().origin }}/p/releases?app={{ appFilter }}&amp;embed=1" width="100%" height="800" frameborder="0"&gt;&lt;/iframe&gt;</code>
     </div>
   </div>
 </template>
@@ -315,5 +360,25 @@ watch(releases, (list) => {
   padding: 40px 0;
   text-align: center;
   color: var(--muted);
+}
+.public-embed-snippet {
+  margin-top: 40px;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+.public-embed-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.public-embed-code {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
 }
 </style>
