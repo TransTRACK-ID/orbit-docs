@@ -345,17 +345,25 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
     <!-- App info -->
     <div class="row-between" style="margin-bottom: 16px;">
       <div>
-        <h2 class="section-title">
-          {{ selectedApp?.name ?? "—" }} · {{ versions.length }} version{{ versions.length === 1 ? "" : "s" }}
-        </h2>
-        <p class="text-muted-sm" style="margin: 4px 0 0;">
-          Current:
-          <span v-if="selectedApp?.latestVersion" class="num pill pill-blue">v{{ selectedApp.latestVersion.version }}</span>
-          <span v-else class="text-muted-sm">No version</span>
-          <span v-if="selectedApp?.latestVersion?.createdAt">
-            · Published {{ formatDate(selectedApp.latestVersion.createdAt) }}
-          </span>
-        </p>
+        <template v-if="isLoading">
+          <h2 class="section-title">
+            <span class="loading-spinner" /> Loading…
+          </h2>
+          <p class="text-muted-sm" style="margin: 4px 0 0;">Fetching versions</p>
+        </template>
+        <template v-else>
+          <h2 class="section-title">
+            {{ selectedApp?.name ?? "—" }} · {{ versions.length }} version{{ versions.length === 1 ? "" : "s" }}
+          </h2>
+          <p class="text-muted-sm" style="margin: 4px 0 0;">
+            Current:
+            <span v-if="selectedApp?.latestVersion" class="num pill pill-blue">v{{ selectedApp.latestVersion.version }}</span>
+            <span v-else class="text-muted-sm">No version</span>
+            <span v-if="selectedApp?.latestVersion?.createdAt">
+              · Published {{ formatDate(selectedApp.latestVersion.createdAt) }}
+            </span>
+          </p>
+        </template>
       </div>
       <div class="flex-gap-sm">
         <button
@@ -457,7 +465,12 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               </div>
             </td>
           </tr>
-          <tr v-if="filteredVersions.length === 0 && !isLoading">
+          <tr v-if="isLoading">
+            <td colspan="9" class="empty-cell">
+              <span class="loading-spinner" /> Loading versions…
+            </td>
+          </tr>
+          <tr v-else-if="filteredVersions.length === 0">
             <td colspan="9" class="empty-cell">No versions found.</td>
           </tr>
         </tbody>
@@ -1003,6 +1016,22 @@ h2 {
   text-align: center;
   color: var(--muted);
   padding: 32px;
+}
+
+.loading-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .selection-bar {
