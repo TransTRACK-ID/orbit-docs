@@ -45,12 +45,15 @@ export default defineEventHandler(async (event) => {
 
   const actor = getActorName(user);
 
+  const validActions = ["save", "publish", "quick_release", "article_release"];
+  const normalizedAction = validActions.includes(action) ? action : "save";
+
   const entry = await db
     .insert(versionHistory)
     .values({
       versionId,
       content,
-      action: action === "publish" ? "publish" : "save",
+      action: normalizedAction,
       actor,
     })
     .returning()

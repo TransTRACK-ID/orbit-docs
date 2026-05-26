@@ -83,6 +83,16 @@ export default defineNuxtConfig({
 
   compatibilityDate: "2025-01-31",
 
+  nitro: {
+    routeRules: {
+      "/p/**": {
+        headers: {
+          "X-Frame-Options": "SAMEORIGIN",
+        },
+      },
+    },
+  },
+
   vite: {
     server: {
       hmr: {

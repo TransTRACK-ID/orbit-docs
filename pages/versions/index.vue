@@ -193,7 +193,7 @@ async function submitNewVersion() {
   }
   newVersionError.value = false;
   if (!selectedAppId.value || isCreating.value) return;
-  await createVersion(selectedAppId.value, {
+  const newVersion = await createVersion(selectedAppId.value, {
     version: newVersionForm.version.trim(),
     status: newVersionForm.status,
     releaseDate: newVersionForm.releaseDate || undefined,
@@ -205,6 +205,10 @@ async function submitNewVersion() {
     ciStatus: newVersionForm.ciStatus,
   });
   closeNewVersionModal();
+  // Navigate to changelog editor with the new version pre-selected
+  if (newVersion?.id) {
+    await navigateTo(`/changelogs?app=${selectedAppId.value}&versionId=${newVersion.id}`);
+  }
 }
 
 // Edit Version Modal
@@ -296,20 +300,6 @@ const statusLabel: Record<string, string> = {
   draft: "Draft",
   rc: "RC",
   archived: "Archived",
-};
-
-const ciStatusClass: Record<string, string> = {
-  passed: "pill-green",
-  failed: "pill-red",
-  pending: "pill-amber",
-  unknown: "pill-muted",
-};
-
-const ciStatusLabel: Record<string, string> = {
-  passed: "Passed",
-  failed: "Failed",
-  pending: "Pending",
-  unknown: "—",
 };
 
 function onKeydown(e: KeyboardEvent) {
@@ -407,7 +397,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             <th>Date</th>
             <th>Author</th>
             <th>Status</th>
-            <th>CI</th>
             <th>Release</th>
             <th>Changelog</th>
             <th>Actions</th>
@@ -434,11 +423,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             <td>
               <span class="pill" :class="statusClass[v.status] || 'pill-blue'">
                 {{ statusLabel[v.status] || v.status }}
-              </span>
-            </td>
-            <td>
-              <span class="pill" :class="ciStatusClass[v.ciStatus] || 'pill-muted'">
-                {{ ciStatusLabel[v.ciStatus] || v.ciStatus }}
               </span>
             </td>
             <td>
@@ -496,12 +480,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         <h3>Metadata</h3>
         <p><strong>Branch:</strong> <span class="num">{{ activeDetailVersion.branch || "—" }}</span></p>
         <p><strong>Tags:</strong> <span class="num">{{ activeDetailVersion.tags || "—" }}</span></p>
-        <p>
-          <strong>CI/CD:</strong>
-          <span class="pill" :class="ciStatusClass[activeDetailVersion.ciStatus] || 'pill-muted'">
-            {{ ciStatusLabel[activeDetailVersion.ciStatus] || activeDetailVersion.ciStatus }}
-          </span>
-        </p>
         <p><strong>Approver:</strong> {{ activeDetailVersion.approver || "—" }}</p>
         <p style="margin-top: 12px;">
           <button type="button" class="btn btn-secondary" style="width: 100%;">Download Release Bundle</button>
@@ -605,37 +583,14 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
                 <input id="releaseDate" v-model="newVersionForm.releaseDate" type="date" />
               </div>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="versionStatus">Status</label>
-                <select id="versionStatus" v-model="newVersionForm.status">
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
-                  <option value="rc">RC</option>
-                  <option value="archived">Archived</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="versionCiStatus">CI Status</label>
-                <select id="versionCiStatus" v-model="newVersionForm.ciStatus">
-                  <option value="unknown">Unknown</option>
-                  <option value="passed">Passed</option>
-                  <option value="failed">Failed</option>
-                  <option value="pending">Pending</option>
-                </select>
-              </div>
-            </div>
             <div class="form-group">
-              <label for="versionBranch">Git Branch / CI Ref <span class="opt">(optional)</span></label>
-              <input id="versionBranch" v-model="newVersionForm.branch" type="text" placeholder="e.g. release/2.5.0" />
-            </div>
-            <div class="form-group">
-              <label for="versionTags">Tags <span class="opt">(optional)</span></label>
-              <input id="versionTags" v-model="newVersionForm.tags" type="text" placeholder="e.g. breaking-change, security-fix, feature" />
-            </div>
-            <div class="form-group">
-              <label for="versionCommit">Commit Hash <span class="opt">(optional)</span></label>
-              <input id="versionCommit" v-model="newVersionForm.commitHash" type="text" placeholder="e.g. a7f3c2d" />
+              <label for="versionStatus">Status</label>
+              <select id="versionStatus" v-model="newVersionForm.status">
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="rc">RC</option>
+                <option value="archived">Archived</option>
+              </select>
             </div>
             <div class="form-group">
               <label for="versionApprover">Approver <span class="opt">(optional)</span></label>
@@ -649,6 +604,32 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 - Changed: ...
 - Deprecated: ..." />
             </div>
+            <details class="technical-details">
+              <summary>Technical details</summary>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="versionCiStatus">CI Status</label>
+                  <select id="versionCiStatus" v-model="newVersionForm.ciStatus">
+                    <option value="unknown">Unknown</option>
+                    <option value="passed">Passed</option>
+                    <option value="failed">Failed</option>
+                    <option value="pending">Pending</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="versionCommit">Commit Hash <span class="opt">(optional)</span></label>
+                  <input id="versionCommit" v-model="newVersionForm.commitHash" type="text" placeholder="e.g. a7f3c2d" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="versionBranch">Git Branch / CI Ref <span class="opt">(optional)</span></label>
+                <input id="versionBranch" v-model="newVersionForm.branch" type="text" placeholder="e.g. release/2.5.0" />
+              </div>
+              <div class="form-group">
+                <label for="versionTags">Tags <span class="opt">(optional)</span></label>
+                <input id="versionTags" v-model="newVersionForm.tags" type="text" placeholder="e.g. breaking-change, security-fix, feature" />
+              </div>
+            </details>
           </div>
           <div class="form-footer">
             <button type="button" class="btn btn-secondary" @click="closeNewVersionModal">Cancel</button>
@@ -688,37 +669,14 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
                 <input id="editReleaseDate" v-model="editVersionForm.releaseDate" type="date" />
               </div>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="editVersionStatus">Status</label>
-                <select id="editVersionStatus" v-model="editVersionForm.status">
-                  <option value="draft">Draft</option>
-                  <option value="published">Published</option>
-                  <option value="rc">RC</option>
-                  <option value="archived">Archived</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="editVersionCiStatus">CI Status</label>
-                <select id="editVersionCiStatus" v-model="editVersionForm.ciStatus">
-                  <option value="unknown">Unknown</option>
-                  <option value="passed">Passed</option>
-                  <option value="failed">Failed</option>
-                  <option value="pending">Pending</option>
-                </select>
-              </div>
-            </div>
             <div class="form-group">
-              <label for="editVersionBranch">Git Branch / CI Ref <span class="opt">(optional)</span></label>
-              <input id="editVersionBranch" v-model="editVersionForm.branch" type="text" />
-            </div>
-            <div class="form-group">
-              <label for="editVersionTags">Tags <span class="opt">(optional)</span></label>
-              <input id="editVersionTags" v-model="editVersionForm.tags" type="text" />
-            </div>
-            <div class="form-group">
-              <label for="editVersionCommit">Commit Hash <span class="opt">(optional)</span></label>
-              <input id="editVersionCommit" v-model="editVersionForm.commitHash" type="text" />
+              <label for="editVersionStatus">Status</label>
+              <select id="editVersionStatus" v-model="editVersionForm.status">
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="rc">RC</option>
+                <option value="archived">Archived</option>
+              </select>
             </div>
             <div class="form-group">
               <label for="editVersionApprover">Approver <span class="opt">(optional)</span></label>
@@ -728,6 +686,32 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               <label for="editReleaseNotes">Release Notes <span class="opt">(optional)</span></label>
               <textarea id="editReleaseNotes" v-model="editVersionForm.releaseNotes" />
             </div>
+            <details class="technical-details">
+              <summary>Technical details</summary>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="editVersionCiStatus">CI Status</label>
+                  <select id="editVersionCiStatus" v-model="editVersionForm.ciStatus">
+                    <option value="unknown">Unknown</option>
+                    <option value="passed">Passed</option>
+                    <option value="failed">Failed</option>
+                    <option value="pending">Pending</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="editVersionCommit">Commit Hash <span class="opt">(optional)</span></label>
+                  <input id="editVersionCommit" v-model="editVersionForm.commitHash" type="text" />
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="editVersionBranch">Git Branch / CI Ref <span class="opt">(optional)</span></label>
+                <input id="editVersionBranch" v-model="editVersionForm.branch" type="text" />
+              </div>
+              <div class="form-group">
+                <label for="editVersionTags">Tags <span class="opt">(optional)</span></label>
+                <input id="editVersionTags" v-model="editVersionForm.tags" type="text" />
+              </div>
+            </details>
           </div>
           <div class="form-footer">
             <button type="button" class="btn btn-secondary" @click="closeEditVersionModal">Cancel</button>
@@ -1338,6 +1322,50 @@ h2 {
   gap: 10px;
   padding: 16px 24px;
   border-top: 1px solid var(--border);
+}
+.technical-details {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.technical-details summary {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.technical-details summary::before {
+  content: "▸";
+  font-size: 11px;
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+.technical-details[open] summary::before {
+  transform: rotate(90deg);
+}
+.technical-details summary:hover {
+  color: var(--text);
+}
+.technical-details > .form-group,
+.technical-details > .form-row {
+  margin-top: 12px;
+  animation: detailsSlideDown 0.2s ease;
+}
+@keyframes detailsSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .error-banner {
   background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent);

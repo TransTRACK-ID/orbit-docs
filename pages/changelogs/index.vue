@@ -275,8 +275,9 @@ async function createHistorySnapshot(versionId: string, snapshotContent: string,
       method: "POST",
       body: { versionId, content: snapshotContent, action },
     });
-  } catch {
-    // Silently fail; history is non-critical
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("History snapshot failed:", err);
   }
 }
 
@@ -319,7 +320,7 @@ function onHistoryListKeydown(e: KeyboardEvent) {
   } else if (e.key === "Enter" || e.key === " ") {
     e.preventDefault();
     const activeItem = items[historyFocusIndex.value];
-    if (activeItem) restoreHistoryItem(activeItem);
+    if (activeItem && isRestorableAction(activeItem.action)) restoreHistoryItem(activeItem);
   }
 }
 
@@ -477,6 +478,7 @@ async function submitQuickRelease() {
     });
 
     if (release?.id) {
+      await createHistorySnapshot(currentVersion.value.id, content.value, "quick_release");
       await checkExistingRelease(currentVersion.value.id);
       await navigateTo(`/releases/${release.id}`);
     }
@@ -523,6 +525,7 @@ async function submitPublishRelease() {
 
     // Navigate to the newly created release
     if (release?.id) {
+      await createHistorySnapshot(currentVersion.value.id, content.value, "article_release");
       await navigateTo(`/releases/${release.id}`);
     }
   } catch (e: any) {
@@ -563,7 +566,9 @@ async function fetchHistory() {
       query: { limit: "20" },
     });
     historyItems.value = data.data;
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("Fetch history failed:", err);
     historyItems.value = [];
   } finally {
     isHistoryLoading.value = false;
@@ -576,8 +581,77 @@ const filteredHistory = computed(() => {
   return historyItems.value.filter(
     (h) =>
       (h.actor || "").toLowerCase().includes(q) ||
-      (h.action || "").toLowerCase().includes(q)
+      (h.action || "").toLowerCase().includes(q) ||
+      (h.content || "").toLowerCase().includes(q)
   );
+});
+
+function historyActionClass(action: string): string {
+  switch (action) {
+    case "publish": return "pill-green";
+    case "quick_release": return "pill-amber";
+    case "article_release": return "pill-purple";
+    default: return "pill-muted";
+  }
+}
+
+function historyActionLabel(action: string): string {
+  switch (action) {
+    case "quick_release": return "quick release";
+    case "article_release": return "article release";
+    default: return action;
+  }
+}
+
+function isRestorableAction(action: string): boolean {
+  return action === "save" || action === "publish";
+}
+
+function historyDotClass(action: string): string {
+  switch (action) {
+    case "publish": return "history-dot-publish";
+    case "quick_release": return "history-dot-amber";
+    case "article_release": return "history-dot-purple";
+    default: return "history-dot-save";
+  }
+}
+
+function previewContent(text: string, maxLen = 140): string {
+  if (!text) return "No content";
+  const cleaned = text.replace(/^\s*[#\-*\d.\[\]>\s]+/gm, " ").replace(/\s+/g, " ").trim();
+  if (cleaned.length <= maxLen) return cleaned;
+  return cleaned.slice(0, maxLen).replace(/\s+[^\s]*$/, "") + "…";
+}
+
+function formatHistoryDate(dateStr: string | null): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+  if (isToday) return "Today";
+  if (isYesterday) return "Yesterday";
+  return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+}
+
+function formatHistoryTime(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+}
+
+const groupedHistory = computed(() => {
+  const groups: Record<string, typeof historyItems.value> = {};
+  for (const item of filteredHistory.value) {
+    const key = item.createdAt ? new Date(item.createdAt).toDateString() : "Unknown";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(item);
+  }
+  return Object.entries(groups).map(([dateKey, items]) => ({
+    label: formatHistoryDate(items[0]?.createdAt ?? null),
+    items,
+  }));
 });
 
 function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
@@ -821,27 +895,42 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
           <input v-model="historySearch" type="search" class="history-search" placeholder="Filter by author or action…" aria-label="Filter version history" />
         </div>
         <div class="history-list" role="list" @keydown="onHistoryListKeydown">
-          <div
-            v-for="(item, index) in filteredHistory"
-            :key="item.id"
-            class="history-item"
-            role="listitem"
-            tabindex="0"
-            @click="historyFocusIndex = index"
-            @keydown.enter.prevent="restoreHistoryItem(item)"
-            @keydown.space.prevent="restoreHistoryItem(item)"
-          >
-            <div class="history-item-main">
-              <div class="time">{{ item.createdAt ? new Date(item.createdAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—" }}</div>
-              <div class="history-meta-row">
-                <span class="author">{{ item.actor || "Unknown" }}</span>
-                <span class="pill" :class="item.action === 'publish' ? 'pill-green' : 'pill-muted'">{{ item.action }}</span>
+          <template v-if="!isHistoryLoading && filteredHistory.length > 0">
+            <div v-for="group in groupedHistory" :key="group.label" class="history-group">
+              <div class="history-date-sep" aria-hidden="true">
+                <span class="history-date-label">{{ group.label }}</span>
+                <span class="history-date-line"></span>
+              </div>
+              <div
+                v-for="(item, index) in group.items"
+                :key="item.id"
+                class="history-item"
+                :class="{ 'history-item-restorable': isRestorableAction(item.action) }"
+                role="listitem"
+                tabindex="0"
+                @click="historyFocusIndex = index"
+                @keydown.enter.prevent="isRestorableAction(item.action) && restoreHistoryItem(item)"
+                @keydown.space.prevent="isRestorableAction(item.action) && restoreHistoryItem(item)"
+              >
+                <div class="history-timeline" aria-hidden="true">
+                  <span class="history-dot" :class="historyDotClass(item.action)"></span>
+                  <span class="history-line"></span>
+                </div>
+                <div class="history-item-main">
+                  <p class="history-preview">{{ previewContent(item.content) }}</p>
+                  <div class="history-meta-row">
+                    <span class="history-time">{{ formatHistoryTime(item.createdAt) }}</span>
+                    <span class="history-actor">{{ item.actor || "Unknown" }}</span>
+                    <span class="pill" :class="historyActionClass(item.action)">{{ historyActionLabel(item.action) }}</span>
+                  </div>
+                </div>
+                <button v-if="isRestorableAction(item.action)" type="button" class="btn btn-ghost btn-sm history-restore" @click.stop="restoreHistoryItem(item)">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                  Restore
+                </button>
               </div>
             </div>
-            <button type="button" class="btn btn-ghost btn-sm history-restore" @click.stop="restoreHistoryItem(item)">
-              Restore
-            </button>
-          </div>
+          </template>
           <div v-if="isHistoryLoading" class="history-empty">
             <p>Loading history…</p>
           </div>
@@ -1328,7 +1417,7 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
   pointer-events: auto;
 }
 .history-drawer {
-  width: 420px;
+  width: 480px;
   max-width: 90vw;
   height: 100%;
   background: var(--surface);
@@ -1388,52 +1477,140 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
 .history-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 0;
+}
+.history-group {
+  position: relative;
+  padding: 0 20px;
+}
+.history-group::before {
+  content: "";
+  position: absolute;
+  left: 29px;
+  top: 44px;
+  bottom: 16px;
+  width: 1.5px;
+  background: var(--border);
+  z-index: 0;
+}
+.history-date-sep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 0 8px;
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
+}
+.history-date-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.history-date-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  min-width: 0;
 }
 .history-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: var(--radius);
-  margin-bottom: 4px;
+  align-items: flex-start;
+  gap: 0;
+  padding: 12px 0 16px;
   cursor: pointer;
-  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   outline: none;
+  position: relative;
 }
 .history-item:focus-visible {
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+  border-radius: var(--radius);
 }
 .history-item:hover {
   background: var(--fg-soft);
+  border-radius: var(--radius);
 }
 .history-item:hover .history-restore {
-  opacity: 1;
+  color: var(--accent);
+}
+.history-timeline {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  flex-shrink: 0;
+  margin-right: 12px;
+  padding-top: 6px;
+}
+.history-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.history-dot-save {
+  background: var(--muted);
+}
+.history-dot-publish {
+  background: oklch(65% 0.18 145);
+}
+.history-dot-amber {
+  background: oklch(65% 0.15 75);
+}
+.history-dot-purple {
+  background: oklch(55% 0.2 295);
+}
+.history-line {
+  display: none;
 }
 .history-item-main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.history-item .time {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--muted);
+.history-preview {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--fg);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .history-meta-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  gap: 10px;
 }
-.history-item .author {
-  font-size: 13px;
-  color: var(--fg);
+.history-time {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.history-actor {
+  font-size: 12px;
+  color: var(--muted);
 }
 .history-restore {
-  opacity: 0;
-  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
+  margin-left: 8px;
+  color: var(--muted);
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .history-empty {
   flex: 1;
