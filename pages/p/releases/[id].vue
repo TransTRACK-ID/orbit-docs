@@ -15,10 +15,36 @@ const isLoading = ref(true);
 
 const appFilter = computed(() => route.query.app as string || "");
 const isEmbed = computed(() => route.query.embed === "1" || route.query.embed === "true");
+const embedCopied = ref(false);
+
+const embedCode = computed(() => {
+  const url = `${useRequestURL().origin}/p/releases/${releaseId.value}${appFilter.value ? `?app=${appFilter.value}&embed=1` : `?embed=1`}`;
+  return `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
+});
+
+async function copyEmbedCode() {
+  try {
+    await navigator.clipboard.writeText(embedCode.value);
+    embedCopied.value = true;
+    setTimeout(() => embedCopied.value = false, 2000);
+  } catch {
+    const input = document.createElement("input");
+    input.value = embedCode.value;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    document.body.removeChild(input);
+    embedCopied.value = true;
+    setTimeout(() => embedCopied.value = false, 2000);
+  }
+}
 
 const backUrl = computed(() => {
-  if (appFilter.value) return `/p/releases?app=${appFilter.value}`;
-  return "/p/releases";
+  const params = new URLSearchParams();
+  if (appFilter.value) params.set("app", appFilter.value);
+  if (isEmbed.value) params.set("embed", "1");
+  const q = params.toString();
+  return q ? `/p/releases?${q}` : "/p/releases";
 });
 
 onMounted(async () => {
@@ -177,8 +203,11 @@ watch(release, (r) => {
 
       <!-- Embed -->
       <div v-if="!isEmbed" class="rd-embed">
-        <span class="rd-embed-label">Embed this release</span>
-        <code class="rd-embed-code">&lt;iframe src="{{ useRequestURL().origin }}/p/releases/{{ release.id }}{{ appFilter ? `?app=${appFilter}&amp;embed=1` : `?embed=1` }}" width="100%" height="600" frameborder="0"&gt;&lt;/iframe&gt;</code>
+        <button type="button" class="rd-embed-btn" @click="copyEmbedCode">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span v-if="embedCopied">Copied</span>
+          <span v-else>Copy embed code</span>
+        </button>
       </div>
     </article>
   </div>
@@ -460,26 +489,36 @@ watch(release, (r) => {
 /* Embed */
 .rd-embed {
   margin-top: 48px;
-  padding: 20px;
-  background: var(--fg-soft);
-  border-radius: 8px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
 }
-.rd-embed-label {
-  display: block;
-  margin-bottom: 10px;
-  font-size: 12px;
+.rd-embed-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.rd-embed-code {
-  display: block;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
+.rd-embed-btn:hover {
   color: var(--fg);
-  word-break: break-all;
-  line-height: 1.6;
+  border-color: var(--fg);
+}
+.rd-embed-btn:active {
+  transform: scale(0.98);
+}
+.rd-embed-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Responsive */
