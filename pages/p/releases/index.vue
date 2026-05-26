@@ -73,6 +73,14 @@ function countCategories(categories: any) {
   };
 }
 
+function detailLink(id: string): string {
+  const params = new URLSearchParams();
+  if (appFilter.value) params.set("app", appFilter.value);
+  if (isEmbed.value) params.set("embed", "1");
+  const q = params.toString();
+  return q ? `/p/releases/${id}?${q}` : `/p/releases/${id}`;
+}
+
 function stripMarkdown(text: string, maxLen = 280): string {
   if (!text) return "";
   const cleaned = text
@@ -176,7 +184,7 @@ watch(releases, (list) => {
             :key="r.id"
             class="rl-item"
           >
-            <NuxtLink :to="`/p/releases/${r.id}?app=${appFilter}`" class="rl-link">
+            <NuxtLink :to="detailLink(r.id)" class="rl-link">
               <div class="rl-meta">
                 <span class="rl-version">{{ r.version }}</span>
                 <span class="rl-sep">·</span>
@@ -221,7 +229,7 @@ watch(releases, (list) => {
               :key="r.id"
               class="rl-item"
             >
-              <NuxtLink :to="`/p/releases/${r.id}`" class="rl-link">
+              <NuxtLink :to="detailLink(r.id)" class="rl-link">
                 <div class="rl-meta">
                   <span class="rl-version">{{ r.version }}</span>
                   <span class="rl-sep">·</span>
