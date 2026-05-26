@@ -63,7 +63,9 @@ export default defineEventHandler(async (event) => {
     ciStatus,
   } = body || {};
 
-  const updates: Record<string, any> = {};
+  const updates: Record<string, any> = {
+    updatedAt: new Date(),
+  };
 
   if (version !== undefined) {
     if (typeof version !== "string" || version.trim().length === 0) {

@@ -47,7 +47,6 @@ export default defineEventHandler(async (event) => {
   if (existing.type === "normal") {
     const disallowed = [
       { field: heroTitle, name: "heroTitle" },
-      { field: summary, name: "summary" },
       { field: features, name: "features" },
     ].filter((d) => d.field !== undefined);
     if (disallowed.length > 0) {

@@ -230,8 +230,9 @@ async function syncReleasesFromChangelog() {
     if (releases.normal?.id) {
       await updateRelease(releases.normal.id, { categories, summary });
     }
-  } catch {
-    // Silently ignore sync failures; the version save is the primary action
+  } catch (err) {
+    // Log sync failures for debugging; the version save is the primary action
+    console.error("Failed to sync release from changelog:", err);
   }
 }
 
