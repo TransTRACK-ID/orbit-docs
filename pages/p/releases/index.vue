@@ -67,22 +67,6 @@ function detailLink(id: string): string {
   return q ? `/p/releases/${id}?${q}` : `/p/releases/${id}`;
 }
 
-function stripMarkdown(text: string, maxLen = 200): string {
-  if (!text) return "";
-  const cleaned = text
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\*\*|__/g, "")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/^#+\s*/gm, "")
-    .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/^\s*\d+\.\s+/gm, "")
-    .replace(/\n+/g, " ")
-    .trim();
-  if (cleaned.length <= maxLen) return cleaned;
-  return cleaned.slice(0, maxLen).replace(/\s+[^\s]*$/, "") + "…";
-}
-
 // Group by month
 const groupedByMonth = computed(() => {
   const groups: Record<string, ReleaseItem[]> = {};
@@ -162,24 +146,28 @@ useSeoMeta({
             :key="r.id"
             class="rl-entry"
           >
-            <NuxtLink :to="detailLink(r.id)" class="rl-entry-link">
-              <div class="rl-entry-header">
-                <div class="rl-entry-date">
-                  <span class="rl-entry-day">{{ new Date(r.releaseDate || '').getDate() }}</span>
-                  <span class="rl-entry-weekday">{{ new Date(r.releaseDate || '').toLocaleDateString('en-US', { weekday: 'short' }) }}</span>
-                </div>
-                <div class="rl-entry-meta">
-                  <span class="rl-entry-version">{{ r.version }}</span>
-                  <span v-if="r.type === 'article'" class="rl-entry-type">Article</span>
-                </div>
+            <div class="rl-entry-header">
+              <div class="rl-entry-date">
+                <span class="rl-entry-day">{{ new Date(r.releaseDate || '').getDate() }}</span>
+                <span class="rl-entry-weekday">{{ new Date(r.releaseDate || '').toLocaleDateString('en-US', { weekday: 'short' }) }}</span>
               </div>
-              <h2 class="rl-entry-title">{{ r.heroTitle || `${r.appName} ${r.version}` }}</h2>
-              <div
-                v-if="r.summary"
-                class="rl-entry-body"
-                v-html="renderMarkdown(r.summary)"
-              />
-            </NuxtLink>
+              <div class="rl-entry-meta">
+                <span class="rl-entry-version">{{ r.version }}</span>
+                <span v-if="r.type === 'article'" class="rl-entry-type">Article</span>
+              </div>
+            </div>
+            <h2 class="rl-entry-title">
+              <NuxtLink v-if="r.type !== 'article'" :to="detailLink(r.id)">{{ r.heroTitle || `${r.appName} ${r.version}` }}</NuxtLink>
+              <template v-else>{{ r.heroTitle || `${r.appName} ${r.version}` }}</template>
+            </h2>
+            <div
+              v-if="r.summary"
+              class="rl-entry-body"
+              v-html="renderMarkdown(r.summary)"
+            />
+            <div v-if="r.type === 'article' && !isEmbed" class="rl-entry-actions">
+              <NuxtLink :to="detailLink(r.id)" class="rl-entry-link">Open release page →</NuxtLink>
+            </div>
           </article>
         </div>
       </div>
@@ -285,12 +273,25 @@ useSeoMeta({
   padding-bottom: 0;
 }
 
-.rl-entry-link {
-  display: block;
+.rl-entry-title a {
   text-decoration: none;
   color: inherit;
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.rl-entry-link:hover .rl-entry-title {
+.rl-entry-title a:hover {
+  color: var(--accent);
+}
+.rl-entry-actions {
+  margin-top: 16px;
+}
+.rl-entry-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.rl-entry-link:hover {
   color: var(--accent);
 }
 
@@ -375,7 +376,42 @@ useSeoMeta({
   margin-bottom: 0;
 }
 .rl-entry-body :deep(img) {
-  display: none;
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin: 24px 0;
+  display: block;
+}
+.rl-entry-body :deep(video) {
+  max-width: 100%;
+  height: auto;
+  border-radius: 12px;
+  margin: 24px 0;
+  display: block;
+}
+.rl-entry-body :deep(iframe) {
+  max-width: 100%;
+  border-radius: 12px;
+  margin: 24px 0;
+  display: block;
+}
+.rl-entry-body :deep(blockquote) {
+  margin: 24px 0;
+  padding: 16px 20px;
+  background: var(--fg-soft);
+  border-radius: 8px;
+  font-style: italic;
+}
+.rl-entry-body :deep(pre) {
+  margin: 24px 0;
+  padding: 16px;
+  background: var(--bg);
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.rl-entry-body :deep(pre code) {
+  background: transparent;
+  padding: 0;
 }
 .rl-entry-body :deep(h1),
 .rl-entry-body :deep(h2),
