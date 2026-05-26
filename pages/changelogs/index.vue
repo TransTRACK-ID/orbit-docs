@@ -97,11 +97,9 @@ onMounted(async () => {
   if (selectedAppId.value) {
     await fetchVersions(selectedAppId.value);
 
-    const persistedVersionId = $page.selectedVersionId;
+    // Priority: URL param > latest version (first in desc order) > persisted
     if (queryVersionId && versions.value.find((v) => v.id === queryVersionId)) {
       selectedVersionId.value = queryVersionId;
-    } else if (persistedVersionId && versions.value.find((v) => v.id === persistedVersionId)) {
-      selectedVersionId.value = persistedVersionId;
     } else if (versions.value.length > 0) {
       selectedVersionId.value = versions.value[0].id;
     }
@@ -151,13 +149,8 @@ watch(selectedAppId, async (newAppId, oldAppId) => {
   if (!newAppId) return;
   await fetchVersions(newAppId);
   if (versions.value.length > 0) {
-    const stillExists = versions.value.find((v) => v.id === selectedVersionId.value);
-    if (!stillExists) {
-      selectedVersionId.value = versions.value[0].id;
-    } else if (oldAppId !== newAppId) {
-      // Version id stayed the same but app changed; still need to sync URL
-      syncUrlQuery();
-    }
+    // Always select the latest version (first in desc order) when app changes
+    selectedVersionId.value = versions.value[0].id;
   } else {
     selectedVersionId.value = "";
     currentVersion.value = null;
