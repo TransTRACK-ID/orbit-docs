@@ -11,7 +11,8 @@
     "nuxt-prepare": "nuxt prepare",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "db:seed": "tsx server/database/seed.ts"
   },
   "dependencies": {
     "@nuxt/devtools": "^3.2.4",
@@ -52,5 +53,8 @@
   },
   "overrides": {
     "pinia-plugin-persistedstate": "3.2.1"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.3"
   }
 }
