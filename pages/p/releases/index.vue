@@ -40,16 +40,6 @@ const filteredReleases = computed(() => {
   });
 });
 
-const groupedByApp = computed(() => {
-  const map = new Map<string, ReleaseItem[]>();
-  for (const r of filteredReleases.value) {
-    const list = map.get(r.appName) || [];
-    list.push(r);
-    map.set(r.appName, list);
-  }
-  return map;
-});
-
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -63,14 +53,10 @@ function formatDate(dateStr: string | null): string {
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
-function countCategories(categories: any) {
-  return {
-    added: categories?.added?.length || 0,
-    fixed: categories?.fixed?.length || 0,
-    changed: categories?.changed?.length || 0,
-    deprecated: categories?.deprecated?.length || 0,
-    security: categories?.security?.length || 0,
-  };
+function formatMonthYear(dateStr: string | null): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 }
 
 function detailLink(id: string): string {
@@ -81,7 +67,7 @@ function detailLink(id: string): string {
   return q ? `/p/releases/${id}?${q}` : `/p/releases/${id}`;
 }
 
-function stripMarkdown(text: string, maxLen = 280): string {
+function stripMarkdown(text: string, maxLen = 200): string {
   if (!text) return "";
   const cleaned = text
     .replace(/!\[([^\]]*)\]\([^)]+\)/g, "")
@@ -96,6 +82,21 @@ function stripMarkdown(text: string, maxLen = 280): string {
   if (cleaned.length <= maxLen) return cleaned;
   return cleaned.slice(0, maxLen).replace(/\s+[^\s]*$/, "") + "…";
 }
+
+// Group by month
+const groupedByMonth = computed(() => {
+  const groups: Record<string, ReleaseItem[]> = {};
+  for (const r of filteredReleases.value) {
+    const key = formatMonthYear(r.releaseDate);
+    if (!key) continue;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(r);
+  }
+  return Object.entries(groups).map(([month, items]) => ({
+    month,
+    items,
+  }));
+});
 
 // SEO
 const pageTitle = computed(() => {
@@ -117,43 +118,16 @@ useSeoMeta({
   ogType: "website",
   twitterCard: "summary",
 });
-
-// JSON-LD structured data
-watch(releases, (list) => {
-  if (!list.length) return;
-  const items = list.slice(0, 20).map((r) => ({
-    "@type": "SoftwareApplication",
-    name: r.appName,
-    softwareVersion: r.version,
-    datePublished: r.releaseDate,
-    description: r.heroTitle || r.summary || undefined,
-    url: `${useRequestURL().origin}/p/releases/${r.id}`,
-  }));
-  const jsonLd = JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "ItemList",
-    itemListElement: items.map((item, idx) => ({
-      "@type": "ListItem",
-      position: idx + 1,
-      item,
-    })),
-  });
-  useHead({
-    script: [
-      {
-        type: "application/ld+json",
-        innerHTML: jsonLd,
-      },
-    ],
-  });
-}, { immediate: true });
 </script>
 
 <template>
   <div class="rl">
     <!-- Header -->
     <header class="rl-head">
-      <h1>{{ appFilter ? `${appFilter} Release Notes` : "Release Notes" }}</h1>
+      <h1>{{ appFilter ? `${appFilter} Release Notes` : "What's New" }}</h1>
+      <p class="rl-subtitle">
+        {{ appFilter ? `Keep up with the latest releases for ${appFilter}.` : "Keep up with the latest releases, improvements, and fixes." }}
+      </p>
       <div v-if="!isEmbed" class="rl-search">
         <input
           v-model="search"
@@ -176,96 +150,39 @@ watch(releases, (list) => {
 
     <!-- List -->
     <div v-else class="rl-list">
-      <!-- Scoped to single app: flat timeline -->
-      <template v-if="appFilter">
-        <div class="rl-timeline">
+      <div
+        v-for="group in groupedByMonth"
+        :key="group.month"
+        class="rl-month-group"
+      >
+        <div class="rl-month-label">{{ group.month }}</div>
+        <div class="rl-entries">
           <article
-            v-for="r in filteredReleases"
+            v-for="r in group.items"
             :key="r.id"
-            class="rl-item"
+            class="rl-entry"
           >
-            <NuxtLink :to="detailLink(r.id)" class="rl-link">
-              <div class="rl-meta">
-                <span class="rl-version">{{ r.version }}</span>
-                <span class="rl-sep">·</span>
-                <time class="rl-time">{{ formatDate(r.releaseDate) }}</time>
-                <span v-if="r.type === 'article'" class="rl-type">Article</span>
+            <NuxtLink :to="detailLink(r.id)" class="rl-entry-link">
+              <div class="rl-entry-header">
+                <div class="rl-entry-date">
+                  <span class="rl-entry-day">{{ new Date(r.releaseDate || '').getDate() }}</span>
+                  <span class="rl-entry-weekday">{{ new Date(r.releaseDate || '').toLocaleDateString('en-US', { weekday: 'short' }) }}</span>
+                </div>
+                <div class="rl-entry-meta">
+                  <span class="rl-entry-version">{{ r.version }}</span>
+                  <span v-if="r.type === 'article'" class="rl-entry-type">Article</span>
+                </div>
               </div>
-              <h2 class="rl-title">{{ r.heroTitle || `${r.appName} ${r.version}` }}</h2>
-              <p
+              <h2 class="rl-entry-title">{{ r.heroTitle || `${r.appName} ${r.version}` }}</h2>
+              <div
                 v-if="r.summary"
-                class="rl-excerpt"
-              >{{ stripMarkdown(r.summary) }}</p>
-              <div class="rl-tags">
-                <span v-if="countCategories(r.categories).added" class="rl-tag rl-tag-added">
-                  {{ countCategories(r.categories).added }} added
-                </span>
-                <span v-if="countCategories(r.categories).fixed" class="rl-tag rl-tag-fixed">
-                  {{ countCategories(r.categories).fixed }} fixed
-                </span>
-                <span v-if="countCategories(r.categories).changed" class="rl-tag rl-tag-changed">
-                  {{ countCategories(r.categories).changed }} changed
-                </span>
-                <span v-if="countCategories(r.categories).security" class="rl-tag rl-tag-security">
-                  {{ countCategories(r.categories).security }} security
-                </span>
-              </div>
+                class="rl-entry-body"
+                v-html="renderMarkdown(r.summary)"
+              />
             </NuxtLink>
           </article>
         </div>
-      </template>
-
-      <!-- All apps: grouped -->
-      <template v-else>
-        <section
-          v-for="[appName, appReleases] in groupedByApp"
-          :key="appName"
-          class="rl-group"
-        >
-          <h2 class="rl-group-label">{{ appName }}</h2>
-          <div class="rl-timeline">
-            <article
-              v-for="r in appReleases"
-              :key="r.id"
-              class="rl-item"
-            >
-              <NuxtLink :to="detailLink(r.id)" class="rl-link">
-                <div class="rl-meta">
-                  <span class="rl-version">{{ r.version }}</span>
-                  <span class="rl-sep">·</span>
-                  <time class="rl-time">{{ formatDate(r.releaseDate) }}</time>
-                  <span v-if="r.type === 'article'" class="rl-type">Article</span>
-                </div>
-                <h3 class="rl-title">{{ r.heroTitle || `${r.appName} ${r.version}` }}</h3>
-                <p
-                  v-if="r.summary"
-                  class="rl-excerpt"
-                >{{ stripMarkdown(r.summary) }}</p>
-                <div class="rl-tags">
-                  <span v-if="countCategories(r.categories).added" class="rl-tag rl-tag-added">
-                    {{ countCategories(r.categories).added }} added
-                  </span>
-                  <span v-if="countCategories(r.categories).fixed" class="rl-tag rl-tag-fixed">
-                    {{ countCategories(r.categories).fixed }} fixed
-                  </span>
-                  <span v-if="countCategories(r.categories).changed" class="rl-tag rl-tag-changed">
-                    {{ countCategories(r.categories).changed }} changed
-                  </span>
-                  <span v-if="countCategories(r.categories).security" class="rl-tag rl-tag-security">
-                    {{ countCategories(r.categories).security }} security
-                  </span>
-                </div>
-              </NuxtLink>
-            </article>
-          </div>
-        </section>
-      </template>
-    </div>
-
-    <!-- Embed code -->
-    <div v-if="!isEmbed && appFilter" class="rl-embed">
-      <span class="rl-embed-label">Embed this list</span>
-      <code class="rl-embed-code">&lt;iframe src="{{ useRequestURL().origin }}/p/releases?app={{ appFilter }}&amp;embed=1" width="100%" height="800" frameborder="0"&gt;&lt;/iframe&gt;</code>
+      </div>
     </div>
   </div>
 </template>
@@ -273,33 +190,44 @@ watch(releases, (list) => {
 <style scoped>
 .rl {
   width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 /* Header */
 .rl-head {
-  margin-bottom: 40px;
+  text-align: center;
+  margin-bottom: 64px;
+  padding-top: 24px;
 }
 .rl-head h1 {
-  margin: 0 0 8px;
-  font-size: 32px;
+  margin: 0 0 12px;
+  font-size: 40px;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
   color: var(--fg);
 }
+.rl-subtitle {
+  margin: 0 0 32px;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--muted);
+}
 .rl-search {
-  max-width: 400px;
+  max-width: 360px;
+  margin: 0 auto;
 }
 .rl-search-input {
   width: 100%;
-  padding: 8px 0;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: transparent;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
   font: inherit;
   font-size: 15px;
   color: var(--fg);
-  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .rl-search-input::placeholder {
   color: var(--muted);
@@ -307,190 +235,218 @@ watch(releases, (list) => {
 .rl-search-input:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 12%, transparent);
 }
 
-/* Groups */
-.rl-group {
-  margin-bottom: 56px;
+/* Month Group */
+.rl-month-group {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 64px;
 }
-.rl-group:last-child {
+.rl-month-group:last-child {
   margin-bottom: 0;
 }
-.rl-group-label {
-  margin: 0 0 24px;
+
+/* Month Label (sticky left) */
+.rl-month-label {
+  flex-shrink: 0;
+  width: 100px;
+  position: sticky;
+  top: 24px;
+  align-self: flex-start;
   font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
+  padding-top: 24px;
 }
 
-/* Timeline */
-.rl-timeline {
+/* Entries */
+.rl-entries {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  gap: 0;
 }
 
-/* Item */
-.rl-item {
-  position: relative;
-  padding: 24px 0;
-}
-.rl-item:first-child {
-  padding-top: 0;
-}
-.rl-item:not(:last-child) {
+/* Entry */
+.rl-entry {
+  padding: 32px 0;
   border-bottom: 1px solid var(--border);
 }
-.rl-item:last-child {
+.rl-entry:first-child {
+  padding-top: 0;
+}
+.rl-entry:last-child {
+  border-bottom: none;
   padding-bottom: 0;
 }
-.rl-link {
+
+.rl-entry-link {
   display: block;
   text-decoration: none;
   color: inherit;
 }
-.rl-link:hover .rl-title {
+.rl-entry-link:hover .rl-entry-title {
   color: var(--accent);
 }
 
-/* Meta */
-.rl-meta {
+/* Entry Header */
+.rl-entry-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: 13px;
-  line-height: 1;
-  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
 }
-.rl-version {
+
+/* Date Block */
+.rl-entry-date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: var(--fg-soft);
+  flex-shrink: 0;
+}
+.rl-entry-day {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--fg);
+}
+.rl-entry-weekday {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* Meta */
+.rl-entry-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rl-entry-version {
   font-family: var(--font-mono);
+  font-size: 14px;
   font-weight: 600;
   color: var(--fg);
 }
-.rl-sep {
-  color: var(--border);
-}
-.rl-time {
-  color: var(--muted);
-}
-.rl-type {
+.rl-entry-type {
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: oklch(55% 0.14 300);
-  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: color-mix(in oklch, oklch(55% 0.14 300) 8%, transparent);
 }
 
 /* Title */
-.rl-title {
-  margin: 0 0 8px;
-  font-size: 18px;
+.rl-entry-title {
+  margin: 0 0 16px;
+  font-size: 22px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--fg);
   transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Excerpt */
-.rl-excerpt {
-  font-size: 14px;
+/* Body */
+.rl-entry-body {
+  font-size: 15px;
   line-height: 1.6;
   color: var(--muted);
-  margin: 0 0 10px;
 }
-
-/* Tags */
-.rl-tags {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+.rl-entry-body :deep(p) {
+  margin: 0 0 12px;
 }
-.rl-tag {
-  font-size: 12px;
-  font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 4px;
+.rl-entry-body :deep(p:last-child) {
+  margin-bottom: 0;
 }
-.rl-tag-added {
-  background: color-mix(in oklch, oklch(65% 0.14 145) 8%, transparent);
-  color: oklch(50% 0.12 145);
+.rl-entry-body :deep(img) {
+  display: none;
 }
-.rl-tag-fixed {
-  background: color-mix(in oklch, oklch(55% 0.14 255) 8%, transparent);
-  color: oklch(45% 0.12 255);
+.rl-entry-body :deep(h1),
+.rl-entry-body :deep(h2),
+.rl-entry-body :deep(h3) {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 8px;
+  color: var(--fg);
 }
-.rl-tag-changed {
-  background: color-mix(in oklch, oklch(70% 0.12 85) 8%, transparent);
-  color: oklch(55% 0.10 85);
+.rl-entry-body :deep(ul),
+.rl-entry-body :deep(ol) {
+  margin: 0 0 12px;
+  padding-left: 20px;
 }
-.rl-tag-security {
-  background: color-mix(in oklch, oklch(60% 0.14 25) 8%, transparent);
-  color: oklch(50% 0.12 25);
+.rl-entry-body :deep(li) {
+  margin-bottom: 4px;
+}
+.rl-entry-body :deep(blockquote) {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: var(--fg-soft);
+  border-radius: 6px;
+  font-style: italic;
+}
+.rl-entry-body :deep(pre) {
+  display: none;
 }
 
 /* Empty */
 .rl-empty {
-  padding: 48px 0;
+  padding: 80px 0;
   text-align: center;
   color: var(--muted);
 }
 .rl-empty p {
   margin: 0;
-  font-size: 15px;
-}
-
-/* Embed */
-.rl-embed {
-  margin-top: 48px;
-  padding: 20px;
-  background: var(--fg-soft);
-  border-radius: 8px;
-}
-.rl-embed-label {
-  display: block;
-  margin-bottom: 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.rl-embed-code {
-  display: block;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  color: var(--fg);
-  word-break: break-all;
-  line-height: 1.6;
+  font-size: 16px;
 }
 
 /* Responsive */
-@media (max-width: 600px) {
+@media (max-width: 640px) {
   .rl-head h1 {
-    font-size: 22px;
-    letter-spacing: -0.01em;
+    font-size: 28px;
+    letter-spacing: -0.02em;
   }
-  .rl-item {
-    padding: 20px 0;
+  .rl-subtitle {
+    font-size: 15px;
   }
-  .rl-title {
-    font-size: 16px;
+  .rl-month-group {
+    flex-direction: column;
+    gap: 16px;
   }
-  .rl-meta {
-    gap: 6px;
+  .rl-month-label {
+    position: static;
+    width: auto;
+    padding-top: 0;
+    font-size: 12px;
   }
-  .rl-type {
-    margin-left: 0;
-    width: 100%;
+  .rl-entry {
+    padding: 24px 0;
+  }
+  .rl-entry-title {
+    font-size: 18px;
+  }
+  .rl-entry-header {
+    gap: 12px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rl-link:hover .rl-title {
+  .rl-entry-link:hover .rl-entry-title {
     transition: none;
   }
 }

@@ -15,29 +15,6 @@ const isLoading = ref(true);
 
 const appFilter = computed(() => route.query.app as string || "");
 const isEmbed = computed(() => route.query.embed === "1" || route.query.embed === "true");
-const embedCopied = ref(false);
-
-const embedCode = computed(() => {
-  const url = `${useRequestURL().origin}/p/releases/${releaseId.value}${appFilter.value ? `?app=${appFilter.value}&embed=1` : `?embed=1`}`;
-  return `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
-});
-
-async function copyEmbedCode() {
-  try {
-    await navigator.clipboard.writeText(embedCode.value);
-    embedCopied.value = true;
-    setTimeout(() => embedCopied.value = false, 2000);
-  } catch {
-    const input = document.createElement("input");
-    input.value = embedCode.value;
-    document.body.appendChild(input);
-    input.select();
-    document.execCommand("copy");
-    document.body.removeChild(input);
-    embedCopied.value = true;
-    setTimeout(() => embedCopied.value = false, 2000);
-  }
-}
 
 const backUrl = computed(() => {
   const params = new URLSearchParams();
@@ -120,6 +97,30 @@ watch(release, (r) => {
     ],
   });
 }, { immediate: true });
+
+// Embed
+const embedCopied = ref(false);
+const embedCode = computed(() => {
+  const url = `${useRequestURL().origin}/p/releases/${releaseId.value}${appFilter.value ? `?app=${appFilter.value}&embed=1` : `?embed=1`}`;
+  return `<iframe src="${url}" width="100%" height="600" frameborder="0"></iframe>`;
+});
+
+async function copyEmbedCode() {
+  try {
+    await navigator.clipboard.writeText(embedCode.value);
+    embedCopied.value = true;
+    setTimeout(() => embedCopied.value = false, 2000);
+  } catch {
+    const input = document.createElement("input");
+    input.value = embedCode.value;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    document.body.removeChild(input);
+    embedCopied.value = true;
+    setTimeout(() => embedCopied.value = false, 2000);
+  }
+}
 </script>
 
 <template>
@@ -141,14 +142,15 @@ watch(release, (r) => {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
             All releases
           </NuxtLink>
-          <span v-if="release.type === 'article'" class="rd-type">Article</span>
+          <div class="rd-hero-meta">
+            <span class="rd-hero-date">{{ formatDate(release.releaseDate) }}</span>
+            <span v-if="release.type === 'article'" class="rd-hero-type">Article</span>
+          </div>
         </div>
         <h1 class="rd-title">{{ release.heroTitle || `${release.appName} ${release.version}` }}</h1>
-        <div class="rd-meta">
+        <div class="rd-subtitle">
           <span class="rd-app">{{ release.appName }}</span>
           <span class="rd-version">{{ release.version }}</span>
-          <span class="rd-sep">·</span>
-          <time class="rd-date">{{ formatDate(release.releaseDate) }}</time>
         </div>
       </header>
 
@@ -216,28 +218,32 @@ watch(release, (r) => {
 <style scoped>
 .rd {
   width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 /* Loading / Empty */
 .rd-empty {
-  padding: 64px 0;
+  padding: 80px 0;
   text-align: center;
   color: var(--muted);
 }
 .rd-empty p {
   margin: 0;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 /* Hero */
 .rd-hero {
-  margin-bottom: 40px;
+  text-align: center;
+  margin-bottom: 48px;
+  padding-top: 24px;
 }
 .rd-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 32px;
 }
 .rd-back {
   display: inline-flex;
@@ -255,27 +261,39 @@ watch(release, (r) => {
 .rd-back svg {
   flex-shrink: 0;
 }
-.rd-type {
+.rd-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.rd-hero-date {
+  font-size: 13px;
+  color: var(--muted);
+}
+.rd-hero-type {
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: oklch(55% 0.14 300);
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: color-mix(in oklch, oklch(55% 0.14 300) 8%, transparent);
 }
 .rd-title {
-  margin: 0 0 12px;
-  font-size: 32px;
+  margin: 0 0 16px;
+  font-size: 36px;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
   color: var(--fg);
 }
-.rd-meta {
+.rd-subtitle {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 14px;
+  justify-content: center;
+  gap: 10px;
+  font-size: 15px;
   color: var(--muted);
 }
 .rd-app {
@@ -284,14 +302,11 @@ watch(release, (r) => {
 }
 .rd-version {
   font-family: var(--font-mono);
-  font-weight: 600;
   font-size: 13px;
-  padding: 2px 6px;
+  font-weight: 600;
+  padding: 2px 8px;
   background: var(--fg-soft);
   border-radius: 4px;
-}
-.rd-sep {
-  color: var(--border);
 }
 
 /* Body */
@@ -301,18 +316,18 @@ watch(release, (r) => {
   color: var(--fg);
 }
 .rd-body :deep(h2) {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 600;
-  margin: 40px 0 16px;
-  letter-spacing: -0.01em;
-  line-height: 1.3;
+  margin: 48px 0 20px;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
   color: var(--fg);
 }
 .rd-body :deep(h3) {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
-  margin: 28px 0 12px;
-  line-height: 1.35;
+  margin: 32px 0 14px;
+  line-height: 1.3;
   color: var(--fg);
 }
 .rd-body :deep(p) {
@@ -324,15 +339,15 @@ watch(release, (r) => {
 .rd-body :deep(img) {
   max-width: 100%;
   height: auto;
-  border-radius: 8px;
-  margin: 24px 0;
+  border-radius: 12px;
+  margin: 32px 0;
   display: block;
 }
 .rd-body :deep(video) {
   max-width: 100%;
   height: auto;
-  border-radius: 8px;
-  margin: 24px 0;
+  border-radius: 12px;
+  margin: 32px 0;
   display: block;
 }
 .rd-body :deep(ul),
@@ -341,24 +356,24 @@ watch(release, (r) => {
   margin-bottom: 16px;
 }
 .rd-body :deep(li) {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .rd-body :deep(li:last-child) {
   margin-bottom: 0;
 }
 .rd-body :deep(blockquote) {
-  margin: 24px 0;
-  padding: 16px 20px;
+  margin: 32px 0;
+  padding: 20px 24px;
   background: var(--fg-soft);
-  border-radius: 8px;
+  border-radius: 12px;
   font-style: italic;
   color: var(--muted);
 }
 .rd-body :deep(pre) {
-  margin: 24px 0;
-  padding: 16px;
+  margin: 32px 0;
+  padding: 20px;
   background: var(--bg);
-  border-radius: 8px;
+  border-radius: 12px;
   overflow-x: auto;
 }
 .rd-body :deep(code) {
@@ -372,15 +387,17 @@ watch(release, (r) => {
   background: transparent;
   padding: 0;
 }
-.rd-body :deep(ul + p),
-.rd-body :deep(ol + p),
-.rd-body :deep(pre + p),
-.rd-body :deep(blockquote + p) {
-  margin-top: 16px;
+.rd-body :deep(a) {
+  color: var(--accent);
+  text-decoration: none;
+}
+.rd-body :deep(a:hover) {
+  text-decoration: underline;
 }
 
 /* Section */
 .rd-section {
+  margin-top: 48px;
   padding-top: 48px;
   border-top: 1px solid var(--border);
 }
@@ -388,25 +405,25 @@ watch(release, (r) => {
   margin-top: 48px;
 }
 .rd-section-title {
-  margin: 0 0 16px;
-  font-size: 20px;
+  margin: 0 0 20px;
+  font-size: 22px;
   font-weight: 600;
   line-height: 1.3;
   color: var(--fg);
 }
 .rd-section-desc {
-  font-size: 15px;
-  line-height: 1.6;
+  font-size: 16px;
+  line-height: 1.7;
   color: var(--muted);
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 /* Tags */
 .rd-tag {
   font-size: 12px;
   font-weight: 500;
-  padding: 3px 10px;
-  border-radius: 4px;
+  padding: 4px 12px;
+  border-radius: 6px;
 }
 .rd-tag-added {
   background: color-mix(in oklch, oklch(65% 0.14 145) 8%, transparent);
@@ -441,8 +458,8 @@ watch(release, (r) => {
 }
 .rd-list li {
   position: relative;
-  padding-left: 18px;
-  margin-bottom: 8px;
+  padding-left: 20px;
+  margin-bottom: 10px;
   line-height: 1.6;
   color: var(--fg);
 }
@@ -461,8 +478,8 @@ watch(release, (r) => {
 /* Media */
 .rd-media {
   display: grid;
-  gap: 12px;
-  margin-top: 16px;
+  gap: 16px;
+  margin-top: 20px;
 }
 .rd-media-2 {
   grid-template-columns: repeat(2, 1fr);
@@ -474,13 +491,13 @@ watch(release, (r) => {
 .rd-media-item video {
   width: 100%;
   height: auto;
-  border-radius: 8px;
+  border-radius: 12px;
   display: block;
   object-fit: cover;
   aspect-ratio: 16 / 10;
 }
 .rd-media-item figcaption {
-  margin-top: 8px;
+  margin-top: 10px;
   font-size: 13px;
   color: var(--muted);
   text-align: center;
@@ -488,24 +505,23 @@ watch(release, (r) => {
 
 /* Embed */
 .rd-embed {
-  margin-top: 48px;
-  padding-top: 24px;
+  margin-top: 64px;
+  padding-top: 32px;
   border-top: 1px solid var(--border);
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
+  justify-content: center;
 }
 .rd-embed-btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 8px 16px;
   font-size: 13px;
   font-weight: 500;
   color: var(--muted);
   background: transparent;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -522,13 +538,34 @@ watch(release, (r) => {
 }
 
 /* Responsive */
-@media (max-width: 600px) {
+@media (max-width: 640px) {
+  .rd-hero {
+    padding-top: 16px;
+    margin-bottom: 32px;
+  }
   .rd-title {
-    font-size: 22px;
-    letter-spacing: -0.01em;
+    font-size: 26px;
+    letter-spacing: -0.02em;
   }
   .rd-body {
     font-size: 15px;
+  }
+  .rd-body :deep(h2) {
+    font-size: 22px;
+    margin: 32px 0 16px;
+  }
+  .rd-body :deep(h3) {
+    font-size: 18px;
+    margin: 24px 0 12px;
+  }
+  .rd-body :deep(img),
+  .rd-body :deep(video) {
+    border-radius: 8px;
+    margin: 24px 0;
+  }
+  .rd-section {
+    margin-top: 32px;
+    padding-top: 32px;
   }
   .rd-section-title {
     font-size: 18px;
@@ -537,13 +574,19 @@ watch(release, (r) => {
   .rd-media-3 {
     grid-template-columns: 1fr;
   }
-  .rd-meta {
+  .rd-nav {
+    margin-bottom: 24px;
+  }
+  .rd-hero-meta {
+    flex-direction: column;
     gap: 6px;
+    align-items: flex-end;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rd-back {
+  .rd-back,
+  .rd-embed-btn {
     transition: none !important;
   }
 }
