@@ -340,7 +340,8 @@ h3 {
 
 .embed-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 /* Doc nav sidebar */
@@ -735,7 +736,8 @@ h3 {
 /* Loading & error states */
 .loading-shell {
   display: flex;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg);
 }
 .loading-sidebar {
@@ -744,12 +746,14 @@ h3 {
   background: var(--surface);
   border-right: 1px solid var(--border);
   padding: 24px 20px;
+  overflow-y: auto;
 }
 .loading-content {
   flex: 1;
   padding: 40px 48px;
   display: flex;
   justify-content: center;
+  overflow-y: auto;
 }
 @keyframes shimmer {
   0% { background-position: 200% 0; }
