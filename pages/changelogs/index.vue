@@ -43,6 +43,24 @@ const hasChanges = ref(false);
 const lastSavedAt = ref<Date | null>(null);
 const isUpdating = ref(false);
 
+// ── Category hint ────────────────────────────────────────────────
+const showCategoryHint = ref(true);
+
+function insertCategoryHeader(category: string) {
+  if (!textareaRef.value) return;
+  const textarea = textareaRef.value;
+  const start = textarea.selectionStart;
+  const before = content.value.slice(0, start);
+  const after = content.value.slice(start);
+  const insertion = `## ${category}\n- `;
+  content.value = before + insertion + after;
+  nextTick(() => {
+    const newPos = start + insertion.length;
+    textarea.setSelectionRange(newPos, newPos);
+    textarea.focus();
+  });
+}
+
 // ── Search ─────────────────────────────────────────────────────
 const editorSearch = ref("");
 
@@ -840,14 +858,19 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
     <div v-else class="editor-shell" :class="{ 'preview-only': previewOnly }">
       <!-- Editor -->
       <div class="editor-pane">
-        <div class="format-hint" v-if="!content.trim()">
-          <span class="format-hint-label">Changelog categories:</span>
+        <div class="format-hint" v-if="showCategoryHint">
+          <div class="format-hint-main">
+            <span class="format-hint-label">Use category headers to create colored badges on public release pages.</span>
+            <button type="button" class="format-hint-close" @click="showCategoryHint = false" aria-label="Dismiss category hint">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
           <div class="format-hint-tags">
-            <span class="format-hint-tag">### Added</span>
-            <span class="format-hint-tag">### Fixed</span>
-            <span class="format-hint-tag">### Changed</span>
-            <span class="format-hint-tag">### Deprecated</span>
-            <span class="format-hint-tag">### Security</span>
+            <button type="button" class="format-hint-tag tag-added" @click="insertCategoryHeader('Added')">## Added</button>
+            <button type="button" class="format-hint-tag tag-fixed" @click="insertCategoryHeader('Fixed')">## Fixed</button>
+            <button type="button" class="format-hint-tag tag-changed" @click="insertCategoryHeader('Changed')">## Changed</button>
+            <button type="button" class="format-hint-tag tag-deprecated" @click="insertCategoryHeader('Deprecated')">## Deprecated</button>
+            <button type="button" class="format-hint-tag tag-security" @click="insertCategoryHeader('Security')">## Security</button>
           </div>
         </div>
         <div class="toolbar">
@@ -1912,18 +1935,41 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
 
 /* Editor format hint */
 .format-hint {
-  padding: 12px 16px;
+  padding: 10px 16px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
+}
+.format-hint-main {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
+  margin-bottom: 8px;
 }
 .format-hint-label {
   font-size: 12px;
   color: var(--muted);
   font-weight: 500;
+  line-height: 1.4;
+}
+.format-hint-close {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.format-hint-close:hover {
+  color: var(--fg);
+  background: var(--fg-soft);
 }
 .format-hint-tags {
   display: flex;
@@ -1931,14 +1977,65 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
   flex-wrap: wrap;
 }
 .format-hint-tag {
-  font-size: 12px;
-  padding: 3px 10px;
+  font-size: 11px;
+  padding: 4px 10px;
   border-radius: 999px;
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--muted);
   font-family: var(--font-mono);
-  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.format-hint-tag:hover {
+  background: var(--fg-soft);
+  color: var(--fg);
+  border-color: var(--fg);
+}
+.format-hint-tag.tag-added {
+  background: color-mix(in oklch, oklch(65% 0.14 145) 8%, transparent);
+  border-color: color-mix(in oklch, oklch(65% 0.14 145) 20%, var(--border));
+  color: oklch(50% 0.12 145);
+}
+.format-hint-tag.tag-added:hover {
+  background: color-mix(in oklch, oklch(65% 0.14 145) 15%, transparent);
+  border-color: color-mix(in oklch, oklch(65% 0.14 145) 35%, var(--border));
+}
+.format-hint-tag.tag-fixed {
+  background: color-mix(in oklch, oklch(55% 0.14 255) 8%, transparent);
+  border-color: color-mix(in oklch, oklch(55% 0.14 255) 20%, var(--border));
+  color: oklch(45% 0.12 255);
+}
+.format-hint-tag.tag-fixed:hover {
+  background: color-mix(in oklch, oklch(55% 0.14 255) 15%, transparent);
+  border-color: color-mix(in oklch, oklch(55% 0.14 255) 35%, var(--border));
+}
+.format-hint-tag.tag-changed {
+  background: color-mix(in oklch, oklch(70% 0.12 85) 8%, transparent);
+  border-color: color-mix(in oklch, oklch(70% 0.12 85) 20%, var(--border));
+  color: oklch(55% 0.10 85);
+}
+.format-hint-tag.tag-changed:hover {
+  background: color-mix(in oklch, oklch(70% 0.12 85) 15%, transparent);
+  border-color: color-mix(in oklch, oklch(70% 0.12 85) 35%, var(--border));
+}
+.format-hint-tag.tag-deprecated {
+  background: color-mix(in oklch, oklch(60% 0.14 300) 8%, transparent);
+  border-color: color-mix(in oklch, oklch(60% 0.14 300) 20%, var(--border));
+  color: oklch(50% 0.12 300);
+}
+.format-hint-tag.tag-deprecated:hover {
+  background: color-mix(in oklch, oklch(60% 0.14 300) 15%, transparent);
+  border-color: color-mix(in oklch, oklch(60% 0.14 300) 35%, var(--border));
+}
+.format-hint-tag.tag-security {
+  background: color-mix(in oklch, oklch(60% 0.14 25) 8%, transparent);
+  border-color: color-mix(in oklch, oklch(60% 0.14 25) 20%, var(--border));
+  color: oklch(50% 0.12 25);
+}
+.format-hint-tag.tag-security:hover {
+  background: color-mix(in oklch, oklch(60% 0.14 25) 15%, transparent);
+  border-color: color-mix(in oklch, oklch(60% 0.14 25) 35%, var(--border));
 }
 
 @media (prefers-reduced-motion: reduce) {
