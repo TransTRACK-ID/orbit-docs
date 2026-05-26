@@ -154,8 +154,8 @@ async function copyEmbedCode() {
         </div>
       </header>
 
-      <!-- Body -->
-      <div v-if="release.summary" class="rd-body" v-html="renderMarkdown(release.summary)" />
+      <!-- Body: article prose or fallback when no structured categories -->
+      <div v-if="release.summary && (release.type === 'article' || !release.categories)" class="rd-body" v-html="renderMarkdown(release.summary)" />
 
       <!-- Features -->
       <section

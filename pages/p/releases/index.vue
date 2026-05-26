@@ -67,6 +67,24 @@ function detailLink(id: string): string {
   return q ? `/p/releases/${id}?${q}` : `/p/releases/${id}`;
 }
 
+function countCategories(categories: any) {
+  return {
+    fixed: categories?.fixed || [],
+    added: categories?.added || [],
+    changed: categories?.changed || [],
+    deprecated: categories?.deprecated || [],
+    security: categories?.security || [],
+  };
+}
+
+const categoryConfig: Record<string, { label: string; tagClass: string }> = {
+  fixed: { label: "Fixed", tagClass: "rl-tag-fixed" },
+  added: { label: "Added", tagClass: "rl-tag-added" },
+  changed: { label: "Changed", tagClass: "rl-tag-changed" },
+  deprecated: { label: "Deprecated", tagClass: "rl-tag-deprecated" },
+  security: { label: "Security", tagClass: "rl-tag-security" },
+};
+
 // Group by month
 const groupedByMonth = computed(() => {
   const groups: Record<string, ReleaseItem[]> = {};
@@ -160,8 +178,24 @@ useSeoMeta({
               <NuxtLink v-if="r.type !== 'article'" :to="detailLink(r.id)">{{ r.heroTitle || `${r.appName} ${r.version}` }}</NuxtLink>
               <template v-else>{{ r.heroTitle || `${r.appName} ${r.version}` }}</template>
             </h2>
+            <!-- Normal release: colored category badges -->
+            <template v-if="r.type !== 'article' && r.categories">
+              <div
+                v-for="[key, items] in Object.entries(countCategories(r.categories)).filter(([, v]) => v.length > 0)"
+                :key="key"
+                class="rl-cat-group"
+              >
+                <span class="rl-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
+                  {{ categoryConfig[key]?.label || key }}
+                </span>
+                <ul class="rl-cat-list">
+                  <li v-for="item in items" :key="item">{{ item }}</li>
+                </ul>
+              </div>
+            </template>
+            <!-- Article or no categories: raw markdown -->
             <div
-              v-if="r.summary"
+              v-else-if="r.summary"
               class="rl-entry-body"
               v-html="renderMarkdown(r.summary)"
             />
@@ -443,6 +477,70 @@ useSeoMeta({
 }
 .rl-entry-body :deep(pre) {
   display: none;
+}
+
+/* Category badges (normal releases) */
+.rl-cat-group {
+  margin-bottom: 16px;
+}
+.rl-cat-group:last-child {
+  margin-bottom: 0;
+}
+.rl-cat-badge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.rl-cat-list {
+  padding-left: 0;
+  list-style: none;
+  margin: 0;
+}
+.rl-cat-list li {
+  position: relative;
+  padding-left: 18px;
+  margin-bottom: 6px;
+  line-height: 1.5;
+  font-size: 14px;
+  color: var(--muted);
+}
+.rl-cat-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  transform: translateY(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.rl-tag-added {
+  background: color-mix(in oklch, oklch(65% 0.14 145) 8%, transparent);
+  color: oklch(50% 0.12 145);
+}
+.rl-tag-fixed {
+  background: color-mix(in oklch, oklch(55% 0.14 255) 8%, transparent);
+  color: oklch(45% 0.12 255);
+}
+.rl-tag-changed {
+  background: color-mix(in oklch, oklch(70% 0.12 85) 8%, transparent);
+  color: oklch(55% 0.10 85);
+}
+.rl-tag-deprecated {
+  background: color-mix(in oklch, oklch(60% 0.14 300) 8%, transparent);
+  color: oklch(50% 0.12 300);
+}
+.rl-tag-security {
+  background: color-mix(in oklch, oklch(60% 0.14 25) 8%, transparent);
+  color: oklch(50% 0.12 25);
+}
+.rl-tag-muted {
+  background: var(--fg-soft);
+  color: var(--muted);
 }
 
 /* Empty */
