@@ -278,7 +278,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         </div>
         <div class="share-body">
           <div class="share-field">
-            <label for="shareApp">App</label>
+            <label for="shareApp">Scope</label>
             <GeneralSearchableDropdown
               id="shareApp"
               v-model="shareApp"
@@ -287,14 +287,28 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               search-placeholder="Search apps…"
             />
           </div>
-          <div class="share-field share-field-inline">
-            <label class="share-checkbox-label">
-              <input v-model="shareEmbed" type="checkbox" />
-              <span>iframe embed mode (no header/footer)</span>
-            </label>
+
+          <div class="share-field">
+            <div class="share-toggle-row" @click="shareEmbed = !shareEmbed">
+              <div class="share-toggle-info">
+                <span class="share-toggle-label">Embed mode</span>
+                <span class="share-toggle-desc">Strips header and footer for iframe use</span>
+              </div>
+              <button
+                type="button"
+                class="share-toggle"
+                :class="{ on: shareEmbed }"
+                role="switch"
+                :aria-checked="shareEmbed"
+                @click.stop="shareEmbed = !shareEmbed"
+              >
+                <span class="share-toggle-thumb" />
+              </button>
+            </div>
           </div>
+
           <div class="share-preview">
-            <label>Preview URL</label>
+            <label>URL preview</label>
             <code class="share-url">{{ shareUrl }}</code>
           </div>
         </div>
@@ -721,22 +735,63 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   color: var(--fg);
   margin-bottom: 6px;
 }
-.share-field-inline {
+.share-toggle-row {
   display: flex;
   align-items: center;
-}
-.share-checkbox-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--fg);
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
   cursor: pointer;
 }
-.share-checkbox-label input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
+.share-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.share-toggle-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.share-toggle-desc {
+  font-size: 12px;
+  color: var(--muted);
+}
+.share-toggle {
+  position: relative;
+  width: 40px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--border);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.share-toggle.on {
+  background: var(--accent);
+}
+.share-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.share-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px oklch(0% 0 0 / 0.15);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.share-toggle.on .share-toggle-thumb {
+  transform: translateX(16px);
+}
+.share-preview {
+  margin-top: 4px;
 }
 .share-preview label {
   display: block;
