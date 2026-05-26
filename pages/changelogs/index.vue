@@ -42,6 +42,7 @@ const previewOnly = ref(false);
 const hasChanges = ref(false);
 const lastSavedAt = ref<Date | null>(null);
 const isUpdating = ref(false);
+const isInitializing = ref(true);
 
 // ── Category hint ────────────────────────────────────────────────
 const showCategoryHint = ref(true);
@@ -112,6 +113,7 @@ onMounted(async () => {
   }
 
   syncUrlQuery();
+  isInitializing.value = false;
 });
 
 async function loadVersion(versionId: string) {
@@ -790,8 +792,22 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
       </div>
     </div>
 
+    <!-- Loading state while initializing -->
+    <div v-if="isInitializing" class="empty-state">
+      <div class="empty-state-content">
+        <div class="empty-state-icon" style="opacity: 0.5;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" stroke-dasharray="60" stroke-dashoffset="10">
+              <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+        </div>
+        <p class="empty-state-desc">Loading changelog editor…</p>
+      </div>
+    </div>
+
     <!-- Empty state: onboarding for new users -->
-    <div v-if="!currentVersion" class="empty-state">
+    <div v-else-if="!currentVersion" class="empty-state">
       <div class="empty-state-content">
         <div class="empty-state-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" aria-hidden="true">
