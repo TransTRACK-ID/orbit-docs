@@ -270,7 +270,6 @@ watch(release, (r) => {
   font-size: 16px;
   line-height: 1.7;
   color: var(--fg);
-  margin-bottom: 40px;
 }
 .rd-body :deep(h2) {
   font-size: 24px;
@@ -295,24 +294,28 @@ watch(release, (r) => {
 }
 .rd-body :deep(img) {
   max-width: 100%;
+  height: auto;
   border-radius: 8px;
-  margin: 20px 0;
+  margin: 24px 0;
+  display: block;
 }
 .rd-body :deep(video) {
   max-width: 100%;
+  height: auto;
   border-radius: 8px;
-  margin: 20px 0;
+  margin: 24px 0;
+  display: block;
 }
-.rd-body :deep(ul) {
-  padding-left: 24px;
-  margin-bottom: 16px;
-}
+.rd-body :deep(ul),
 .rd-body :deep(ol) {
   padding-left: 24px;
   margin-bottom: 16px;
 }
 .rd-body :deep(li) {
   margin-bottom: 6px;
+}
+.rd-body :deep(li:last-child) {
+  margin-bottom: 0;
 }
 .rd-body :deep(blockquote) {
   margin: 24px 0;
@@ -340,17 +343,20 @@ watch(release, (r) => {
   background: transparent;
   padding: 0;
 }
+.rd-body :deep(ul + p),
+.rd-body :deep(ol + p),
+.rd-body :deep(pre + p),
+.rd-body :deep(blockquote + p) {
+  margin-top: 16px;
+}
 
 /* Section */
 .rd-section {
-  margin: 40px 0;
-  padding-top: 32px;
+  padding-top: 48px;
   border-top: 1px solid var(--border);
 }
-.rd-section:first-of-type {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
+.rd-article > .rd-section:first-of-type {
+  margin-top: 48px;
 }
 .rd-section-title {
   margin: 0 0 16px;
@@ -415,7 +421,8 @@ watch(release, (r) => {
   content: "";
   position: absolute;
   left: 0;
-  top: 10px;
+  top: 0.7em;
+  transform: translateY(-50%);
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -437,8 +444,11 @@ watch(release, (r) => {
 .rd-media-item img,
 .rd-media-item video {
   width: 100%;
+  height: auto;
   border-radius: 8px;
   display: block;
+  object-fit: cover;
+  aspect-ratio: 16 / 10;
 }
 .rd-media-item figcaption {
   margin-top: 8px;
@@ -450,12 +460,13 @@ watch(release, (r) => {
 /* Embed */
 .rd-embed {
   margin-top: 48px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
+  padding: 20px;
+  background: var(--fg-soft);
+  border-radius: 8px;
 }
 .rd-embed-label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   font-size: 12px;
   font-weight: 500;
   color: var(--muted);
@@ -466,18 +477,22 @@ watch(release, (r) => {
   display: block;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--fg);
   word-break: break-all;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 /* Responsive */
 @media (max-width: 600px) {
   .rd-title {
-    font-size: 24px;
+    font-size: 22px;
+    letter-spacing: -0.01em;
   }
   .rd-body {
     font-size: 15px;
+  }
+  .rd-section-title {
+    font-size: 18px;
   }
   .rd-media-2,
   .rd-media-3 {
@@ -489,8 +504,7 @@ watch(release, (r) => {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rd-back,
-  .rd-link {
+  .rd-back {
     transition: none !important;
   }
 }

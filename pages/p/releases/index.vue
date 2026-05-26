@@ -73,6 +73,22 @@ function countCategories(categories: any) {
   };
 }
 
+function stripMarkdown(text: string, maxLen = 280): string {
+  if (!text) return "";
+  const cleaned = text
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/\*\*|__/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/^#+\s*/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/\n+/g, " ")
+    .trim();
+  if (cleaned.length <= maxLen) return cleaned;
+  return cleaned.slice(0, maxLen).replace(/\s+[^\s]*$/, "") + "…";
+}
+
 // SEO
 const pageTitle = computed(() => {
   if (appFilter.value) return `${appFilter.value} Release Notes`;
@@ -168,11 +184,10 @@ watch(releases, (list) => {
                 <span v-if="r.type === 'article'" class="rl-type">Article</span>
               </div>
               <h2 class="rl-title">{{ r.heroTitle || `${r.appName} ${r.version}` }}</h2>
-              <div
+              <p
                 v-if="r.summary"
                 class="rl-excerpt"
-                v-html="renderMarkdown(r.summary)"
-              />
+              >{{ stripMarkdown(r.summary) }}</p>
               <div class="rl-tags">
                 <span v-if="countCategories(r.categories).added" class="rl-tag rl-tag-added">
                   {{ countCategories(r.categories).added }} added
@@ -214,11 +229,10 @@ watch(releases, (list) => {
                   <span v-if="r.type === 'article'" class="rl-type">Article</span>
                 </div>
                 <h3 class="rl-title">{{ r.heroTitle || `${r.appName} ${r.version}` }}</h3>
-                <div
+                <p
                   v-if="r.summary"
                   class="rl-excerpt"
-                  v-html="renderMarkdown(r.summary)"
-                />
+                >{{ stripMarkdown(r.summary) }}</p>
                 <div class="rl-tags">
                   <span v-if="countCategories(r.categories).added" class="rl-tag rl-tag-added">
                     {{ countCategories(r.categories).added }} added
@@ -289,13 +303,13 @@ watch(releases, (list) => {
 
 /* Groups */
 .rl-group {
-  margin-bottom: 48px;
+  margin-bottom: 56px;
 }
 .rl-group:last-child {
   margin-bottom: 0;
 }
 .rl-group-label {
-  margin: 0 0 20px;
+  margin: 0 0 24px;
   font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
@@ -312,7 +326,10 @@ watch(releases, (list) => {
 /* Item */
 .rl-item {
   position: relative;
-  padding: 20px 0;
+  padding: 24px 0;
+}
+.rl-item:first-child {
+  padding-top: 0;
 }
 .rl-item:not(:last-child) {
   border-bottom: 1px solid var(--border);
@@ -324,7 +341,6 @@ watch(releases, (list) => {
   display: block;
   text-decoration: none;
   color: inherit;
-  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .rl-link:hover .rl-title {
   color: var(--accent);
@@ -335,9 +351,10 @@ watch(releases, (list) => {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   font-size: 13px;
   line-height: 1;
+  flex-wrap: wrap;
 }
 .rl-version {
   font-family: var(--font-mono);
@@ -351,12 +368,12 @@ watch(releases, (list) => {
   color: var(--muted);
 }
 .rl-type {
-  margin-left: auto;
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: oklch(55% 0.14 300);
+  margin-left: auto;
 }
 
 /* Title */
@@ -374,16 +391,7 @@ watch(releases, (list) => {
   font-size: 14px;
   line-height: 1.6;
   color: var(--muted);
-  margin-bottom: 10px;
-}
-.rl-excerpt :deep(p) {
-  margin: 0 0 8px;
-}
-.rl-excerpt :deep(*:last-child) {
-  margin-bottom: 0;
-}
-.rl-excerpt :deep(img) {
-  display: none;
+  margin: 0 0 10px;
 }
 
 /* Tags */
@@ -396,7 +404,7 @@ watch(releases, (list) => {
 .rl-tag {
   font-size: 12px;
   font-weight: 500;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 4px;
 }
 .rl-tag-added {
@@ -430,12 +438,13 @@ watch(releases, (list) => {
 /* Embed */
 .rl-embed {
   margin-top: 48px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
+  padding: 20px;
+  background: var(--fg-soft);
+  border-radius: 8px;
 }
 .rl-embed-label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   font-size: 12px;
   font-weight: 500;
   color: var(--muted);
@@ -446,22 +455,35 @@ watch(releases, (list) => {
   display: block;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--fg);
   word-break: break-all;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 /* Responsive */
 @media (max-width: 600px) {
   .rl-head h1 {
-    font-size: 24px;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+  }
+  .rl-item {
+    padding: 20px 0;
+  }
+  .rl-title {
+    font-size: 16px;
   }
   .rl-meta {
-    flex-wrap: wrap;
     gap: 6px;
   }
   .rl-type {
     margin-left: 0;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rl-link:hover .rl-title {
+    transition: none;
   }
 }
 </style>
