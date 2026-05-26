@@ -75,3 +75,9 @@ const isEmbed = computed(() => route.query.embed === "1" || route.query.embed ==
   }
 }
 </style>
+
+<style>
+html, body {
+  background: var(--bg);
+}
+</style>
