@@ -79,8 +79,58 @@ function mediaCount(r: ReleaseItem) {
   return (r.features || []).reduce((sum, f) => sum + (f.media || []).length, 0);
 }
 
+// ── Share modal state ──────────────────────────────────────────
+const showShareModal = ref(false);
+const shareApp = ref("");
+const shareEmbed = ref(false);
+
+const shareUrl = computed(() => {
+  const base = `${window.location.origin}/p/releases`;
+  const params = new URLSearchParams();
+  if (shareApp.value) params.set("app", shareApp.value);
+  if (shareEmbed.value) params.set("embed", "1");
+  const q = params.toString();
+  return q ? `${base}?${q}` : base;
+});
+
+const shareAppOptions = computed(() => [
+  { id: "", label: "All apps" },
+  ...apps.value.map((a) => ({ id: a.name, label: a.name })),
+]);
+
+function openShareModal() {
+  shareApp.value = appFilter.value;
+  shareEmbed.value = false;
+  showShareModal.value = true;
+}
+
+function closeShareModal() {
+  showShareModal.value = false;
+}
+
+async function copyShareUrl() {
+  try {
+    await navigator.clipboard.writeText(shareUrl.value);
+    alert("Public link copied to clipboard");
+    closeShareModal();
+  } catch {
+    const input = document.createElement("input");
+    input.value = shareUrl.value;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    document.body.removeChild(input);
+    alert("Public link copied to clipboard");
+    closeShareModal();
+  }
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
+    if (showShareModal.value) {
+      closeShareModal();
+      return;
+    }
     searchQuery.value = "";
     appFilter.value = "";
   }
@@ -92,7 +142,6 @@ async function copyPublicLink(releaseId: string) {
     await navigator.clipboard.writeText(url);
     alert("Public link copied to clipboard");
   } catch {
-    // Fallback
     const input = document.createElement("input");
     input.value = url;
     document.body.appendChild(input);
@@ -128,7 +177,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
           placeholder="Filter by app…"
           search-placeholder="Search apps…"
         />
-
+        <button type="button" class="btn btn-secondary btn-sm" @click="openShareModal">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          Share
+        </button>
       </div>
     </header>
 
@@ -237,6 +289,47 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         <span class="meta-label">Try adjusting your search or filter</span>
       </div>
     </main>
+
+    <!-- Share public link modal -->
+    <div class="share-modal" :class="{ open: showShareModal }" role="dialog" aria-modal="true" aria-labelledby="shareTitle" tabindex="-1" @click.self="closeShareModal">
+      <div class="share-drawer">
+        <div class="share-header">
+          <h3 id="shareTitle">Share public link</h3>
+          <button type="button" class="btn btn-ghost share-close" aria-label="Close share dialog" @click="closeShareModal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="share-body">
+          <div class="share-field">
+            <label for="shareApp">App</label>
+            <GeneralSearchableDropdown
+              id="shareApp"
+              v-model="shareApp"
+              :options="shareAppOptions"
+              placeholder="All apps"
+              search-placeholder="Search apps…"
+            />
+          </div>
+          <div class="share-field share-field-inline">
+            <label class="share-checkbox-label">
+              <input v-model="shareEmbed" type="checkbox" />
+              <span>iframe embed mode (no header/footer)</span>
+            </label>
+          </div>
+          <div class="share-preview">
+            <label>Preview URL</label>
+            <code class="share-url">{{ shareUrl }}</code>
+          </div>
+        </div>
+        <div class="share-footer">
+          <button type="button" class="btn btn-secondary" @click="closeShareModal">Cancel</button>
+          <button type="button" class="btn btn-primary" @click="copyShareUrl">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Copy link
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -579,5 +672,121 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   .select {
     transition: none !important;
   }
+}
+
+/* Share modal */
+.share-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: color-mix(in oklch, var(--fg) 35%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.share-modal.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.share-drawer {
+  width: 480px;
+  max-width: 90vw;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  transform: scale(0.96);
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.share-modal.open .share-drawer {
+  transform: scale(1);
+}
+.share-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.share-header h3 {
+  font-size: 16px;
+  margin: 0;
+  font-weight: 600;
+}
+.share-close {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius);
+}
+.share-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.share-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.share-field label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  margin-bottom: 6px;
+}
+.share-field-inline {
+  display: flex;
+  align-items: center;
+}
+.share-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.share-checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.share-preview label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  margin-bottom: 6px;
+}
+.share-url {
+  display: block;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  color: var(--muted);
+  word-break: break-all;
+  line-height: 1.5;
+}
+.share-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
 }
 </style>
