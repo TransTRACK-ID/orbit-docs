@@ -38,7 +38,7 @@ export interface CreateDocPayload {
 export const useDocs = () => {
   const docs = ref<DocItem[]>([]);
   const currentDoc = ref<DocDetail | null>(null);
-  const isLoading = ref(false);
+  const isLoading = ref(true);
   const isSaving = ref(false);
   const search = ref("");
 

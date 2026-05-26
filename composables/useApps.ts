@@ -66,7 +66,7 @@ export const useApps = () => {
   const apps = ref<AppItem[]>([]);
   const stats = ref<AppStats | null>(null);
   const activities = ref<ActivityLog[]>([]);
-  const isLoading = ref(false);
+  const isLoading = ref(true);
   const isCreating = ref(false);
   const search = ref("");
 

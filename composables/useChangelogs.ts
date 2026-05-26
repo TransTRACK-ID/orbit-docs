@@ -6,7 +6,7 @@ export type { ChangelogItem, CreateChangelogPayload } from "~/types";
 export const useChangelogs = () => {
   const changelogs = ref<ChangelogItem[]>([]);
   const changelog = ref<ChangelogItem | null>(null);
-  const isLoading = ref(false);
+  const isLoading = ref(true);
   const isCreating = ref(false);
   const isUpdating = ref(false);
   const isDeleting = ref(false);

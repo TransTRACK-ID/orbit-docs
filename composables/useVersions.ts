@@ -15,7 +15,7 @@ export interface CreateVersionPayload {
 
 export const useVersions = () => {
   const versions = ref<AppVersion[]>([]);
-  const isLoading = ref(false);
+  const isLoading = ref(true);
   const isCreating = ref(false);
   const isUpdating = ref(false);
   const isDeleting = ref(false);

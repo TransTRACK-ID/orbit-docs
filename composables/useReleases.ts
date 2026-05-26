@@ -6,7 +6,7 @@ export type { ReleaseItem, CreateReleasePayload } from "~/types";
 export const useReleases = () => {
   const releases = ref<ReleaseItem[]>([]);
   const release = ref<ReleaseItem | null>(null);
-  const isLoading = ref(false);
+  const isLoading = ref(true);
   const isCreating = ref(false);
   const isUpdating = ref(false);
   const isDeleting = ref(false);
