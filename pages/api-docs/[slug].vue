@@ -757,46 +757,50 @@ a {
 }
 
 .sk-header {
-  padding: 0 20px 16px;
-  margin-bottom: 12px;
+  padding: 20px 20px 16px;
   border-bottom: 1px solid var(--border);
 }
 
 .sk-title {
+  display: block;
   width: 75%;
   height: 16px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
   background-size: 200% 100%;
-  border-radius: var(--radius);
+  border-radius: 4px;
   animation: shimmer 1.5s infinite;
 }
 
 .sk-meta {
+  display: block;
   width: 55%;
   height: 12px;
   background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
   background-size: 200% 100%;
-  border-radius: var(--radius);
+  border-radius: 4px;
   animation: shimmer 1.5s infinite;
 }
 
 .sk-nav {
-  padding: 0 16px 0 20px;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .sk-nav-item {
+  display: block;
   height: 12px;
-  margin-bottom: 12px;
   background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
   background-size: 200% 100%;
-  border-radius: var(--radius);
+  border-radius: 4px;
   animation: shimmer 1.5s infinite;
 }
 
 .sk-nav-item.indent {
-  margin-left: 12px;
-  width: 80%;
+  margin-left: 16px;
+  width: calc(80% - 16px);
 }
 
 .sk-body {
@@ -812,6 +816,7 @@ a {
 }
 
 .sk-badge {
+  display: block;
   width: 52px;
   height: 22px;
   border-radius: 999px;
@@ -821,35 +826,39 @@ a {
 }
 
 .sk-meta-text {
+  display: block;
   width: 140px;
   height: 14px;
   background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
   background-size: 200% 100%;
-  border-radius: var(--radius);
+  border-radius: 4px;
   animation: shimmer 1.5s infinite;
 }
 
 .sk-heading {
+  display: block;
   width: 45%;
   height: 28px;
   margin: 32px 0 16px;
   background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
   background-size: 200% 100%;
-  border-radius: var(--radius);
+  border-radius: 4px;
   animation: shimmer 1.5s infinite;
 }
 
 .sk-paragraph {
+  display: block;
   width: 100%;
   height: 14px;
   margin-bottom: 10px;
   background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
   background-size: 200% 100%;
-  border-radius: var(--radius);
+  border-radius: 4px;
   animation: shimmer 1.5s infinite;
 }
 
 .sk-code-block {
+  display: block;
   width: 100%;
   height: 120px;
   margin: 16px 0;
