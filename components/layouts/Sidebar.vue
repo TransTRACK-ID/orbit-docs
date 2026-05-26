@@ -17,6 +17,58 @@ const user = computed(() => {
 const userName = computed(() => user.value?.name || "");
 const userEmail = computed(() => user.value?.email || "");
 
+/* mobile drawer state */
+const isMobileOpen = ref(false);
+const firstNavLinkRef = ref<HTMLAnchorElement | null>(null);
+
+const MOBILE_BREAKPOINT = 768;
+
+function openMobile() {
+  isMobileOpen.value = true;
+  document.body.style.overflow = "hidden";
+  nextTick(() => {
+    firstNavLinkRef.value?.focus();
+  });
+}
+
+function closeMobile() {
+  isMobileOpen.value = false;
+  document.body.style.overflow = "";
+}
+
+function toggleMobile() {
+  if (isMobileOpen.value) closeMobile();
+  else openMobile();
+}
+
+function onEscape(e: KeyboardEvent) {
+  if (e.key === "Escape" && isMobileOpen.value) {
+    closeMobile();
+  }
+}
+
+function onResize() {
+  if (window.innerWidth > MOBILE_BREAKPOINT && isMobileOpen.value) {
+    closeMobile();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener("keydown", onEscape);
+  window.addEventListener("resize", onResize);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", onEscape);
+  window.removeEventListener("resize", onResize);
+  document.body.style.overflow = "";
+});
+
+/* route change closes drawer on mobile */
+watch(() => route.path, () => {
+  if (isMobileOpen.value) closeMobile();
+});
+
 function logout() {
   $auth.logout().catch(() => {
     // signOut handles navigation; only force-redirect on error
@@ -26,8 +78,44 @@ function logout() {
 </script>
 
 <template>
-  <aside class="sidebar">
+  <!-- mobile toggle button (fixed, sits on top of content) -->
+  <button
+    class="mobile-nav-toggle"
+    aria-label="Open navigation"
+    aria-expanded="false"
+    @click="openMobile"
+  >
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="3" y1="6" x2="21" y2="6"/>
+      <line x1="3" y1="12" x2="21" y2="12"/>
+      <line x1="3" y1="18" x2="21" y2="18"/>
+    </svg>
+  </button>
+
+  <!-- backdrop -->
+  <div
+    v-if="isMobileOpen"
+    class="sidebar-backdrop"
+    aria-hidden="true"
+    @click="closeMobile"
+  />
+
+  <aside
+    class="sidebar"
+    :class="{ 'sidebar--mobile-open': isMobileOpen }"
+  >
     <div class="sidebar-brand">
+      <button
+        class="mobile-close-btn"
+        aria-label="Close navigation"
+        @click="closeMobile"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+
       <img
         v-if="workspace?.logoUrl"
         :src="workspace.logoUrl"
@@ -47,15 +135,16 @@ function logout() {
         <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
         <path d="M2 12h20"/>
       </svg>
-      {{ workspace?.name || "Orbit Docs" }}
+      <span class="brand-text">{{ workspace?.name || "Orbit Docs" }}</span>
     </div>
 
     <nav class="sidebar-nav">
       <div class="nav-group">
         <div class="nav-group-title">Workspace</div>
         <NuxtLink
-          v-for="item in sidebarMenu.filter(i => i.id !== 'menu__settings')"
+          v-for="(item, idx) in sidebarMenu.filter(i => i.id !== 'menu__settings')"
           :key="item.id"
+          ref="(el: any) => { if (idx === 0) firstNavLinkRef = el }"
           :to="item.route"
           class="nav-item"
           :class="{ active: isActive(item.route || '') }"
@@ -97,6 +186,46 @@ function logout() {
 </template>
 
 <style scoped>
+/* ─── mobile toggle button ─────────────────────────────────────── */
+.mobile-nav-toggle {
+  display: none;
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 40;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid var(--border, oklch(90% 0.006 250));
+  background: var(--surface, oklch(100% 0 0));
+  color: var(--fg, oklch(20% 0.02 250));
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.mobile-nav-toggle:hover {
+  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
+}
+.mobile-nav-toggle:focus-visible {
+  outline: 2px solid var(--accent, oklch(55% 0.16 25));
+  outline-offset: 2px;
+}
+
+/* ─── backdrop ───────────────────────────────────────────────── */
+.sidebar-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 48;
+  background: color-mix(in oklch, oklch(20% 0.02 250) 40%, transparent);
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ─── sidebar ────────────────────────────────────────────────── */
 .sidebar {
   width: 240px;
   flex-shrink: 0;
@@ -112,6 +241,31 @@ function logout() {
   height: 100vh;
   overflow-y: auto;
 }
+
+.mobile-close-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted, oklch(55% 0.015 250));
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+.mobile-close-btn:hover {
+  color: var(--fg, oklch(20% 0.02 250));
+  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
+}
+.mobile-close-btn:focus-visible {
+  outline: 2px solid var(--accent, oklch(55% 0.16 25));
+  outline-offset: 2px;
+}
+
 .sidebar-brand {
   display: flex;
   align-items: center;
@@ -242,5 +396,43 @@ function logout() {
 .logout-icon {
   stroke: currentColor;
   flex-shrink: 0;
+}
+
+/* ─── mobile breakpoint ──────────────────────────────────────── */
+@media (max-width: 768px) {
+  .mobile-nav-toggle {
+    display: inline-flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 4px 0 24px color-mix(in oklch, oklch(20% 0.02 250) 12%, transparent);
+    border-right: none;
+  }
+  .sidebar--mobile-open {
+    transform: translateX(0);
+  }
+
+  .mobile-close-btn {
+    display: inline-flex;
+  }
+
+  .sidebar-brand {
+    padding: 0 16px 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+  .sidebar-backdrop {
+    animation: none;
+  }
 }
 </style>

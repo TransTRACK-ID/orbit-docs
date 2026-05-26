@@ -44,7 +44,12 @@
 }
 @media (max-width: 768px) {
   .content {
-    padding: 20px;
+    padding: 64px 20px 20px 64px;
+  }
+}
+@media (max-width: 480px) {
+  .content {
+    padding: 56px 16px 16px 56px;
   }
 }
 </style>

@@ -273,12 +273,14 @@ function timeAgo(dateStr: string | null) {
   const now = new Date();
   const d = new Date(dateStr);
   const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
+  const pluralize = (n: number, singular: string, plural: string) =>
+    n === 1 ? `${n} ${singular}` : `${n} ${plural}`;
   if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
-  if (diff < 2419200) return `${Math.floor(diff / 604800)} weeks ago`;
-  return `${Math.floor(diff / 2419200)} months ago`;
+  if (diff < 3600) return `${pluralize(Math.floor(diff / 60), "min", "min")} ago`;
+  if (diff < 86400) return `${pluralize(Math.floor(diff / 3600), "hour", "hours")} ago`;
+  if (diff < 604800) return `${pluralize(Math.floor(diff / 86400), "day", "days")} ago`;
+  if (diff < 2419200) return `${pluralize(Math.floor(diff / 604800), "week", "weeks")} ago`;
+  return `${pluralize(Math.floor(diff / 2419200), "month", "months")} ago`;
 }
 
 const statusClass: Record<string, string> = {
@@ -500,7 +502,7 @@ const statusLabel: Record<string, string> = {
           <span v-if="app.latestVersion" class="num pill pill-blue">
             v{{ app.latestVersion.version }}
           </span>
-          <span v-else class="num text-xs text-gray-400">No version</span>
+          <span v-else class="num text-xs app-card-no-version">No version</span>
           <span class="app-card-owner">
             by {{ app.owner || "Unknown" }}
           </span>
@@ -563,7 +565,7 @@ const statusLabel: Record<string, string> = {
             <td>{{ log.actor }}</td>
           </tr>
           <tr v-if="activities.length === 0">
-            <td colspan="4" class="text-center text-gray-400 py-4">
+            <td colspan="4" class="text-center py-4" style="color: var(--muted);">
               No recent activity
             </td>
           </tr>
@@ -800,11 +802,15 @@ h2 {
               box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 }
 .app-card:hover {
   border-color: color-mix(in oklch, var(--fg) 20%, var(--border));
   box-shadow: 0 2px 8px color-mix(in oklch, var(--fg) 6%, transparent);
+}
+.app-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .app-card-header {
@@ -839,6 +845,10 @@ h2 {
   color: var(--muted);
   font-size: 12px;
 }
+.app-card-no-version {
+  color: var(--muted);
+  font-style: italic;
+}
 
 .app-card-foot {
   display: flex;
@@ -852,7 +862,11 @@ h2 {
 .app-card-links {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.app-card-links .btn {
+  white-space: nowrap;
 }
 .app-card-actions {
   display: flex;
@@ -970,6 +984,10 @@ h2 {
   cursor: pointer;
   background: transparent;
 }
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .btn-primary {
   background: var(--accent);
   color: var(--surface);
@@ -993,6 +1011,10 @@ h2 {
 }
 .btn-ghost:hover {
   color: var(--fg);
+  background: color-mix(in oklch, var(--fg) 4%, transparent);
+}
+.btn-ghost:active {
+  background: color-mix(in oklch, var(--fg) 8%, transparent);
 }
 .btn-sm {
   padding: 6px 12px;
@@ -1007,8 +1029,16 @@ h2 {
   background: oklch(50% 0.18 25);
 }
 .action-btn {
-  padding: 4px;
-  border-radius: 6px;
+  padding: 9px;
+  border-radius: 8px;
+  min-width: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.action-btn:active {
+  background: color-mix(in oklch, var(--fg) 10%, transparent);
 }
 
 .modal-overlay {
