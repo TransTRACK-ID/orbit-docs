@@ -4,6 +4,7 @@ import {
   IconsReleases,
   IconsChangelogs,
   IconsDocEditor,
+  IconsApiDocs,
   IconsSettings,
 } from "#components";
 import type { ISidebar } from "@/types/sidebar";
@@ -43,6 +44,13 @@ export const sidebarMenu: ISidebar[] = [
     label: "Docs",
     route: "/docs",
     icon: markRaw(IconsDocEditor),
+    active: false,
+  },
+  {
+    id: "menu__api_docs",
+    label: "API Docs",
+    route: "/api-docs",
+    icon: markRaw(IconsApiDocs),
     active: false,
   },
   {
