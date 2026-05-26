@@ -374,9 +374,10 @@ const responseStatusClass = (statusCode: string): string => {
 
 .info-row-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
+  flex-wrap: wrap;
 }
 
 .param-badge {
@@ -405,23 +406,35 @@ const responseStatusClass = (statusCode: string): string => {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 8px 12px;
+  padding: 0;
 }
 
 .code-row {
   display: flex;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 12px;
   font-size: 13px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.code-row:last-child {
+  border-bottom: none;
 }
 
 .code-key {
   font-family: var(--font-mono);
   color: var(--fg);
-  min-width: 0;
+  flex-shrink: 0;
+  font-weight: 500;
 }
 
 .code-value {
   color: var(--muted);
+  flex: 1;
+  min-width: 0;
+  word-break: break-all;
+  line-height: 1.5;
 }
 
 .table-wrap {
