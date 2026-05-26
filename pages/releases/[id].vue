@@ -139,7 +139,9 @@ function setupScrollSpy() {
   const sections = Array.from(navLinks)
     .map((a) => {
       const href = a.getAttribute("href");
-      return href ? document.querySelector(href) : null;
+      if (!href) return null;
+      const id = href.startsWith("#") ? href.slice(1) : href;
+      return document.getElementById(id);
     })
     .filter(Boolean) as HTMLElement[];
 

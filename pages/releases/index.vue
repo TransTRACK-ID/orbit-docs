@@ -48,11 +48,11 @@ function formatDate(dateStr: string | null) {
 
 function countCategories(categories: ReleaseItem["categories"]) {
   return {
-    added: categories?.added?.length || 0,
-    fixed: categories?.fixed?.length || 0,
-    changed: categories?.changed?.length || 0,
-    deprecated: categories?.deprecated?.length || 0,
-    security: categories?.security?.length || 0,
+    added: categories?.added || [],
+    fixed: categories?.fixed || [],
+    changed: categories?.changed || [],
+    deprecated: categories?.deprecated || [],
+    security: categories?.security || [],
   };
 }
 
@@ -73,6 +73,14 @@ const statusLabel: Record<string, string> = {
   draft: "Draft",
   rc: "RC",
   archived: "Archived",
+};
+
+const categoryConfig: Record<string, { label: string; tagClass: string }> = {
+  fixed: { label: "Fixed", tagClass: "rl-tag-fixed" },
+  added: { label: "Added", tagClass: "rl-tag-added" },
+  changed: { label: "Changed", tagClass: "rl-tag-changed" },
+  deprecated: { label: "Deprecated", tagClass: "rl-tag-deprecated" },
+  security: { label: "Security", tagClass: "rl-tag-security" },
 };
 
 function mediaCount(r: ReleaseItem) {
@@ -206,38 +214,58 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               {{ statusLabel[r.versionStatus] || r.versionStatus }}
             </span>
           </div>
-          <div class="release-summary" v-html="renderMarkdown(r.summary || r.heroTitle || '')" />
+          <!-- Normal release: colored category badges like /p/releases -->
+          <template v-if="r.type === 'normal' && r.categories">
+            <div
+              v-for="[key, items] in Object.entries(countCategories(r.categories)).filter(([, v]) => v.length > 0)"
+              :key="key"
+              class="rl-cat-group"
+            >
+              <span class="rl-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
+                {{ categoryConfig[key]?.label || key }}
+              </span>
+              <ul class="rl-cat-list list-disc">
+                <li v-for="item in items" :key="item">{{ item }}</li>
+              </ul>
+            </div>
+          </template>
+          <!-- Article or no categories: raw markdown -->
+          <div
+            v-else
+            class="release-summary"
+            v-html="renderMarkdown(r.summary || r.heroTitle || '')"
+          />
           <div class="release-meta-row">
             <span class="release-app">{{ r.appName }}</span>
             <span
-              v-if="countCategories(r.categories).added"
+              v-if="countCategories(r.categories).added.length"
               class="pill pill-green"
             >
-              {{ countCategories(r.categories).added }} added
+              {{ countCategories(r.categories).added.length }} added
             </span>
             <span
-              v-if="countCategories(r.categories).fixed"
+              v-if="countCategories(r.categories).fixed.length"
               class="pill pill-blue"
             >
-              {{ countCategories(r.categories).fixed }} fixed
+              {{ countCategories(r.categories).fixed.length }} fixed
             </span>
             <span
-              v-if="countCategories(r.categories).changed"
+              v-if="countCategories(r.categories).changed.length"
               class="pill pill-amber"
             >
-              {{ countCategories(r.categories).changed }} changed
+              {{ countCategories(r.categories).changed.length }} changed
             </span>
             <span
-              v-if="countCategories(r.categories).deprecated"
+              v-if="countCategories(r.categories).deprecated.length"
               class="pill pill-purple"
             >
-              {{ countCategories(r.categories).deprecated }} deprecated
+              {{ countCategories(r.categories).deprecated.length }} deprecated
             </span>
             <span
-              v-if="countCategories(r.categories).security"
+              v-if="countCategories(r.categories).security.length"
               class="pill pill-red"
             >
-              {{ countCategories(r.categories).security }} security
+              {{ countCategories(r.categories).security.length }} security
             </span>
             <NuxtLink
               v-if="r.type === 'normal'"
@@ -432,7 +460,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 }
 
 .release-list {
-  max-width: 880px;
+  width: 100%;
 }
 
 .release-item {
@@ -826,5 +854,63 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   padding: 12px 20px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+/* ── Colored category badges ──────────────────────────────────── */
+.rl-cat-group {
+  margin-bottom: 8px;
+}
+
+.rl-cat-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.rl-cat-list {
+  margin: 0;
+  padding-left: 22px;
+  list-style-type: disc !important;
+  list-style-position: outside !important;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.rl-cat-list li {
+  margin-bottom: 2px;
+  display: list-item;
+}
+
+/* Category badge colours */
+.rl-tag-added {
+  background: oklch(95% 0.05 145);
+  color: oklch(45% 0.12 145);
+}
+.rl-tag-fixed {
+  background: oklch(95% 0.03 250);
+  color: oklch(45% 0.1 250);
+}
+.rl-tag-changed {
+  background: oklch(96% 0.04 85);
+  color: oklch(45% 0.1 85);
+}
+.rl-tag-deprecated {
+  background: oklch(94% 0.05 300);
+  color: oklch(45% 0.1 300);
+}
+.rl-tag-security {
+  background: oklch(94% 0.05 25);
+  color: oklch(45% 0.1 25);
+}
+.rl-tag-muted {
+  background: var(--surface);
+  color: var(--muted);
 }
 </style>

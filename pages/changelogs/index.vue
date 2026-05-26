@@ -242,11 +242,14 @@ async function syncReleasesFromChangelog() {
     const categories = parseChangelogToCategories(content.value);
     const summary = content.value.slice(0, 500);
     const releases = releasesForVersion.value;
-    // Only sync the NORMAL release from markdown changelog edits.
-    // Article releases have their own rich content (hero, features, media)
-    // and should NOT be overwritten by markdown saves.
+    // Sync the NORMAL release (source of truth) from markdown changelog edits.
     if (releases.normal?.id) {
       await updateRelease(releases.normal.id, { categories, summary });
+    }
+    // Also sync categories to the ARTICLE release so its badge counts
+    // reflect the latest changelog data (hero/summary/features stay untouched).
+    if (releases.article?.id) {
+      await updateRelease(releases.article.id, { categories });
     }
   } catch (err) {
     // Log sync failures for debugging; the version save is the primary action

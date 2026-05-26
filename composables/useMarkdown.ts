@@ -110,11 +110,13 @@ export function renderMarkdown(md: string): string {
       pushBlock(`<h1>${inlineMd(escapeHtml(line.slice(2)))}</h1>`);
     } else if (line.startsWith("## ")) {
       const text = line.slice(3);
-      const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      let slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      if (/^\d/.test(slug)) slug = "h-" + slug;
       pushBlock(`<h2 id="${slug}">${inlineMd(escapeHtml(text))}</h2>`);
     } else if (line.startsWith("### ")) {
       const text = line.slice(4);
-      const slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      let slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+      if (/^\d/.test(slug)) slug = "h-" + slug;
       pushBlock(`<h3 id="${slug}">${inlineMd(escapeHtml(text))}</h3>`);
     } else if (line.startsWith("> ")) {
       pushBlock(
