@@ -142,8 +142,11 @@ async function initEditor() {
     readOnly: props.readOnly,
     autofocus: props.autofocus,
     minHeight: props.minHeight,
-    onReady: () => {
+    onReady: async () => {
       isReady.value = true;
+      // Initialize drag-drop after editor is ready
+      const { default: DragDrop } = await import("editorjs-drag-drop");
+      new DragDrop(editor);
       emit("ready");
     },
     onChange: async () => {
@@ -689,5 +692,30 @@ defineExpose({
 
 .editor-js-container .codex-editor__redactor::-webkit-scrollbar-thumb:hover {
   background: var(--muted);
+}
+
+/* Drag and Drop styles */
+.editor-js-container .ce-block--drop-target .ce-block__content {
+  position: relative;
+}
+
+.editor-js-container .ce-block--drop-target .ce-block__content:before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -20px;
+  margin-top: -1px;
+  height: 8px;
+  width: 8px;
+  border: solid var(--accent);
+  border-width: 1px 1px 0 0;
+  -webkit-transform-origin: right;
+  transform-origin: right;
+  -webkit-transform: rotate(45deg);
+  transform: rotate(45deg);
+}
+
+.editor-js-container .ce-block--drop-target .ce-block__content:after {
+  background: none;
 }
 </style>
