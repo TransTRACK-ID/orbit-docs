@@ -263,7 +263,7 @@ defineExpose({
 
 .editor-js-container .codex-editor__redactor {
   padding-bottom: 100px !important;
-  padding-left: 24px !important;
+  padding-left: 0 !important;
   padding-right: 24px !important;
   padding-top: 16px !important;
 }
@@ -271,12 +271,33 @@ defineExpose({
 .editor-js-container .ce-block__content {
   max-width: 100%;
   margin: 0;
-  padding: 0 16px;
+  padding: 0 16px 0 68px;
 }
 
 .editor-js-container .ce-toolbar__content {
   max-width: 100%;
   margin: 0;
+}
+
+/* Notion-style toolbar: overlay to the left of the block on hover */
+.editor-js-container .ce-toolbar__actions {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 1;
+}
+
+.editor-js-container .ce-block:hover ~ .ce-toolbar .ce-toolbar__actions,
+.editor-js-container .ce-toolbar:hover .ce-toolbar__actions,
+.editor-js-container .ce-toolbar--opened .ce-toolbar__actions {
+  opacity: 1;
 }
 
 .editor-js-container .ce-header {
@@ -338,7 +359,7 @@ defineExpose({
   background: transparent;
 }
 
-.editor-js-container .ce-block--selected .ce-block__content {
+.editor-js-container .ce-block--selected {
   background: var(--accent-soft);
 }
 
@@ -487,17 +508,23 @@ defineExpose({
 .editor-js-container .ce-toolbar__plus,
 .editor-js-container .ce-toolbar__settings-btn {
   color: var(--muted);
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.15s ease;
+  padding: 0;
 }
 
 .editor-js-container .ce-toolbar__plus:hover,
 .editor-js-container .ce-toolbar__settings-btn:hover {
   color: var(--fg);
   background: var(--fg-soft);
-  transform: scale(1.05);
+  transform: scale(1.08);
 }
 
 .editor-js-container .ce-popover {
