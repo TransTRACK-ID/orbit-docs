@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick } from "vue";
+import { nextTick, ref } from "vue";
 import { usePageStore } from "~/store/page";
 import { renderMarkdown } from "~/composables/useMarkdown";
 import type { AppVersion } from "~/composables/useApps";
@@ -13,7 +13,7 @@ const router = useRouter();
 const $page = usePageStore();
 
 const { apps, fetchApps } = useApps();
-const { versions, fetchVersions, updateVersion } = useVersions();
+const { versions, fetchVersions, fetchVersionById, updateVersion } = useVersions();
 const { createRelease, fetchReleases, updateRelease } = useReleases();
 const releasesForVersion = ref<{ normal?: { id: string }; article?: { id: string } }>({});
 
@@ -48,18 +48,8 @@ const isInitializing = ref(true);
 const showCategoryHint = ref(true);
 
 function insertCategoryHeader(category: string) {
-  if (!textareaRef.value) return;
-  const textarea = textareaRef.value;
-  const start = textarea.selectionStart;
-  const before = content.value.slice(0, start);
-  const after = content.value.slice(start);
   const insertion = `## ${category}\n- `;
-  content.value = before + insertion + after;
-  nextTick(() => {
-    const newPos = start + insertion.length;
-    textarea.setSelectionRange(newPos, newPos);
-    textarea.focus();
-  });
+  content.value = content.value + (content.value ? "\n\n" : "") + insertion;
 }
 
 // ── Search ─────────────────────────────────────────────────────
@@ -81,9 +71,21 @@ const featureDesc = ref("");
 onMounted(async () => {
   await fetchApps();
 
-  const queryVersionId = route.query.versionId as string | undefined;
-  const queryAppId = route.query.app as string | undefined;
+  let queryVersionId = route.query.versionId as string | undefined;
+  let queryAppId = route.query.app as string | undefined;
   const persistedAppId = $page.selectedAppId;
+
+  // If versionId is provided without app, look up the version to find its app
+  if (queryVersionId && !queryAppId) {
+    try {
+      const versionData = await fetchVersionById(queryVersionId);
+      if (versionData?.appId && apps.value.find((a) => a.id === versionData.appId)) {
+        queryAppId = versionData.appId;
+      }
+    } catch {
+      // Version not found or error, fall through to normal selection
+    }
+  }
 
   // Restore selection: URL param > persisted store > first app
   if (queryAppId && apps.value.find((a) => a.id === queryAppId)) {
@@ -119,10 +121,45 @@ async function loadVersion(versionId: string) {
   if (!version) return;
 
   currentVersion.value = version;
-  content.value = version.releaseNotes || "";
+  let releaseNotes = version.releaseNotes || "";
+
+  // If releaseNotes is empty, try to reconstruct from the release's categories
+  if (!releaseNotes.trim()) {
+    try {
+      const data = await $fetch<{ data: Array<{ id: string; categories: Record<string, string[]> }> }>("/api/releases", {
+        query: { version: versionId, limit: "10" },
+      });
+      const release = data.data[0];
+      if (release?.categories) {
+        releaseNotes = categoriesToMarkdown(release.categories);
+      }
+    } catch {
+      // Silently fail if release categories can't be fetched
+    }
+  }
+
+  content.value = releaseNotes;
   status.value = version.status === "published" ? "published" : "draft";
   hasChanges.value = false;
   lastSavedAt.value = version.updatedAt ? new Date(version.updatedAt) : new Date();
+}
+
+function categoriesToMarkdown(categories: Record<string, string[]>): string {
+  const lines: string[] = [];
+  const categoryOrder = ["Added", "Fixed", "Changed", "Deprecated", "Security"];
+
+  for (const category of categoryOrder) {
+    const items = categories[category.toLowerCase()];
+    if (items && items.length > 0) {
+      lines.push(`## ${category}`);
+      for (const item of items) {
+        lines.push(`- ${item}`);
+      }
+      lines.push("");
+    }
+  }
+
+  return lines.join("\n").trim();
 }
 
 watch([content, status], () => {
@@ -146,11 +183,17 @@ function syncUrlQuery() {
 }
 
 watch(selectedAppId, async (newAppId, oldAppId) => {
-  if (!newAppId) return;
+  if (!newAppId || newAppId === oldAppId) return;
   await fetchVersions(newAppId);
   if (versions.value.length > 0) {
-    // Always select the latest version (first in desc order) when app changes
-    selectedVersionId.value = versions.value[0].id;
+    // Respect URL query parameter if the version belongs to this app
+    const queryVersionId = route.query.versionId as string | undefined;
+    if (queryVersionId && versions.value.find((v) => v.id === queryVersionId)) {
+      selectedVersionId.value = queryVersionId;
+    } else {
+      // Default to the latest version (first in desc order) when app changes
+      selectedVersionId.value = versions.value[0].id;
+    }
   } else {
     selectedVersionId.value = "";
     currentVersion.value = null;
@@ -195,36 +238,6 @@ const saveStatusLabel = computed(() => {
 
 // ── Markdown preview ─────────────────────────────────────────────
 const renderedPreview = computed(() => renderMarkdown(content.value));
-
-// ── Toolbar helpers ────────────────────────────────────────────
-const textareaRef = ref<HTMLTextAreaElement | null>(null);
-
-function wrapText(before: string, after?: string) {
-  const textarea = textareaRef.value;
-  if (!textarea) return;
-  after = after || before;
-  const start = textarea.selectionStart;
-  const end = textarea.selectionEnd;
-  const text = textarea.value;
-  const selected = text.slice(start, end);
-  const replacement = before + selected + after;
-  textarea.setRangeText(replacement, start, end, "end");
-  textarea.focus();
-  textarea.setSelectionRange(start + before.length, start + before.length + selected.length);
-  content.value = textarea.value;
-}
-
-function insertLine(prefix: string) {
-  const textarea = textareaRef.value;
-  if (!textarea) return;
-  const start = textarea.selectionStart;
-  const text = textarea.value;
-  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-  textarea.setRangeText(prefix, lineStart, lineStart, "end");
-  textarea.focus();
-  textarea.setSelectionRange(lineStart + prefix.length, lineStart + prefix.length);
-  content.value = textarea.value;
-}
 
 function togglePreview() {
   previewOnly.value = !previewOnly.value;
@@ -885,26 +898,14 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
             <button type="button" class="format-hint-tag tag-security" @click="insertCategoryHeader('Security')">## Security</button>
           </div>
         </div>
-        <div class="toolbar">
-          <button type="button" class="tool-btn" @click="wrapText('## ')">H2</button>
-          <button type="button" class="tool-btn" @click="wrapText('### ')">H3</button>
-          <button type="button" class="tool-btn" @click="wrapText('**','**')">B</button>
-          <button type="button" class="tool-btn" @click="wrapText('*','*')">I</button>
-          <button type="button" class="tool-btn" @click="wrapText('`','`')">`code`</button>
-          <button type="button" class="tool-btn" @click="insertLine('- ')">• list</button>
-          <button type="button" class="tool-btn" @click="insertLine('1. ')">1. list</button>
-          <button type="button" class="tool-btn" @click="insertLine('- [ ] ')">[] task</button>
-          <button type="button" class="tool-btn" @click="wrapText('[',']()')">link</button>
-          <button type="button" class="tool-btn" @click="insertLine('> ')">quote</button>
-        </div>
-        <div class="pane-body">
-          <textarea
-            ref="textareaRef"
-            v-model="content"
-            class="textarea"
-            spellcheck="false"
-            placeholder="Enter changelog markdown…"
-          />
+        <div class="pane-body" style="padding:0;overflow:visible;">
+          <ClientOnly>
+            <EditorJs
+              v-model="content"
+              placeholder="Enter changelog markdown…"
+              style="height:100%;"
+            />
+          </ClientOnly>
         </div>
       </div>
 
@@ -1217,6 +1218,10 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.editor-pane:has(.editor-js-wrapper) {
+  overflow: visible;
 }
 .pane-header {
   padding: 12px 16px;

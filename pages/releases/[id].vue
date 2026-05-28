@@ -197,10 +197,11 @@ function isMediaPlaceholder(m: ReleaseMedia) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Inline edit mode (block-based rich editor)
+// Inline edit mode (Editor.js)
 // ═══════════════════════════════════════════════════════════════
 const isEditing = ref(false);
 const editError = ref("");
+const editContent = ref("");
 
 const editDraft = reactive<{
   heroTitle: string;
@@ -210,205 +211,11 @@ const editDraft = reactive<{
   published: false,
 });
 
-interface ArticleBlock {
-  id: string;
-  type: 'heading' | 'paragraph' | 'image' | 'video' | 'list' | 'code' | 'quote' | 'divider';
-  content: string;
-  meta?: {
-    level?: number;
-    language?: string;
-    src?: string;
-    alt?: string;
-    caption?: string;
-    items?: string[];
-  };
-}
-
-const blocks = ref<ArticleBlock[]>([]);
-const activeBlockId = ref<string | null>(null);
-const showAddMenuAt = ref<number | null>(null);
-
-function parseMarkdownToBlocks(md: string): ArticleBlock[] {
-  if (!md.trim()) return [];
-  const lines = md.split('\n');
-  const result: ArticleBlock[] = [];
-  let i = 0;
-
-  function peek(): string | undefined {
-    return lines[i];
-  }
-
-  function consume(): string | undefined {
-    return lines[i++];
-  }
-
-  while (i < lines.length) {
-    const line = peek();
-    if (line === undefined) break;
-
-    // Empty line
-    if (!line.trim()) {
-      i++;
-      continue;
-    }
-
-    // Divider
-    if (/^(---|___|\*\*\*)$/.test(line.trim())) {
-      result.push({ id: crypto.randomUUID(), type: 'divider', content: '' });
-      i++;
-      continue;
-    }
-
-    // Heading
-    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
-    if (headingMatch) {
-      const level = headingMatch[1]?.length || 2;
-      const content = headingMatch[2] || '';
-      result.push({
-        id: crypto.randomUUID(),
-        type: 'heading',
-        content,
-        meta: { level },
-      });
-      i++;
-      continue;
-    }
-
-    // Code block
-    if (line.startsWith('```')) {
-      const lang = line.slice(3).trim();
-      const codeLines: string[] = [];
-      i++;
-      let codeLine = peek();
-      while (codeLine !== undefined && !codeLine.startsWith('```')) {
-        codeLines.push(codeLine);
-        i++;
-        codeLine = peek();
-      }
-      if (codeLine?.startsWith('```')) i++; // skip closing ```
-      result.push({
-        id: crypto.randomUUID(),
-        type: 'code',
-        content: codeLines.join('\n'),
-        meta: { language: lang },
-      });
-      continue;
-    }
-
-    // Image
-    const imageMatch = line.match(/^!\[(.*?)\]\((.*?)\)$/);
-    if (imageMatch) {
-      result.push({
-        id: crypto.randomUUID(),
-        type: 'image',
-        content: '',
-        meta: { alt: imageMatch[1], src: imageMatch[2] },
-      });
-      i++;
-      continue;
-    }
-
-    // Video (HTML tag)
-    const videoMatch = line.match(/<video[^>]*src="([^"]*)"[^>]*>/);
-    if (videoMatch) {
-      result.push({
-        id: crypto.randomUUID(),
-        type: 'video',
-        content: '',
-        meta: { src: videoMatch[1] },
-      });
-      // Skip closing tag if present
-      const nextLine = lines[i + 1];
-      if (nextLine?.includes('</video>')) i++;
-      i++;
-      continue;
-    }
-
-    // Blockquote
-    if (line.startsWith('> ')) {
-      const quoteLines: string[] = [];
-      let quoteLine = peek();
-      while (quoteLine !== undefined && quoteLine.startsWith('> ')) {
-        quoteLines.push(quoteLine.slice(2));
-        i++;
-        quoteLine = peek();
-      }
-      result.push({
-        id: crypto.randomUUID(),
-        type: 'quote',
-        content: quoteLines.join('\n'),
-      });
-      continue;
-    }
-
-    // List
-    const listMatch = line.match(/^(\s*)([-*]|\d+\.)\s+(.+)$/);
-    if (listMatch) {
-      const items: string[] = [];
-      let listLine = peek();
-      while (listLine !== undefined && /^(\s*)([-*]|\d+\.)\s+(.+)$/.test(listLine)) {
-        items.push(listLine.replace(/^(\s*)([-*]|\d+\.)\s+/, ''));
-        i++;
-        listLine = peek();
-      }
-      result.push({
-        id: crypto.randomUUID(),
-        type: 'list',
-        content: '',
-        meta: { items },
-      });
-      continue;
-    }
-
-    // Paragraph (collect until empty line or next block)
-    const paraLines: string[] = [line];
-    i++;
-    let paraLine = peek();
-    while (paraLine !== undefined && paraLine.trim() && !paraLine.match(/^(#{1,3}|>|[-*]|\d+\.|```|!\[|<video|---)/)) {
-      paraLines.push(paraLine);
-      i++;
-      paraLine = peek();
-    }
-    result.push({
-      id: crypto.randomUUID(),
-      type: 'paragraph',
-      content: paraLines.join('\n'),
-    });
-  }
-
-  return result;
-}
-
-function blocksToMarkdown(blocks: ArticleBlock[]): string {
-  return blocks.map((b) => {
-    switch (b.type) {
-      case 'heading':
-        return `${'#'.repeat(b.meta?.level || 2)} ${b.content}`;
-      case 'paragraph':
-        return b.content;
-      case 'image':
-        return `![${b.meta?.alt || ''}](${b.meta?.src || ''})`;
-      case 'video':
-        return `<video src="${b.meta?.src || ''}" controls></video>`;
-      case 'list':
-        return (b.meta?.items || []).map((item) => `- ${item}`).join('\n');
-      case 'code':
-        return `\`\`\`${b.meta?.language || ''}\n${b.content}\n\`\`\``;
-      case 'quote':
-        return b.content.split('\n').map((l) => `> ${l}`).join('\n');
-      case 'divider':
-        return '---';
-      default:
-        return b.content;
-    }
-  }).join('\n\n');
-}
-
 function enterEditMode() {
   if (!release.value) return;
   editDraft.heroTitle = release.value.heroTitle || '';
   editDraft.published = release.value.published;
-  blocks.value = parseMarkdownToBlocks(release.value.summary || '');
+  editContent.value = release.value.summary || '';
   editError.value = '';
   isEditing.value = true;
 }
@@ -416,120 +223,21 @@ function enterEditMode() {
 function cancelEdit() {
   isEditing.value = false;
   editError.value = '';
-  blocks.value = [];
-  showAddMenuAt.value = null;
+  editContent.value = '';
 }
 
 async function saveEdit() {
   if (!release.value) return;
   editError.value = '';
-  const markdown = blocksToMarkdown(blocks.value);
 
   await updateRelease(release.value.id, {
     heroTitle: editDraft.heroTitle,
-    summary: markdown,
+    summary: editContent.value,
     published: editDraft.published,
   });
   isEditing.value = false;
-  blocks.value = [];
-  showAddMenuAt.value = null;
+  editContent.value = '';
 }
-
-// Block operations
-function addBlock(type: ArticleBlock['type'], afterIndex: number) {
-  const baseBlock: ArticleBlock = {
-    id: crypto.randomUUID(),
-    type,
-    content: '',
-  };
-
-  switch (type) {
-    case 'heading':
-      baseBlock.content = 'New heading';
-      baseBlock.meta = { level: 2 };
-      break;
-    case 'code':
-      baseBlock.meta = { language: '' };
-      break;
-    case 'image':
-      baseBlock.meta = { src: '', alt: '' };
-      break;
-    case 'video':
-      baseBlock.meta = { src: '' };
-      break;
-    case 'list':
-      baseBlock.meta = { items: [''] };
-      break;
-    case 'paragraph':
-    case 'quote':
-    case 'divider':
-      break;
-  }
-
-  blocks.value.splice(afterIndex + 1, 0, baseBlock);
-  showAddMenuAt.value = null;
-  activeBlockId.value = baseBlock.id;
-}
-
-function deleteBlock(index: number) {
-  blocks.value.splice(index, 1);
-}
-
-function moveBlockUp(index: number) {
-  if (index <= 0) return;
-  const current = blocks.value[index];
-  const prev = blocks.value[index - 1];
-  if (!current || !prev) return;
-  blocks.value[index] = prev;
-  blocks.value[index - 1] = current;
-}
-
-function moveBlockDown(index: number) {
-  if (index >= blocks.value.length - 1) return;
-  const current = blocks.value[index];
-  const next = blocks.value[index + 1];
-  if (!current || !next) return;
-  blocks.value[index] = next;
-  blocks.value[index + 1] = current;
-}
-
-function duplicateBlock(index: number) {
-  const original = blocks.value[index];
-  if (!original) return;
-  const clone: ArticleBlock = {
-    id: crypto.randomUUID(),
-    type: original.type,
-    content: original.content,
-    meta: original.meta ? JSON.parse(JSON.stringify(original.meta)) : undefined,
-  };
-  blocks.value.splice(index + 1, 0, clone);
-}
-
-// List helpers
-function addListItem(block: ArticleBlock) {
-  if (!block.meta) block.meta = {};
-  if (!block.meta.items) block.meta.items = [];
-  block.meta.items.push('');
-}
-
-function removeListItem(block: ArticleBlock, itemIndex: number) {
-  if (!block.meta?.items) return;
-  block.meta.items.splice(itemIndex, 1);
-  if (block.meta.items.length === 0) {
-    block.meta.items = [''];
-  }
-}
-
-const blockTypeOptions: { type: ArticleBlock['type']; label: string; icon: string }[] = [
-  { type: 'heading', label: 'Heading', icon: 'H' },
-  { type: 'paragraph', label: 'Paragraph', icon: 'P' },
-  { type: 'image', label: 'Image', icon: '📷' },
-  { type: 'video', label: 'Video', icon: '▶' },
-  { type: 'list', label: 'List', icon: '•' },
-  { type: 'code', label: 'Code', icon: '</>' },
-  { type: 'quote', label: 'Quote', icon: '"' },
-  { type: 'divider', label: 'Divider', icon: '—' },
-];
 
 // ═══════════════════════════════════════════════════════════════
 // Delete modal
@@ -709,7 +417,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             </template>
           </template>
 
-          <!-- EDIT MODE (block-based rich editor) -->
+          <!-- EDIT MODE (Editor.js) -->
           <template v-else>
             <div class="edit-form">
               <div v-if="editError" class="error-banner">{{ editError }}</div>
@@ -728,128 +436,15 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
                 </label>
               </div>
 
-              <!-- Block Editor -->
-              <div class="block-editor">
-                <!-- Empty state -->
-                <div v-if="blocks.length === 0" class="block-empty-state">
-                  <p class="text-muted-sm">No content yet. Add your first block below.</p>
-                </div>
-
-                <div
-                  v-for="(block, index) in blocks"
-                  :key="block.id"
-                  class="block-card"
-                  :class="{ 'block-active': activeBlockId === block.id }"
-                  @click="activeBlockId = block.id"
-                >
-                  <!-- Block toolbar -->
-                  <div class="block-toolbar">
-                    <div class="block-type-badge">{{ blockTypeOptions.find((o) => o.type === block.type)?.label || block.type }}</div>
-                    <div class="block-actions">
-                      <button type="button" class="block-action-btn" title="Move up" :disabled="index === 0" @click.stop="moveBlockUp(index)">↑</button>
-                      <button type="button" class="block-action-btn" title="Move down" :disabled="index === blocks.length - 1" @click.stop="moveBlockDown(index)">↓</button>
-                      <button type="button" class="block-action-btn" title="Duplicate" @click.stop="duplicateBlock(index)">⎘</button>
-                      <button type="button" class="block-action-btn block-action-danger" title="Delete" @click.stop="deleteBlock(index)">×</button>
-                    </div>
-                  </div>
-
-                  <!-- Block content editor -->
-                  <div class="block-content">
-                    <!-- Heading -->
-                    <template v-if="block.type === 'heading' && block.meta">
-                      <div class="block-heading-row">
-                        <select v-model="block.meta.level" class="block-level-select">
-                          <option :value="2">H2</option>
-                          <option :value="3">H3</option>
-                        </select>
-                        <input v-model="block.content" type="text" class="block-heading-input" placeholder="Heading text…" />
-                      </div>
-                    </template>
-
-                    <!-- Paragraph -->
-                    <template v-if="block.type === 'paragraph'">
-                      <textarea v-model="block.content" class="block-paragraph-textarea" rows="4" placeholder="Write something…" />
-                    </template>
-
-                    <!-- Image -->
-                    <template v-if="block.type === 'image' && block.meta">
-                      <div class="block-media-form">
-                        <input v-model="block.meta.src" type="text" placeholder="Image URL…" />
-                        <input v-model="block.meta.alt" type="text" placeholder="Alt text / caption…" />
-                        <div v-if="block.meta.src" class="block-media-preview">
-                          <img :src="block.meta.src" :alt="block.meta.alt || ''" loading="lazy" />
-                        </div>
-                      </div>
-                    </template>
-
-                    <!-- Video -->
-                    <template v-if="block.type === 'video' && block.meta">
-                      <div class="block-media-form">
-                        <input v-model="block.meta.src" type="text" placeholder="Video URL…" />
-                        <div v-if="block.meta.src" class="block-media-preview">
-                          <video :src="block.meta.src" controls preload="metadata" />
-                        </div>
-                      </div>
-                    </template>
-
-                    <!-- List -->
-                    <template v-if="block.type === 'list' && block.meta">
-                      <div class="block-list-items">
-                        <div v-for="(item, itemIdx) in block.meta.items" :key="itemIdx" class="block-list-row">
-                          <span class="block-list-bullet">•</span>
-                          <input :value="item" type="text" placeholder="List item…" @input="(e) => { const items = block.meta!.items || []; items[itemIdx] = (e.target as HTMLInputElement).value; }" />
-                          <button type="button" class="block-action-btn" @click="removeListItem(block, itemIdx)">×</button>
-                        </div>
-                        <button type="button" class="btn btn-ghost btn-sm" @click="addListItem(block)">+ Add item</button>
-                      </div>
-                    </template>
-
-                    <!-- Code -->
-                    <template v-if="block.type === 'code' && block.meta">
-                      <div class="block-code-header">
-                        <input v-model="block.meta.language" type="text" placeholder="language (e.g. typescript)" class="block-code-lang" />
-                      </div>
-                      <textarea v-model="block.content" class="block-code-textarea" rows="8" placeholder="Paste code here…" />
-                    </template>
-
-                    <!-- Quote -->
-                    <template v-if="block.type === 'quote'">
-                      <textarea v-model="block.content" class="block-quote-textarea" rows="4" placeholder="Quote text…" />
-                    </template>
-
-                    <!-- Divider -->
-                    <template v-if="block.type === 'divider'">
-                      <div class="block-divider-preview">—</div>
-                    </template>
-                  </div>
-                </div>
-
-                <!-- Add block menu -->
-                <div class="add-block-area">
-                  <button
-                    v-if="showAddMenuAt === null"
-                    type="button"
-                    class="add-block-trigger"
-                    @click="showAddMenuAt = blocks.length"
-                  >
-                    + Add block
-                  </button>
-                  <div v-else class="add-block-menu">
-                    <div class="add-block-grid">
-                      <button
-                        v-for="opt in blockTypeOptions"
-                        :key="opt.type"
-                        type="button"
-                        class="add-block-option"
-                        @click="addBlock(opt.type, showAddMenuAt - 1)"
-                      >
-                        <span class="add-block-icon">{{ opt.icon }}</span>
-                        <span class="add-block-label">{{ opt.label }}</span>
-                      </button>
-                    </div>
-                    <button type="button" class="add-block-cancel" @click="showAddMenuAt = null">Cancel</button>
-                  </div>
-                </div>
+              <!-- Editor.js -->
+              <div class="editor-js-release-editor">
+                <ClientOnly>
+                  <EditorJs
+                    v-model="editContent"
+                    placeholder="Write your release article content..."
+                    style="min-height:400px;"
+                  />
+                </ClientOnly>
               </div>
 
               <!-- Actions -->
@@ -1261,6 +856,14 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   border-radius: 8px;
   color: oklch(50% 0.15 25);
   font-size: 13px;
+}
+
+.editor-js-release-editor {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: visible;
+  background: var(--surface);
+  min-height: 400px;
 }
 .form-footer {
   display: flex;

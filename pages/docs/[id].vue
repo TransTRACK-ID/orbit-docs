@@ -75,48 +75,7 @@ function generatePDF() {
   setTimeout(() => showToast("PDF ready for download"), 1500);
 }
 
-const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const previewRef = ref<HTMLDivElement | null>(null);
-
-function wrapText(before: string, after?: string) {
-  after = after || before;
-  const ta = textareaRef.value;
-  if (!ta) return;
-  const start = ta.selectionStart;
-  const end = ta.selectionEnd;
-  const text = ta.value;
-  const selected = text.slice(start, end);
-  const replacement = before + selected + after;
-  ta.setRangeText(replacement, start, end, "end");
-  ta.focus();
-  ta.setSelectionRange(
-    start + before.length,
-    start + before.length + selected.length
-  );
-  editorContent.value = ta.value;
-}
-
-function insertLine(prefix: string) {
-  const ta = textareaRef.value;
-  if (!ta) return;
-  const start = ta.selectionStart;
-  const text = ta.value;
-  const lineStart = text.lastIndexOf("\n", start - 1) + 1;
-  ta.setRangeText(prefix, lineStart, lineStart, "end");
-  ta.focus();
-  ta.setSelectionRange(lineStart + prefix.length, lineStart + prefix.length);
-  editorContent.value = ta.value;
-}
-
-function insertTable() {
-  const ta = textareaRef.value;
-  if (!ta) return;
-  const table = "\n| Column | Column |\n|--------|--------|\n| Cell   | Cell   |\n";
-  const start = ta.selectionStart;
-  ta.setRangeText(table, start, start, "end");
-  ta.focus();
-  editorContent.value = ta.value;
-}
 
 function removeTag(index: number) {
   editorTags.value.splice(index, 1);
@@ -155,21 +114,13 @@ const renderedHtml = computed(() => renderMarkdown(editorContent.value));
 
 function scrollToHeading(text: string) {
   activeHeading.value = text;
-  // Try to find the heading line in the textarea and move cursor there
-  const ta = textareaRef.value;
-  if (ta) {
-    const lines = ta.value.split("\n");
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const match = line.match(/^(#{1,3})\s+(.+)$/);
-      if (match && match[2].trim() === text) {
-        let pos = 0;
-        for (let j = 0; j < i; j++) pos += lines[j].length + 1;
-        ta.focus();
-        ta.setSelectionRange(pos, pos);
-        // Scroll the line into view roughly
-        const lineHeight = 22; // approximate
-        ta.scrollTop = Math.max(0, i * lineHeight - ta.clientHeight / 2);
+  // Scroll in preview pane if visible
+  const preview = previewRef.value;
+  if (preview) {
+    const headings = preview.querySelectorAll("h2, h3");
+    for (const h of headings) {
+      if (h.textContent?.trim() === text) {
+        h.scrollIntoView({ behavior: "smooth", block: "start" });
         break;
       }
     }
@@ -374,126 +325,21 @@ const lastModified = computed(() => {
 
         <!-- Editor -->
         <div class="editor-pane">
-          <div class="toolbar">
-            <button
-              type="button"
-              class="tool-btn"
-              title="Heading 1"
-              @click="wrapText('# ')"
-            >
-              H1
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Heading 2"
-              @click="wrapText('## ')"
-            >
-              H2
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Heading 3"
-              @click="wrapText('### ')"
-            >
-              H3
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Bold"
-              @click="wrapText('**', '**')"
-            >
-              B
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Italic"
-              @click="wrapText('*', '*')"
-            >
-              I
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Inline code"
-              @click="wrapText('`', '`')"
-            >
-              `code`
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Code block"
-              @click="wrapText('```\n', '\n```')"
-            >
-              ```
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Bullet list"
-              @click="insertLine('- ')"
-            >
-              • list
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Numbered list"
-              @click="insertLine('1. ')"
-            >
-              1.
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Task list"
-              @click="insertLine('- [ ] ')"
-            >
-              []
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Link"
-              @click="wrapText('[', ']()')"
-            >
-              link
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Image"
-              @click="wrapText('![alt text](', ')')"
-            >
-              img
-            </button>
-            <button
-              type="button"
-              class="tool-btn"
-              title="Table"
-              @click="insertTable"
-            >
-              table
-            </button>
-          </div>
-          <div class="pane-body">
-            <textarea
-              v-if="!previewOnly"
-              ref="textareaRef"
-              v-model="editorContent"
-              class="textarea"
-              spellcheck="false"
-            />
-            <div
-              v-else
-              ref="previewRef"
-              class="preview-body"
-              v-html="renderedHtml"
-            />
+          <div class="pane-body" style="padding:0;overflow:visible;">
+            <ClientOnly>
+              <EditorJs
+                v-if="!previewOnly"
+                v-model="editorContent"
+                placeholder="Write your technical documentation..."
+                style="height:100%;"
+              />
+              <div
+                v-else
+                ref="previewRef"
+                class="preview-body"
+                v-html="renderedHtml"
+              />
+            </ClientOnly>
           </div>
         </div>
 
@@ -807,6 +653,10 @@ const lastModified = computed(() => {
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+}
+
+.editor-pane:has(.editor-js-wrapper) {
+  overflow: visible;
 }
 .pane-header {
   padding: 12px 16px;
