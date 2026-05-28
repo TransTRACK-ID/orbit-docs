@@ -142,7 +142,7 @@ function logout() {
       <div class="nav-group">
         <div class="nav-group-title">Workspace</div>
         <NuxtLink
-          v-for="(item, idx) in sidebarMenu.filter(i => i.id !== 'menu__settings')"
+          v-for="(item, idx) in sidebarMenu.filter(i => i.id !== 'menu__settings' && i.id !== 'menu__changelogs')"
           :key="item.id"
           ref="(el: any) => { if (idx === 0) firstNavLinkRef = el }"
           :to="item.route"
