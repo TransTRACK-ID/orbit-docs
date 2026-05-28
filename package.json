@@ -52,7 +52,6 @@
     "date-fns": "^2.30.0",
     "drizzle-kit": "^0.30.6",
     "drizzle-orm": "^0.45.2",
-    "editorjs-drag-drop": "^1.1.16",
     "editorjs-indent-tune": "^1.4.4",
     "editorjs-inline-image": "^2.2.2",
     "editorjs-mermaid": "^1.0.0",
