@@ -27,13 +27,41 @@ const emit = defineEmits<{
 const editorContainer = ref<HTMLDivElement | null>(null);
 const editorInstance = ref<any>(null);
 const isReady = ref(false);
+const dragDropInstance = ref<any>(null);
+const undoInstance = ref<any>(null);
 
 // ── Import Editor.js dynamically (client-only) ─────────────────
 async function initEditor() {
   if (!editorContainer.value) return;
   if (typeof window === "undefined") return;
 
-  const [{ default: EditorJS }, { default: Header }, { default: List }, { default: NestedList }, { default: Paragraph }, { default: Code }, { default: Quote }, { default: Table }, { default: Image }, { default: LinkTool }, { default: Marker }, { default: Checklist }, { default: InlineCode }, { default: Embed }, { default: Delimiter }, { default: Warning }, { default: ToggleBlock }, { default: ColorPlugin }, { default: TextVariantTune }, { default: MermaidTool }, { default: AlignmentTune }, { default: IndentTune }, { default: InlineImage }] = await Promise.all([
+  const [
+    { default: EditorJS },
+    { default: Header },
+    { default: List },
+    { default: NestedList },
+    { default: Paragraph },
+    { default: Code },
+    { default: Quote },
+    { default: Table },
+    { default: Image },
+    { default: LinkTool },
+    { default: Marker },
+    { default: Checklist },
+    { default: InlineCode },
+    { default: Embed },
+    { default: Delimiter },
+    { default: Warning },
+    { default: ToggleBlock },
+    { default: ColorPlugin },
+    { default: TextVariantTune },
+    { default: MermaidTool },
+    { default: AlignmentTune },
+    { default: IndentTune },
+    { default: InlineImage },
+    { default: DragDrop },
+    { default: Undo },
+  ] = await Promise.all([
     import("@editorjs/editorjs"),
     import("@editorjs/header"),
     import("@editorjs/list"),
@@ -57,6 +85,8 @@ async function initEditor() {
     import("editorjs-text-alignment-blocktune"),
     import("editorjs-indent-tune"),
     import("editorjs-inline-image"),
+    import("editorjs-drag-drop"),
+    import("editorjs-undo"),
   ]);
 
   // Convert initial markdown to Editor.js data
@@ -138,12 +168,16 @@ async function initEditor() {
       },
     },
     data: initialData,
-    placeholder: props.placeholder,
+    placeholder: props.placeholder || "Type '/' for commands, or start writing…",
     readOnly: props.readOnly,
     autofocus: props.autofocus,
     minHeight: props.minHeight,
     onReady: () => {
       isReady.value = true;
+      // Drag & drop block reordering (Notion-style) — borderStyle:'none' suppresses the dashed line the plugin injects via inline styles
+      dragDropInstance.value = new DragDrop(editor, 'none');
+      // Undo / redo (Ctrl+Z / Ctrl+Shift+Z)
+      undoInstance.value = new Undo({ editor });
       emit("ready");
     },
     onChange: async () => {
@@ -177,6 +211,12 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  if (dragDropInstance.value) {
+    dragDropInstance.value = null;
+  }
+  if (undoInstance.value) {
+    undoInstance.value = null;
+  }
   if (editorInstance.value) {
     editorInstance.value.destroy();
     editorInstance.value = null;
@@ -286,6 +326,12 @@ defineExpose({
 .editor-js-container .ce-block {
   margin: 0;
   padding: 2px 0;
+  border-radius: 4px;
+  transition: background-color 0.1s ease;
+}
+
+.editor-js-container .ce-block:hover {
+  background-color: color-mix(in oklch, var(--fg) 3%, transparent);
 }
 
 .editor-js-container .ce-block--focused {
@@ -432,10 +478,10 @@ defineExpose({
 }
 
 .editor-js-container .ce-toolbar {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px color-mix(in oklch, var(--fg) 8%, transparent);
+  background: none;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .editor-js-container .ce-toolbar__plus,
@@ -451,6 +497,7 @@ defineExpose({
 .editor-js-container .ce-toolbar__settings-btn:hover {
   color: var(--fg);
   background: var(--fg-soft);
+  transform: scale(1.05);
 }
 
 .editor-js-container .ce-popover {
@@ -476,8 +523,9 @@ defineExpose({
 .editor-js-container .ce-inline-toolbar {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px color-mix(in oklch, var(--fg) 8%, transparent);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px color-mix(in oklch, var(--fg) 12%, transparent);
+  animation: editorFadeInUp 0.15s ease;
 }
 
 .editor-js-container .ce-inline-toolbar__toggler-and-button-wrapper {
@@ -500,29 +548,59 @@ defineExpose({
 .editor-js-container .ce-conversion-toolbar {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px color-mix(in oklch, var(--fg) 8%, transparent);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px color-mix(in oklch, var(--fg) 15%, transparent);
+  padding: 6px;
+  animation: editorFadeInUp 0.15s ease;
 }
 
 .editor-js-container .ce-conversion-tool {
   color: var(--fg);
+  border-radius: 6px;
+  transition: background 0.1s ease;
 }
 
 .editor-js-container .ce-conversion-tool:hover {
   background: var(--fg-soft);
+  border-radius: 6px;
 }
 
 .editor-js-container .ce-conversion-tool--focused {
   background: var(--accent-soft);
   color: var(--accent);
+  border-radius: 6px;
 }
 
+/* Drag & drop — drop target indicator */
 .editor-js-container .ce-block--drop-target {
-  background: var(--accent-soft);
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+  border-radius: 4px;
 }
 
-.editor-js-container .ce-block--drop-target::before {
-  background: var(--accent);
+/* Suppress the plugin's default dashed border and arrow pseudo-elements */
+.ce-block--drop-target .ce-block__content::before,
+.ce-block--drop-target .ce-block__content::after {
+  display: none !important;
+}
+
+/* Drag handle (editorjs-drag-drop injects .drag-handle) */
+.drag-handle {
+  color: var(--muted);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.ce-block:hover .drag-handle {
+  opacity: 1;
+}
+
+.drag-handle:hover {
+  color: var(--fg);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .editor-js-container .cdx-input {
@@ -671,6 +749,18 @@ defineExpose({
   color: var(--muted);
   font-size: 14px;
   font-family: inherit;
+}
+
+/* Shared fade-in-up animation for all editor overlays */
+@keyframes editorFadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Scrollbar styling */
