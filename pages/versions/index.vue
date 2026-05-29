@@ -1324,54 +1324,18 @@ h2 {
   padding-left: 28px;
 }
 .detail-cat-list li::before {
-  content: "";
+  content: "•";
   position: absolute;
   left: 12px;
   top: 50%;
   transform: translateY(-50%);
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--muted);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
 }
 .detail-cat-list li:hover {
   background: var(--surface);
   border-color: color-mix(in oklch, var(--muted) 50%, var(--border));
-}
-.detail-cat-section.rl-tag-added .detail-cat-list li {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 6%, var(--bg));
-  border-color: color-mix(in oklch, oklch(50% 0.14 145) 30%, var(--border));
-}
-.detail-cat-section.rl-tag-added .detail-cat-list li::before {
-  background: oklch(50% 0.14 145);
-}
-.detail-cat-section.rl-tag-fixed .detail-cat-list li {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 6%, var(--bg));
-  border-color: color-mix(in oklch, oklch(55% 0.14 255) 30%, var(--border));
-}
-.detail-cat-section.rl-tag-fixed .detail-cat-list li::before {
-  background: oklch(55% 0.14 255);
-}
-.detail-cat-section.rl-tag-changed .detail-cat-list li {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 6%, var(--bg));
-  border-color: color-mix(in oklch, oklch(60% 0.12 85) 30%, var(--border));
-}
-.detail-cat-section.rl-tag-changed .detail-cat-list li::before {
-  background: oklch(60% 0.12 85);
-}
-.detail-cat-section.rl-tag-deprecated .detail-cat-list li {
-  background: color-mix(in oklch, oklch(60% 0.18 300) 6%, var(--bg));
-  border-color: color-mix(in oklch, oklch(55% 0.14 300) 30%, var(--border));
-}
-.detail-cat-section.rl-tag-deprecated .detail-cat-list li::before {
-  background: oklch(55% 0.14 300);
-}
-.detail-cat-section.rl-tag-security .detail-cat-list li {
-  background: color-mix(in oklch, oklch(55% 0.2 25) 6%, var(--bg));
-  border-color: color-mix(in oklch, oklch(50% 0.16 25) 30%, var(--border));
-}
-.detail-cat-section.rl-tag-security .detail-cat-list li::before {
-  background: oklch(50% 0.16 25);
 }
 .detail-empty {
   display: flex;
@@ -1568,27 +1532,6 @@ h2 {
 .compare-cat-list li:hover {
   background: var(--surface);
   border-color: color-mix(in oklch, var(--muted) 50%, var(--border));
-}
-
-.compare-cat-group.rl-tag-added .compare-cat-list li {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 6%, var(--bg));
-  border-color: color-mix(in oklch, oklch(50% 0.14 145) 30%, var(--border));
-}
-.compare-cat-group.rl-tag-fixed .compare-cat-list li {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 6%, var(--bg));
-  border-color: color-mix(in oklch, oklch(55% 0.14 255) 30%, var(--border));
-}
-.compare-cat-group.rl-tag-changed .compare-cat-list li {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 6%, var(--bg));
-  border-color: color-mix(in oklch, oklch(60% 0.12 85) 30%, var(--border));
-}
-.compare-cat-group.rl-tag-deprecated .compare-cat-list li {
-  background: color-mix(in oklch, oklch(60% 0.18 300) 6%, var(--bg));
-  border-color: color-mix(in oklch, oklch(55% 0.14 300) 30%, var(--border));
-}
-.compare-cat-group.rl-tag-security .compare-cat-list li {
-  background: color-mix(in oklch, oklch(55% 0.2 25) 6%, var(--bg));
-  border-color: color-mix(in oklch, oklch(50% 0.16 25) 30%, var(--border));
 }
 
 .compare-empty {
