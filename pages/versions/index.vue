@@ -529,7 +529,12 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
     <!-- Version detail panel -->
     <div v-if="activeDetailVersion" class="version-detail">
       <div class="card detail-card">
-        <h3>Changelog · v{{ activeDetailVersion.version }}</h3>
+        <div class="detail-card-header">
+          <h3>Changelog · v{{ activeDetailVersion.version }}</h3>
+          <NuxtLink :to="`/changelogs?versionId=${activeDetailVersion.id}`" class="btn btn-ghost btn-sm">
+            Edit
+          </NuxtLink>
+        </div>
         <div v-if="isLoadingReleaseDetail" class="text-muted-sm">
           <span class="loading-spinner" /> Loading changelog…
         </div>
@@ -552,15 +557,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         <div v-if="activeDetailVersion.commitHash" style="margin-top: 16px;">
           <span class="num">Commit {{ activeDetailVersion.commitHash }}</span>
         </div>
-      </div>
-      <div class="card detail-card">
-        <h3>Metadata</h3>
-        <p><strong>Branch:</strong> <span class="num">{{ activeDetailVersion.branch || "—" }}</span></p>
-        <p><strong>Tags:</strong> <span class="num">{{ activeDetailVersion.tags || "—" }}</span></p>
-        <p><strong>Approver:</strong> {{ activeDetailVersion.approver || "—" }}</p>
-        <p style="margin-top: 12px;">
-          <button type="button" class="btn btn-secondary" style="width: 100%;">Download Release Bundle</button>
-        </p>
       </div>
     </div>
 
@@ -1550,5 +1546,16 @@ h2 {
 }
 .rl-cat-list li {
   margin-bottom: 4px;
+}
+
+/* Detail card header with edit button */
+.detail-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.detail-card-header h3 {
+  margin: 0;
 }
 </style>
