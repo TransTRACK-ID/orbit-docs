@@ -351,6 +351,40 @@ const categoryConfig: Record<string, { label: string; tagClass: string }> = {
   security: { label: "Security", tagClass: "rl-tag-security" },
 };
 
+// Parse markdown changelog text into categories
+function parseChangelogMarkdown(text: string | null): Record<string, string[]> {
+  const categories: Record<string, string[]> = {
+    added: [],
+    fixed: [],
+    changed: [],
+    deprecated: [],
+    security: [],
+  };
+  if (!text) return categories;
+
+  const lines = text.split(/\n/);
+  let currentCategory = "";
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Match headers like ## Added, ## Fixed, ### Added, etc.
+    const headerMatch = trimmed.match(/^#{2,3}\s*(Added|Fixed|Changed|Deprecated|Security)/i);
+    if (headerMatch) {
+      currentCategory = headerMatch[1].toLowerCase();
+      continue;
+    }
+    // Match list items (- or *)
+    if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+      const item = trimmed.slice(2).trim();
+      if (item && currentCategory && categories[currentCategory]) {
+        categories[currentCategory].push(item);
+      }
+    }
+  }
+
+  return categories;
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
     closeCompare();
@@ -572,53 +606,58 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
           </button>
         </div>
         <div class="compare-body">
-          <div class="diff-stat">
-            <div class="diff-stat-item">
-              <span class="num added">+4</span>
-              <span class="label">Added</span>
-            </div>
-            <div class="diff-stat-item">
-              <span class="num removed">−2</span>
-              <span class="label">Removed</span>
-            </div>
-            <div class="diff-stat-item">
-              <span class="num changed">3</span>
-              <span class="label">Changed</span>
-            </div>
-            <div class="diff-stat-item">
-              <span class="num">7 files</span>
-              <span class="label">Files</span>
-            </div>
-            <div class="diff-stat-item">
-              <span class="num">+284 −67</span>
-              <span class="label">Lines</span>
-            </div>
-          </div>
           <div class="compare-grid">
             <div class="compare-col">
-              <h3>v{{ compareOld?.version }} · {{ formatDate(compareOld?.releaseDate || compareOld?.createdAt) }}</h3>
-              <ul class="diff-list">
-                <li v-if="compareOld?.releaseNotes" class="changed">
-                  <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                  </svg>
-                  <span>{{ compareOld.releaseNotes }}</span>
-                </li>
-                <li v-else>No release notes</li>
-              </ul>
+              <div class="compare-col-header">
+                <h3>v{{ compareOld?.version }} · {{ formatDate(compareOld?.releaseDate || compareOld?.createdAt) }}</h3>
+                <span class="pill" :class="statusClass[compareOld?.status || 'draft']">{{ statusLabel[compareOld?.status || 'draft'] }}</span>
+              </div>
+              <div class="compare-content">
+                <template v-if="compareOld?.releaseNotes">
+                  <div
+                    v-for="[key, items] in Object.entries(parseChangelogMarkdown(compareOld.releaseNotes)).filter(([, v]) => v.length > 0)"
+                    :key="key"
+                    class="compare-cat-group"
+                  >
+                    <div class="compare-cat-header">
+                      <span class="compare-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
+                        {{ categoryConfig[key]?.label || key }}
+                      </span>
+                      <span class="compare-cat-count">{{ items.length }} item{{ items.length === 1 ? '' : 's' }}</span>
+                    </div>
+                    <ul class="compare-cat-list">
+                      <li v-for="item in items" :key="item">{{ item }}</li>
+                    </ul>
+                  </div>
+                </template>
+                <p v-else class="text-muted-sm">No release notes available.</p>
+              </div>
             </div>
             <div class="compare-col">
-              <h3>v{{ compareNew?.version }} · {{ formatDate(compareNew?.releaseDate || compareNew?.createdAt) }}</h3>
-              <ul class="diff-list">
-                <li v-if="compareNew?.releaseNotes" class="added">
-                  <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 5v14M5 12h14"/>
-                  </svg>
-                  <span>{{ compareNew.releaseNotes }}</span>
-                </li>
-                <li v-else>No release notes</li>
-              </ul>
+              <div class="compare-col-header">
+                <h3>v{{ compareNew?.version }} · {{ formatDate(compareNew?.releaseDate || compareNew?.createdAt) }}</h3>
+                <span class="pill" :class="statusClass[compareNew?.status || 'draft']">{{ statusLabel[compareNew?.status || 'draft'] }}</span>
+              </div>
+              <div class="compare-content">
+                <template v-if="compareNew?.releaseNotes">
+                  <div
+                    v-for="[key, items] in Object.entries(parseChangelogMarkdown(compareNew.releaseNotes)).filter(([, v]) => v.length > 0)"
+                    :key="key"
+                    class="compare-cat-group"
+                  >
+                    <div class="compare-cat-header">
+                      <span class="compare-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
+                        {{ categoryConfig[key]?.label || key }}
+                      </span>
+                      <span class="compare-cat-count">{{ items.length }} item{{ items.length === 1 ? '' : 's' }}</span>
+                    </div>
+                    <ul class="compare-cat-list">
+                      <li v-for="item in items" :key="item">{{ item }}</li>
+                    </ul>
+                  </div>
+                </template>
+                <p v-else class="text-muted-sm">No release notes available.</p>
+              </div>
             </div>
           </div>
         </div>
@@ -1186,74 +1225,97 @@ h2 {
     grid-template-columns: 1fr;
   }
 }
-.compare-col h3 {
-  font-size: 14px;
-  color: var(--muted);
+.compare-col-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 16px;
-  padding-bottom: 8px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
-.diff-stat {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 20px;
-  padding: 12px 16px;
-  background: var(--bg);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-}
-.diff-stat-item {
-  text-align: center;
-}
-.diff-stat-item .num {
-  font-size: 20px;
-  font-weight: 600;
-  display: block;
-}
-.diff-stat-item .label {
-  font-size: 12px;
+.compare-col-header h3 {
+  font-size: 14px;
   color: var(--muted);
-}
-.diff-stat-item .added {
-  color: oklch(50% 0.14 145);
-}
-.diff-stat-item .removed {
-  color: oklch(50% 0.16 25);
-}
-.diff-stat-item .changed {
-  color: oklch(55% 0.14 255);
+  margin: 0;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.diff-list {
+.compare-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.compare-cat-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compare-cat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.compare-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.compare-cat-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.compare-cat-list {
   list-style: none;
   margin: 0;
   padding: 0;
-}
-.diff-list li {
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  margin-bottom: 6px;
-  font-size: 14px;
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
 }
-.diff-list li.added {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 8%, transparent);
+
+.compare-cat-list li {
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
 }
-.diff-list li.removed {
-  background: color-mix(in oklch, oklch(55% 0.2 25) 8%, transparent);
-  text-decoration: line-through;
-  opacity: 0.7;
+
+.compare-cat-list li::before {
+  content: "•";
+  margin-right: 8px;
+  color: var(--muted);
 }
-.diff-list li.changed {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 8%, transparent);
+
+.compare-cat-group .rl-tag-added + .compare-cat-list li {
+  border-left: 3px solid oklch(50% 0.14 145);
 }
-.diff-icon {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  margin-top: 2px;
+.compare-cat-group .rl-tag-fixed + .compare-cat-list li {
+  border-left: 3px solid oklch(55% 0.14 255);
+}
+.compare-cat-group .rl-tag-changed + .compare-cat-list li {
+  border-left: 3px solid oklch(60% 0.12 85);
+}
+.compare-cat-group .rl-tag-deprecated + .compare-cat-list li {
+  border-left: 3px solid oklch(55% 0.14 300);
+}
+.compare-cat-group .rl-tag-security + .compare-cat-list li {
+  border-left: 3px solid oklch(50% 0.16 25);
 }
 
 .close-btn {
