@@ -564,31 +564,53 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
     <div v-if="activeDetailVersion" class="version-detail">
       <div class="card detail-card">
         <div class="detail-card-header">
-          <h3>Changelog · v{{ activeDetailVersion.version }}</h3>
+          <div class="detail-card-title">
+            <h3>Changelog</h3>
+            <span class="detail-card-version">v{{ activeDetailVersion.version }}</span>
+          </div>
           <NuxtLink :to="`/changelogs?versionId=${activeDetailVersion.id}`" class="btn btn-ghost btn-sm">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
             Edit
           </NuxtLink>
         </div>
-        <div v-if="isLoadingReleaseDetail" class="text-muted-sm">
-          <span class="loading-spinner" /> Loading changelog…
+        <div v-if="isLoadingReleaseDetail" class="detail-loading">
+          <span class="loading-spinner" />
+          <span class="text-muted-sm">Loading changelog…</span>
         </div>
         <template v-else-if="activeReleaseDetail?.categories">
-          <div
-            v-for="[key, items] in Object.entries(countCategories(activeReleaseDetail.categories)).filter(([, v]) => v.length > 0)"
-            :key="key"
-            class="rl-cat-group"
-          >
-            <span class="rl-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
-              {{ categoryConfig[key]?.label || key }}
-            </span>
-            <ul class="rl-cat-list list-disc">
-              <li v-for="item in items" :key="item">{{ item }}</li>
-            </ul>
+          <div class="detail-changelog-content">
+            <div
+              v-for="[key, items] in Object.entries(countCategories(activeReleaseDetail.categories)).filter(([, v]) => v.length > 0)"
+              :key="key"
+              class="detail-cat-section"
+            >
+              <div class="detail-cat-header">
+                <span class="detail-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
+                  {{ categoryConfig[key]?.label || key }}
+                </span>
+                <span class="detail-cat-count">{{ items.length }} item{{ items.length === 1 ? '' : 's' }}</span>
+              </div>
+              <ul class="detail-cat-list">
+                <li v-for="item in items" :key="item">{{ item }}</li>
+              </ul>
+            </div>
           </div>
         </template>
-        <p v-else-if="activeReleaseDetail?.summary" style="line-height: 1.6;" v-html="renderMarkdown(activeReleaseDetail.summary)" />
-        <p v-else class="text-muted-sm">No changelog available.</p>
-        <div v-if="activeDetailVersion.commitHash" style="margin-top: 16px;">
+        <div v-else-if="activeReleaseDetail?.summary" class="detail-changelog-content" v-html="renderMarkdown(activeReleaseDetail.summary)" />
+        <div v-else class="detail-empty">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <p class="text-muted-sm">No changelog for this version</p>
+        </div>
+        <div v-if="activeDetailVersion.commitHash" class="detail-commit">
           <span class="num">Commit {{ activeDetailVersion.commitHash }}</span>
         </div>
       </div>
@@ -1182,25 +1204,172 @@ h2 {
 
 .version-detail {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr;
   gap: 24px;
   margin-top: 32px;
+  max-width: 800px;
 }
-@media (max-width: 960px) {
-  .version-detail {
-    grid-template-columns: 1fr;
-  }
+.detail-card {
+  padding: 32px;
 }
-.detail-card h3 {
+.detail-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.detail-card-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.detail-card-title h3 {
   font-size: 14px;
+  font-weight: 500;
   color: var(--muted);
-  margin-bottom: 12px;
+  margin: 0;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.detail-card p {
-  margin: 0 0 8px;
+.detail-card-version {
   font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.detail-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+  color: var(--muted);
+}
+.detail-changelog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+.detail-cat-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.detail-cat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.detail-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.detail-cat-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.detail-cat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.detail-cat-list li {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  transition: background 0.15s ease, border-color 0.15s ease;
+  position: relative;
+  padding-left: 28px;
+}
+.detail-cat-list li::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.detail-cat-list li:hover {
+  background: var(--surface);
+  border-color: color-mix(in oklch, var(--muted) 50%, var(--border));
+}
+.detail-cat-section .rl-tag-added ~ .detail-cat-list li {
+  background: color-mix(in oklch, oklch(60% 0.18 145) 6%, var(--bg));
+  border-color: color-mix(in oklch, oklch(50% 0.14 145) 30%, var(--border));
+}
+.detail-cat-section .rl-tag-added ~ .detail-cat-list li::before {
+  background: oklch(50% 0.14 145);
+}
+.detail-cat-section .rl-tag-fixed ~ .detail-cat-list li {
+  background: color-mix(in oklch, oklch(60% 0.16 255) 6%, var(--bg));
+  border-color: color-mix(in oklch, oklch(55% 0.14 255) 30%, var(--border));
+}
+.detail-cat-section .rl-tag-fixed ~ .detail-cat-list li::before {
+  background: oklch(55% 0.14 255);
+}
+.detail-cat-section .rl-tag-changed ~ .detail-cat-list li {
+  background: color-mix(in oklch, oklch(75% 0.14 85) 6%, var(--bg));
+  border-color: color-mix(in oklch, oklch(60% 0.12 85) 30%, var(--border));
+}
+.detail-cat-section .rl-tag-changed ~ .detail-cat-list li::before {
+  background: oklch(60% 0.12 85);
+}
+.detail-cat-section .rl-tag-deprecated ~ .detail-cat-list li {
+  background: color-mix(in oklch, oklch(60% 0.18 300) 6%, var(--bg));
+  border-color: color-mix(in oklch, oklch(55% 0.14 300) 30%, var(--border));
+}
+.detail-cat-section .rl-tag-deprecated ~ .detail-cat-list li::before {
+  background: oklch(55% 0.14 300);
+}
+.detail-cat-section .rl-tag-security ~ .detail-cat-list li {
+  background: color-mix(in oklch, oklch(55% 0.2 25) 6%, var(--bg));
+  border-color: color-mix(in oklch, oklch(50% 0.16 25) 30%, var(--border));
+}
+.detail-cat-section .rl-tag-security ~ .detail-cat-list li::before {
+  background: oklch(50% 0.16 25);
+}
+.detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  color: var(--muted);
+  text-align: center;
+}
+.detail-empty svg {
+  opacity: 0.5;
+}
+.detail-empty p {
+  margin: 0;
+  font-size: 14px;
+}
+.detail-commit {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
 }
 
 /* Compare overlay */
@@ -1668,23 +1837,7 @@ h2 {
   }
 }
 
-/* Changelog category display */
-.rl-cat-group {
-  margin-bottom: 16px;
-}
-.rl-cat-group:last-child {
-  margin-bottom: 0;
-}
-.rl-cat-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  margin-bottom: 8px;
-}
+/* Tag color classes - reused across detail panel and compare modal */
 .rl-tag-added {
   background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
   color: oklch(50% 0.14 145);
@@ -1708,26 +1861,5 @@ h2 {
 .rl-tag-muted {
   background: var(--fg-soft);
   color: var(--muted);
-}
-.rl-cat-list {
-  margin: 0;
-  padding-left: 20px;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--fg);
-}
-.rl-cat-list li {
-  margin-bottom: 4px;
-}
-
-/* Detail card header with edit button */
-.detail-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.detail-card-header h3 {
-  margin: 0;
 }
 </style>
