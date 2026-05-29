@@ -595,12 +595,15 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
     </div>
 
     <!-- Compare overlay -->
-    <div class="compare-overlay" :class="{ active: showCompare }" @click.self="closeCompare">
+    <div class="compare-overlay" :class="{ active: showCompare }" role="dialog" aria-modal="true" aria-label="Compare versions" @click.self="closeCompare">
       <div class="compare-panel">
         <div class="compare-header">
-          <h2>Compare versions</h2>
-          <button type="button" class="close-btn" aria-label="Close compare overlay" @click="closeCompare">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <div class="compare-header-title">
+            <h2>Compare versions</h2>
+            <p class="compare-subtitle">v{{ compareOld?.version }} vs v{{ compareNew?.version }}</p>
+          </div>
+          <button type="button" class="close-btn" aria-label="Close compare" @click="closeCompare">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
@@ -609,7 +612,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
           <div class="compare-grid">
             <div class="compare-col">
               <div class="compare-col-header">
-                <h3>v{{ compareOld?.version }} · {{ formatDate(compareOld?.releaseDate || compareOld?.createdAt) }}</h3>
+                <div class="compare-col-meta">
+                  <h3>v{{ compareOld?.version }}</h3>
+                  <span class="compare-col-date">{{ formatDate(compareOld?.releaseDate || compareOld?.createdAt) }}</span>
+                </div>
                 <span class="pill" :class="statusClass[compareOld?.status || 'draft']">{{ statusLabel[compareOld?.status || 'draft'] }}</span>
               </div>
               <div class="compare-content">
@@ -630,12 +636,25 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
                     </ul>
                   </div>
                 </template>
-                <p v-else class="text-muted-sm">No release notes available.</p>
+                <div v-else class="compare-empty">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                  <p>No changelog for this version</p>
+                </div>
               </div>
             </div>
+            <div class="compare-divider" aria-hidden="true" />
             <div class="compare-col">
               <div class="compare-col-header">
-                <h3>v{{ compareNew?.version }} · {{ formatDate(compareNew?.releaseDate || compareNew?.createdAt) }}</h3>
+                <div class="compare-col-meta">
+                  <h3>v{{ compareNew?.version }}</h3>
+                  <span class="compare-col-date">{{ formatDate(compareNew?.releaseDate || compareNew?.createdAt) }}</span>
+                </div>
                 <span class="pill" :class="statusClass[compareNew?.status || 'draft']">{{ statusLabel[compareNew?.status || 'draft'] }}</span>
               </div>
               <div class="compare-content">
@@ -656,7 +675,16 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
                     </ul>
                   </div>
                 </template>
-                <p v-else class="text-muted-sm">No release notes available.</p>
+                <div v-else class="compare-empty">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                  <p>No changelog for this version</p>
+                </div>
               </div>
             </div>
           </div>
@@ -1181,13 +1209,17 @@ h2 {
   inset: 0;
   background: color-mix(in oklch, var(--fg) 40%, transparent);
   z-index: 100;
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px;
+  padding: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .compare-overlay.active {
-  display: flex;
+  opacity: 1;
+  pointer-events: auto;
 }
 .compare-panel {
   background: var(--surface);
@@ -1199,16 +1231,34 @@ h2 {
   display: flex;
   flex-direction: column;
   box-shadow: 0 24px 48px color-mix(in oklch, var(--fg) 12%, transparent);
+  transform: translateY(12px) scale(0.98);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.compare-overlay.active .compare-panel {
+  transform: translateY(0) scale(1);
 }
 .compare-header {
   padding: 20px 24px;
   border-bottom: 1px solid var(--border);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 16px;
+}
+.compare-header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 .compare-header h2 {
   font-size: 18px;
+  margin: 0;
+  font-weight: 600;
+}
+.compare-subtitle {
+  font-size: 14px;
+  color: var(--muted);
+  margin: 0;
 }
 .compare-body {
   flex: 1;
@@ -1218,34 +1268,57 @@ h2 {
 .compare-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 32px;
+  position: relative;
 }
 @media (max-width: 800px) {
   .compare-grid {
     grid-template-columns: 1fr;
+    gap: 24px;
+  }
+}
+.compare-divider {
+  width: 1px;
+  background: var(--border);
+  align-self: stretch;
+  justify-self: center;
+}
+@media (max-width: 800px) {
+  .compare-divider {
+    display: none;
   }
 }
 .compare-col-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 20px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
+.compare-col-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .compare-col-header h3 {
-  font-size: 14px;
-  color: var(--muted);
+  font-size: 16px;
+  color: var(--fg);
   margin: 0;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.compare-col-date {
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .compare-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 .compare-cat-group {
@@ -1287,35 +1360,58 @@ h2 {
 }
 
 .compare-cat-list li {
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-radius: var(--radius);
   font-size: 14px;
   line-height: 1.5;
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--fg);
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.compare-cat-list li::before {
-  content: "•";
-  margin-right: 8px;
-  color: var(--muted);
+.compare-cat-list li:hover {
+  background: var(--surface);
+  border-color: color-mix(in oklch, var(--muted) 50%, var(--border));
 }
 
 .compare-cat-group .rl-tag-added + .compare-cat-list li {
-  border-left: 3px solid oklch(50% 0.14 145);
+  background: color-mix(in oklch, oklch(60% 0.18 145) 6%, var(--bg));
+  border-color: color-mix(in oklch, oklch(50% 0.14 145) 30%, var(--border));
 }
 .compare-cat-group .rl-tag-fixed + .compare-cat-list li {
-  border-left: 3px solid oklch(55% 0.14 255);
+  background: color-mix(in oklch, oklch(60% 0.16 255) 6%, var(--bg));
+  border-color: color-mix(in oklch, oklch(55% 0.14 255) 30%, var(--border));
 }
 .compare-cat-group .rl-tag-changed + .compare-cat-list li {
-  border-left: 3px solid oklch(60% 0.12 85);
+  background: color-mix(in oklch, oklch(75% 0.14 85) 6%, var(--bg));
+  border-color: color-mix(in oklch, oklch(60% 0.12 85) 30%, var(--border));
 }
 .compare-cat-group .rl-tag-deprecated + .compare-cat-list li {
-  border-left: 3px solid oklch(55% 0.14 300);
+  background: color-mix(in oklch, oklch(60% 0.18 300) 6%, var(--bg));
+  border-color: color-mix(in oklch, oklch(55% 0.14 300) 30%, var(--border));
 }
 .compare-cat-group .rl-tag-security + .compare-cat-list li {
-  border-left: 3px solid oklch(50% 0.16 25);
+  background: color-mix(in oklch, oklch(55% 0.2 25) 6%, var(--bg));
+  border-color: color-mix(in oklch, oklch(50% 0.16 25) 30%, var(--border));
+}
+
+.compare-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  color: var(--muted);
+  text-align: center;
+}
+.compare-empty svg {
+  opacity: 0.5;
+}
+.compare-empty p {
+  margin: 0;
+  font-size: 14px;
 }
 
 .close-btn {
@@ -1326,6 +1422,7 @@ h2 {
   cursor: pointer;
   border-radius: var(--radius);
   transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
 }
 .close-btn:hover {
   background: var(--fg-soft);
@@ -1335,6 +1432,10 @@ h2 {
 .close-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+.close-btn:active {
+  transform: scale(0.96);
+  transition-duration: 0.05s;
 }
 
 /* Modal */
@@ -1555,6 +1656,15 @@ h2 {
   }
   .version-detail {
     grid-template-columns: 1fr;
+  }
+  .compare-overlay {
+    padding: 16px;
+  }
+  .compare-body {
+    padding: 16px;
+  }
+  .compare-header {
+    padding: 16px;
   }
 }
 
