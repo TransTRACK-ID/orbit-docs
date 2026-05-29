@@ -586,9 +586,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               v-for="[key, items] in Object.entries(countCategories(activeReleaseDetail.categories)).filter(([, v]) => v.length > 0)"
               :key="key"
               class="detail-cat-section"
+              :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'"
             >
               <div class="detail-cat-header">
-                <span class="detail-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
+                <span class="detail-cat-badge">
                   {{ categoryConfig[key]?.label || key }}
                 </span>
                 <span class="detail-cat-count">{{ items.length }} item{{ items.length === 1 ? '' : 's' }}</span>
@@ -646,9 +647,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
                     v-for="[key, items] in Object.entries(parseChangelogMarkdown(compareOld.releaseNotes)).filter(([, v]) => v.length > 0)"
                     :key="key"
                     class="compare-cat-group"
+                    :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'"
                   >
                     <div class="compare-cat-header">
-                      <span class="compare-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
+                      <span class="compare-cat-badge">
                         {{ categoryConfig[key]?.label || key }}
                       </span>
                       <span class="compare-cat-count">{{ items.length }} item{{ items.length === 1 ? '' : 's' }}</span>
@@ -685,9 +687,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
                     v-for="[key, items] in Object.entries(parseChangelogMarkdown(compareNew.releaseNotes)).filter(([, v]) => v.length > 0)"
                     :key="key"
                     class="compare-cat-group"
+                    :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'"
                   >
                     <div class="compare-cat-header">
-                      <span class="compare-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
+                      <span class="compare-cat-badge">
                         {{ categoryConfig[key]?.label || key }}
                       </span>
                       <span class="compare-cat-count">{{ items.length }} item{{ items.length === 1 ? '' : 's' }}</span>
@@ -1312,39 +1315,39 @@ h2 {
   background: var(--surface);
   border-color: color-mix(in oklch, var(--muted) 50%, var(--border));
 }
-.detail-cat-section .rl-tag-added ~ .detail-cat-list li {
+.detail-cat-section.rl-tag-added .detail-cat-list li {
   background: color-mix(in oklch, oklch(60% 0.18 145) 6%, var(--bg));
   border-color: color-mix(in oklch, oklch(50% 0.14 145) 30%, var(--border));
 }
-.detail-cat-section .rl-tag-added ~ .detail-cat-list li::before {
+.detail-cat-section.rl-tag-added .detail-cat-list li::before {
   background: oklch(50% 0.14 145);
 }
-.detail-cat-section .rl-tag-fixed ~ .detail-cat-list li {
+.detail-cat-section.rl-tag-fixed .detail-cat-list li {
   background: color-mix(in oklch, oklch(60% 0.16 255) 6%, var(--bg));
   border-color: color-mix(in oklch, oklch(55% 0.14 255) 30%, var(--border));
 }
-.detail-cat-section .rl-tag-fixed ~ .detail-cat-list li::before {
+.detail-cat-section.rl-tag-fixed .detail-cat-list li::before {
   background: oklch(55% 0.14 255);
 }
-.detail-cat-section .rl-tag-changed ~ .detail-cat-list li {
+.detail-cat-section.rl-tag-changed .detail-cat-list li {
   background: color-mix(in oklch, oklch(75% 0.14 85) 6%, var(--bg));
   border-color: color-mix(in oklch, oklch(60% 0.12 85) 30%, var(--border));
 }
-.detail-cat-section .rl-tag-changed ~ .detail-cat-list li::before {
+.detail-cat-section.rl-tag-changed .detail-cat-list li::before {
   background: oklch(60% 0.12 85);
 }
-.detail-cat-section .rl-tag-deprecated ~ .detail-cat-list li {
+.detail-cat-section.rl-tag-deprecated .detail-cat-list li {
   background: color-mix(in oklch, oklch(60% 0.18 300) 6%, var(--bg));
   border-color: color-mix(in oklch, oklch(55% 0.14 300) 30%, var(--border));
 }
-.detail-cat-section .rl-tag-deprecated ~ .detail-cat-list li::before {
+.detail-cat-section.rl-tag-deprecated .detail-cat-list li::before {
   background: oklch(55% 0.14 300);
 }
-.detail-cat-section .rl-tag-security ~ .detail-cat-list li {
+.detail-cat-section.rl-tag-security .detail-cat-list li {
   background: color-mix(in oklch, oklch(55% 0.2 25) 6%, var(--bg));
   border-color: color-mix(in oklch, oklch(50% 0.16 25) 30%, var(--border));
 }
-.detail-cat-section .rl-tag-security ~ .detail-cat-list li::before {
+.detail-cat-section.rl-tag-security .detail-cat-list li::before {
   background: oklch(50% 0.16 25);
 }
 .detail-empty {
@@ -1544,23 +1547,23 @@ h2 {
   border-color: color-mix(in oklch, var(--muted) 50%, var(--border));
 }
 
-.compare-cat-group .rl-tag-added + .compare-cat-list li {
+.compare-cat-group.rl-tag-added .compare-cat-list li {
   background: color-mix(in oklch, oklch(60% 0.18 145) 6%, var(--bg));
   border-color: color-mix(in oklch, oklch(50% 0.14 145) 30%, var(--border));
 }
-.compare-cat-group .rl-tag-fixed + .compare-cat-list li {
+.compare-cat-group.rl-tag-fixed .compare-cat-list li {
   background: color-mix(in oklch, oklch(60% 0.16 255) 6%, var(--bg));
   border-color: color-mix(in oklch, oklch(55% 0.14 255) 30%, var(--border));
 }
-.compare-cat-group .rl-tag-changed + .compare-cat-list li {
+.compare-cat-group.rl-tag-changed .compare-cat-list li {
   background: color-mix(in oklch, oklch(75% 0.14 85) 6%, var(--bg));
   border-color: color-mix(in oklch, oklch(60% 0.12 85) 30%, var(--border));
 }
-.compare-cat-group .rl-tag-deprecated + .compare-cat-list li {
+.compare-cat-group.rl-tag-deprecated .compare-cat-list li {
   background: color-mix(in oklch, oklch(60% 0.18 300) 6%, var(--bg));
   border-color: color-mix(in oklch, oklch(55% 0.14 300) 30%, var(--border));
 }
-.compare-cat-group .rl-tag-security + .compare-cat-list li {
+.compare-cat-group.rl-tag-security .compare-cat-list li {
   background: color-mix(in oklch, oklch(55% 0.2 25) 6%, var(--bg));
   border-color: color-mix(in oklch, oklch(50% 0.16 25) 30%, var(--border));
 }
