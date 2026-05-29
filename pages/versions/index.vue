@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
+import { renderMarkdown } from "~/composables/useMarkdown";
 import type { AppItem } from "~/composables/useApps";
 import type { AppVersion } from "~/composables/useApps";
+import type { ReleaseItem } from "~/composables/useReleases";
 
 definePageMeta({
   auth: true,
@@ -14,6 +16,7 @@ onBeforeMount(() => {
 
 const { apps, fetchApps } = useApps();
 const { versions, isLoading, isCreating, isUpdating, isDeleting, fetchVersions, createVersion, updateVersion, deleteVersion } = useVersions();
+const { fetchRelease } = useReleases();
 
 const isArchiving = ref(false);
 
@@ -127,10 +130,32 @@ async function archiveSelectedVersions() {
 
 // Detail view
 const activeDetailVersion = ref<AppVersion | null>(null);
+const activeReleaseDetail = ref<ReleaseItem | null>(null);
+const isLoadingReleaseDetail = ref(false);
 
 function selectRow(version: AppVersion) {
   activeDetailVersion.value = version;
 }
+
+async function loadReleaseDetail(version: AppVersion | null) {
+  activeReleaseDetail.value = null;
+  if (!version) return;
+  const normalRelease = version.releases?.find((r) => r.type === "normal");
+  if (!normalRelease) return;
+  isLoadingReleaseDetail.value = true;
+  try {
+    const release = await fetchRelease(normalRelease.id);
+    activeReleaseDetail.value = release;
+  } catch {
+    activeReleaseDetail.value = null;
+  } finally {
+    isLoadingReleaseDetail.value = false;
+  }
+}
+
+watch(activeDetailVersion, (v) => {
+  loadReleaseDetail(v);
+}, { immediate: true });
 
 // Compare overlay
 const showCompare = ref(false);
@@ -306,6 +331,24 @@ const statusLabel: Record<string, string> = {
   draft: "Draft",
   rc: "RC",
   archived: "Archived",
+};
+
+function countCategories(categories: ReleaseItem["categories"]) {
+  return {
+    added: categories?.added || [],
+    fixed: categories?.fixed || [],
+    changed: categories?.changed || [],
+    deprecated: categories?.deprecated || [],
+    security: categories?.security || [],
+  };
+}
+
+const categoryConfig: Record<string, { label: string; tagClass: string }> = {
+  fixed: { label: "Fixed", tagClass: "rl-tag-fixed" },
+  added: { label: "Added", tagClass: "rl-tag-added" },
+  changed: { label: "Changed", tagClass: "rl-tag-changed" },
+  deprecated: { label: "Deprecated", tagClass: "rl-tag-deprecated" },
+  security: { label: "Security", tagClass: "rl-tag-security" },
 };
 
 function onKeydown(e: KeyboardEvent) {
@@ -486,11 +529,26 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
     <!-- Version detail panel -->
     <div v-if="activeDetailVersion" class="version-detail">
       <div class="card detail-card">
-        <h3>Release Notes · v{{ activeDetailVersion.version }}</h3>
-        <p v-if="activeDetailVersion.releaseNotes" style="line-height: 1.6;">
-          {{ activeDetailVersion.releaseNotes }}
-        </p>
-        <p v-else class="text-muted-sm">No release notes provided.</p>
+        <h3>Changelog · v{{ activeDetailVersion.version }}</h3>
+        <div v-if="isLoadingReleaseDetail" class="text-muted-sm">
+          <span class="loading-spinner" /> Loading changelog…
+        </div>
+        <template v-else-if="activeReleaseDetail?.categories">
+          <div
+            v-for="[key, items] in Object.entries(countCategories(activeReleaseDetail.categories)).filter(([, v]) => v.length > 0)"
+            :key="key"
+            class="rl-cat-group"
+          >
+            <span class="rl-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
+              {{ categoryConfig[key]?.label || key }}
+            </span>
+            <ul class="rl-cat-list list-disc">
+              <li v-for="item in items" :key="item">{{ item }}</li>
+            </ul>
+          </div>
+        </template>
+        <p v-else-if="activeReleaseDetail?.summary" style="line-height: 1.6;" v-html="renderMarkdown(activeReleaseDetail.summary)" />
+        <p v-else class="text-muted-sm">No changelog available.</p>
         <div v-if="activeDetailVersion.commitHash" style="margin-top: 16px;">
           <span class="num">Commit {{ activeDetailVersion.commitHash }}</span>
         </div>
@@ -1440,5 +1498,57 @@ h2 {
   .version-detail {
     grid-template-columns: 1fr;
   }
+}
+
+/* Changelog category display */
+.rl-cat-group {
+  margin-bottom: 16px;
+}
+.rl-cat-group:last-child {
+  margin-bottom: 0;
+}
+.rl-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+.rl-tag-added {
+  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
+  color: oklch(50% 0.14 145);
+}
+.rl-tag-fixed {
+  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
+  color: oklch(55% 0.14 255);
+}
+.rl-tag-changed {
+  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
+  color: oklch(60% 0.12 85);
+}
+.rl-tag-deprecated {
+  background: color-mix(in oklch, oklch(60% 0.18 300) 12%, transparent);
+  color: oklch(55% 0.14 300);
+}
+.rl-tag-security {
+  background: color-mix(in oklch, oklch(55% 0.2 25) 12%, transparent);
+  color: oklch(50% 0.16 25);
+}
+.rl-tag-muted {
+  background: var(--fg-soft);
+  color: var(--muted);
+}
+.rl-cat-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg);
+}
+.rl-cat-list li {
+  margin-bottom: 4px;
 }
 </style>
