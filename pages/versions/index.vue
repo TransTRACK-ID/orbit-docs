@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
 import { renderMarkdown } from "~/composables/useMarkdown";
+import { copyChangelogToClipboard } from "~/composables/useClipboard";
 import type { AppItem } from "~/composables/useApps";
 import type { AppVersion } from "~/composables/useApps";
 import type { ReleaseItem } from "~/composables/useReleases";
@@ -568,13 +569,30 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             <h3>Changelog</h3>
             <span class="detail-card-version">v{{ activeDetailVersion.version }}</span>
           </div>
-          <NuxtLink :to="`/changelogs?versionId=${activeDetailVersion.id}`" class="btn btn-ghost btn-sm">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-            Edit
-          </NuxtLink>
+          <div class="detail-card-actions">
+            <button
+              v-if="activeReleaseDetail?.categories"
+              type="button"
+              class="btn btn-ghost btn-sm"
+              @click="copyChangelogToClipboard(
+                activeReleaseDetail.categories,
+                { version: activeDetailVersion.version, appName: selectedApp?.name, releaseDate: activeDetailVersion.releaseDate }
+              )"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              Copy
+            </button>
+            <NuxtLink :to="`/changelogs?versionId=${activeDetailVersion.id}`" class="btn btn-ghost btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+              Edit
+            </NuxtLink>
+          </div>
         </div>
         <div v-if="isLoadingReleaseDetail" class="detail-loading">
           <span class="loading-spinner" />
@@ -1243,6 +1261,11 @@ h2 {
   color: var(--fg);
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+.detail-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .detail-loading {
   display: flex;

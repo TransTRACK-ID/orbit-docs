@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
+import { copyChangelogToClipboard } from "~/composables/useClipboard";
 import type { ReleaseItem, ReleaseFeature, ReleaseMedia, ReleaseCategories } from "~/types";
 
 definePageMeta({
@@ -460,22 +461,41 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 
           <!-- Categories: shown for both normal and article -->
           <template v-if="release.categories">
-            <section
-              v-for="[key, items] in Object.entries(countCategories(release.categories)).filter(([, v]) => v.length > 0)"
-              :key="key"
-              :id="key"
-              class="changes-section"
-              :class="{ 'changes-section-compact': release.type === 'normal' }"
-            >
-              <h3 class="changes-heading">
-                <span class="pill" :class="categoryConfig[key]?.pillClass || 'pill-muted'">
-                  {{ categoryConfig[key]?.label || key }}
-                </span>
-              </h3>
-              <ul class="changes-list">
-                <li v-for="(item, idx) in items" :key="idx" v-html="item" />
-              </ul>
-            </section>
+            <div class="changes-section">
+              <div class="changes-section-header">
+                <h3 class="changes-section-title">Changelog</h3>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm"
+                  @click="copyChangelogToClipboard(
+                    release.categories,
+                    { version: release.version, appName: release.appName, releaseDate: release.releaseDate }
+                  )"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                  Copy
+                </button>
+              </div>
+              <section
+                v-for="[key, items] in Object.entries(countCategories(release.categories)).filter(([, v]) => v.length > 0)"
+                :key="key"
+                :id="key"
+                class="changes-subsection"
+                :class="{ 'changes-section-compact': release.type === 'normal' }"
+              >
+                <h3 class="changes-heading">
+                  <span class="pill" :class="categoryConfig[key]?.pillClass || 'pill-muted'">
+                    {{ categoryConfig[key]?.label || key }}
+                  </span>
+                </h3>
+                <ul class="changes-list">
+                  <li v-for="(item, idx) in items" :key="idx" v-html="item" />
+                </ul>
+              </section>
+            </div>
           </template>
 
           <!-- Prev / Next -->
@@ -1275,6 +1295,29 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   margin: 48px 0;
 }
 .changes-section:first-of-type {
+  margin-top: 0;
+}
+.changes-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.changes-section-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--muted);
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.changes-subsection {
+  margin: 48px 0;
+}
+.changes-subsection:first-of-type {
   margin-top: 0;
 }
 .changes-section-compact {
