@@ -176,8 +176,23 @@ function inlineMd(text: string): string {
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
     .replace(
       /!\[([^\]]*)\]\(([^)]+)\)/g,
-      '<img src="$2" alt="$1" />'
+      (match, alt, url) => renderMediaEmbed(url, alt)
     );
+}
+
+function renderMediaEmbed(url: string, alt: string): string {
+  // YouTube embed
+  const youtubeMatch = url.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+  if (youtubeMatch) {
+    return `<iframe src="https://www.youtube.com/embed/${youtubeMatch[1]}" width="580" height="320" frameborder="0" allowfullscreen style="max-width:100%;border-radius:var(--radius);"></iframe>${alt ? `<p style="text-align:center;font-size:13px;color:var(--muted);margin-top:8px;">${alt}</p>` : ""}`;
+  }
+  // Vimeo embed
+  const vimeoMatch = url.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
+  if (vimeoMatch) {
+    return `<iframe src="https://player.vimeo.com/video/${vimeoMatch[1]}" width="580" height="320" frameborder="0" allowfullscreen style="max-width:100%;border-radius:var(--radius);"></iframe>${alt ? `<p style="text-align:center;font-size:13px;color:var(--muted);margin-top:8px;">${alt}</p>` : ""}`;
+  }
+  // Default image
+  return `<img src="${url}" alt="${alt}" />`;
 }
 
 export function extractHeadings(md: string): Array<{ level: number; text: string }> {
