@@ -219,14 +219,15 @@ function closeNewVersionModal() {
 }
 
 async function submitNewVersion() {
-  if (!newVersionForm.version.trim()) {
+  const cleanVersion = newVersionForm.version.trim().replace(/^v/i, "");
+  if (!cleanVersion) {
     newVersionError.value = true;
     return;
   }
   newVersionError.value = false;
   if (!selectedAppId.value || isCreating.value) return;
   const newVersion = await createVersion(selectedAppId.value, {
-    version: newVersionForm.version.trim(),
+    version: cleanVersion,
     status: newVersionForm.status,
     releaseDate: newVersionForm.releaseDate || undefined,
     releaseNotes: newVersionForm.releaseNotes || undefined,
@@ -280,14 +281,15 @@ function closeEditVersionModal() {
 }
 
 async function submitEditVersion() {
-  if (!editVersionForm.version.trim()) {
+  const cleanVersion = editVersionForm.version.trim().replace(/^v/i, "");
+  if (!cleanVersion) {
     editVersionError.value = true;
     return;
   }
   editVersionError.value = false;
   if (!editingVersion.value || !selectedAppId.value) return;
   await updateVersion(selectedAppId.value, editingVersion.value.id, {
-    version: editVersionForm.version.trim(),
+    version: cleanVersion,
     status: editVersionForm.status,
     releaseDate: editVersionForm.releaseDate || undefined,
     releaseNotes: editVersionForm.releaseNotes || undefined,
@@ -751,7 +753,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
                   id="versionNumber"
                   v-model="newVersionForm.version"
                   type="text"
-                  placeholder="e.g. v2.5.0"
+                  placeholder="e.g. 2.5.0"
                   required
                   :class="{ 'input-error': newVersionError }"
                   aria-describedby="versionNumberError"

@@ -6,7 +6,7 @@ describe("renderMarkdown", () => {
     const md = "# Hello\n## World";
     const html = renderMarkdown(md);
     expect(html).toContain("<h1>Hello</h1>");
-    expect(html).toContain("<h2>World</h2>");
+    expect(html).toContain('<h2 id="world">World</h2>');
   });
 
   it("should render paragraphs", () => {
@@ -85,6 +85,26 @@ describe("renderMarkdown", () => {
     const html = renderMarkdown(md);
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("should render images", () => {
+    const md = "![alt text](https://example.com/image.png)";
+    const html = renderMarkdown(md);
+    expect(html).toContain('<img src="https://example.com/image.png" alt="alt text" />');
+  });
+
+  it("should render YouTube embeds", () => {
+    const md = "![video](https://youtube.com/watch?v=AbCdEfGhIjK)";
+    const html = renderMarkdown(md);
+    expect(html).toContain("<iframe");
+    expect(html).toContain("https://www.youtube.com/embed/AbCdEfGhIjK");
+  });
+
+  it("should render Vimeo embeds", () => {
+    const md = "![video](https://vimeo.com/123456789)";
+    const html = renderMarkdown(md);
+    expect(html).toContain("<iframe");
+    expect(html).toContain("https://player.vimeo.com/video/123456789");
   });
 });
 

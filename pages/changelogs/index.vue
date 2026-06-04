@@ -14,7 +14,7 @@ const $page = usePageStore();
 
 const { apps, fetchApps } = useApps();
 const { versions, fetchVersions, fetchVersionById, updateVersion } = useVersions();
-const { createRelease, fetchReleases, updateRelease } = useReleases();
+const { createRelease } = useReleases();
 const releasesForVersion = ref<{ normal?: { id: string }; article?: { id: string } }>({});
 
 onBeforeMount(() => {
@@ -252,12 +252,18 @@ async function syncReleasesFromChangelog() {
     const releases = releasesForVersion.value;
     // Sync the NORMAL release (source of truth) from markdown changelog edits.
     if (releases.normal?.id) {
-      await updateRelease(releases.normal.id, { categories, summary });
+      await $fetch(`/api/releases/${releases.normal.id}`, {
+        method: "PUT",
+        body: { categories, summary },
+      });
     }
     // Also sync categories to the ARTICLE release so its badge counts
     // reflect the latest changelog data (hero/summary/features stay untouched).
     if (releases.article?.id) {
-      await updateRelease(releases.article.id, { categories });
+      await $fetch(`/api/releases/${releases.article.id}`, {
+        method: "PUT",
+        body: { categories },
+      });
     }
   } catch (err) {
     // Log sync failures for debugging; the version save is the primary action

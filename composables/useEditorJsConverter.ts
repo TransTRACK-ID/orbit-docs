@@ -245,10 +245,19 @@ export function markdownToEditorJs(md: string): EditorJsData {
     // Image
     const imageMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
     if (imageMatch) {
-      blocks.push({
-        type: "image",
-        data: { file: { url: imageMatch[2] }, caption: imageMatch[1], stretched: false, withBorder: false, withBackground: false },
-      });
+      const url = imageMatch[2];
+      // Video embeds (YouTube, Vimeo) – use embed block
+      if (/^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|vimeo\.com\/)/.test(url)) {
+        blocks.push({
+          type: "embed",
+          data: { service: url.includes("vimeo") ? "vimeo" : "youtube", source: url, embed: "", width: 580, height: 320, caption: imageMatch[1] },
+        });
+      } else {
+        blocks.push({
+          type: "image",
+          data: { url, caption: imageMatch[1], withBorder: false, withBackground: false, stretched: false },
+        });
+      }
       i++;
       continue;
     }
@@ -325,14 +334,14 @@ export function editorJsToMarkdown(data: EditorJsData): string {
       }
       case "image": {
         const caption = block.data.caption || "";
-        const url = block.data.file?.url || block.data.url || "";
+        const url = block.data.url || "";
         out.push(`![${caption}](${url})`);
         break;
       }
-      case "inlineImage": {
-        const url = block.data.url || "";
+      case "embed": {
         const caption = block.data.caption || "";
-        out.push(`![${caption}](${url})`);
+        const source = block.data.source || "";
+        out.push(`![${caption}](${source})`);
         break;
       }
       case "table": {
@@ -497,7 +506,7 @@ export function editorJsToHtml(data: EditorJsData): string {
         break;
       }
       case "image": {
-        const url = block.data.file?.url || block.data.url || "";
+        const url = block.data.url || "";
         const caption = block.data.caption || "";
         out.push(`<img src="${url}" alt="${caption}" />`);
         break;
@@ -523,10 +532,17 @@ export function editorJsToHtml(data: EditorJsData): string {
         }
         break;
       }
-      case "inlineImage": {
-        const url = block.data.url || "";
+      case "embed": {
+        const embed = block.data.embed || "";
         const caption = block.data.caption || "";
-        out.push(`<img src="${url}" alt="${caption}" />`);
+        const width = block.data.width || 580;
+        const height = block.data.height || 320;
+        if (embed) {
+          out.push(`<iframe src="${embed}" width="${width}" height="${height}" frameborder="0" allowfullscreen style="max-width:100%;"></iframe>`);
+        }
+        if (caption) {
+          out.push(`<p style="text-align:center;font-size:13px;color:var(--muted);margin-top:8px;">${caption}</p>`);
+        }
         break;
       }
       case "delimiter": {

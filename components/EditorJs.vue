@@ -44,7 +44,7 @@ async function initEditor() {
     { default: Code },
     { default: Quote },
     { default: Table },
-    { default: Image },
+    { default: SimpleImage },
     { default: LinkTool },
     { default: Marker },
     { default: Checklist },
@@ -58,7 +58,6 @@ async function initEditor() {
     { default: MermaidTool },
     { default: AlignmentTune },
     { default: IndentTune },
-    { default: InlineImage },
     { default: DragDrop },
     { default: Undo },
   ] = await Promise.all([
@@ -70,7 +69,7 @@ async function initEditor() {
     import("@editorjs/code"),
     import("@editorjs/quote"),
     import("@editorjs/table"),
-    import("@editorjs/image"),
+    import("@editorjs/simple-image"),
     import("@editorjs/link"),
     import("@editorjs/marker"),
     import("@editorjs/checklist"),
@@ -84,7 +83,6 @@ async function initEditor() {
     import("editorjs-mermaid"),
     import("editorjs-text-alignment-blocktune"),
     import("editorjs-indent-tune"),
-    import("editorjs-inline-image"),
     import("editorjs-drag-drop"),
     import("editorjs-undo"),
   ]);
@@ -111,11 +109,7 @@ async function initEditor() {
       quote: { class: Quote, config: { placeholder: "Enter a quote", captionPlaceholder: "Author" } },
       table: { class: Table },
       image: {
-        class: Image,
-        config: {
-          placeholder: "Paste image URL",
-          captionPlaceholder: "Image caption",
-        },
+        class: SimpleImage,
       },
       link: { class: LinkTool },
       marker: { class: Marker },
@@ -139,17 +133,9 @@ async function initEditor() {
         class: MermaidTool,
         config: { placeholder: "Enter Mermaid diagram code" },
       },
-      inlineImage: {
-        class: InlineImage,
-        config: {
-          embed: {
-            display: true,
-          },
-          unsplash: {
-            appName: "OrbitDocs",
-            clientId: "",
-          },
-        },
+      video: {
+        class: Embed,
+        inlineToolbar: true,
       },
     },
     tunes: {
@@ -283,13 +269,13 @@ defineExpose({
 .editor-js-container .ce-toolbar__actions {
   position: absolute;
   left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0px;
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 2px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s ease;
   z-index: 1;
 }
@@ -298,6 +284,11 @@ defineExpose({
 .editor-js-container .ce-toolbar:hover .ce-toolbar__actions,
 .editor-js-container .ce-toolbar--opened .ce-toolbar__actions {
   opacity: 1;
+}
+
+.editor-js-container .ce-toolbar__plus,
+.editor-js-container .ce-toolbar__settings-btn {
+  pointer-events: auto;
 }
 
 .editor-js-container .ce-header {
@@ -486,12 +477,19 @@ defineExpose({
   color: var(--muted);
 }
 
-.editor-js-container .image-tool {
+.editor-js-container .cdx-simple-image {
   font-family: inherit;
   margin: 16px 0;
+  max-width: 100%;
 }
 
-.editor-js-container .image-tool__caption {
+.editor-js-container .cdx-simple-image img {
+  max-width: 100%;
+  border-radius: var(--radius);
+  vertical-align: bottom;
+}
+
+.editor-js-container .cdx-simple-image__caption {
   font-size: 13px;
   color: var(--muted);
   margin-top: 8px;
@@ -733,14 +731,18 @@ defineExpose({
   max-width: 100%;
 }
 
-/* Inline image styles */
-.editor-js-container .cdx-inline-image {
+/* Embed styles */
+.editor-js-container .embed-tool {
   margin: 16px 0;
   max-width: 100%;
 }
 
-.editor-js-container .cdx-inline-image__picture img {
-  max-width: 100%;
+.editor-js-container .embed-tool__content {
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.editor-js-container .embed-tool__content iframe {
   border-radius: var(--radius);
 }
 
