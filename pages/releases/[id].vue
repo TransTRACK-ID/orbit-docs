@@ -303,7 +303,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
           <NuxtLink to="/releases" class="btn btn-ghost btn-sm">All releases</NuxtLink>
           <NuxtLink v-if="release.type === 'normal'" :to="`/changelogs?versionId=${release.versionId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
           <template v-if="release.type === 'article'">
-            <button v-if="!isEditing" type="button" class="btn btn-secondary btn-sm" @click="enterEditMode">Edit release</button>
+            <button v-if="!isEditing" type="button" class="btn btn-secondary btn-sm" @click="enterEditMode">Edit Release Article</button>
             <template v-else>
               <button type="button" class="btn btn-secondary btn-sm" @click="cancelEdit">Cancel</button>
               <button type="button" class="btn btn-primary btn-sm" :disabled="isUpdating" @click="saveEdit">

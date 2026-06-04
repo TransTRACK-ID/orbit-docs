@@ -733,15 +733,7 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
         </div>
         <div class="release-actions">
           <button
-            v-if="releasesForVersion.normal"
-            type="button"
-            class="btn btn-sm btn-secondary"
-            @click="navigateTo(`/releases/${releasesForVersion.normal.id}`)"
-          >
-            View Normal
-          </button>
-          <button
-            v-else
+            v-if="!releasesForVersion.normal"
             type="button"
             class="btn btn-sm btn-secondary"
             :disabled="!currentVersion || isPublishingRelease"
@@ -750,12 +742,20 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
             {{ isPublishingRelease ? "Creating…" : "Quick Release" }}
           </button>
           <button
+            type="button"
+            class="btn btn-sm btn-secondary"
+            :disabled="isUpdating || !currentVersion"
+            @click="saveDraft"
+          >
+            {{ isUpdating ? "Saving…" : "Save" }}
+          </button>
+          <button
             v-if="releasesForVersion.article"
             type="button"
             class="btn btn-sm btn-primary"
             @click="navigateTo(`/releases/${releasesForVersion.article.id}`)"
           >
-            Edit Article
+            See Article
           </button>
           <button
             v-else
@@ -778,8 +778,14 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
           {{ status === 'published' ? 'Published' : 'Draft' }}
         </span>
         <span v-if="saveStatusLabel" class="pill" :class="hasChanges ? 'pill-amber' : 'pill-green'">{{ saveStatusLabel }}</span>
-        <button type="button" class="btn btn-ghost btn-sm" :disabled="isUpdating || !currentVersion" @click="saveDraft">
-          {{ isUpdating ? "Saving…" : "Save" }}
+        <button
+          v-if="releasesForVersion.normal"
+          type="button"
+          class="btn btn-ghost btn-sm btn-icon"
+          @click="navigateTo(`/releases/${releasesForVersion.normal.id}`)"
+          title="View Normal"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
         </button>
       </div>
       <div class="flex-gap-sm">
@@ -1432,6 +1438,12 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
 .btn-sm {
   padding: 5px 12px;
   font-size: 13px;
+}
+.btn-icon {
+  padding: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .release-actions {
