@@ -49,6 +49,7 @@
         "editorjs-text-alignment-blocktune": "^1.0.3",
         "editorjs-text-color-plugin": "^2.0.4",
         "editorjs-toggle-block": "^0.3.16",
+        "editorjs-undo": "^2.0.28",
         "flowbite": "^2.1.1",
         "gsap": "^3.12.5",
         "happy-dom": "^17.4.7",
@@ -1120,6 +1121,8 @@
     "editorjs-text-color-plugin": ["editorjs-text-color-plugin@2.0.4", "", {}, "sha512-QpibTkOxs3ndlKNOLT8ZlC4ktc3/eKIajiLO0Jm/hh9AJug/CrM1/rAvHy+ldfUKavbWeI+YZvgjad0YTyoyGw=="],
 
     "editorjs-toggle-block": ["editorjs-toggle-block@0.3.16", "", { "dependencies": { "uuid": "^9.0.0" } }, "sha512-vjLE0bTF2HcQ7gQdgQ4c+Dl0n2o+oA0JICseJSYkQluDIE+LA9oHfTAE8ziJr03oeya7iVQ/b+d21Ez5hKsVsw=="],
+
+    "editorjs-undo": ["editorjs-undo@2.0.28", "", { "dependencies": { "vanilla-caret-js": "^1.0.1" } }, "sha512-7MiLdjIsPOXn8+cHDeAt2HapVklg4vcLWWkd2eMMlGI6UVtwYSjdQquDSv9752B/fOEP1C3NMF2sdiCoZV3tTA=="],
 
     "ee-first": ["ee-first@1.1.1", "", {}, ""],
 
@@ -2198,6 +2201,8 @@
     "util-deprecate": ["util-deprecate@1.0.2", "", {}, ""],
 
     "uuid": ["uuid@9.0.1", "", { "bin": { "uuid": "dist/bin/uuid" } }, "sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA=="],
+
+    "vanilla-caret-js": ["vanilla-caret-js@1.1.0", "", {}, "sha512-vl3R4Xjqb+xnM0gYyg+wcqWGYwKKnkz58Yj29/FQB+w+yP7R8IR1DGoJnDIs05moEZiGlQUTabPMoEtnQNcrpQ=="],
 
     "vary": ["vary@1.1.2", "", {}, ""],
 

@@ -283,13 +283,13 @@ defineExpose({
 .editor-js-container .ce-toolbar__actions {
   position: absolute;
   left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0px;
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 2px;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.15s ease;
   z-index: 1;
 }
@@ -298,6 +298,11 @@ defineExpose({
 .editor-js-container .ce-toolbar:hover .ce-toolbar__actions,
 .editor-js-container .ce-toolbar--opened .ce-toolbar__actions {
   opacity: 1;
+}
+
+.editor-js-container .ce-toolbar__plus,
+.editor-js-container .ce-toolbar__settings-btn {
+  pointer-events: auto;
 }
 
 .editor-js-container .ce-header {

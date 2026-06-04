@@ -69,6 +69,21 @@ watch(() => route.path, () => {
   if (isMobileOpen.value) closeMobile();
 });
 
+/* collapse state (desktop only) */
+const isCollapsed = ref(false);
+
+onMounted(() => {
+  const saved = localStorage.getItem('sidebar-collapsed');
+  if (saved !== null) {
+    isCollapsed.value = saved === 'true';
+  }
+});
+
+function toggleCollapse() {
+  isCollapsed.value = !isCollapsed.value;
+  localStorage.setItem('sidebar-collapsed', String(isCollapsed.value));
+}
+
 function logout() {
   $auth.logout().catch(() => {
     // signOut handles navigation; only force-redirect on error
@@ -102,7 +117,7 @@ function logout() {
 
   <aside
     class="sidebar"
-    :class="{ 'sidebar--mobile-open': isMobileOpen }"
+    :class="{ 'sidebar--mobile-open': isMobileOpen, 'sidebar--collapsed': isCollapsed }"
   >
     <div class="sidebar-brand">
       <button
@@ -182,6 +197,27 @@ function logout() {
         </div>
       </div>
     </nav>
+
+    <button
+      class="sidebar-collapse-toggle"
+      :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+      :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+      @click="toggleCollapse"
+    >
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <polyline v-if="!isCollapsed" points="15 18 9 12 15 6" />
+        <polyline v-else points="9 18 15 12 9 6" />
+      </svg>
+    </button>
   </aside>
 </template>
 
@@ -240,6 +276,7 @@ function logout() {
   align-self: flex-start;
   height: 100vh;
   overflow-y: auto;
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .mobile-close-btn {
@@ -398,6 +435,79 @@ function logout() {
   flex-shrink: 0;
 }
 
+/* ─── collapse toggle ────────────────────────────────────────── */
+.sidebar-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted, oklch(55% 0.015 250));
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  margin: 8px auto;
+  flex-shrink: 0;
+  padding: 0;
+}
+.sidebar-collapse-toggle:hover {
+  color: var(--fg, oklch(20% 0.02 250));
+  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
+}
+.sidebar-collapse-toggle:focus-visible {
+  outline: 2px solid var(--accent, oklch(55% 0.16 25));
+  outline-offset: 2px;
+}
+
+/* ─── collapsed state ────────────────────────────────────────── */
+.sidebar--collapsed {
+  width: 64px;
+  padding: 16px 0;
+}
+.sidebar--collapsed .sidebar-brand {
+  padding: 0 8px 16px;
+  justify-content: center;
+}
+.sidebar--collapsed .brand-text {
+  display: none;
+}
+.sidebar--collapsed .nav-group-title {
+  display: none;
+}
+.sidebar--collapsed .nav-item {
+  justify-content: center;
+  gap: 0;
+  padding: 8px;
+  margin: 2px 8px;
+}
+.sidebar--collapsed .nav-item span {
+  display: none;
+}
+.sidebar--collapsed .sidebar-profile {
+  padding: 8px;
+  margin: 8px 8px 0;
+}
+.sidebar--collapsed .profile-row {
+  margin-bottom: 8px;
+  justify-content: center;
+}
+.sidebar--collapsed .profile-info {
+  display: none;
+}
+.sidebar--collapsed .logout-btn {
+  justify-content: center;
+  padding: 8px;
+  gap: 0;
+}
+.sidebar--collapsed .logout-btn span {
+  display: none;
+}
+.sidebar--collapsed .sidebar-collapse-toggle {
+  margin: 8px auto;
+}
+
 /* ─── mobile breakpoint ──────────────────────────────────────── */
 @media (max-width: 768px) {
   .mobile-nav-toggle {
@@ -424,6 +534,10 @@ function logout() {
 
   .sidebar-brand {
     padding: 0 16px 20px;
+  }
+
+  .sidebar-collapse-toggle {
+    display: none;
   }
 }
 
