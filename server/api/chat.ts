@@ -4,7 +4,7 @@ import { getCustomOpenAI } from "~/mastra/openai";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
-  const { messages, docId } = body || {};
+  const { messages, docId, docContent, docTitle } = body || {};
 
   if (!messages || !Array.isArray(messages) || messages.length === 0) {
     throw createError({
@@ -16,9 +16,17 @@ export default defineEventHandler(async (event) => {
 
   const model = getCustomOpenAI().languageModel(process.env.OPENAI_MODEL || "gpt-4o-mini");
 
-  const systemPrompt = docId
-    ? `You are a helpful documentation assistant. You are currently viewing a specific document. Answer questions based on the document context. If the context doesn't contain the answer, say so clearly.`
-    : `You are a helpful documentation assistant. Answer questions based on the available documentation. If the context doesn't contain the answer, say so clearly.`;
+  let systemPrompt = `You are a helpful documentation assistant. Answer questions based on the available documentation. If the context doesn't contain the answer, say so clearly.`;
+
+  if (docContent) {
+    systemPrompt = `You are a helpful documentation assistant. You are currently viewing a document titled "${docTitle || "Untitled"}". Here is the document content:
+
+---
+${docContent}
+---
+
+Answer questions based on the document context above. If the context doesn't contain the answer, say so clearly.`;
+  }
 
   const result = await streamText({
     model,
@@ -29,7 +37,7 @@ export default defineEventHandler(async (event) => {
     })),
   });
 
-  return result.toUIMessageStreamResponse({
+  return result.toTextStreamResponse({
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",

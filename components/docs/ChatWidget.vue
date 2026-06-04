@@ -98,23 +98,9 @@ async function sendMessage() {
       if (done) break;
 
       const chunk = decoder.decode(value, { stream: true });
-      const lines = chunk.split("\n");
-
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          try {
-            const jsonStr = line.slice(6);
-            const parsed = JSON.parse(jsonStr);
-            if (parsed && parsed.type === "text-delta" && typeof parsed.delta === "string") {
-              accumulated += parsed.delta;
-              assistantMessage.content = accumulated;
-              scrollToBottom();
-            }
-          } catch {
-            // Ignore parse errors
-          }
-        }
-      }
+      accumulated += chunk;
+      assistantMessage.content = accumulated;
+      scrollToBottom();
     }
   } catch (e: any) {
     if (e.name !== "AbortError") {
