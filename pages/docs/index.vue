@@ -31,11 +31,20 @@ onMounted(async () => {
   await fetchApps();
   await fetchDocs({ appId: appFilter.value });
   document.addEventListener("keydown", onKeydown);
+  document.addEventListener("click", onClickOutside);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKeydown);
+  document.removeEventListener("click", onClickOutside);
 });
+
+function onClickOutside(e: MouseEvent) {
+  const target = e.target as HTMLElement;
+  if (!target.closest(".actions-menu")) {
+    docs.value.forEach((d: any) => (d._showActions = false));
+  }
+}
 
 watch([search, appFilter], async () => {
   await fetchDocs({ appId: appFilter.value });
@@ -216,28 +225,37 @@ const statusLabel: Record<string, string> = {
         <div class="card-foot">
           <span style="color:var(--muted);font-size:12px;">{{ doc.author || 'Unknown' }}</span>
           <div class="flex-gap-sm">
-            <button type="button" class="btn btn-ghost btn-sm" @click="confirmDelete(doc)">
-              Delete
-            </button>
-            <NuxtLink
-              v-if="doc.status === 'published'"
-              :to="`/p/${doc.id}`"
-              target="_blank"
-              class="btn btn-ghost btn-sm"
-            >
-              Public View
+            <NuxtLink :to="`/docs/${doc.id}`" class="btn btn-primary btn-sm">
+              Edit
             </NuxtLink>
-            <NuxtLink
-              v-if="doc.status === 'published'"
-              :to="`/embed-docs/view?id=${doc.id}`"
-              target="_blank"
-              class="btn btn-ghost btn-sm"
-            >
-              Preview Embed
-            </NuxtLink>
-            <NuxtLink :to="`/docs/${doc.id}`" class="btn btn-ghost btn-sm">
-              Edit &rarr;
-            </NuxtLink>
+            <div class="actions-menu">
+              <button type="button" class="btn btn-ghost btn-sm actions-toggle" @click="doc._showActions = !doc._showActions">
+                …
+              </button>
+              <div v-if="doc._showActions" class="actions-dropdown" @click.stop>
+                <NuxtLink
+                  v-if="doc.status === 'published'"
+                  :to="`/p/${doc.id}`"
+                  target="_blank"
+                  class="actions-item"
+                  @click="doc._showActions = false"
+                >
+                  Public View
+                </NuxtLink>
+                <NuxtLink
+                  v-if="doc.status === 'published'"
+                  :to="`/embed-docs/view?id=${doc.id}`"
+                  target="_blank"
+                  class="actions-item"
+                  @click="doc._showActions = false"
+                >
+                  Preview Embed
+                </NuxtLink>
+                <button type="button" class="actions-item actions-danger" @click="doc._showActions = false; confirmDelete(doc)">
+                  Delete
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -464,6 +482,66 @@ const statusLabel: Record<string, string> = {
     border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   background: transparent;
+}
+.actions-menu {
+  position: relative;
+}
+.actions-toggle {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  justify-content: center;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.actions-toggle:hover {
+  border-color: var(--fg);
+  color: var(--fg);
+  background: var(--surface);
+}
+.actions-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px color-mix(in oklch, var(--fg) 10%, transparent);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  overflow: hidden;
+}
+.actions-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--fg);
+  text-decoration: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+.actions-item:hover {
+  background: color-mix(in oklch, var(--fg) 7%, transparent);
+}
+.actions-danger {
+  color: oklch(50% 0.16 25);
+}
+.actions-danger:hover {
+  background: color-mix(in oklch, oklch(55% 0.16 25) 10%, transparent);
 }
 .btn-primary {
   background: var(--accent);
