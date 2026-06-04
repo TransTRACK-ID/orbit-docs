@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { marked } from "marked";
+import { renderMarkdown } from "~/composables/useMarkdown";
 
 interface ChatMessage {
   id: string;
@@ -142,10 +142,6 @@ function closeChat() {
     abortController.value.abort();
   }
   emit("close");
-}
-
-function renderMarkdown(content: string): string {
-  return marked.parse(content, { async: false }) as string;
 }
 </script>
 
