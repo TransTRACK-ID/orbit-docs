@@ -13,7 +13,7 @@ When answering questions:
 4. Use markdown formatting for code, lists, and emphasis
 
 You have access to a document search tool that can retrieve relevant sections from the user's documentation.`,
-  model: getCustomOpenAI().languageModel(process.env.OPENAI_MODEL || "gpt-4o-mini"),
+  model: getCustomOpenAI().chat(process.env.OPENAI_MODEL || "gpt-4o-mini"),
   tools: {
     searchDocs: searchDocsTool,
   },

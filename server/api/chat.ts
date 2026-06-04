@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const model = getCustomOpenAI().languageModel(process.env.OPENAI_MODEL || "gpt-4o-mini");
+  const model = getCustomOpenAI().chat(process.env.OPENAI_MODEL || "gpt-4o-mini");
 
   let systemPrompt = `You are a helpful documentation assistant. Answer questions based on the available documentation. If the context doesn't contain the answer, say so clearly.`;
 
