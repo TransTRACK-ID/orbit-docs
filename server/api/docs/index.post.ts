@@ -1,6 +1,6 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { getDb } from "~/server/database";
-import { docs, activityLogs } from "~/server/database/schema";
+import { docs, activityLogs, docVersions } from "~/server/database/schema";
 import { requireAuth, getActorName } from "~/server/utils/auth";
 
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
@@ -49,6 +49,15 @@ export default defineEventHandler(async (event) => {
     })
     .returning()
     .then((rows) => rows[0]);
+
+  // Create initial version
+  await db.insert(docVersions).values({
+    docId: doc.id,
+    version: "v1",
+    content: doc.content || "",
+    title: doc.title,
+    actor: getActorName(user),
+  });
 
   await db.insert(activityLogs).values({
     appId: doc.appId,

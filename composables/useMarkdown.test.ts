@@ -59,7 +59,9 @@ describe("renderMarkdown", () => {
   it("should render blockquotes", () => {
     const md = "> quote";
     const html = renderMarkdown(md);
-    expect(html).toContain("<blockquote>quote</blockquote>");
+    expect(html).toContain("<blockquote>");
+    expect(html).toContain("quote");
+    expect(html).toContain("</blockquote>");
   });
 
   it("should render tables", () => {

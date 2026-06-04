@@ -82,6 +82,11 @@ export default defineNuxtConfig({
     // Postrack API Docs integration (server-side only)
     postrackApiUrl: process.env.NITRO_POSTRACK_API_URL,
     postrackApiKey: process.env.NITRO_POSTRACK_API_KEY,
+    // Mastra AI integration (server-side only)
+    openaiApiKey: process.env.OPENAI_API_KEY,
+    openaiApiBaseUrl: process.env.OPENAI_API_BASE_URL,
+    openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    vectorDbUrl: process.env.VECTOR_DB_URL || 'file:./vector.db',
   },
 
   compatibilityDate: "2025-01-31",

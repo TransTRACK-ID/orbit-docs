@@ -14,11 +14,15 @@ const docId = computed(() => route.params.id as string);
 
 const {
   currentDoc,
+  docVersions,
   isLoading,
   isSaving,
+  isLoadingVersions,
   fetchDoc,
   updateDoc,
   publishDoc,
+  fetchDocVersions,
+  restoreDocVersion,
 } = useDocs();
 
 const editorContent = ref("");
@@ -35,6 +39,8 @@ const shortcutsVisible = ref(false);
 const activeHeading = ref("");
 const docLoading = ref(false);
 const docNotFound = ref(false);
+const chatOpen = ref(false);
+const versionTimelineOpen = ref(false);
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -137,6 +143,31 @@ function toggleShortcuts() {
   }
 }
 
+function toggleChat() {
+  chatOpen.value = !chatOpen.value;
+  if (chatOpen.value) {
+    versionTimelineOpen.value = false;
+  }
+}
+
+function toggleVersionTimeline() {
+  versionTimelineOpen.value = !versionTimelineOpen.value;
+  if (versionTimelineOpen.value) {
+    chatOpen.value = false;
+  }
+}
+
+async function restoreVersion(version: any) {
+  if (!docId.value) return;
+  try {
+    await restoreDocVersion(docId.value, version.id);
+    await loadDoc();
+    toast.success("Version restored successfully");
+  } catch {
+    // Error handled by composable
+  }
+}
+
 function onKeydown(e: KeyboardEvent) {
   // Ctrl+S / Cmd+S — Save
   if ((e.ctrlKey || e.metaKey) && e.key === "s") {
@@ -190,6 +221,7 @@ async function loadDoc() {
     } else {
       docNotFound.value = true;
     }
+    await fetchDocVersions(docId.value);
   } catch {
     docNotFound.value = true;
   } finally {
@@ -241,6 +273,22 @@ const lastModified = computed(() => {
         <span class="pill pill-blue">{{ appName }}</span>
       </div>
       <div class="flex-gap-sm">
+        <button
+          type="button"
+          class="btn btn-ghost"
+          :class="{ active: versionTimelineOpen }"
+          @click="toggleVersionTimeline"
+        >
+          Versions
+        </button>
+        <button
+          type="button"
+          class="btn btn-ghost"
+          :class="{ active: chatOpen }"
+          @click="toggleChat"
+        >
+          AI Chat
+        </button>
         <NuxtLink
           v-if="editorStatus === 'published'"
           :to="`/embed-docs/view?id=${docId}`"
@@ -451,6 +499,25 @@ const lastModified = computed(() => {
             </button>
           </div>
         </div>
+
+        <!-- Version Timeline -->
+        <div v-if="versionTimelineOpen && !previewOnly" class="version-pane">
+          <DocsVersionTimeline
+            :versions="docVersions"
+            :is-loading="isLoadingVersions"
+            @restore="restoreVersion"
+          />
+        </div>
+
+        <!-- AI Chat -->
+        <div v-if="chatOpen && !previewOnly" class="chat-pane">
+          <DocsChatWidget
+            :doc-id="docId"
+            :doc-content="editorContent"
+            :doc-title="editorTitle"
+            @close="chatOpen = false"
+          />
+        </div>
       </div>
     </main>
 
@@ -586,8 +653,24 @@ const lastModified = computed(() => {
 .doc-shell.preview-only .props-pane {
   display: none;
 }
+.doc-shell.preview-only .version-pane {
+  display: none;
+}
+.doc-shell.preview-only .chat-pane {
+  display: none;
+}
 .doc-shell.preview-only .editor-pane {
   grid-column: 1 / -1;
+}
+@media (max-width: 1400px) {
+  .doc-shell {
+    grid-template-columns: 220px 1fr 280px;
+  }
+  .doc-shell .version-pane,
+  .doc-shell .chat-pane {
+    grid-column: 1 / -1;
+    min-height: 400px;
+  }
 }
 @media (max-width: 1100px) {
   .doc-shell {
@@ -596,6 +679,11 @@ const lastModified = computed(() => {
   .doc-shell .outline-pane,
   .doc-shell .props-pane {
     display: none;
+  }
+  .doc-shell .version-pane,
+  .doc-shell .chat-pane {
+    grid-column: auto;
+    min-height: 400px;
   }
 }
 
@@ -815,6 +903,24 @@ const lastModified = computed(() => {
   border-radius: var(--radius-lg);
   padding: 20px;
   overflow: auto;
+}
+
+.version-pane {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: auto;
+  min-width: 260px;
+}
+
+.chat-pane {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
 }
 .props-title {
   font-size: 11px;

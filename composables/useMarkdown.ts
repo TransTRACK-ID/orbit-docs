@@ -1,4 +1,20 @@
+import { marked } from "marked";
+
 export function renderMarkdown(md: string): string {
+  try {
+    const renderer = new marked.Renderer();
+    // Escape raw HTML instead of rendering it
+    const originalHtml = renderer.html;
+    renderer.html = (text: string) => {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    };
+    return marked.parse(md, { async: false, renderer }) as string;
+  } catch {
+    // Fallback to simple rendering if marked fails
+  }
   const lines = md.split("\n");
   const out: string[] = [];
   let inCodeBlock = false;

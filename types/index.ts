@@ -78,3 +78,49 @@ export interface CreateChangelogPayload {
   content?: string;
   status?: "draft" | "published";
 }
+
+// Docs types
+export interface DocItem {
+  id: string;
+  appId: string | null;
+  title: string;
+  content: string | null;
+  status: "draft" | "in_review" | "published" | "archived";
+  versionId: string | null;
+  tags: string[] | null;
+  author: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  app: { id: string; name: string } | null;
+  version: { id: string; version: string } | null;
+}
+
+export interface DocVersion {
+  id: string;
+  docId: string;
+  version: string;
+  content: string | null;
+  title: string | null;
+  actor: string | null;
+  createdAt: string | null;
+}
+
+export interface DocVersionOption {
+  id: string;
+  version: string;
+  status: string;
+}
+
+export interface DocDetail extends DocItem {
+  appVersions: DocVersionOption[];
+}
+
+export interface CreateDocPayload {
+  title: string;
+  appId?: string | null;
+  content?: string;
+  status?: string;
+  versionId?: string | null;
+  tags?: string[];
+  author?: string;
+}

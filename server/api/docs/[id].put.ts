@@ -1,6 +1,6 @@
 import { defineEventHandler, readBody, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { docs, activityLogs, apps, appVersions } from "~/server/database/schema";
+import { docs, activityLogs, apps, appVersions, docVersions } from "~/server/database/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
 
@@ -59,6 +59,27 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: "Bad Request",
       message: "All tags must be strings",
+    });
+  }
+
+  // Auto-save version before update if content or title changed
+  const contentChanged = content !== undefined && content !== existing.content;
+  const titleChanged = title !== undefined && title !== existing.title;
+  if (contentChanged || titleChanged) {
+    const existingVersions = await db
+      .select()
+      .from(docVersions)
+      .where(eq(docVersions.docId, id))
+      .orderBy(desc(docVersions.createdAt));
+
+    const nextVersionNum = existingVersions.length + 1;
+
+    await db.insert(docVersions).values({
+      docId: id,
+      version: `v${nextVersionNum}`,
+      content: existing.content || "",
+      title: existing.title,
+      actor: getActorName(user),
     });
   }
 
