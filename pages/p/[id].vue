@@ -4,7 +4,7 @@ import { renderMarkdown, extractHeadings } from "~/composables/useMarkdown";
 import type { PublishedDocDetail } from "~/composables/usePublishedDocs";
 
 definePageMeta({
-  layout: "public",
+  layout: false,
   auth: false,
 });
 
@@ -107,8 +107,12 @@ function scrollToSection(targetId: string) {
   }
 }
 
+function toggleChat() {
+  chatOpen.value = !chatOpen.value;
+}
+
 function setupScrollSpy() {
-  const contentEl = document.querySelector(".public-main") as HTMLElement | null;
+  const contentEl = document.querySelector(".content") as HTMLElement | null;
   const docContent = document.getElementById("docContent");
   if (!docContent || !contentEl) return;
 
@@ -178,10 +182,6 @@ function handleContentClick(e: MouseEvent) {
   }
 }
 
-function toggleChat() {
-  chatOpen.value = !chatOpen.value;
-}
-
 function scrollToTop() {
   const el = document.getElementById("docContent");
   if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -194,78 +194,97 @@ function itemHref(item: NavItem): string {
 function itemTarget(item: NavItem): string {
   return item.slug;
 }
-
-function formatDate(dateStr: string | null) {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-}
 </script>
 
 <template>
-  <div v-if="isLoading" class="loading-state">
-    <div class="sk-header">
-      <div class="sk-title" />
-      <div class="sk-meta" />
+  <div class="page-root">
+    <div v-if="isLoading" class="loading-shell">
+      <div class="loading-sidebar">
+        <div class="sk-header">
+          <div class="sk-title" />
+          <div class="sk-meta" />
+        </div>
+        <div class="sk-nav">
+          <div v-for="n in 6" :key="n" class="sk-nav-item" :class="{ indent: n % 3 === 0 }" :style="{ width: `${65 + Math.random() * 25}%` }" />
+        </div>
+      </div>
+      <div class="loading-content">
+        <div class="sk-body">
+          <div class="sk-badge-row">
+            <div class="sk-badge" />
+            <div class="sk-meta-text" />
+          </div>
+          <div class="sk-paragraph" />
+          <div class="sk-paragraph" style="width: 92%;" />
+          <div class="sk-paragraph" style="width: 85%;" />
+          <div class="sk-heading" />
+          <div class="sk-paragraph" />
+          <div class="sk-paragraph" style="width: 95%;" />
+          <div class="sk-code-block" />
+          <div class="sk-heading" />
+          <div class="sk-paragraph" />
+          <div class="sk-paragraph" style="width: 90%;" />
+        </div>
+      </div>
     </div>
-    <div class="sk-body">
-      <div v-for="n in 6" :key="n" class="sk-paragraph" :style="{ width: `${60 + Math.random() * 40}%` }" />
+
+    <div v-else-if="error" class="error-shell">
+      <div class="error-body">
+        <h1>{{ error }}</h1>
+        <p>The documentation you are looking for could not be loaded.</p>
+      </div>
     </div>
-  </div>
 
-  <div v-else-if="error" class="error-state">
-    <h1>{{ error }}</h1>
-    <p>The documentation you are looking for could not be loaded.</p>
-  </div>
-
-  <div v-else-if="doc" class="doc-view">
-    <!-- Header -->
-    <header class="doc-header">
-      <div class="breadcrumbs">
-        <span v-if="doc.app">{{ doc.app.name }}</span>
-        <span v-if="doc.version">{{ doc.version.version }}</span>
-      </div>
-      <h1 class="doc-title">{{ doc.title }}</h1>
-      <div class="doc-meta">
-        <span v-if="doc.author" class="author">{{ doc.author }}</span>
-        <span v-if="doc.updatedAt" class="date">Updated {{ formatDate(doc.updatedAt) }}</span>
-      </div>
-      <div v-if="doc.tags && doc.tags.length > 0" class="tags">
-        <span v-for="tag in doc.tags" :key="tag" class="tag">{{ tag }}</span>
-      </div>
-    </header>
-
-    <!-- TOC -->
-    <nav v-if="navItems.length > 0" class="toc">
-      <div class="toc-title">On this page</div>
-      <ul>
+    <div v-else-if="doc" class="doc-shell">
+    <aside class="doc-sidebar">
+      <a class="doc-sidebar-header" href="#docContent" @click.prevent="scrollToTop">
+        <div class="doc-sidebar-title">{{ doc.app?.name || doc.title }}</div>
+        <div class="doc-sidebar-meta num">
+          {{ doc.version?.version ? `v${doc.version.version}` : "" }}
+          <span v-if="doc.updatedAt">· Updated {{ new Date(doc.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }}</span>
+        </div>
+      </a>
+      <ul v-if="navItems.length > 0" id="docNav" class="doc-nav" role="list">
         <li v-for="(item, idx) in navItems" :key="idx">
           <a
             :class="[item.type, { active: activeSlug === item.slug }]"
+            role="listitem"
             :href="itemHref(item)"
+            :data-target="itemTarget(item)"
+            :tabindex="item.type === 'indent' ? 0 : undefined"
             @click.prevent="scrollToSection(item.slug)"
           >
             {{ item.text }}
           </a>
         </li>
       </ul>
-    </nav>
+      <ul v-else id="docNav" class="doc-nav" role="list">
+        <li><a :class="['section', { active: activeSlug === 'docContent' || !activeSlug }]" role="listitem" href="#docContent" data-target="docContent" @click.prevent="scrollToSection('docContent')">{{ doc.app?.name || doc.title }}</a></li>
+      </ul>
+    </aside>
 
-    <!-- Content -->
-    <article id="docContent" class="doc-body">
-      <div class="markdown-content" v-html="renderedHtml" @click="handleContentClick" />
+    <main class="content">
+      <article id="docContent" class="doc-body">
+        <div class="flex-gap-sm" style="margin-bottom: 8px;">
+          <span class="pill pill-green">Latest</span>
+          <span v-if="doc.updatedAt" class="meta-label num">
+            Updated {{ new Date(doc.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }}
+          </span>
+        </div>
 
-      <!-- Feedback -->
-      <div class="feedback-bar" id="feedbackBar">
-        <span class="feedback-msg">Was this helpful?</span>
-        <button type="button" class="btn" @click="voteFeedback($event.currentTarget as HTMLButtonElement, true)">
-          Yes
-        </button>
-        <button type="button" class="btn" @click="voteFeedback($event.currentTarget as HTMLButtonElement, false)">
-          No
-        </button>
-      </div>
-    </article>
+        <div class="markdown-content" v-html="renderedHtml" @click="handleContentClick" />
+
+        <div class="feedback-bar" id="feedbackBar">
+          <span class="feedback-msg">Was this helpful?</span>
+          <button type="button" class="btn" @click="voteFeedback($event.currentTarget as HTMLButtonElement, true)">
+            Yes
+          </button>
+          <button type="button" class="btn" @click="voteFeedback($event.currentTarget as HTMLButtonElement, false)">
+            No
+          </button>
+        </div>
+      </article>
+    </main>
 
     <!-- AI Chat Toggle -->
     <button
@@ -276,7 +295,7 @@ function formatDate(dateStr: string | null) {
       aria-label="Toggle AI Chat"
     >
       <span v-if="chatOpen">✕</span>
-      <span v-else">AI Chat</span>
+      <span v-else>AI Chat</span>
     </button>
 
     <!-- AI Chat Panel -->
@@ -294,117 +313,269 @@ function formatDate(dateStr: string | null) {
       {{ toastMsg }}
     </div>
   </div>
+</div>
 </template>
 
 <style scoped>
-.doc-view {
-  position: relative;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
-/* Header */
-.doc-header {
-  margin-bottom: 32px;
-  padding-bottom: 24px;
-  border-bottom: 1px solid var(--border);
-}
-.breadcrumbs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.breadcrumbs span:not(:last-child)::after {
-  content: "/";
-  margin-left: 8px;
-  color: var(--border);
-}
-.doc-title {
-  font-size: 32px;
-  font-weight: 700;
-  margin: 0 0 12px;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
+.page-root {
+  --bg: oklch(98% 0.004 250);
+  --surface: oklch(100% 0 0);
+  --fg: oklch(20% 0.02 250);
+  --muted: oklch(55% 0.015 250);
+  --border: oklch(90% 0.006 250);
+  --accent: oklch(55% 0.16 25);
+  --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
+  --fg-soft: color-mix(in oklch, var(--fg) 6%, transparent);
+  --font-display: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --fs-body: 14px;
+  --gap-xs: 8px;
+  --gap-sm: 12px;
+  --gap-md: 16px;
+  --gap-lg: 24px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --sidebar: 260px;
+
+  background: var(--bg);
   color: var(--fg);
-}
-.doc-meta {
-  display: flex;
-  gap: 16px;
-  font-size: 13px;
-  color: var(--muted);
-  margin-bottom: 12px;
-}
-.tags {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  background: var(--accent-soft);
-  color: var(--accent);
+  font-family: var(--font-body);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
-/* TOC */
-.toc {
-  margin-bottom: 32px;
-  padding: 20px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+a {
+  color: inherit;
+  text-decoration: none;
 }
-.toc-title {
-  font-size: 13px;
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
   font-weight: 600;
-  color: var(--fg);
-  margin-bottom: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
 }
-.toc ul {
+
+.doc-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* Doc nav sidebar */
+.doc-sidebar {
+  width: var(--sidebar);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+.doc-sidebar-header {
+  display: block;
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 2;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.doc-sidebar-header:hover {
+  background: color-mix(in oklch, var(--fg) 5%, var(--surface));
+}
+.doc-sidebar-header:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.doc-sidebar-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+.doc-sidebar-meta {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.doc-nav {
   list-style: none;
-  padding: 0;
+  padding: 16px 12px 32px;
   margin: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
-.toc a {
-  display: block;
-  padding: 6px 10px;
-  font-size: 13px;
-  color: var(--muted);
-  text-decoration: none;
-  border-radius: 6px;
-  transition: color 0.15s, background 0.15s;
-  cursor: pointer;
+.doc-nav li {
+  margin: 0;
 }
-.toc a:hover {
+.doc-nav a {
+  display: block;
+  padding: 7px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+  cursor: pointer;
+  outline: none;
+  border-radius: 6px;
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+.doc-nav a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+.doc-nav a:hover {
   color: var(--fg);
   background: color-mix(in oklch, var(--fg) 7%, transparent);
 }
-.toc a.section {
-  font-weight: 600;
+.doc-nav a.section {
+  font-weight: 700;
   color: var(--fg);
+  font-size: 13.5px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
 }
-.toc a.indent {
-  padding-left: 20px;
-  font-size: 12.5px;
+.doc-nav a.section:first-child {
+  margin-top: 0;
+  padding-top: 6px;
+  border-top: none;
 }
-.toc a.active {
+.doc-nav a.active {
   color: var(--accent);
-  background: var(--accent-soft);
+  font-weight: 600;
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
+}
+.doc-nav a.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2.5px;
+  height: 18px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+.doc-nav a.indent {
+  padding-left: 28px;
+  font-size: 12.5px;
+  color: color-mix(in oklch, var(--muted) 85%, var(--fg));
+}
+.doc-nav a.indent.active {
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
+}
+.doc-nav a.indent.active::before {
+  left: 0;
 }
 
-/* Doc body */
+/* Content */
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: 40px 48px;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
+}
+.doc-body {
+  width: 100%;
+  max-width: 720px;
+}
+@media (max-width: 820px) {
+  .doc-sidebar {
+    width: 220px;
+  }
+  .content {
+    padding: 24px;
+  }
+}
+@media (max-width: 640px) {
+  .doc-sidebar {
+    display: none;
+  }
+  .content {
+    padding: 20px;
+  }
+}
+
+/* Chat FAB */
+.chat-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 40;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 16px color-mix(in oklch, var(--accent) 30%, transparent);
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.chat-fab:hover {
+  background: color-mix(in oklch, var(--accent) 88%, black);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px color-mix(in oklch, var(--accent) 40%, transparent);
+}
+.chat-fab.active {
+  background: var(--fg);
+  color: var(--surface);
+}
+@media (max-width: 640px) {
+  .chat-fab {
+    bottom: 16px;
+    right: 16px;
+  }
+}
+
+/* Chat pane */
+.chat-pane {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  max-width: 100vw;
+  height: 100vh;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: -4px 0 24px color-mix(in oklch, var(--fg) 10%, transparent);
+}
+@media (max-width: 820px) {
+  .chat-pane {
+    width: 100%;
+  }
+}
+
 .doc-body :deep(h1) {
-  font-size: 28px;
-  margin-bottom: 20px;
+  font-size: 32px;
+  margin-bottom: 24px;
   letter-spacing: -0.02em;
   line-height: 1.2;
 }
@@ -524,6 +695,11 @@ function formatDate(dateStr: string | null) {
   box-shadow: 0 1px 3px color-mix(in oklch, var(--fg) 8%, transparent);
 }
 
+/* Markdown content wrapper */
+.markdown-content {
+  width: 100%;
+}
+
 /* Code copy button */
 .doc-body :deep(.code-block) {
   position: relative;
@@ -551,7 +727,8 @@ function formatDate(dateStr: string | null) {
   font-weight: 500;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.2s, background 0.2s, color 0.2s;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .doc-body :deep(.code-block:hover .copy-btn),
 .doc-body :deep(pre:hover .copy-btn) {
@@ -576,8 +753,8 @@ function formatDate(dateStr: string | null) {
 .feedback-bar {
   display: flex;
   gap: 12px;
-  margin-top: 48px;
-  padding-top: 24px;
+  margin-top: 32px;
+  padding-top: 20px;
   border-top: 1px solid var(--border);
   align-items: center;
 }
@@ -612,57 +789,31 @@ function formatDate(dateStr: string | null) {
   border-color: var(--accent);
 }
 
-/* Chat FAB */
-.chat-fab {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 40;
-  padding: 12px 20px;
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
   border-radius: 999px;
-  background: var(--accent);
-  color: var(--surface);
-  border: none;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
-  cursor: pointer;
-  box-shadow: 0 4px 16px color-mix(in oklch, var(--accent) 30%, transparent);
-  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
 }
-.chat-fab:hover {
-  background: color-mix(in oklch, var(--accent) 88%, black);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px color-mix(in oklch, var(--accent) 40%, transparent);
-}
-.chat-fab.active {
-  background: var(--fg);
-  color: var(--surface);
+.pill-green {
+  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
+  color: oklch(50% 0.14 145);
 }
 
-/* Chat pane */
-.chat-pane {
-  position: fixed;
-  top: 0;
-  right: 0;
-  width: 420px;
-  max-width: 100vw;
-  height: 100vh;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  box-shadow: -4px 0 24px color-mix(in oklch, var(--fg) 10%, transparent);
+.meta-label {
+  font-size: 13px;
+  color: var(--muted);
 }
-@media (max-width: 640px) {
-  .chat-pane {
-    width: 100%;
-  }
-  .chat-fab {
-    bottom: 16px;
-    right: 16px;
-  }
+.flex-gap-sm {
+  display: flex;
+  gap: 8px;
+}
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Toast */
@@ -680,7 +831,7 @@ function formatDate(dateStr: string | null) {
   box-shadow: 0 4px 16px color-mix(in oklch, var(--fg) 20%, transparent);
   opacity: 0;
   transform: translateY(8px);
-  transition: opacity 0.2s, transform 0.2s;
+  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
 }
 .toast.show {
@@ -689,66 +840,170 @@ function formatDate(dateStr: string | null) {
   pointer-events: auto;
 }
 
-/* Loading state */
-.loading-state {
-  padding: 40px 0;
-}
-.sk-header {
-  margin-bottom: 24px;
-}
-.sk-title {
-  width: 60%;
-  height: 32px;
-  margin-bottom: 12px;
-  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
-  background-size: 200% 100%;
-  border-radius: var(--radius);
-  animation: shimmer 1.5s infinite;
-}
-.sk-meta {
-  width: 40%;
-  height: 16px;
-  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
-  background-size: 200% 100%;
-  border-radius: var(--radius);
-  animation: shimmer 1.5s infinite;
-}
-.sk-body {
+/* Loading & error states */
+.loading-shell {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
 }
-.sk-paragraph {
-  height: 16px;
-  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
-  background-size: 200% 100%;
-  border-radius: var(--radius);
-  animation: shimmer 1.5s infinite;
+.loading-sidebar {
+  width: var(--sidebar);
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 24px 20px;
+  overflow-y: auto;
+}
+.loading-content {
+  flex: 1;
+  padding: 40px 48px;
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
 }
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
 
-/* Error state */
-.error-state {
-  text-align: center;
-  padding: 48px 0;
+/* Sidebar skeleton */
+.sk-header {
+  padding: 0 20px 16px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
-.error-state h1 {
+.sk-title {
+  width: 75%;
+  height: 16px;
+  margin-bottom: 6px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius);
+  animation: shimmer 1.5s infinite;
+}
+.sk-meta {
+  width: 55%;
+  height: 12px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius);
+  animation: shimmer 1.5s infinite;
+}
+.sk-nav {
+  padding: 0 16px 0 20px;
+}
+.sk-nav-item {
+  height: 12px;
+  margin-bottom: 12px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius);
+  animation: shimmer 1.5s infinite;
+}
+.sk-nav-item.indent {
+  margin-left: 12px;
+  width: 80%;
+}
+
+/* Content skeleton */
+.sk-body {
+  width: 100%;
+  max-width: 720px;
+}
+.sk-badge-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  align-items: center;
+}
+.sk-badge {
+  width: 52px;
+  height: 22px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+.sk-meta-text {
+  width: 140px;
+  height: 14px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius);
+  animation: shimmer 1.5s infinite;
+}
+.sk-heading {
+  width: 45%;
+  height: 28px;
+  margin: 32px 0 16px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius);
+  animation: shimmer 1.5s infinite;
+}
+.sk-paragraph {
+  width: 100%;
+  height: 14px;
+  margin-bottom: 10px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius);
+  animation: shimmer 1.5s infinite;
+}
+.sk-code-block {
+  width: 100%;
+  height: 120px;
+  margin: 16px 0;
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius);
+  animation: shimmer 1.5s infinite;
+}
+
+.error-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--bg);
+  padding: 40px;
+}
+.error-body {
+  text-align: center;
+  max-width: 480px;
+}
+.error-body h1 {
   font-size: 22px;
   margin-bottom: 12px;
   color: var(--fg);
+  font-weight: 600;
 }
-.error-state p {
+.error-body p {
   color: var(--muted);
   font-size: 14px;
+  line-height: 1.6;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
   .sk-title,
   .sk-meta,
-  .sk-paragraph {
+  .sk-nav-item,
+  .sk-badge,
+  .sk-meta-text,
+  .sk-heading,
+  .sk-paragraph,
+  .sk-code-block {
     animation: none;
     background: var(--border);
   }
