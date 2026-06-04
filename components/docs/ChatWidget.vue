@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { renderMarkdown } from "~/composables/useMarkdown";
+import { nextTick } from "vue";
 
 interface ChatMessage {
   id: string;
@@ -100,6 +101,7 @@ async function sendMessage() {
       const chunk = decoder.decode(value, { stream: true });
       accumulated += chunk;
       assistantMessage.content = accumulated;
+      await nextTick();
       scrollToBottom();
     }
   } catch (e: any) {
@@ -194,9 +196,9 @@ function closeChat() {
           </svg>
         </div>
         <div class="chat-bubble">
-          <div v-if="message.role === 'assistant' && message.content" class="chat-content" v-html="renderMarkdown(message.content)" />
+          <div v-if="message.role === 'assistant' && !isStreaming" class="chat-content" v-html="renderMarkdown(message.content)" />
           <div v-else class="chat-content">{{ message.content }}</div>
-          <div v-if="message.role === 'assistant' && isStreaming && message.content === messages[messages.length - 1]?.content" class="chat-typing">
+          <div v-if="message.role === 'assistant' && isStreaming && message === messages[messages.length - 1]" class="chat-typing">
             <span class="typing-dot" />
             <span class="typing-dot" />
             <span class="typing-dot" />
