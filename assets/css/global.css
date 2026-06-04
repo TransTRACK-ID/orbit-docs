@@ -161,9 +161,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  /* Scope to app root only so vue3-toastify autoClose works */
+  #__nuxt *,
+  #__nuxt *::before,
+  #__nuxt *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
