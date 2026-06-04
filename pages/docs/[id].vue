@@ -291,11 +291,11 @@ const lastModified = computed(() => {
         </button>
         <NuxtLink
           v-if="editorStatus === 'published'"
-          :to="`/embed-docs/view?id=${docId}`"
+          :to="`/p/${docId}`"
           target="_blank"
           class="btn btn-ghost"
         >
-          Preview Embed
+          Public View
         </NuxtLink>
         <button
           type="button"

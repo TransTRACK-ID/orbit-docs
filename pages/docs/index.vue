@@ -244,12 +244,12 @@ const statusLabel: Record<string, string> = {
                 </NuxtLink>
                 <NuxtLink
                   v-if="doc.status === 'published'"
-                  :to="`/embed-docs/view?id=${doc.id}`"
+                  :to="`/p/${doc.id}`"
                   target="_blank"
                   class="actions-item"
                   @click="doc._showActions = false"
                 >
-                  Preview Embed
+                  Public View
                 </NuxtLink>
                 <button type="button" class="actions-item actions-danger" @click="doc._showActions = false; confirmDelete(doc)">
                   Delete
