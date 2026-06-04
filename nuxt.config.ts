@@ -2,7 +2,7 @@
 
 export default defineNuxtConfig({
   devtools: {
-    enabled: true,
+    enabled: process.env.NODE_ENV === 'development',
 
     timeline: {
       enabled: true,
@@ -32,7 +32,6 @@ export default defineNuxtConfig({
     "nuxt3-leaflet",
     "@nuxt/image",
     "@nuxt/icon",
-    "@nuxt/test-utils/module",
   ],
 
   ssr: false,
@@ -99,6 +98,24 @@ export default defineNuxtConfig({
         },
       },
     },
+    externals: {
+      external: [
+        "@mastra/core",
+        "@mastra/rag",
+        "@mastra/libsql",
+        "@mastra/ai-sdk",
+        "@libsql/darwin-arm64",
+        "@libsql/linux-x64-gnu",
+        "@libsql/linux-x64-musl",
+        "@img/sharp-libvips-darwin-arm64",
+        "@img/sharp-darwin-arm64",
+        "@img/sharp-linux-x64",
+        "@img/sharp-libvips-linux-x64",
+        "sharp",
+      ],
+    },
+    minify: true,
+    sourceMap: false,
   },
 
   vite: {
