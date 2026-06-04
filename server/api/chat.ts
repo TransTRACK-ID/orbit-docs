@@ -1,6 +1,6 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { streamText } from "ai";
-import { customOpenAI } from "~/mastra/openai";
+import { getCustomOpenAI } from "~/mastra/openai";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const model = customOpenAI.languageModel(process.env.OPENAI_MODEL || "gpt-4o-mini");
+  const model = getCustomOpenAI().languageModel(process.env.OPENAI_MODEL || "gpt-4o-mini");
 
   const systemPrompt = docId
     ? `You are a helpful documentation assistant. You are currently viewing a specific document. Answer questions based on the document context. If the context doesn't contain the answer, say so clearly.`

@@ -1,5 +1,5 @@
 import { Agent } from "@mastra/core";
-import { customOpenAI } from "../index";
+import { getCustomOpenAI } from "../openai";
 import { searchDocsTool } from "../tools/search-docs";
 
 export const docsAgent = new Agent({
@@ -13,7 +13,7 @@ When answering questions:
 4. Use markdown formatting for code, lists, and emphasis
 
 You have access to a document search tool that can retrieve relevant sections from the user's documentation.`,
-  model: customOpenAI.languageModel(process.env.OPENAI_MODEL || "gpt-4o-mini"),
+  model: getCustomOpenAI().languageModel(process.env.OPENAI_MODEL || "gpt-4o-mini"),
   tools: {
     searchDocs: searchDocsTool,
   },
