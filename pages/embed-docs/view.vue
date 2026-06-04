@@ -21,6 +21,8 @@ const toastMsg = ref("");
 const toastVisible = ref(false);
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
+const chatOpen = ref(false);
+
 const activeSlug = ref("");
 let scrollSpyPaused = false;
 let scrollSpyPauseTimer: ReturnType<typeof setTimeout> | null = null;
@@ -104,6 +106,10 @@ function scrollToSection(targetId: string) {
       scrollSpyPaused = false;
     }, 800);
   }
+}
+
+function toggleChat() {
+  chatOpen.value = !chatOpen.value;
 }
 
 function setupScrollSpy() {
@@ -239,6 +245,16 @@ function itemTarget(item: NavItem): string {
           <span v-if="doc.updatedAt">· Updated {{ new Date(doc.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }}</span>
         </div>
       </a>
+      <div class="sidebar-actions">
+        <button
+          type="button"
+          class="btn btn-ghost"
+          :class="{ active: chatOpen }"
+          @click="toggleChat"
+        >
+          AI Chat
+        </button>
+      </div>
       <ul v-if="navItems.length > 0" id="docNav" class="doc-nav" role="list">
         <li v-for="(item, idx) in navItems" :key="idx">
           <a
@@ -280,6 +296,16 @@ function itemTarget(item: NavItem): string {
         </div>
       </article>
     </main>
+
+    <!-- AI Chat -->
+    <div v-if="chatOpen" class="chat-pane">
+      <DocsChatWidget
+        :doc-id="docId"
+        :doc-content="doc?.content || ''"
+        :doc-title="doc?.title || ''"
+        @close="chatOpen = false"
+      />
+    </div>
 
     <!-- Toast -->
     <div class="toast" :class="{ show: toastVisible }">
@@ -377,6 +403,34 @@ h3 {
 }
 .doc-sidebar-header:hover {
   background: color-mix(in oklch, var(--fg) 5%, var(--surface));
+}
+
+.sidebar-actions {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.sidebar-actions .btn {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 13px;
+  border-radius: var(--radius);
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.sidebar-actions .btn:hover {
+  color: var(--fg);
+  border-color: var(--fg);
+}
+
+.sidebar-actions .btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 .doc-sidebar-header:focus-visible {
   outline: 2px solid var(--accent);
@@ -494,6 +548,28 @@ h3 {
   }
   .content {
     padding: 20px;
+  }
+}
+
+/* Chat pane */
+.chat-pane {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  max-width: 100vw;
+  height: 100vh;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: -4px 0 24px color-mix(in oklch, var(--fg) 10%, transparent);
+}
+@media (max-width: 820px) {
+  .chat-pane {
+    width: 100%;
   }
 }
 

@@ -221,6 +221,14 @@ const statusLabel: Record<string, string> = {
             </button>
             <NuxtLink
               v-if="doc.status === 'published'"
+              :to="`/p/${doc.id}`"
+              target="_blank"
+              class="btn btn-ghost btn-sm"
+            >
+              Public View
+            </NuxtLink>
+            <NuxtLink
+              v-if="doc.status === 'published'"
               :to="`/embed-docs/view?id=${doc.id}`"
               target="_blank"
               class="btn btn-ghost btn-sm"
