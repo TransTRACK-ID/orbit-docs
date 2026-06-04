@@ -1,10 +1,8 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { streamText } from "ai";
 import { customOpenAI } from "~/mastra/openai";
-import { requireAuth } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
-  await requireAuth(event);
   const body = await readBody(event);
   const { messages, docId } = body || {};
 
