@@ -2,7 +2,7 @@ import { createTool } from "@mastra/core";
 import { z } from "zod";
 import { getDb } from "~/server/database";
 import { docs } from "~/server/database/schema";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
 export const searchDocsTool = createTool({
   id: "search-docs",
@@ -39,7 +39,7 @@ export const searchDocsTool = createTool({
         content: docs.content,
       })
       .from(docs)
-      .where(sql`${conditions.join(" AND ")}`)
+      .where(and(...conditions))
       .limit(5);
 
     return {
