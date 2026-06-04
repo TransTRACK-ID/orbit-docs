@@ -120,6 +120,7 @@ const renderedHtml = computed(() => renderMarkdown(editorContent.value));
 
 function scrollToHeading(text: string) {
   activeHeading.value = text;
+  let scrolled = false;
   // Scroll in preview pane if visible
   const preview = previewRef.value;
   if (preview) {
@@ -127,7 +128,22 @@ function scrollToHeading(text: string) {
     for (const h of headings) {
       if (h.textContent?.trim() === text) {
         h.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrolled = true;
         break;
+      }
+    }
+  }
+  // Fallback: scroll inside the editor pane body
+  if (!scrolled) {
+    const paneBody = document.querySelector(".editor-pane .pane-body");
+    if (paneBody) {
+      const headings = paneBody.querySelectorAll(".ce-header");
+      for (const h of headings) {
+        if (h.textContent?.trim() === text) {
+          h.scrollIntoView({ behavior: "smooth", block: "start" });
+          scrolled = true;
+          break;
+        }
       }
     }
   }
