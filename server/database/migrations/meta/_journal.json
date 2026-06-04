@@ -64,6 +64,13 @@
       "when": 1779698298967,
       "tag": "0008_military_darkstar",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780574308201,
+      "tag": "0009_easy_red_shift",
+      "breakpoints": true
     }
   ]
 }
