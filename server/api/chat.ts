@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
     ? `You are a helpful documentation assistant. You are currently viewing a specific document. Answer questions based on the document context. If the context doesn't contain the answer, say so clearly.`
     : `You are a helpful documentation assistant. Answer questions based on the available documentation. If the context doesn't contain the answer, say so clearly.`;
 
-  const result = streamText({
+  const result = await streamText({
     model,
     system: systemPrompt,
     messages: messages.map((m: any) => ({
