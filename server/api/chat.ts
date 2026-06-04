@@ -1,4 +1,4 @@
-import { defineEventHandler, readBody, createError } from "h3";
+import { defineEventHandler, readBody, createError, sendWebResponse } from "h3";
 import { streamText } from "ai";
 import { getCustomOpenAI } from "~/mastra/openai";
 
@@ -28,7 +28,7 @@ ${docContent}
 Answer questions based on the document context above. If the context doesn't contain the answer, say so clearly.`;
   }
 
-  const result = await streamText({
+  const result = streamText({
     model,
     system: systemPrompt,
     messages: messages.map((m: any) => ({
@@ -37,11 +37,16 @@ Answer questions based on the document context above. If the context doesn't con
     })),
   });
 
-  return result.toTextStreamResponse({
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
-  });
+  // Use sendWebResponse so Nitro/h3 passes the ReadableStream through
+  // directly without buffering or JSON-serialising the Response object.
+  // toTextStreamResponse() emits raw plain text — one token per chunk.
+  return sendWebResponse(
+    event,
+    result.toTextStreamResponse({
+      headers: {
+        "Cache-Control": "no-cache, no-transform",
+        "X-Accel-Buffering": "no", // disable nginx buffering in production
+      },
+    }),
+  );
 });

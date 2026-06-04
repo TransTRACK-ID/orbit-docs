@@ -21,6 +21,7 @@ const messages = ref<ChatMessage[]>([]);
 const inputValue = ref("");
 const isStreaming = ref(false);
 const chatContainer = ref<HTMLDivElement | null>(null);
+const bottomAnchor = ref<HTMLDivElement | null>(null);
 const abortController = ref<AbortController | null>(null);
 
 function generateId() {
@@ -29,10 +30,7 @@ function generateId() {
 
 function scrollToBottom() {
   nextTick(() => {
-    const el = chatContainer.value;
-    if (el) {
-      el.scrollTop = el.scrollHeight;
-    }
+    bottomAnchor.value?.scrollIntoView({ behavior: "smooth", block: "end" });
   });
 }
 
@@ -92,16 +90,13 @@ async function sendMessage() {
     if (!reader) return;
 
     const decoder = new TextDecoder();
-    let accumulated = "";
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value, { stream: true });
-      accumulated += chunk;
-      assistantMessage.content = accumulated;
-      await nextTick();
+      // toTextStreamResponse() emits raw plain text — append directly
+      assistantMessage.content += decoder.decode(value, { stream: true });
       scrollToBottom();
     }
   } catch (e: any) {
@@ -205,6 +200,7 @@ function closeChat() {
           </div>
         </div>
       </div>
+      <div ref="bottomAnchor" style="float: left; clear: both" />
     </div>
 
     <div class="chat-input-area">
