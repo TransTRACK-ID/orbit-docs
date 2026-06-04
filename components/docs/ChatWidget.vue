@@ -101,12 +101,12 @@ async function sendMessage() {
       const lines = chunk.split("\n");
 
       for (const line of lines) {
-        if (line.startsWith("0:")) {
+        if (line.startsWith("d:")) {
           try {
             const jsonStr = line.slice(2);
             const parsed = JSON.parse(jsonStr);
-            if (typeof parsed === "string") {
-              accumulated += parsed;
+            if (parsed && typeof parsed.content === "string") {
+              accumulated += parsed.content;
               assistantMessage.content = accumulated;
               scrollToBottom();
             }

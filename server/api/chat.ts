@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     })),
   });
 
-  return result.toDataStreamResponse({
+  return result.toUIMessageStreamResponse({
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
