@@ -173,11 +173,11 @@ function inlineMd(text: string): string {
     .replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>")
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.*?)\*/g, "<em>$1</em>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
     .replace(
       /!\[([^\]]*)\]\(([^)]+)\)/g,
       (match, alt, url) => renderMediaEmbed(url, alt)
-    );
+    )
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 }
 
 function renderMediaEmbed(url: string, alt: string): string {
