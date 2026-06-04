@@ -511,7 +511,7 @@ const statusLabel: Record<string, string> = {
         <div class="app-card-foot">
           <div class="app-card-links">
             <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm">
-              Versions
+              Versions &rarr;
             </NuxtLink>
             <NuxtLink :to="`/releases?app=${app.name}`" class="btn btn-ghost btn-sm">
               Releases &rarr;
