@@ -20,8 +20,8 @@ const emit = defineEmits<{ close: [] }>();
 const messages = ref<ChatMessage[]>([]);
 const inputValue = ref("");
 const isStreaming = ref(false);
+const streamingMessageId = ref<string | null>(null);
 const chatContainer = ref<HTMLDivElement | null>(null);
-const bottomAnchor = ref<HTMLDivElement | null>(null);
 const abortController = ref<AbortController | null>(null);
 
 function generateId() {
@@ -30,8 +30,15 @@ function generateId() {
 
 function scrollToBottom() {
   nextTick(() => {
-    bottomAnchor.value?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = chatContainer.value;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
   });
+}
+
+function isCurrentlyStreaming(message: ChatMessage): boolean {
+  return message.id === streamingMessageId.value;
 }
 
 async function sendMessage() {
@@ -51,17 +58,33 @@ async function sendMessage() {
 
   isStreaming.value = true;
 
-  const assistantMessage: ChatMessage = {
-    id: generateId(),
+  const assistantId = generateId();
+  streamingMessageId.value = assistantId;
+
+  messages.value.push({
+    id: assistantId,
     role: "assistant",
     content: "",
     createdAt: new Date().toISOString(),
-  };
+  });
 
-  messages.value.push(assistantMessage);
+  // Get the REACTIVE PROXY reference — this is critical.
+  // The raw object we pushed is wrapped by Vue's proxy inside the ref array.
+  // We must mutate through this proxy so Vue detects changes and re-renders.
+  const reactiveAssistant = messages.value[messages.value.length - 1];
+
+  scrollToBottom();
 
   try {
     abortController.value = new AbortController();
+
+    // Build payload — filter out the empty assistant placeholder
+    const chatHistory = messages.value
+      .filter((m) => m.content)
+      .map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
 
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -69,12 +92,7 @@ async function sendMessage() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        messages: messages.value
-          .filter((m) => m.content)
-          .map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+        messages: chatHistory,
         docId: props.docId,
         docContent: props.docContent,
         docTitle: props.docTitle,
@@ -95,17 +113,20 @@ async function sendMessage() {
       const { done, value } = await reader.read();
       if (done) break;
 
-      // toTextStreamResponse() emits raw plain text — append directly
-      assistantMessage.content += decoder.decode(value, { stream: true });
+      // Mutate through the reactive proxy so Vue detects the change
+      reactiveAssistant.content += decoder.decode(value, { stream: true });
       scrollToBottom();
     }
   } catch (e: any) {
     if (e.name !== "AbortError") {
-      assistantMessage.content = "Sorry, I encountered an error. Please try again.";
+      reactiveAssistant.content =
+        "Sorry, I encountered an error. Please try again.";
     }
   } finally {
     isStreaming.value = false;
+    streamingMessageId.value = null;
     abortController.value = null;
+    scrollToBottom();
   }
 }
 
@@ -191,16 +212,25 @@ function closeChat() {
           </svg>
         </div>
         <div class="chat-bubble">
-          <div v-if="message.role === 'assistant' && !isStreaming" class="chat-content" v-html="renderMarkdown(message.content)" />
-          <div v-else class="chat-content">{{ message.content }}</div>
-          <div v-if="message.role === 'assistant' && isStreaming && message === messages[messages.length - 1]" class="chat-typing">
+          <!-- User messages: plain text always -->
+          <div v-if="message.role === 'user'" class="chat-content">{{ message.content }}</div>
+
+          <!-- Currently streaming assistant message: show raw text + blinking cursor -->
+          <div v-else-if="isCurrentlyStreaming(message)" class="chat-content streaming-text">
+            {{ message.content }}<span v-if="message.content" class="streaming-cursor" />
+          </div>
+
+          <!-- Completed assistant messages: render markdown -->
+          <div v-else class="chat-content" v-html="renderMarkdown(message.content)" />
+
+          <!-- Typing dots: only while waiting for the first token -->
+          <div v-if="isCurrentlyStreaming(message) && !message.content" class="chat-typing">
             <span class="typing-dot" />
             <span class="typing-dot" />
             <span class="typing-dot" />
           </div>
         </div>
       </div>
-      <div ref="bottomAnchor" style="float: left; clear: both" />
     </div>
 
     <div class="chat-input-area">
@@ -369,6 +399,25 @@ function closeChat() {
   line-height: 1.5;
   max-width: calc(100% - 40px);
   word-break: break-word;
+}
+
+.streaming-text {
+  white-space: pre-wrap;
+}
+
+.streaming-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--accent);
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  animation: blink 0.8s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 .chat-content :deep(p) {
