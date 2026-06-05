@@ -47,7 +47,7 @@ describe("useSettings composable", () => {
   });
 
   it("should fetch team members", async () => {
-    const data = { data: [{ id: "m1", name: "Alice", email: "alice@example.com", initials: "AL", role: "admin" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null }] };
+    const data = { data: [{ id: "m1", name: "Alice", email: "alice@example.com", initials: "AL", role: "admin" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null }] };
     mockFetch.mockResolvedValueOnce(data);
 
     const { teamMembers, fetchTeam, isLoadingTeam } = useSettings();
@@ -59,7 +59,7 @@ describe("useSettings composable", () => {
   });
 
   it("should fetch current member", async () => {
-    const data = { data: { id: "m1", name: "Alice", email: "alice@example.com", initials: "AL", role: "admin" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null } };
+    const data = { data: { id: "m1", name: "Alice", email: "alice@example.com", initials: "AL", role: "admin" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null } };
     mockFetch.mockResolvedValueOnce(data);
 
     const { currentMember, fetchCurrentMember, isLoadingCurrentMember } = useSettings();
@@ -73,15 +73,15 @@ describe("useSettings composable", () => {
     const { canManageTeam, currentMember } = useSettings();
     expect(canManageTeam.value).toBe(false);
 
-    currentMember.value = { id: "m1", name: "Alice", email: "alice@example.com", initials: "AL", role: "admin" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null };
+    currentMember.value = { id: "m1", name: "Alice", email: "alice@example.com", initials: "AL", role: "admin" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null };
     expect(canManageTeam.value).toBe(true);
 
-    currentMember.value = { id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "viewer" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null };
+    currentMember.value = { id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "viewer" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null };
     expect(canManageTeam.value).toBe(false);
   });
 
   it("should invite a team member", async () => {
-    const newMember = { id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "pending" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null };
+    const newMember = { id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "pending" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null };
     mockFetch.mockResolvedValueOnce({ data: newMember });
 
     const { teamMembers, inviteMember, isInviting } = useSettings();
@@ -94,12 +94,12 @@ describe("useSettings composable", () => {
   });
 
   it("should accept an invitation", async () => {
-    const accepted = { id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null };
+    const accepted = { id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null };
     mockFetch.mockResolvedValueOnce({ data: accepted });
 
     const { teamMembers, currentMember, pendingInvitations, acceptInvitation, isAccepting } = useSettings();
-    teamMembers.value = [{ id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "pending" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null }];
-    pendingInvitations.value = [{ id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "pending" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null }];
+    teamMembers.value = [{ id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "pending" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null }];
+    pendingInvitations.value = [{ id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "pending" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null }];
 
     const result = await acceptInvitation("m2");
     expect(result.status).toBe("active");
@@ -110,11 +110,11 @@ describe("useSettings composable", () => {
   });
 
   it("should update a team member", async () => {
-    const updated = { id: "m2", name: "Bob Updated", email: "bob@example.com", initials: "BO", role: "product_manager" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null };
+    const updated = { id: "m2", name: "Bob Updated", email: "bob@example.com", initials: "BO", role: "product_manager" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null };
     mockFetch.mockResolvedValueOnce({ data: updated });
 
     const { teamMembers, updateMember } = useSettings();
-    teamMembers.value = [{ id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null }];
+    teamMembers.value = [{ id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null }];
 
     const result = await updateMember("m2", { name: "Bob Updated", role: "product_manager" });
     expect(result.name).toBe("Bob Updated");
@@ -126,7 +126,7 @@ describe("useSettings composable", () => {
     mockFetch.mockResolvedValueOnce(undefined);
 
     const { teamMembers, deleteMember } = useSettings();
-    teamMembers.value = [{ id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", createdAt: null, updatedAt: null }];
+    teamMembers.value = [{ id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "tech_writer" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null }];
 
     await deleteMember("m2");
     expect(teamMembers.value).toHaveLength(0);

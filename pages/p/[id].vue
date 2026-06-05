@@ -11,7 +11,7 @@ definePageMeta({
 const route = useRoute();
 const { fetchPublishedDoc } = usePublishedDocs();
 
-const docId = computed(() => (route.query.id as string) || "");
+const docId = computed(() => route.params.id as string);
 const doc = ref<PublishedDocDetail | null>(null);
 const isLoading = ref(true);
 const error = ref("");
@@ -20,6 +20,8 @@ const feedbackGiven = ref(false);
 const toastMsg = ref("");
 const toastVisible = ref(false);
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+const chatOpen = ref(false);
 
 const activeSlug = ref("");
 let scrollSpyPaused = false;
@@ -97,13 +99,16 @@ function scrollToSection(targetId: string) {
     targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
     activeSlug.value = targetId;
 
-    // Pause scroll spy briefly to prevent it from overriding the clicked state during smooth scroll
     scrollSpyPaused = true;
     if (scrollSpyPauseTimer) clearTimeout(scrollSpyPauseTimer);
     scrollSpyPauseTimer = setTimeout(() => {
       scrollSpyPaused = false;
     }, 800);
   }
+}
+
+function toggleChat() {
+  chatOpen.value = !chatOpen.value;
 }
 
 function setupScrollSpy() {
@@ -118,7 +123,7 @@ function setupScrollSpy() {
     if (scrollSpyPaused) return;
 
     const contentRect = contentEl!.getBoundingClientRect();
-    const threshold = contentRect.top + 160; // 160px from top of content area
+    const threshold = contentRect.top + 160;
 
     let currentId = "";
     for (const h of headings) {
@@ -128,7 +133,6 @@ function setupScrollSpy() {
       }
     }
 
-    // Default to first heading if none have scrolled past threshold
     if (!currentId && headings.length > 0) {
       currentId = headings[0].id;
     }
@@ -137,7 +141,7 @@ function setupScrollSpy() {
   }
 
   contentEl.addEventListener("scroll", updateActiveNav, { passive: true });
-  updateActiveNav(); // set initial active state
+  updateActiveNav();
 }
 
 function copyCode(btn: HTMLButtonElement) {
@@ -193,45 +197,46 @@ function itemTarget(item: NavItem): string {
 </script>
 
 <template>
-  <div v-if="isLoading" class="loading-shell">
-    <div class="loading-sidebar">
-      <div class="sk-header">
-        <div class="sk-title" />
-        <div class="sk-meta" />
-      </div>
-      <div class="sk-nav">
-        <div v-for="n in 6" :key="n" class="sk-nav-item" :class="{ indent: n % 3 === 0 }" :style="{ width: `${65 + Math.random() * 25}%` }" />
-      </div>
-    </div>
-    <div class="loading-content">
-      <div class="sk-body">
-        <div class="sk-badge-row">
-          <div class="sk-badge" />
-          <div class="sk-meta-text" />
+  <div class="page-root">
+    <div v-if="isLoading" class="loading-shell">
+      <div class="loading-sidebar">
+        <div class="sk-header">
+          <div class="sk-title" />
+          <div class="sk-meta" />
         </div>
-        <div class="sk-paragraph" />
-        <div class="sk-paragraph" style="width: 92%;" />
-        <div class="sk-paragraph" style="width: 85%;" />
-        <div class="sk-heading" />
-        <div class="sk-paragraph" />
-        <div class="sk-paragraph" style="width: 95%;" />
-        <div class="sk-code-block" />
-        <div class="sk-heading" />
-        <div class="sk-paragraph" />
-        <div class="sk-paragraph" style="width: 90%;" />
+        <div class="sk-nav">
+          <div v-for="n in 6" :key="n" class="sk-nav-item" :class="{ indent: n % 3 === 0 }" :style="{ width: `${65 + Math.random() * 25}%` }" />
+        </div>
+      </div>
+      <div class="loading-content">
+        <div class="sk-body">
+          <div class="sk-badge-row">
+            <div class="sk-badge" />
+            <div class="sk-meta-text" />
+          </div>
+          <div class="sk-paragraph" />
+          <div class="sk-paragraph" style="width: 92%;" />
+          <div class="sk-paragraph" style="width: 85%;" />
+          <div class="sk-heading" />
+          <div class="sk-paragraph" />
+          <div class="sk-paragraph" style="width: 95%;" />
+          <div class="sk-code-block" />
+          <div class="sk-heading" />
+          <div class="sk-paragraph" />
+          <div class="sk-paragraph" style="width: 90%;" />
+        </div>
       </div>
     </div>
-  </div>
 
-  <div v-else-if="error" class="error-shell">
-    <div class="error-body">
-      <h1>{{ error }}</h1>
-      <p>The documentation you are looking for could not be loaded.</p>
+    <div v-else-if="error" class="error-shell">
+      <div class="error-body">
+        <h1>{{ error }}</h1>
+        <p>The documentation you are looking for could not be loaded.</p>
+      </div>
     </div>
-  </div>
 
-  <div v-else-if="doc" class="embed-shell">
-    <aside class="doc-sidebar" data-od-id="doc-sidebar">
+    <div v-else-if="doc" class="doc-shell">
+    <aside class="doc-sidebar">
       <a class="doc-sidebar-header" href="#docContent" @click.prevent="scrollToTop">
         <div class="doc-sidebar-title">{{ doc.app?.name || doc.title }}</div>
         <div class="doc-sidebar-meta num">
@@ -258,7 +263,7 @@ function itemTarget(item: NavItem): string {
       </ul>
     </aside>
 
-    <main class="content" data-od-id="content">
+    <main class="content">
       <article id="docContent" class="doc-body">
         <div class="flex-gap-sm" style="margin-bottom: 8px;">
           <span class="pill pill-green">Latest</span>
@@ -281,15 +286,42 @@ function itemTarget(item: NavItem): string {
       </article>
     </main>
 
+    <!-- AI Chat Toggle -->
+    <button
+      type="button"
+      class="chat-fab"
+      :class="{ active: chatOpen }"
+      @click="toggleChat"
+      aria-label="Toggle AI Chat"
+    >
+      <span v-if="chatOpen">✕</span>
+      <span v-else>AI Chat</span>
+    </button>
+
+    <!-- AI Chat Panel -->
+    <div v-if="chatOpen" class="chat-pane">
+      <DocsChatWidget
+        :doc-id="docId"
+        @close="chatOpen = false"
+      />
+    </div>
+
     <!-- Toast -->
     <div class="toast" :class="{ show: toastVisible }">
       {{ toastMsg }}
     </div>
   </div>
+</div>
 </template>
 
 <style scoped>
-:root {
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.page-root {
   --bg: oklch(98% 0.004 250);
   --surface: oklch(100% 0 0);
   --fg: oklch(20% 0.02 250);
@@ -309,27 +341,14 @@ function itemTarget(item: NavItem): string {
   --radius: 8px;
   --radius-lg: 12px;
   --sidebar: 260px;
-}
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-html {
-  -webkit-text-size-adjust: 100%;
-  scroll-behavior: smooth;
-}
-
-body {
-  margin: 0;
   background: var(--bg);
   color: var(--fg);
   font-family: var(--font-body);
   font-size: var(--fs-body);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
 a {
@@ -349,7 +368,7 @@ h3 {
   font-weight: 600;
 }
 
-.embed-shell {
+.doc-shell {
   display: flex;
   height: 100vh;
   overflow: hidden;
@@ -494,6 +513,61 @@ h3 {
   }
   .content {
     padding: 20px;
+  }
+}
+
+/* Chat FAB */
+.chat-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 40;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 4px 16px color-mix(in oklch, var(--accent) 30%, transparent);
+  transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.chat-fab:hover {
+  background: color-mix(in oklch, var(--accent) 88%, black);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px color-mix(in oklch, var(--accent) 40%, transparent);
+}
+.chat-fab.active {
+  background: var(--fg);
+  color: var(--surface);
+}
+@media (max-width: 640px) {
+  .chat-fab {
+    bottom: 16px;
+    right: 16px;
+  }
+}
+
+/* Chat pane */
+.chat-pane {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  max-width: 100vw;
+  height: 100vh;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: -4px 0 24px color-mix(in oklch, var(--fg) 10%, transparent);
+}
+@media (max-width: 820px) {
+  .chat-pane {
+    width: 100%;
   }
 }
 

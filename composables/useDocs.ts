@@ -21,6 +21,16 @@ export interface DocVersionOption {
   status: string;
 }
 
+export interface DocVersion {
+  id: string;
+  docId: string;
+  version: string;
+  content: string | null;
+  title: string | null;
+  actor: string | null;
+  createdAt: string | null;
+}
+
 export interface DocDetail extends DocItem {
   appVersions: DocVersionOption[];
 }
@@ -38,8 +48,10 @@ export interface CreateDocPayload {
 export const useDocs = () => {
   const docs = ref<DocItem[]>([]);
   const currentDoc = ref<DocDetail | null>(null);
+  const docVersions = ref<DocVersion[]>([]);
   const isLoading = ref(true);
   const isSaving = ref(false);
+  const isLoadingVersions = ref(false);
   const search = ref("");
 
   async function fetchDocs(filters?: { appId?: string; status?: string }) {
@@ -183,11 +195,55 @@ export const useDocs = () => {
     }
   }
 
+  async function fetchDocVersions(id: string) {
+    isLoadingVersions.value = true;
+    try {
+      const data = await $fetch<{ data: DocVersion[] }>(`/api/docs/${id}/versions`);
+      docVersions.value = data.data;
+      return data.data;
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load doc versions");
+      }
+      console.error(e);
+      throw e;
+    } finally {
+      isLoadingVersions.value = false;
+    }
+  }
+
+  async function restoreDocVersion(id: string, versionId: string) {
+    try {
+      const data = await $fetch<{ data: DocItem }>(`/api/docs/${id}/versions/${versionId}`, {
+        method: "POST",
+      });
+      if (currentDoc.value && currentDoc.value.id === id) {
+        currentDoc.value = { ...currentDoc.value, ...data.data };
+      }
+      toast.success("Version restored");
+      return data.data;
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to restore version";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
+      throw e;
+    }
+  }
+
   return {
     docs,
     currentDoc,
+    docVersions,
     isLoading,
     isSaving,
+    isLoadingVersions,
     search,
     fetchDocs,
     fetchDoc,
@@ -195,5 +251,7 @@ export const useDocs = () => {
     updateDoc,
     publishDoc,
     deleteDoc,
+    fetchDocVersions,
+    restoreDocVersion,
   };
 };

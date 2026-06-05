@@ -17,7 +17,7 @@ onBeforeMount(() => {
 
 const { apps, fetchApps } = useApps();
 const { versions, isLoading, isCreating, isUpdating, isDeleting, fetchVersions, createVersion, updateVersion, deleteVersion } = useVersions();
-const { fetchRelease } = useReleases();
+const { fetchRelease, createRelease } = useReleases();
 
 const isArchiving = ref(false);
 
@@ -237,6 +237,27 @@ async function submitNewVersion() {
     approver: newVersionForm.approver || undefined,
     ciStatus: newVersionForm.ciStatus,
   });
+
+  // Auto-create quick release (normal) for the new version
+  if (newVersion?.id && selectedAppId.value) {
+    try {
+      const categories = parseChangelogMarkdown(newVersionForm.releaseNotes || "");
+      await createRelease({
+        appId: selectedAppId.value,
+        versionId: newVersion.id,
+        heroTitle: `${selectedApp.value?.name || "Release"} v${newVersion.version}`,
+        summary: (newVersionForm.releaseNotes || "").slice(0, 500),
+        categories,
+        type: "normal",
+        published: true,
+      });
+    } catch (e: any) {
+      if (e?.statusCode !== 409) {
+        console.error("Failed to auto-create quick release:", e);
+      }
+    }
+  }
+
   closeNewVersionModal();
   // Navigate to changelog editor with the new version pre-selected
   if (newVersion?.id) {
@@ -313,6 +334,105 @@ async function doDeleteVersion() {
   if (!versionToDelete.value || !selectedAppId.value) return;
   await deleteVersion(selectedAppId.value, versionToDelete.value.id);
   versionToDelete.value = null;
+}
+
+// Create Article Modal
+const showArticleModal = ref(false);
+const articleVersion = ref<AppVersion | null>(null);
+const articleForm = reactive({
+  heroTitle: "",
+  featureHeading: "",
+  featureDesc: "",
+});
+const isPublishingArticle = ref(false);
+
+function openArticleModal(version: AppVersion) {
+  articleVersion.value = version;
+  articleForm.heroTitle = `${selectedApp.value?.name || "Release"} v${version.version}`;
+  articleForm.featureHeading = "";
+  articleForm.featureDesc = "";
+  showArticleModal.value = true;
+  nextTick(() => {
+    const el = document.getElementById("articleHeroTitle");
+    if (el) el.focus();
+  });
+}
+
+function closeArticleModal() {
+  showArticleModal.value = false;
+  articleVersion.value = null;
+}
+
+function parseChangelogToCategories(text: string | null): Record<string, string[]> {
+  const categories: Record<string, string[]> = {
+    added: [],
+    fixed: [],
+    changed: [],
+    deprecated: [],
+    security: [],
+  };
+  if (!text) return categories;
+
+  const lines = text.split(/\n/);
+  let currentCategory = "";
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const headerMatch = trimmed.match(/^#{2,3}\s*(Added|Fixed|Changed|Deprecated|Security)/i);
+    if (headerMatch) {
+      currentCategory = headerMatch[1].toLowerCase();
+      continue;
+    }
+    if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+      const item = trimmed.slice(2).trim();
+      if (item && currentCategory && categories[currentCategory]) {
+        categories[currentCategory].push(item);
+      }
+    }
+  }
+
+  return categories;
+}
+
+async function submitArticle() {
+  if (!articleVersion.value || !selectedAppId.value || isPublishingArticle.value) return;
+
+  isPublishingArticle.value = true;
+  try {
+    const categories = parseChangelogToCategories(articleVersion.value.releaseNotes || "");
+    const features: Array<{ id: string; heading: string; description: string }> = [];
+    if (articleForm.featureHeading.trim()) {
+      features.push({
+        id: crypto.randomUUID(),
+        heading: articleForm.featureHeading.trim(),
+        description: articleForm.featureDesc.trim(),
+      });
+    }
+
+    const release = await createRelease({
+      appId: selectedAppId.value,
+      versionId: articleVersion.value.id,
+      heroTitle: articleForm.heroTitle.trim() || `${selectedApp.value?.name || "Release"} v${articleVersion.value.version}`,
+      summary: (articleVersion.value.releaseNotes || "").slice(0, 500),
+      features: features.length > 0 ? features : undefined,
+      categories,
+      type: "article",
+      published: true,
+    });
+
+    closeArticleModal();
+    if (release?.id) {
+      await navigateTo(`/releases/${release.id}`);
+    }
+  } catch (e: any) {
+    if (e?.statusCode === 409 && e?.data?.existingReleaseId) {
+      closeArticleModal();
+      await navigateTo(`/releases/${e.data.existingReleaseId}`);
+    }
+    if (e?.statusCode !== 409) throw e;
+  } finally {
+    isPublishingArticle.value = false;
+  }
 }
 
 // Helpers
@@ -520,20 +640,32 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               </span>
             </td>
             <td>
-              <div v-if="v.releases && v.releases.length > 0" class="release-stack">
-                <NuxtLink
-                  v-for="r in v.releases"
-                  :key="r.id"
-                  :to="`/releases/${r.id}`"
-                  class="release-pill-link"
-                  @click.stop
+              <div class="release-cell">
+                <template v-if="v.releases && v.releases.length > 0">
+                  <NuxtLink
+                    v-for="r in v.releases"
+                    :key="r.id"
+                    :to="`/releases/${r.id}`"
+                    class="release-pill-link"
+                    @click.stop
+                  >
+                    <span class="pill" :class="r.type === 'article' ? 'pill-purple' : 'pill-muted'">
+                      {{ r.type === 'article' ? 'Article' : 'Normal' }}
+                    </span>
+                  </NuxtLink>
+                </template>
+                <button
+                  v-if="!v.releases?.find((r) => r.type === 'article')"
+                  type="button"
+                  class="release-action-link"
+                  @click.stop="openArticleModal(v)"
                 >
-                  <span class="pill" :class="r.type === 'article' ? 'pill-purple' : 'pill-muted'">
-                    {{ r.type === 'article' ? 'Article' : 'Normal' }}
-                  </span>
-                </NuxtLink>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14" />
+                  </svg>
+                  Article
+                </button>
               </div>
-              <span v-else class="text-muted-sm">—</span>
             </td>
             <td>
               <NuxtLink :to="`/changelogs?versionId=${v.id}`" class="btn btn-ghost btn-sm" @click.stop>
@@ -930,6 +1062,44 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         </div>
       </div>
     </div>
+
+    <!-- Create Article Modal -->
+    <div class="modal-overlay" :class="{ open: showArticleModal }" @click.self="closeArticleModal">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <h2>Create Article Release</h2>
+          <button type="button" class="modal-close" aria-label="Close modal" @click="closeArticleModal">✕</button>
+        </div>
+        <form novalidate @submit.prevent="submitArticle">
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="articleHeroTitle">Headline</label>
+              <input
+                id="articleHeroTitle"
+                v-model="articleForm.heroTitle"
+                type="text"
+                placeholder="e.g. Request tracing, deep health checks, and retry reliability"
+              />
+            </div>
+            <div class="form-group">
+              <label for="articleFeatureHeading">Feature Heading <span class="opt">(optional)</span></label>
+              <input id="articleFeatureHeading" v-model="articleForm.featureHeading" type="text" placeholder="Feature heading" />
+            </div>
+            <div class="form-group">
+              <label for="articleFeatureDesc">Feature Description <span class="opt">(optional)</span></label>
+              <textarea id="articleFeatureDesc" v-model="articleForm.featureDesc" placeholder="Describe the feature for the release article…" />
+            </div>
+          </div>
+          <div class="form-footer">
+            <button type="button" class="btn btn-secondary" @click="closeArticleModal">Cancel</button>
+            <button type="submit" class="btn btn-primary" :disabled="isPublishingArticle">
+              <span v-if="isPublishingArticle">Publishing…</span>
+              <span v-else>Publish Article</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1123,15 +1293,15 @@ h2 {
   color: oklch(55% 0.14 300);
 }
 
-.release-stack {
+.release-cell {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 .release-pill-link {
   text-decoration: none;
-  width: fit-content;
-  display: block;
+  display: inline-flex;
 }
 .release-pill-link .pill {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
@@ -1139,6 +1309,30 @@ h2 {
 .release-pill-link:hover .pill {
   transform: translateY(-1px);
   box-shadow: 0 2px 4px oklch(0% 0 0 / 0.08);
+}
+.release-action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+.release-action-link:hover {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.release-action-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .ds-table {

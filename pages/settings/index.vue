@@ -71,7 +71,7 @@ async function acceptMyInvitation() {
   await acceptInvitation(myPendingInvitation.value.id);
 }
 
-const activeTab = ref<"general" | "team" | "integrations" | "notifications" | "api">("general");
+const activeTab = ref<"general" | "team" | "mcp">("general");
 
 onMounted(() => {
   fetchWorkspace();
@@ -81,6 +81,7 @@ onMounted(() => {
   fetchIntegrations();
   fetchNotifications();
   fetchApiKeys();
+  fetchMcpConfig();
 });
 
 // ─── General tab form ───────────────────────────────────────────
@@ -349,6 +350,90 @@ async function regenerateWebhookSecret() {
 async function revokeAllKeys() {
   await regenerateApiKeys({ revokeAll: true });
 }
+
+// ─── MCP Connection ───────────────────────────────────────────────
+const mcpConfig = ref<{ host: string; url: string; protocol: string; configured: boolean } | null>(null);
+const mcpLoading = ref(false);
+
+async function fetchMcpConfig() {
+  mcpLoading.value = true;
+  try {
+    const { data } = await $fetch<{ data: { host: string; url: string; protocol: string; configured: boolean } }>("/api/mcp-config");
+    mcpConfig.value = data;
+  } catch (e) {
+    console.error("Failed to fetch MCP config", e);
+  } finally {
+    mcpLoading.value = false;
+  }
+}
+
+const mcpUrlHttps = computed(() => mcpConfig.value?.url || "https://localhost:41244/mcp");
+
+const mcpAgents = [
+  {
+    name: "OpenCode / Kilocode",
+    get json() {
+      return JSON.stringify({
+        mcpServers: {
+          orbit_docs: {
+            url: mcpUrlHttps.value,
+            headers: { Authorization: "Bearer YOUR_MCP_API_KEY" },
+          },
+        },
+      }, null, 2);
+    },
+  },
+  {
+    name: "VS Code (GitHub Copilot)",
+    get json() {
+      return JSON.stringify({
+        mcp: {
+          servers: {
+            orbit_docs: {
+              url: mcpUrlHttps.value,
+              headers: { Authorization: "Bearer YOUR_MCP_API_KEY" },
+            },
+          },
+        },
+      }, null, 2);
+    },
+  },
+  {
+    name: "Cline",
+    get json() {
+      return JSON.stringify({
+        mcpServers: {
+          orbit_docs: {
+            url: mcpUrlHttps.value,
+            headers: { Authorization: "Bearer YOUR_MCP_API_KEY" },
+            disabled: false,
+            autoApprove: [],
+          },
+        },
+      }, null, 2);
+    },
+  },
+  {
+    name: "Cursor",
+    get json() {
+      return JSON.stringify({
+        name: "orbit_docs",
+        type: "HTTP",
+        url: mcpUrlHttps.value,
+        headers: { Authorization: "Bearer YOUR_MCP_API_KEY" },
+      }, null, 2);
+    },
+  },
+];
+
+const mcpCopied = ref<string | null>(null);
+
+function copyMcpConfig(agentName: string, text: string) {
+  navigator.clipboard.writeText(text);
+  mcpCopied.value = agentName;
+  setTimeout(() => { mcpCopied.value = null; }, 2000);
+}
+
 </script>
 
 <template>
@@ -361,9 +446,7 @@ async function revokeAllKeys() {
           v-for="tab in [
             { id: 'general', label: 'General' },
             { id: 'team', label: 'Team Members' },
-            { id: 'integrations', label: 'Integrations' },
-            { id: 'notifications', label: 'Notifications' },
-            { id: 'api', label: 'API Keys' },
+            { id: 'mcp', label: 'MCP Connection' },
           ] as const"
           :key="tab.id"
           class="settings-nav-item"
@@ -587,212 +670,63 @@ async function revokeAllKeys() {
           </div>
         </div>
 
-        <!-- Integrations -->
-        <div v-show="activeTab === 'integrations'" class="settings-panel">
+        <!-- MCP Connection -->
+        <div v-show="activeTab === 'mcp'" class="settings-panel">
           <div class="setting-section">
-            <h3>CI / CD Integrations</h3>
-            <p class="desc">Connect your deployment pipeline to auto-publish changelogs.</p>
+            <h3>MCP Connection</h3>
+            <p class="desc">Connect your AI agents to your Orbit Docs data via the Model Context Protocol (MCP).</p>
 
-            <div v-if="isLoadingIntegrations" class="skeleton-wrap">
-              <div class="skeleton-line w-full" />
-              <div class="skeleton-line w-full" />
-              <div class="skeleton-line w-full" />
+            <div class="mcp-info">
+              <div class="mcp-endpoint">
+                <div class="form-group">
+                  <label>MCP Endpoint URL</label>
+                  <div class="token-box">
+                    <span class="token-value">{{ mcpUrlHttps }}</span>
+                    <button class="btn btn-ghost btn-sm" @click="copyToken(mcpUrlHttps)">Copy</button>
+                  </div>
+                  <div v-if="!mcpConfig?.configured" class="mcp-warning" style="margin-top: 8px;">
+                    <span class="pill pill-amber">Not configured</span>
+                    <span style="margin-left: 8px; color: var(--muted); font-size: 12px;">
+                      Set <code>MCP_HOST</code> or <code>NUXT_PUBLIC_MCP_HOST</code> env variable on your server to customize this URL.
+                    </span>
+                  </div>
+                  <div v-else class="mcp-ok" style="margin-top: 8px;">
+                    <span class="pill pill-green">Configured</span>
+                    <span style="margin-left: 8px; color: var(--muted); font-size: 12px;">
+                      Host is set from server environment.
+                    </span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>Authentication</label>
+                  <p class="desc" style="margin: 0 0 8px;">
+                    Provide your API key via the <code>Authorization: Bearer &lt;key&gt;</code> header.
+                    Find your API key in the MCP_API_KEY environment variable on your server.
+                  </p>
+                </div>
+              </div>
             </div>
-
-            <template v-else>
-              <div class="integration-card">
-                <div class="integration-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
-                    <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                    <path d="M2 17l10 5 10-5" />
-                    <path d="M2 12l10 5 10-5" />
-                  </svg>
-                </div>
-                <div class="integration-info">
-                  <div class="name">GitHub Actions</div>
-                  <div class="desc">Trigger changelog publish on release tags</div>
-                </div>
-                <div class="toggle">
-                  <button
-                    class="toggle-switch"
-                    :class="{ on: integrations?.githubActions }"
-                    aria-label="Toggle GitHub Actions"
-                    @click="toggleIntegration('githubActions')"
-                  />
-                </div>
-              </div>
-
-              <div class="integration-card">
-                <div class="integration-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 6v6l4 2" />
-                  </svg>
-                </div>
-                <div class="integration-info">
-                  <div class="name">GitLab CI</div>
-                  <div class="desc">Auto-sync merge request notes to drafts</div>
-                </div>
-                <div class="toggle">
-                  <button
-                    class="toggle-switch"
-                    :class="{ on: integrations?.gitlabCI }"
-                    aria-label="Toggle GitLab CI"
-                    @click="toggleIntegration('gitlabCI')"
-                  />
-                </div>
-              </div>
-
-              <div class="integration-card">
-                <div class="integration-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
-                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                  </svg>
-                </div>
-                <div class="integration-info">
-                  <div class="name">Jenkins</div>
-                  <div class="desc">Post-build step to publish version artifacts</div>
-                </div>
-                <div class="toggle">
-                  <button
-                    class="toggle-switch"
-                    :class="{ on: integrations?.jenkins }"
-                    aria-label="Toggle Jenkins"
-                    @click="toggleIntegration('jenkins')"
-                  />
-                </div>
-              </div>
-
-              <div class="integration-card" style="opacity: 0.6;">
-                <div class="integration-icon">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="24" height="24">
-                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                    <line x1="8" y1="21" x2="16" y2="21" />
-                    <line x1="12" y1="17" x2="12" y2="21" />
-                  </svg>
-                </div>
-                <div class="integration-info">
-                  <div class="name">CircleCI</div>
-                  <div class="desc">Coming soon — Orb for automated doc publishing</div>
-                </div>
-                <span class="pill pill-amber" style="flex-shrink: 0;">Soon</span>
-              </div>
-            </template>
           </div>
-        </div>
 
-        <!-- Notifications -->
-        <div v-show="activeTab === 'notifications'" class="settings-panel">
           <div class="setting-section">
-            <h3>Notification Preferences</h3>
-            <p class="desc">Choose when Orbit Docs sends you updates.</p>
+            <h3>AI Agent Setup</h3>
+            <p class="desc">Copy the configuration for your AI agent to start querying your docs, releases, and versions.</p>
 
-            <div v-if="isLoadingNotifications" class="skeleton-wrap">
-              <div class="skeleton-line w-full" />
-              <div class="skeleton-line w-full" />
-              <div class="skeleton-line w-full" />
+            <div class="mcp-agents">
+              <div v-for="agent in mcpAgents" :key="agent.name" class="mcp-agent-card">
+                <div class="mcp-agent-header">
+                  <div class="mcp-agent-name">{{ agent.name }}</div>
+                  <button
+                    class="btn btn-ghost btn-sm"
+                    @click="copyMcpConfig(agent.name, agent.json)"
+                  >
+                    <span v-if="mcpCopied === agent.name">Copied!</span>
+                    <span v-else>Copy Config</span>
+                  </button>
+                </div>
+                <pre class="mcp-agent-code"><code>{{ agent.json }}</code></pre>
+              </div>
             </div>
-
-            <template v-else>
-              <div class="toggle" style="margin-bottom: 16px;">
-                <button
-                  class="toggle-switch"
-                  :class="{ on: notifications?.emailDigest }"
-                  aria-label="Toggle email digest"
-                  @click="toggleNotification('emailDigest')"
-                />
-                <div>
-                  <div class="toggle-label">Email Digest</div>
-                  <div class="toggle-desc">Weekly summary of new versions and published docs</div>
-                </div>
-              </div>
-
-              <div class="toggle" style="margin-bottom: 16px;">
-                <button
-                  class="toggle-switch"
-                  :class="{ on: notifications?.releaseAlerts }"
-                  aria-label="Toggle release alerts"
-                  @click="toggleNotification('releaseAlerts')"
-                />
-                <div>
-                  <div class="toggle-label">Release Alerts</div>
-                  <div class="toggle-desc">Immediate notification when a version is published</div>
-                </div>
-              </div>
-
-              <div class="toggle" style="margin-bottom: 16px;">
-                <button
-                  class="toggle-switch"
-                  :class="{ on: notifications?.docComments }"
-                  aria-label="Toggle doc comments"
-                  @click="toggleNotification('docComments')"
-                />
-                <div>
-                  <div class="toggle-label">Doc Comments</div>
-                  <div class="toggle-desc">Notify when someone comments on a draft doc</div>
-                </div>
-              </div>
-
-              <div class="toggle">
-                <button
-                  class="toggle-switch"
-                  :class="{ on: notifications?.slackNotifications }"
-                  aria-label="Toggle Slack notifications"
-                  @click="toggleNotification('slackNotifications')"
-                />
-                <div>
-                  <div class="toggle-label">Slack Notifications</div>
-                  <div class="toggle-desc">Push release notes to a Slack channel</div>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <!-- API Keys -->
-        <div v-show="activeTab === 'api'" class="settings-panel">
-          <div class="setting-section">
-            <h3>API Keys</h3>
-            <p class="desc">Use these keys to push versions and docs programmatically.</p>
-
-            <div v-if="isLoadingApiKeys" class="skeleton-wrap">
-              <div class="skeleton-line w-full" />
-              <div class="skeleton-line w-full" />
-            </div>
-
-            <template v-else>
-              <div class="form-group">
-                <label>Production API Key</label>
-                <div class="token-box">
-                  <span class="token-value">{{ apiKeys?.productionKey }}</span>
-                  <button class="btn btn-ghost btn-sm" @click="copyToken(apiKeys?.productionKey || '')">
-                    Copy
-                  </button>
-                  <button class="btn btn-ghost btn-sm" @click="regenerateProductionKey">
-                    Regenerate
-                  </button>
-                </div>
-              </div>
-
-              <div class="form-group">
-                <label>Webhook Secret</label>
-                <div class="token-box">
-                  <span class="token-value">{{ apiKeys?.webhookSecret }}</span>
-                  <button class="btn btn-ghost btn-sm" @click="copyToken(apiKeys?.webhookSecret || '')">
-                    Copy
-                  </button>
-                  <button class="btn btn-ghost btn-sm" @click="regenerateWebhookSecret">
-                    Regenerate
-                  </button>
-                </div>
-              </div>
-
-              <div class="form-actions" style="margin-top: 8px;">
-                <button class="btn btn-danger btn-sm" @click="revokeAllKeys">
-                  Revoke All
-                </button>
-              </div>
-            </template>
           </div>
         </div>
       </div>
@@ -1406,5 +1340,51 @@ async function revokeAllKeys() {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* MCP Connection */
+.mcp-info {
+  margin-bottom: 16px;
+}
+.mcp-endpoint {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.mcp-agents {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.mcp-agent-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.mcp-agent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+.mcp-agent-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--fg);
+}
+.mcp-agent-code {
+  margin: 0;
+  padding: 16px;
+  background: var(--surface);
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mcp-agent-code code {
+  font-family: var(--font-mono);
+  color: var(--fg);
 }
 </style>

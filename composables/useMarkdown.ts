@@ -1,4 +1,43 @@
+import { marked } from "marked";
+
 export function renderMarkdown(md: string): string {
+  try {
+    const renderer = new marked.Renderer();
+    // Escape raw HTML instead of rendering it
+    const originalHtml = renderer.html;
+    renderer.html = (text: string) => {
+      return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    };
+    // Override heading renderer to add IDs for h2 and h3
+    renderer.heading = ({ text, depth, raw }: { text: string; depth: number; raw: string }) => {
+      if (depth === 2 || depth === 3) {
+        let slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+        if (/^\d/.test(slug)) slug = "h-" + slug;
+        return `<h${depth} id="${slug}">${text}</h${depth}>`;
+      }
+      return `<h${depth}>${text}</h${depth}>`;
+    };
+    // Override image renderer to support YouTube and Vimeo embeds
+    renderer.image = (href: string, title: string | null, text: string) => {
+      // YouTube embed
+      const youtubeMatch = href.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
+      if (youtubeMatch) {
+        return `<iframe src="https://www.youtube.com/embed/${youtubeMatch[1]}" width="580" height="320" frameborder="0" allowfullscreen style="max-width:100%;border-radius:var(--radius);"></iframe>${text ? `<p style="text-align:center;font-size:13px;color:var(--muted);margin-top:8px;">${text}</p>` : ""}`;
+      }
+      // Vimeo embed
+      const vimeoMatch = href.match(/(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/);
+      if (vimeoMatch) {
+        return `<iframe src="https://player.vimeo.com/video/${vimeoMatch[1]}" width="580" height="320" frameborder="0" allowfullscreen style="max-width:100%;border-radius:var(--radius);"></iframe>${text ? `<p style="text-align:center;font-size:13px;color:var(--muted);margin-top:8px;">${text}</p>` : ""}`;
+      }
+      return `<img src="${href}" alt="${text}" />`;
+    };
+    return marked.parse(md, { async: false, renderer }) as string;
+  } catch {
+    // Fallback to simple rendering if marked fails
+  }
   const lines = md.split("\n");
   const out: string[] = [];
   let inCodeBlock = false;
@@ -173,11 +212,11 @@ function inlineMd(text: string): string {
     .replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>")
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.*?)\*/g, "<em>$1</em>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
     .replace(
       /!\[([^\]]*)\]\(([^)]+)\)/g,
       (match, alt, url) => renderMediaEmbed(url, alt)
-    );
+    )
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 }
 
 function renderMediaEmbed(url: string, alt: string): string {

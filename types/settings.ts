@@ -23,6 +23,7 @@ export interface TeamMember {
   invitedBy: string | null;
   userId: string | null;
   lastActive: string;
+  lastActiveAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }

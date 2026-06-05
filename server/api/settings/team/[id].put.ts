@@ -3,7 +3,7 @@ import { getDb } from "~/server/database";
 import { teamMembers } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth, getAuthUser } from "~/server/utils/auth";
-import { requireTeamAccess, getCurrentMember, canManageMembers } from "~/server/utils/team-access";
+import { requireTeamAccess, getCurrentMember, canManageMembers, formatLastActive } from "~/server/utils/team-access";
 import type { TeamRole } from "~/server/utils/team-access";
 
 export default defineEventHandler(async (event) => {
@@ -88,5 +88,5 @@ export default defineEventHandler(async (event) => {
     .returning()
     .then((rows) => rows[0]);
 
-  return { data: member };
+  return { data: { ...member, lastActive: formatLastActive(member.lastActiveAt) } };
 });

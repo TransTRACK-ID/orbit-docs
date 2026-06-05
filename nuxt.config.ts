@@ -2,7 +2,7 @@
 
 export default defineNuxtConfig({
   devtools: {
-    enabled: true,
+    enabled: process.env.NODE_ENV === 'development',
 
     timeline: {
       enabled: true,
@@ -32,7 +32,6 @@ export default defineNuxtConfig({
     "nuxt3-leaflet",
     "@nuxt/image",
     "@nuxt/icon",
-    "@nuxt/test-utils/module",
   ],
 
   ssr: false,
@@ -74,6 +73,8 @@ export default defineNuxtConfig({
     public: {
       // Client-side base URL — should be relative so requests go through the preview proxy
       baseAPI: process.env.NUXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL,
+      // MCP Server endpoint (shown in settings page)
+      mcpHost: process.env.NUXT_PUBLIC_MCP_HOST || 'localhost:41244',
     },
     // Server-only base URL — can be absolute (e.g. http://127.0.0.1:port/api/preview/taskId)
     // so server-side $fetch gets a valid URL instead of crashing on relative paths
@@ -82,6 +83,12 @@ export default defineNuxtConfig({
     // Postrack API Docs integration (server-side only)
     postrackApiUrl: process.env.NITRO_POSTRACK_API_URL,
     postrackApiKey: process.env.NITRO_POSTRACK_API_KEY,
+    // OpenAI integration (server-side only)
+    openaiApiKey: process.env.OPENAI_API_KEY,
+    openaiApiBaseUrl: process.env.OPENAI_API_BASE_URL,
+    openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    // MCP Server host (server-side, inferred from request if not set)
+    mcpHost: process.env.MCP_HOST || process.env.NUXT_PUBLIC_MCP_HOST,
   },
 
   compatibilityDate: "2025-01-31",
@@ -94,6 +101,20 @@ export default defineNuxtConfig({
         },
       },
     },
+    externals: {
+      external: [
+        "@libsql/darwin-arm64",
+        "@libsql/linux-x64-gnu",
+        "@libsql/linux-x64-musl",
+        "@img/sharp-libvips-darwin-arm64",
+        "@img/sharp-darwin-arm64",
+        "@img/sharp-linux-x64",
+        "@img/sharp-libvips-linux-x64",
+        "sharp",
+      ],
+    },
+    minify: true,
+    sourceMap: false,
   },
 
   vite: {

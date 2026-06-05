@@ -35,6 +35,7 @@ export const teamMembers = pgTable("team_members", {
   invitedBy: text("invited_by"),
   userId: text("user_id"),
   lastActive: text("last_active").notNull().default("just now"),
+  lastActiveAt: timestamp("last_active_at", { withTimezone: true }).defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

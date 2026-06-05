@@ -18,13 +18,31 @@ export function getRoleLevel(role: TeamRole): number {
 }
 
 /**
+ * Format a timestamp into a human-readable relative time string.
+ */
+export function formatLastActive(date: Date | string | null | undefined): string {
+  if (!date) return "never";
+  const now = new Date();
+  const d = typeof date === "string" ? new Date(date) : date;
+  const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
+  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
+  return `${Math.floor(diff / 604800)} weeks ago`;
+}
+
+/**
  * Get the team member record for the currently authenticated user.
  * Matches by userId first, then falls back to email.
  * Only returns active members.
+ * Updates lastActiveAt if more than 5 minutes have passed since the last activity.
  */
 export async function getCurrentMember(event: H3Event) {
   const user = await getAuthUser(event);
   const db = getDb();
+
+  let member = null;
 
   // Try match by userId first
   if (user.id) {
@@ -34,21 +52,38 @@ export async function getCurrentMember(event: H3Event) {
       .where(and(eq(teamMembers.userId, user.id), eq(teamMembers.status, "active")))
       .limit(1)
       .then((rows) => rows[0]);
-    if (byUserId) return byUserId;
+    if (byUserId) member = byUserId;
   }
 
   // Fallback to email match
-  if (user.email) {
+  if (!member && user.email) {
     const byEmail = await db
       .select()
       .from(teamMembers)
       .where(and(eq(teamMembers.email, user.email), eq(teamMembers.status, "active")))
       .limit(1)
       .then((rows) => rows[0]);
-    if (byEmail) return byEmail;
+    if (byEmail) member = byEmail;
   }
 
-  return null;
+  if (member) {
+    const now = new Date();
+    const lastActive = member.lastActiveAt ? new Date(member.lastActiveAt) : null;
+    const fiveMinutes = 5 * 60 * 1000;
+
+    if (!lastActive || now.getTime() - lastActive.getTime() > fiveMinutes) {
+      try {
+        await db
+          .update(teamMembers)
+          .set({ lastActiveAt: now, updatedAt: now })
+          .where(eq(teamMembers.id, member.id));
+      } catch {
+        // Non-critical: don't fail the request if activity tracking fails
+      }
+    }
+  }
+
+  return member;
 }
 
 /**
@@ -165,6 +200,7 @@ export async function ensureTeamMember(user: SessionUser) {
   }
 
   if (pending) {
+    const now = new Date();
     const [updated] = await db
       .update(teamMembers)
       .set({
@@ -173,6 +209,7 @@ export async function ensureTeamMember(user: SessionUser) {
         initials,
         userId: user.id || pending.userId,
         lastActive: "just now",
+        lastActiveAt: now,
       })
       .where(eq(teamMembers.id, pending.id))
       .returning();
@@ -180,6 +217,7 @@ export async function ensureTeamMember(user: SessionUser) {
   }
 
   // Create new admin — first user to join becomes workspace owner
+  const now = new Date();
   const [member] = await db
     .insert(teamMembers)
     .values({
@@ -191,6 +229,7 @@ export async function ensureTeamMember(user: SessionUser) {
       status: "active",
       userId: user.id || null,
       lastActive: "just now",
+      lastActiveAt: now,
     })
     .returning();
 

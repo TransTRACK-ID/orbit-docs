@@ -73,7 +73,7 @@ export const docs = pgTable("docs", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-export const docsRelations = relations(docs, ({ one }) => ({
+export const docsRelations = relations(docs, ({ one, many }) => ({
   app: one(apps, {
     fields: [docs.appId],
     references: [apps.id],
@@ -82,6 +82,7 @@ export const docsRelations = relations(docs, ({ one }) => ({
     fields: [docs.versionId],
     references: [appVersions.id],
   }),
+  docVersions: many(docVersions),
 }));
 
 export const versionHistory = pgTable("version_history", {
@@ -99,6 +100,25 @@ export const versionHistoryRelations = relations(versionHistory, ({ one }) => ({
   version: one(appVersions, {
     fields: [versionHistory.versionId],
     references: [appVersions.id],
+  }),
+}));
+
+export const docVersions = pgTable("doc_versions", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  docId: text("doc_id")
+    .notNull()
+    .references(() => docs.id, { onDelete: "cascade" }),
+  version: text("version").notNull(),
+  content: text("content").default(""),
+  title: text("title"),
+  actor: text("actor"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const docVersionsRelations = relations(docVersions, ({ one }) => ({
+  doc: one(docs, {
+    fields: [docVersions.docId],
+    references: [docs.id],
   }),
 }));
 
