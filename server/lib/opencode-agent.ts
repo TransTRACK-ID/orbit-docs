@@ -66,8 +66,13 @@ export function createOpencodeAgent() {
     throw new Error("No provider API key found in decoded config. Make sure your config has a provider with an apiKey.");
   }
 
+  // Debug: log the actual baseURL and model being used
+  console.log("[OpencodeAgent] Using baseURL:", baseURL);
+  console.log("[OpencodeAgent] Using model:", modelName);
+  console.log("[OpencodeAgent] Provider name:", providerName);
+
   const openai = createOpenAI({
-    baseURL: baseURL || "https://api.openai.com/v1",
+    baseURL: baseURL || "https://api.fireworks.ai/inference/v1",
     apiKey,
   });
 

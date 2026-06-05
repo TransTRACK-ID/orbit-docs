@@ -40,7 +40,14 @@ export default defineEventHandler(async (event) => {
   }
 
   const sendEvent = (data: unknown) => {
-    event.node.res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if (event.node.res.writableEnded || event.node.res.destroyed) {
+      return;
+    }
+    try {
+      event.node.res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch {
+      // Ignore write errors (client may have disconnected)
+    }
   };
 
   sendEvent({
@@ -77,11 +84,15 @@ export default defineEventHandler(async (event) => {
       // Close connection if completed, failed, or cancelled
       if (updated.status === "completed" || updated.status === "failed" || updated.status === "cancelled") {
         clearInterval(interval);
-        event.node.res.end();
+        if (!event.node.res.writableEnded && !event.node.res.destroyed) {
+          event.node.res.end();
+        }
       }
     } catch {
       clearInterval(interval);
-      event.node.res.end();
+      if (!event.node.res.writableEnded && !event.node.res.destroyed) {
+        event.node.res.end();
+      }
     }
   }, 2000);
 

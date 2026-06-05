@@ -26,7 +26,8 @@ export type GenerationStatus =
   | "generating_fsd"
   | "generating_sdd"
   | "completed"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 interface ProgressUpdate {
   status: GenerationStatus;
@@ -194,6 +195,17 @@ function getRepoName(repoUrl: string): string {
   return parts[parts.length - 1] || "repo";
 }
 
+async function isJobCancelled(jobId: string): Promise<boolean> {
+  const db = getDb();
+  const job = await db
+    .select({ status: docGenerationJobs.status })
+    .from(docGenerationJobs)
+    .where(eq(docGenerationJobs.id, jobId))
+    .limit(1)
+    .then((rows) => rows[0]);
+  return job?.status === "cancelled";
+}
+
 export async function generateDocs(
   jobId: string,
   repoUrl: string,
@@ -210,6 +222,7 @@ export async function generateDocs(
       progressPct: STATUS_PROGRESS.cloning,
       progressMessage: "Cloning or pulling repository...",
     });
+    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
     await cloneOrPullRepo(repoUrl, cloneDir);
 
     // Step 2: Analyze repository
@@ -218,6 +231,7 @@ export async function generateDocs(
       progressPct: STATUS_PROGRESS.analyzing,
       progressMessage: "Analyzing codebase structure...",
     });
+    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
     const structure = await getRepoStructure(cloneDir);
     const keyFiles = await getKeyFiles(cloneDir);
@@ -274,6 +288,7 @@ ${Object.entries(schemaContents)
       progressPct: STATUS_PROGRESS.generating_srs,
       progressMessage: "Generating Software Requirements Specification...",
     });
+    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
     const srsTemplate = await loadTemplate("srs");
     const srsPrompt = `Based on the following codebase analysis, generate a Software Requirements Specification (SRS) document.
@@ -296,6 +311,7 @@ Generate the complete SRS document in markdown format. Fill in all {{placeholder
       progressPct: STATUS_PROGRESS.generating_fsd,
       progressMessage: "Generating Functional Specification Document...",
     });
+    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
     const fsdTemplate = await loadTemplate("fsd");
     const fsdPrompt = `Based on the following codebase analysis, generate a Functional Specification Document (FSD).
@@ -321,6 +337,7 @@ Generate the complete FSD document in markdown format. Fill in all {{placeholder
       progressPct: STATUS_PROGRESS.generating_sdd,
       progressMessage: "Generating System Design Document...",
     });
+    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
     const sddTemplate = await loadTemplate("sdd");
     const sddPrompt = `Based on the following codebase analysis, generate a System Design Document (SDD).
@@ -344,6 +361,7 @@ Generate the complete SDD document in markdown format. Fill in all {{placeholder
     await updateJobResult(jobId, "sdd", sddContent);
 
     // Step 6: Complete
+    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
     await updateJobCompletion(jobId, true);
     await onProgress({
       status: "completed",
@@ -353,12 +371,17 @@ Generate the complete SDD document in markdown format. Fill in all {{placeholder
   } catch (error) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error during generation";
-    await updateJobCompletion(jobId, false, errorMessage);
-    await onProgress({
-      status: "failed",
-      progressPct: 0,
-      progressMessage: errorMessage,
-    });
+    
+    // If cancelled, don't overwrite the cancelled status
+    const wasCancelled = errorMessage === "Generation cancelled";
+    if (!wasCancelled) {
+      await updateJobCompletion(jobId, false, errorMessage);
+      await onProgress({
+        status: "failed",
+        progressPct: 0,
+        progressMessage: errorMessage,
+      });
+    }
     throw error;
   } finally {
     // Repositories are kept in orbit-docs-repositories for reuse
