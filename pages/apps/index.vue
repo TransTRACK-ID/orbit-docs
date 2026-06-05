@@ -519,6 +519,9 @@ const statusLabel: Record<string, string> = {
             <NuxtLink :to="`/docs?app=${app.id}`" class="btn btn-ghost btn-sm">
               Docs &rarr;
             </NuxtLink>
+            <NuxtLink :to="`/apps/${app.id}/generate-docs`" class="btn btn-ghost btn-sm">
+              Generate Docs &rarr;
+            </NuxtLink>
           </div>
           <div class="app-card-actions">
             <button
