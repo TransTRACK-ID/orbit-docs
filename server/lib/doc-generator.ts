@@ -6,9 +6,7 @@ import { existsSync } from "fs";
 import { getDb } from "~/server/database";
 import { docGenerationJobs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
-import { createOpenAI } from "@ai-sdk/openai";
-import { generateText } from "ai";
-import { useRuntimeConfig } from "#imports";
+import { createOpencodeAgent } from "./opencode-agent";
 
 const execAsync = promisify(exec);
 
@@ -18,36 +16,6 @@ async function ensureRepoDir(): Promise<void> {
   if (!existsSync(REPO_DIR)) {
     await mkdir(REPO_DIR, { recursive: true });
   }
-}
-
-function createAgent() {
-  const config = useRuntimeConfig();
-  const apiKey = config.openaiApiKey as string | undefined;
-  const baseURL = config.openaiApiBaseUrl as string | undefined;
-  const model = config.openaiModel as string | undefined;
-
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not set in runtime config");
-  }
-
-  const openai = createOpenAI({
-    baseURL: baseURL || "https://api.openai.com/v1",
-    apiKey,
-  });
-
-  return {
-    async analyze(prompt: string): Promise<string> {
-      const { text } = await generateText({
-        model: openai(model || "gpt-4o-mini"),
-        system:
-          "You are an expert software architect and technical analyst. You analyze codebases and generate detailed technical documentation. You have read access to the file system and bash access to run commands. You do NOT have write or edit permissions.",
-        prompt,
-        temperature: 0.2,
-        maxTokens: 8000,
-      });
-      return text;
-    },
-  };
 }
 
 export type DocType = "srs" | "fsd" | "sdd";
@@ -245,7 +213,7 @@ export async function generateDocs(
 ): Promise<void> {
   const repoName = getRepoName(repoUrl);
   const cloneDir = join(REPO_DIR, repoName);
-  const agent = createAgent();
+  const agent = createOpencodeAgent();
 
   try {
     // Step 1: Clone or pull repository
