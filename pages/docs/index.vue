@@ -186,8 +186,8 @@ const statusLabel: Record<string, string> = {
       </div>
     </header>
 
-    <div v-if="isLoading" class="grid-3">
-      <div v-for="n in 3" :key="n" class="card" style="height: 140px">
+    <div v-if="isLoading" class="doc-grid">
+      <div v-for="n in 3" :key="n" class="doc-card" style="height: 140px">
         <div class="animate-pulse space-y-3">
           <div class="h-4 bg-gray-200 rounded w-3/4"></div>
           <div class="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -203,45 +203,40 @@ const statusLabel: Record<string, string> = {
       </button>
     </div>
 
-    <div v-else class="grid-3">
-      <div v-for="doc in docs" :key="doc.id" class="card">
-        <div class="card-head">
-          <div>
-            <div class="card-title">{{ doc.title }}</div>
-            <div class="card-meta">
-              Updated {{ timeAgo(doc.updatedAt) }}
-              <span v-if="doc.app">· {{ doc.app.name }}</span>
+    <div v-else class="doc-grid">
+      <div v-for="doc in docs" :key="doc.id" class="doc-card">
+        <div class="doc-card__header">
+          <div class="doc-card__title-group">
+            <div class="doc-card__title">{{ doc.title }}</div>
+            <div class="doc-card__meta">
+              <span class="doc-card__meta-item">Updated {{ timeAgo(doc.updatedAt) }}</span>
+              <span v-if="doc.app" class="doc-card__meta-item">{{ doc.app.name }}</span>
             </div>
           </div>
-          <div class="card-actions">
-            <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
-              {{ statusLabel[doc.status] || doc.status }}
-            </span>
-          </div>
+          <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
+            {{ statusLabel[doc.status] || doc.status }}
+          </span>
         </div>
-        <div v-if="doc.tags && doc.tags.length > 0" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+
+        <div v-if="doc.tags && doc.tags.length > 0" class="doc-card__tags">
           <span v-for="tag in doc.tags" :key="tag" class="pill pill-accent">{{ tag }}</span>
         </div>
-        <div class="card-foot">
-          <span style="color:var(--muted);font-size:12px;">{{ doc.author || 'Unknown' }}</span>
-          <div class="flex-gap-sm">
+
+        <div class="doc-card__footer">
+          <span class="doc-card__author">{{ doc.author || 'Unknown' }}</span>
+          <div class="doc-card__actions">
             <NuxtLink :to="`/docs/${doc.id}`" class="btn btn-primary btn-sm">
               Edit
             </NuxtLink>
             <div class="actions-menu">
               <button type="button" class="btn btn-ghost btn-sm actions-toggle" @click="doc._showActions = !doc._showActions">
-                …
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="8" cy="4" r="1.5" fill="currentColor"/>
+                  <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+                  <circle cx="8" cy="12" r="1.5" fill="currentColor"/>
+                </svg>
               </button>
               <div v-if="doc._showActions" class="actions-dropdown" @click.stop>
-                <NuxtLink
-                  v-if="doc.status === 'published'"
-                  :to="`/p/${doc.id}`"
-                  target="_blank"
-                  class="actions-item"
-                  @click="doc._showActions = false"
-                >
-                  Public View
-                </NuxtLink>
                 <NuxtLink
                   v-if="doc.status === 'published'"
                   :to="`/p/${doc.id}`"
@@ -375,72 +370,125 @@ const statusLabel: Record<string, string> = {
   border-color: var(--accent);
 }
 
-.grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-@media (max-width: 1100px) {
-  .grid-3 {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-@media (max-width: 720px) {
-  .grid-3 {
-    grid-template-columns: 1fr;
-  }
+/* ── Spacing scale ─────────────────────────────────────────────── */
+.docs-page {
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
 }
 
-.card {
+/* ── Doc grid ───────────────────────────────────────────────── */
+.doc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+/* ── Doc card ───────────────────────────────────────────────── */
+.doc-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 20px;
-  transition: box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.card:hover {
-  box-shadow: 0 1px 3px var(--fg-soft);
-}
-.card-head {
+  padding: var(--space-lg);
   display: flex;
-  align-items: start;
-  justify-content: space-between;
-  margin-bottom: 12px;
-  gap: 12px;
+  flex-direction: column;
+  transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.card-title {
-  font-size: 16px;
+
+.doc-card:hover {
+  box-shadow: 0 4px 12px color-mix(in oklch, var(--fg) 8%, transparent);
+}
+
+/* ── Header: title + meta ───────────────────────────────────── */
+.doc-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.doc-card__title-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  min-width: 0;
+  flex: 1;
+}
+
+.doc-card__title {
+  font-size: 15px;
   font-weight: 600;
   color: var(--fg);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
-.card-meta {
-  color: var(--muted);
-  font-size: 13px;
-  margin-top: 4px;
-}
-.card-actions {
+
+.doc-card__meta {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  gap: var(--space-xs);
+  color: var(--muted);
+  font-size: 12px;
 }
-.card-foot {
+
+.doc-card__meta-item + .doc-card__meta-item::before {
+  content: "·";
+  margin-right: var(--space-xs);
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+/* ── Tags ───────────────────────────────────────────────────── */
+.doc-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-top: var(--space-md);
+}
+
+/* ── Footer: author + actions ───────────────────────────────── */
+.doc-card__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 16px;
-  padding-top: 12px;
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
   border-top: 1px solid var(--border);
+}
+
+.doc-card__author {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-card__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-shrink: 0;
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 2px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
 }
 .pill-accent {
   background: var(--accent-soft);
@@ -719,7 +767,7 @@ const statusLabel: Record<string, string> = {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card,
+  .doc-card,
   .modal-overlay,
   .modal,
   .btn {
