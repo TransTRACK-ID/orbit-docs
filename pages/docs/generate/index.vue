@@ -7,6 +7,7 @@ definePageMeta({
 
 const $page = usePageStore();
 const { apps, isLoading, fetchApps } = useApps();
+const router = useRouter();
 
 onMounted(() => {
   $page.setTitle("Generate Docs");
@@ -41,10 +42,15 @@ const statusLabel: Record<string, string> = {
 <template>
   <div class="generate-docs-landing">
     <header class="topbar">
-      <h1>Generate Docs</h1>
-      <p class="subtitle">
-        Select an app to generate SRS, FSD, and SDD from its repository
-      </p>
+      <div>
+        <h1>Generate Docs</h1>
+        <p class="subtitle">
+          Select an app to generate SRS, FSD, and SDD from its repository
+        </p>
+      </div>
+      <NuxtLink to="/docs" class="btn btn-ghost">
+        &larr; Back to Docs
+      </NuxtLink>
     </header>
 
     <div v-if="isLoading" class="app-grid">
@@ -65,10 +71,9 @@ const statusLabel: Record<string, string> = {
     </div>
 
     <div v-else class="app-grid">
-      <NuxtLink
+      <div
         v-for="app in apps"
         :key="app.id"
-        :to="`/apps/${app.id}/generate-docs`"
         class="app-card"
       >
         <div class="app-card-header">
@@ -91,9 +96,15 @@ const statusLabel: Record<string, string> = {
         </div>
 
         <div class="app-card-foot">
-          <span class="generate-hint">Generate docs &rarr;</span>
+          <NuxtLink
+            :to="`/docs/generate/${app.id}`"
+            class="generate-hint btn btn-ghost btn-sm"
+            @click.stop
+          >
+            Generate docs &rarr;
+          </NuxtLink>
         </div>
-      </NuxtLink>
+      </div>
     </div>
   </div>
 </template>
@@ -106,6 +117,10 @@ const statusLabel: Record<string, string> = {
 }
 
 .topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 8px;
 }
 
@@ -124,7 +139,7 @@ const statusLabel: Record<string, string> = {
 
 .app-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 20px;
 }
 
@@ -144,17 +159,12 @@ const statusLabel: Record<string, string> = {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  cursor: pointer;
+  color: inherit;
 }
 
 .app-card:hover {
   border-color: var(--accent);
   box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 15%, transparent);
-}
-
-.app-card:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 
 .app-card-header {
@@ -266,6 +276,7 @@ const statusLabel: Record<string, string> = {
   font-weight: 500;
   cursor: pointer;
   transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  text-decoration: none;
 }
 
 .btn-primary {
@@ -276,6 +287,25 @@ const statusLabel: Record<string, string> = {
 
 .btn-primary:hover {
   background: color-mix(in oklch, var(--accent) 88%, black);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--muted);
+}
+
+.btn-ghost:hover {
+  color: var(--fg);
+  background: color-mix(in oklch, var(--fg) 4%, transparent);
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-ghost.generate-hint {
+  color: var(--accent);
 }
 
 .skeleton {

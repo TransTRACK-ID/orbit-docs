@@ -180,6 +180,9 @@ const statusLabel: Record<string, string> = {
           placeholder="Filter by app…"
           search-placeholder="Search apps…"
         />
+        <NuxtLink to="/docs/generate" class="btn btn-secondary">
+          ✦ Generate Docs
+        </NuxtLink>
         <button type="button" class="btn btn-primary" @click="openCreateModal">
           + New Doc
         </button>

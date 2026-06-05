@@ -1,13 +1,22 @@
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFile } from "fs/promises";
+import { readFile, mkdir } from "fs/promises";
 import { join } from "path";
+import { existsSync } from "fs";
 import { getDb } from "~/server/database";
 import { docGenerationJobs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { createOpencodeAgent } from "./opencode-agent";
 
 const execAsync = promisify(exec);
+
+const REPO_DIR = join(process.cwd(), "orbit-docs-repositories");
+
+async function ensureRepoDir(): Promise<void> {
+  if (!existsSync(REPO_DIR)) {
+    await mkdir(REPO_DIR, { recursive: true });
+  }
+}
 
 export type DocType = "srs" | "fsd" | "sdd";
 export type GenerationStatus =
@@ -42,13 +51,26 @@ async function loadTemplate(type: DocType): Promise<string> {
   return readFile(templatePath, "utf-8");
 }
 
-async function cloneRepo(repoUrl: string, cloneDir: string): Promise<void> {
-  const { stderr } = await execAsync(
-    `git clone --depth 1 "${repoUrl}" "${cloneDir}"`,
-    { timeout: 120000 }
-  );
-  if (stderr && stderr.includes("error")) {
-    throw new Error(`Git clone failed: ${stderr}`);
+async function cloneOrPullRepo(repoUrl: string, cloneDir: string): Promise<void> {
+  await ensureRepoDir();
+  const exists = existsSync(join(cloneDir, ".git"));
+  if (exists) {
+    // Pull existing repo
+    const { stderr } = await execAsync(`git -C "${cloneDir}" pull`, {
+      timeout: 120000,
+    });
+    if (stderr && stderr.includes("error")) {
+      throw new Error(`Git pull failed: ${stderr}`);
+    }
+  } else {
+    // Clone new repo
+    const { stderr } = await execAsync(
+      `git clone --depth 1 "${repoUrl}" "${cloneDir}"`,
+      { timeout: 120000 }
+    );
+    if (stderr && stderr.includes("error")) {
+      throw new Error(`Git clone failed: ${stderr}`);
+    }
   }
 }
 
@@ -166,22 +188,29 @@ async function updateJobCompletion(
     .where(eq(docGenerationJobs.id, jobId));
 }
 
+function getRepoName(repoUrl: string): string {
+  const clean = repoUrl.replace(/\.git$/, "");
+  const parts = clean.split("/");
+  return parts[parts.length - 1] || "repo";
+}
+
 export async function generateDocs(
   jobId: string,
   repoUrl: string,
   onProgress: ProgressCallback
 ): Promise<void> {
-  const cloneDir = `/tmp/orbit-docs-${jobId}`;
+  const repoName = getRepoName(repoUrl);
+  const cloneDir = join(REPO_DIR, repoName);
   const agent = createOpencodeAgent();
 
   try {
-    // Step 1: Clone repository
+    // Step 1: Clone or pull repository
     await onProgress({
       status: "cloning",
       progressPct: STATUS_PROGRESS.cloning,
-      progressMessage: "Cloning repository...",
+      progressMessage: "Cloning or pulling repository...",
     });
-    await cloneRepo(repoUrl, cloneDir);
+    await cloneOrPullRepo(repoUrl, cloneDir);
 
     // Step 2: Analyze repository
     await onProgress({
@@ -332,12 +361,7 @@ Generate the complete SDD document in markdown format. Fill in all {{placeholder
     });
     throw error;
   } finally {
-    // Cleanup cloned repo
-    try {
-      await execAsync(`rm -rf "${cloneDir}"`, { timeout: 30000 });
-    } catch {
-      // Ignore cleanup errors
-    }
+    // Repositories are kept in orbit-docs-repositories for reuse
   }
 }
 
