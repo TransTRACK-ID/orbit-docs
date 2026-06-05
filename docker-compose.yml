@@ -33,6 +33,34 @@ services:
             - "traefik.http.services.${IMAGE_NAME}-${APP_ENV}.loadbalancer.server.port=3000"
             - "traefik.docker.network=proxy"
 
+    mcp-server:
+        build:
+            context: .
+            dockerfile: Dockerfile.mcp
+        image: ${IMAGE_NAME}-mcp
+        restart: unless-stopped
+        environment:
+            POSTGRES_URL: ${POSTGRES_URL}
+            MCP_PORT: ${MCP_PORT:-41244}
+            MCP_API_KEY: ${MCP_API_KEY}
+        ports:
+            - "${MCP_PORT:-41244}:41244"
+        networks:
+            - proxy
+        labels:
+            - "traefik.enable=true"
+            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp.entrypoints=http"
+            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp.rule=Host(`${MCP_HOST:-mcp.${APP_HOST}`)"
+            - "traefik.http.middlewares.${IMAGE_NAME}-${APP_ENV}-mcp-https-redirect.redirectscheme.scheme=https"
+            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp.middlewares=${IMAGE_NAME}-${APP_ENV}-mcp-https-redirect"
+            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp-secure.entrypoints=https"
+            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp-secure.rule=Host(`${MCP_HOST:-mcp.${APP_HOST}`)"
+            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp-secure.tls=true"
+            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp-secure.tls.certresolver=http"
+            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp-secure.service=${IMAGE_NAME}-${APP_ENV}-mcp"
+            - "traefik.http.services.${IMAGE_NAME}-${APP_ENV}-mcp.loadbalancer.server.port=41244"
+            - "traefik.docker.network=proxy"
+
 #Docker Networks
 networks:
     proxy:

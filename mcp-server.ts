@@ -28,6 +28,44 @@ const pool = new Pool({ connectionString });
 const db = drizzle(pool, { schema });
 
 /* ------------------------------------------------------------------ */
+/* 1b. Auth Middleware                                                  */
+/* ------------------------------------------------------------------ */
+
+const MCP_API_KEY = process.env.MCP_API_KEY;
+
+if (MCP_API_KEY) {
+  console.log("[orbit-docs-mcp] API key authentication enabled");
+} else {
+  console.warn("[orbit-docs-mcp] WARNING: MCP_API_KEY not set. Server is open to anyone with the URL.");
+  console.warn("[orbit-docs-mcp] Set MCP_API_KEY in your environment to secure the endpoint.");
+}
+
+function requireApiKey(req: express.Request, res: express.Response, next: express.NextFunction) {
+  // Skip auth for health check
+  if (req.path === "/health") {
+    return next();
+  }
+
+  if (!MCP_API_KEY) {
+    return next();
+  }
+
+  const authHeader = req.headers.authorization || "";
+  const apiKey = req.headers["x-api-key"] as string || "";
+
+  const providedKey = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : apiKey;
+
+  if (!providedKey || providedKey !== MCP_API_KEY) {
+    return res.status(401).json({
+      error: "Unauthorized",
+      message: "Invalid or missing API key. Provide it via Authorization: Bearer <key> or X-API-Key header.",
+    });
+  }
+
+  next();
+}
+
+/* ------------------------------------------------------------------ */
 /* 2. MCP Server                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -1249,6 +1287,7 @@ server.setRequestHandler(
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.use(requireApiKey);
 
 const transports: Record<string, SSEServerTransport> = {};
 
