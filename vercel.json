@@ -2,5 +2,15 @@
   "version": 2,
   "env": {
     "VERCEL_ANALYZE_BUILD_OUTPUT": "1"
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/mcp/connect",
+      "destination": "/api/mcp/connect"
+    },
+    {
+      "source": "/api/mcp/message",
+      "destination": "/api/mcp/message"
+    }
+  ]
 }

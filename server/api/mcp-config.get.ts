@@ -7,7 +7,7 @@ export default defineEventHandler((event) => {
   
   // Priority: explicit MCP_HOST env var > inferred from request host
   const mcpHost = config.mcpHost || `mcp.${host}`;
-  const mcpUrl = `${protocol}://${mcpHost}/mcp`;
+  const mcpUrl = `${protocol}://${host}/api/mcp/connect`;
   
   return {
     data: {

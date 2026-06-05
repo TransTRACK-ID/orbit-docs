@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
 
   // Get the request URL to determine the message endpoint
   const url = getRequestURL(event);
-  const messagePath = url.pathname.replace(/\/$/, "") + "/message";
+  const messagePath = url.pathname.replace(/\/$/, "").replace(/\/connect$/, "") + "/message";
   
   // Create SSE transport with Nitro's response
   const transport = new SSEServerTransport(messagePath, event.node.res);
