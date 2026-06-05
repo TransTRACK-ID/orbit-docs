@@ -87,6 +87,8 @@ export default defineNuxtConfig({
     openaiApiKey: process.env.OPENAI_API_KEY,
     openaiApiBaseUrl: process.env.OPENAI_API_BASE_URL,
     openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    // MCP Server host (server-side, inferred from request if not set)
+    mcpHost: process.env.MCP_HOST || process.env.NUXT_PUBLIC_MCP_HOST,
   },
 
   compatibilityDate: "2025-01-31",

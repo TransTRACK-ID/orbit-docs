@@ -81,6 +81,7 @@ onMounted(() => {
   fetchIntegrations();
   fetchNotifications();
   fetchApiKeys();
+  fetchMcpConfig();
 });
 
 // ─── General tab form ───────────────────────────────────────────
@@ -351,9 +352,22 @@ async function revokeAllKeys() {
 }
 
 // ─── MCP Connection ───────────────────────────────────────────────
-const mcpHost = useRuntimeConfig().public.mcpHost;
-const mcpUrl = computed(() => `http://${mcpHost}/mcp`);
-const mcpUrlHttps = computed(() => `https://${mcpHost}/mcp`);
+const mcpConfig = ref<{ host: string; url: string; protocol: string; configured: boolean } | null>(null);
+const mcpLoading = ref(false);
+
+async function fetchMcpConfig() {
+  mcpLoading.value = true;
+  try {
+    const { data } = await $fetch<{ data: { host: string; url: string; protocol: string; configured: boolean } }>("/api/mcp-config");
+    mcpConfig.value = data;
+  } catch (e) {
+    console.error("Failed to fetch MCP config", e);
+  } finally {
+    mcpLoading.value = false;
+  }
+}
+
+const mcpUrlHttps = computed(() => mcpConfig.value?.url || "https://localhost:41244/mcp");
 
 const mcpAgents = [
   {
@@ -419,6 +433,7 @@ function copyMcpConfig(agentName: string, text: string) {
   mcpCopied.value = agentName;
   setTimeout(() => { mcpCopied.value = null; }, 2000);
 }
+
 </script>
 
 <template>
@@ -668,6 +683,18 @@ function copyMcpConfig(agentName: string, text: string) {
                   <div class="token-box">
                     <span class="token-value">{{ mcpUrlHttps }}</span>
                     <button class="btn btn-ghost btn-sm" @click="copyToken(mcpUrlHttps)">Copy</button>
+                  </div>
+                  <div v-if="!mcpConfig?.configured" class="mcp-warning" style="margin-top: 8px;">
+                    <span class="pill pill-amber">Not configured</span>
+                    <span style="margin-left: 8px; color: var(--muted); font-size: 12px;">
+                      Set <code>MCP_HOST</code> or <code>NUXT_PUBLIC_MCP_HOST</code> env variable on your server to customize this URL.
+                    </span>
+                  </div>
+                  <div v-else class="mcp-ok" style="margin-top: 8px;">
+                    <span class="pill pill-green">Configured</span>
+                    <span style="margin-left: 8px; color: var(--muted); font-size: 12px;">
+                      Host is set from server environment.
+                    </span>
                   </div>
                 </div>
                 <div class="form-group">
