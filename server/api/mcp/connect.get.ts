@@ -1,6 +1,6 @@
 import { defineEventHandler, getHeader, createError, getRequestURL } from "h3";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { mcpServer, checkMcpApiKey, transports } from "~/server/utils/mcp-server";
+import { createMcpServer, checkMcpApiKey, transports } from "~/server/utils/mcp-server";
 
 export default defineEventHandler(async (event) => {
   // Check API key
@@ -19,14 +19,24 @@ export default defineEventHandler(async (event) => {
   const url = getRequestURL(event);
   const messagePath = url.pathname.replace(/\/$/, "").replace(/\/connect$/, "") + "/message";
   
-  // Create SSE transport with Nitro's response
-  const transport = new SSEServerTransport(messagePath, event.node.res);
+  // Set SSE headers on the raw Node response
+  const res = event.node.res;
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  
+  // Create SSE transport with the raw response
+  const transport = new SSEServerTransport(messagePath, res);
   transports[transport.sessionId] = transport;
   
   // Clean up on close
-  event.node.res.on("close", () => {
+  res.on("close", () => {
     delete transports[transport.sessionId];
   });
+  
+  // Create a new MCP server instance for this connection
+  const mcpServer = createMcpServer();
   
   // Connect the MCP server
   await mcpServer.connect(transport);

@@ -5,38 +5,26 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { Pool } from "pg";
-import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, desc, sql, and, count } from "drizzle-orm";
+import { db } from "~/server/database";
 import * as schema from "~/server/database/schema";
 
 /* ------------------------------------------------------------------ */
-/* 1. Database Setup                                                   */
+/* 2. MCP Server Factory                                               */
 /* ------------------------------------------------------------------ */
 
-const connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("Missing POSTGRES_URL or DATABASE_URL environment variable");
-}
-
-const pool = new Pool({ connectionString });
-const db = drizzle(pool, { schema });
-
-/* ------------------------------------------------------------------ */
-/* 2. MCP Server                                                       */
-/* ------------------------------------------------------------------ */
-
-export const mcpServer = new Server(
-  {
-    name: "orbit-docs",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
+export function createMcpServer() {
+  const mcpServer = new Server(
+    {
+      name: "orbit-docs",
+      version: "1.0.0",
     },
-  }
-);
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
 
 /* ------------------------------------------------------------------ */
 /* 3. Zod Schemas for Validation                                       */
@@ -119,7 +107,7 @@ const GetStatsSchema = z.object({});
 /* 4. Tool Definitions (JSON Schema)                                   */
 /* ------------------------------------------------------------------ */
 
-export const TOOLS: Tool[] = [
+const TOOLS: Tool[] = [
   {
     name: "list_apps",
     description: "List all applications with name search, pagination, and latest version info.",
@@ -1207,7 +1195,12 @@ mcpServer.setRequestHandler(
       };
     }
   }
-);
+  );
+
+  return mcpServer;
+}
+
+export const mcpServer = createMcpServer();
 
 /* ------------------------------------------------------------------ */
 /* 6. Auth helper for Nitro                                           */

@@ -4,6 +4,15 @@ import { apps, appVersions, activityLogs, docs, owners, workspaceSettings, teamM
 import { count } from "drizzle-orm";
 
 export default defineNitroPlugin(async () => {
+  try {
+    // Test connection first — if DB is unreachable, skip silently
+    // so the server can still start (e.g. in preview / Vercel edge builds)
+    await pool.query("SELECT 1");
+  } catch (err: any) {
+    console.warn("[db-init] Database unreachable, skipping initialization:", err.message);
+    return;
+  }
+
   // Create tables if they don't exist (PostgreSQL syntax)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS apps (
