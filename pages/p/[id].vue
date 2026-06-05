@@ -302,8 +302,6 @@ function itemTarget(item: NavItem): string {
     <div v-if="chatOpen" class="chat-pane">
       <DocsChatWidget
         :doc-id="docId"
-        :doc-content="doc?.content || ''"
-        :doc-title="doc?.title || ''"
         @close="chatOpen = false"
       />
     </div>

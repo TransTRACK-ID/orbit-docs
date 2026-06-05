@@ -11,8 +11,6 @@ interface ChatMessage {
 
 const props = defineProps<{
   docId?: string;
-  docContent?: string;
-  docTitle?: string;
 }>();
 
 const emit = defineEmits<{ close: [] }>();
@@ -94,8 +92,6 @@ async function sendMessage() {
       body: JSON.stringify({
         messages: chatHistory,
         docId: props.docId,
-        docContent: props.docContent,
-        docTitle: props.docTitle,
       }),
       signal: abortController.value.signal,
     });
@@ -183,7 +179,7 @@ function closeChat() {
         </div>
         <p>Ask me anything about this document</p>
         <div class="chat-suggestions">
-          <button v-if="docTitle" type="button" class="suggestion" @click="inputValue = `What is ${docTitle} about?`">
+          <button type="button" class="suggestion" @click="inputValue = 'What is this document about?'">
             What is this about?
           </button>
           <button type="button" class="suggestion" @click="inputValue = 'Summarize the key points'">

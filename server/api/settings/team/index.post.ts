@@ -58,6 +58,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  const now = new Date();
   const member = await db
     .insert(teamMembers)
     .values({
@@ -68,9 +69,10 @@ export default defineEventHandler(async (event) => {
       status: "pending",
       invitedBy: currentMember.name,
       lastActive: lastActive || "invited",
+      lastActiveAt: now,
     })
     .returning()
     .then((rows) => rows[0]);
 
-  return { data: member };
+  return { data: { ...member, lastActive: "invited" } };
 });

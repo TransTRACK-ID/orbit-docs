@@ -529,8 +529,6 @@ const lastModified = computed(() => {
         <div v-if="chatOpen && !previewOnly" class="chat-pane">
           <DocsChatWidget
             :doc-id="docId"
-            :doc-content="editorContent"
-            :doc-title="editorTitle"
             @close="chatOpen = false"
           />
         </div>

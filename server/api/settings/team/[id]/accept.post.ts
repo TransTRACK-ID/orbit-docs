@@ -49,17 +49,19 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const now = new Date();
   const updated = await db
     .update(teamMembers)
     .set({
       status: "active",
       userId: user.id,
       lastActive: "just now",
-      updatedAt: new Date(),
+      lastActiveAt: now,
+      updatedAt: now,
     })
     .where(eq(teamMembers.id, id))
     .returning()
     .then((rows) => rows[0]);
 
-  return { data: updated };
+  return { data: { ...updated, lastActive: "just now" } };
 });

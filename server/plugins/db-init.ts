@@ -117,6 +117,7 @@ export default defineNitroPlugin(async () => {
   await pool.query(`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'`);
   await pool.query(`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS invited_by TEXT`);
   await pool.query(`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS user_id TEXT`);
+  await pool.query(`ALTER TABLE team_members ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS integration_settings (
@@ -281,15 +282,16 @@ export default defineNitroPlugin(async () => {
 
   const teamCount = await db.select({ count: count() }).from(teamMembers);
   if (teamCount[0]?.count === 0) {
+    const now = new Date();
     await db.insert(teamMembers).values([
-      { id: crypto.randomUUID(), name: "Sarah Chen", email: "sarah.chen@example.com", initials: "SC", role: "admin", status: "active", lastActive: "2 hours ago" },
-      { id: crypto.randomUUID(), name: "Mike Ross", email: "mike.ross@example.com", initials: "MR", role: "product_manager", status: "active", lastActive: "1 day ago" },
-      { id: crypto.randomUUID(), name: "Jen Park", email: "jen.park@example.com", initials: "JP", role: "tech_writer", status: "active", lastActive: "3 days ago" },
-      { id: crypto.randomUUID(), name: "Tom Lee", email: "tom.lee@example.com", initials: "TL", role: "viewer", status: "active", lastActive: "1 week ago" },
+      { id: crypto.randomUUID(), name: "Sarah Chen", email: "sarah.chen@example.com", initials: "SC", role: "admin", status: "active", lastActive: "2 hours ago", lastActiveAt: new Date(now.getTime() - 2 * 60 * 60 * 1000) },
+      { id: crypto.randomUUID(), name: "Mike Ross", email: "mike.ross@example.com", initials: "MR", role: "product_manager", status: "active", lastActive: "1 day ago", lastActiveAt: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+      { id: crypto.randomUUID(), name: "Jen Park", email: "jen.park@example.com", initials: "JP", role: "tech_writer", status: "active", lastActive: "3 days ago", lastActiveAt: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) },
+      { id: crypto.randomUUID(), name: "Tom Lee", email: "tom.lee@example.com", initials: "TL", role: "viewer", status: "active", lastActive: "1 week ago", lastActiveAt: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) },
       // Preview-mode admin so local testing works out of the box
-      { id: crypto.randomUUID(), name: "Preview User", email: "preview@example.com", userId: "preview-user", initials: "PU", role: "admin", status: "active", lastActive: "just now" },
+      { id: crypto.randomUUID(), name: "Preview User", email: "preview@example.com", userId: "preview-user", initials: "PU", role: "admin", status: "active", lastActive: "just now", lastActiveAt: now },
       // Pending invitation for demo / testing
-      { id: crypto.randomUUID(), name: "Alex Rivera", email: "alex@example.com", initials: "AR", role: "tech_writer", status: "pending", invitedBy: "Sarah Chen", lastActive: "invited" },
+      { id: crypto.randomUUID(), name: "Alex Rivera", email: "alex@example.com", initials: "AR", role: "tech_writer", status: "pending", invitedBy: "Sarah Chen", lastActive: "invited", lastActiveAt: now },
     ]);
   }
 
