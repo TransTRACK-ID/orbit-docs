@@ -385,7 +385,7 @@ const statusLabel: Record<string, string> = {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
   gap: var(--space-lg);
-  align-items: start;
+  align-items: stretch;
 }
 
 /* ── Doc card ───────────────────────────────────────────────── */
@@ -457,7 +457,7 @@ const statusLabel: Record<string, string> = {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-sm);
-  margin-top: var(--space-sm);
+  margin-top: auto;
   padding-top: var(--space-sm);
   border-top: 1px solid var(--border);
 }
