@@ -73,6 +73,8 @@ export default defineNuxtConfig({
     public: {
       // Client-side base URL — should be relative so requests go through the preview proxy
       baseAPI: process.env.NUXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL,
+      // MCP Server endpoint (shown in settings page)
+      mcpHost: process.env.NUXT_PUBLIC_MCP_HOST || 'localhost:41244',
     },
     // Server-only base URL — can be absolute (e.g. http://127.0.0.1:port/api/preview/taskId)
     // so server-side $fetch gets a valid URL instead of crashing on relative paths
