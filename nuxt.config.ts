@@ -94,6 +94,7 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-01-31",
 
   nitro: {
+    preset: "vercel",
     routeRules: {
       "/p/**": {
         headers: {

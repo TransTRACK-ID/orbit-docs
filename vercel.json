@@ -5,11 +5,11 @@
   },
   "rewrites": [
     {
-      "source": "/api/mcp/connect",
+      "source": "/mcp",
       "destination": "/api/mcp/connect"
     },
     {
-      "source": "/api/mcp/message",
+      "source": "/mcp/message",
       "destination": "/api/mcp/message"
     }
   ]
