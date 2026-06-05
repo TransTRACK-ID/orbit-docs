@@ -21,6 +21,7 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
       "generating_sdd",
       "completed",
       "failed",
+      "cancelled",
     ],
   })
     .notNull()

@@ -2,16 +2,16 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { generateText } from "ai";
 import { useRuntimeConfig } from "#imports";
 
-interface OpencodeConfig {
-  provider?: {
-    openrouter?: {
-      options?: {
-        baseURL?: string;
-        apiKey?: string;
-      };
-      models?: Record<string, { name: string }>;
-    };
+interface ProviderConfig {
+  options?: {
+    baseURL?: string;
+    apiKey?: string;
   };
+  models?: Record<string, { name: string }>;
+}
+
+interface OpencodeConfig {
+  provider?: Record<string, ProviderConfig>;
   model?: string;
   permission?: {
     edit?: string;
@@ -45,17 +45,29 @@ function getConfig(): OpencodeConfig {
 
 export function createOpencodeAgent() {
   const cfg = getConfig();
-  const provider = cfg.provider?.openrouter;
+  const providers = cfg.provider || {};
+
+  // Find the first provider with a valid apiKey
+  let provider: ProviderConfig | undefined;
+  let providerName = "default";
+  for (const [name, p] of Object.entries(providers)) {
+    if (p.options?.apiKey) {
+      provider = p;
+      providerName = name;
+      break;
+    }
+  }
+
   const baseURL = provider?.options?.baseURL;
   const apiKey = provider?.options?.apiKey;
-  const modelName = cfg.model || "openrouter/anthropic/claude-sonnet-4";
+  const modelName = cfg.model || `${providerName}/accounts/fireworks/routers/kimi-k2p6-turbo`;
 
   if (!apiKey) {
-    throw new Error("OpenRouter API key is missing in decoded config");
+    throw new Error("No provider API key found in decoded config. Make sure your config has a provider with an apiKey.");
   }
 
   const openai = createOpenAI({
-    baseURL: baseURL || "https://openrouter.ai/api/v1",
+    baseURL: baseURL || "https://api.openai.com/v1",
     apiKey,
   });
 

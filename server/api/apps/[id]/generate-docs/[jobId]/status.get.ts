@@ -74,8 +74,8 @@ export default defineEventHandler(async (event) => {
         errorMessage: updated.errorMessage,
       });
 
-      // Close connection if completed or failed
-      if (updated.status === "completed" || updated.status === "failed") {
+      // Close connection if completed, failed, or cancelled
+      if (updated.status === "completed" || updated.status === "failed" || updated.status === "cancelled") {
         clearInterval(interval);
         event.node.res.end();
       }

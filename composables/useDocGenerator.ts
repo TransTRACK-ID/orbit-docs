@@ -156,6 +156,80 @@ export const useDocGenerator = () => {
     return es;
   }
 
+  async function cancelJob(appId: string, jobId: string) {
+    try {
+      await $fetch(`/api/apps/${appId}/generate-docs/${jobId}`, {
+        method: "PATCH",
+      });
+
+      // Update local state
+      const idx = jobs.value.findIndex((j) => j.id === jobId);
+      if (idx !== -1) {
+        jobs.value[idx] = {
+          ...jobs.value[idx],
+          status: "cancelled",
+          progressPct: 0,
+          progressMessage: "Cancelled by user",
+        };
+      }
+      if (currentJob.value?.id === jobId) {
+        currentJob.value = {
+          ...currentJob.value,
+          status: "cancelled",
+          progressPct: 0,
+          progressMessage: "Cancelled by user",
+        };
+      }
+
+      disconnectStream();
+      toast.success("Generation cancelled");
+      return true;
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to cancel generation";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
+      console.error(e);
+      throw e;
+    }
+  }
+
+  async function removeJob(appId: string, jobId: string) {
+    try {
+      await $fetch(`/api/apps/${appId}/generate-docs/${jobId}`, {
+        method: "DELETE",
+      });
+
+      // Remove from local list
+      jobs.value = jobs.value.filter((j) => j.id !== jobId);
+
+      // Clear current if it was the removed job
+      if (currentJob.value?.id === jobId) {
+        currentJob.value = null;
+        disconnectStream();
+      }
+      if (currentResult.value?.jobId === jobId) {
+        currentResult.value = null;
+      }
+
+      toast.success("Job removed from history");
+      return true;
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to remove job";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
+      console.error(e);
+      throw e;
+    }
+  }
+
   async function fetchResult(appId: string, jobId: string) {
     try {
       const data = await $fetch<{ data: DocGenerationResult }>(
@@ -197,6 +271,8 @@ export const useDocGenerator = () => {
     fetchJobs,
     generateDocs,
     connectToProgressStream,
+    cancelJob,
+    removeJob,
     fetchResult,
     disconnectStream,
     clearCurrent,

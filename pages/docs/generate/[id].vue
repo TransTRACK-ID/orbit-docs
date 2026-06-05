@@ -20,6 +20,8 @@ const {
   fetchJobs,
   generateDocs,
   connectToProgressStream,
+  cancelJob,
+  removeJob,
   fetchResult,
   clearCurrent,
 } = useDocGenerator();
@@ -61,6 +63,14 @@ async function handleGenerate(payload: { repoUrl: string }) {
   }
 }
 
+async function handleCancel(jobId: string) {
+  await cancelJob(appId, jobId);
+}
+
+async function handleRemove(jobId: string) {
+  await removeJob(appId, jobId);
+}
+
 async function handleViewResult(jobId: string) {
   await fetchResult(appId, jobId);
 }
@@ -88,6 +98,7 @@ const statusClass: Record<string, string> = {
   generating_sdd: "pill-accent",
   completed: "pill-green",
   failed: "pill-danger",
+  cancelled: "pill-muted",
 };
 
 const statusLabel: Record<string, string> = {
@@ -98,6 +109,7 @@ const statusLabel: Record<string, string> = {
   generating_sdd: "Generating SDD",
   completed: "Done",
   failed: "Failed",
+  cancelled: "Cancelled",
 };
 
 // Friendly status for the progress header
@@ -109,13 +121,15 @@ const statusFull: Record<string, string> = {
   generating_sdd: "Writing System Design Document…",
   completed: "All documents generated!",
   failed: "Generation failed",
+  cancelled: "Generation cancelled",
 };
 
 const hasPendingJob = computed(() => {
   if (!currentJob.value) return false;
   return (
     currentJob.value.status !== "completed" &&
-    currentJob.value.status !== "failed"
+    currentJob.value.status !== "failed" &&
+    currentJob.value.status !== "cancelled"
   );
 });
 
@@ -208,6 +222,13 @@ watch(isSubmitting, (v) => {
         </div>
         <p v-if="currentJob.progressMessage" class="progress-msg">{{ currentJob.progressMessage }}</p>
         <p v-if="currentJob.errorMessage" class="error-msg">{{ currentJob.errorMessage }}</p>
+
+        <!-- Cancel button when job is active -->
+        <div v-if="hasPendingJob" class="progress-actions">
+          <button class="btn btn-danger btn-sm" @click="handleCancel(currentJob!.id)">
+            Cancel Generation
+          </button>
+        </div>
 
         <!-- View Results button right under bar when done -->
         <div v-if="isCompleted" class="progress-actions">
@@ -306,6 +327,13 @@ watch(isSubmitting, (v) => {
               @click="handleViewResult(job.id)"
             >
               View Results
+            </button>
+            <button
+              class="btn btn-ghost btn-sm"
+              title="Remove from history"
+              @click="handleRemove(job.id)"
+            >
+              Remove
             </button>
           </div>
         </div>
@@ -685,6 +713,11 @@ watch(isSubmitting, (v) => {
   color: oklch(50% 0.14 25);
 }
 
+.pill-muted {
+  background: color-mix(in oklch, var(--fg) 8%, transparent);
+  color: var(--muted);
+}
+
 .num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -715,6 +748,16 @@ watch(isSubmitting, (v) => {
 
 .btn-primary:hover {
   background: color-mix(in oklch, var(--accent) 88%, black);
+}
+
+.btn-danger {
+  background: oklch(55% 0.16 25);
+  color: var(--surface);
+  border-color: oklch(55% 0.16 25);
+}
+
+.btn-danger:hover {
+  background: oklch(50% 0.18 25);
 }
 
 .btn-ghost {
