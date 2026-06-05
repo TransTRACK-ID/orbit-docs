@@ -1,6 +1,6 @@
 import { defineEventHandler, readBody, createError, sendWebResponse } from "h3";
 import { streamText } from "ai";
-import { getCustomOpenAI } from "~/mastra/openai";
+import { getCustomOpenAI } from "~/server/lib/openai";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event);

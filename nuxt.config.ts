@@ -81,11 +81,10 @@ export default defineNuxtConfig({
     // Postrack API Docs integration (server-side only)
     postrackApiUrl: process.env.NITRO_POSTRACK_API_URL,
     postrackApiKey: process.env.NITRO_POSTRACK_API_KEY,
-    // Mastra AI integration (server-side only)
+    // OpenAI integration (server-side only)
     openaiApiKey: process.env.OPENAI_API_KEY,
     openaiApiBaseUrl: process.env.OPENAI_API_BASE_URL,
     openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
-    vectorDbUrl: process.env.VECTOR_DB_URL || 'file:./vector.db',
   },
 
   compatibilityDate: "2025-01-31",
@@ -100,10 +99,6 @@ export default defineNuxtConfig({
     },
     externals: {
       external: [
-        "@mastra/core",
-        "@mastra/rag",
-        "@mastra/libsql",
-        "@mastra/ai-sdk",
         "@libsql/darwin-arm64",
         "@libsql/linux-x64-gnu",
         "@libsql/linux-x64-musl",
