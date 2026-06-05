@@ -739,38 +739,12 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
         </div>
         <div class="release-actions">
           <button
-            v-if="!releasesForVersion.normal"
-            type="button"
-            class="btn btn-sm btn-secondary"
-            :disabled="!currentVersion || isPublishingRelease"
-            @click="submitQuickRelease"
-          >
-            {{ isPublishingRelease ? "Creating…" : "Quick Release" }}
-          </button>
-          <button
             type="button"
             class="btn btn-sm btn-secondary"
             :disabled="isUpdating || !currentVersion"
             @click="saveDraft"
           >
             {{ isUpdating ? "Saving…" : "Save" }}
-          </button>
-          <button
-            v-if="releasesForVersion.article"
-            type="button"
-            class="btn btn-sm btn-primary"
-            @click="navigateTo(`/releases/${releasesForVersion.article.id}`)"
-          >
-            See Article
-          </button>
-          <button
-            v-else
-            type="button"
-            class="btn btn-sm btn-primary"
-            :disabled="!currentVersion || isPublishingRelease"
-            @click="openReleasePanel"
-          >
-            Create Article
           </button>
         </div>
       </div>
