@@ -89,6 +89,8 @@ export default defineNuxtConfig({
     openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     // MCP Server host (server-side, inferred from request if not set)
     mcpHost: process.env.MCP_HOST || process.env.NUXT_PUBLIC_MCP_HOST,
+    // Opencode Agent Config (base64-encoded)
+    opencodeConfigB64: process.env.OPENCODE_CONFIG_B64,
   },
 
   compatibilityDate: "2025-01-31",

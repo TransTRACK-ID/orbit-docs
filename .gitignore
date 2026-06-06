@@ -56,6 +56,9 @@ temp/
 *.tmp
 *.temp
 
+# ─── Cloned repositories ──────────────────────────────────
+orbit-docs-repositories/
+
 # ─── Testing ───────────────────────────────────────────────
 coverage/
 .nyc_output/

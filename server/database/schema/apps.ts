@@ -69,6 +69,10 @@ export const docs = pgTable("docs", {
   versionId: text("version_id").references(() => appVersions.id, { onDelete: "set null" }),
   tags: text("tags").array().default([]),
   author: text("author"),
+  source: text("source", { enum: ["manual", "generated"] })
+    .notNull()
+    .default("manual"),
+  docType: text("doc_type", { enum: ["srs", "fsd", "sdd"] }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

@@ -1,6 +1,7 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { getDb } from "~/server/database";
 import { docs, activityLogs, docVersions } from "~/server/database/schema";
+import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
 
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
@@ -10,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const db = getDb();
   const body = await readBody(event);
 
-  const { title, appId, content, status, versionId, tags, author } = body || {};
+  const { title, appId, content, status, versionId, tags, author, source, docType } = body || {};
 
   if (!title || typeof title !== "string" || title.trim().length === 0) {
     throw createError({
@@ -36,6 +37,70 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const docSource = source || "manual";
+  const docTypeValue = docType || null;
+
+  // ── Upsert for generated docs: find existing by appId + docType + source ──
+  if (docSource === "generated" && appId && docTypeValue) {
+    const existing = await db
+      .select()
+      .from(docs)
+      .where(
+        and(
+          eq(docs.appId, appId),
+          eq(docs.docType, docTypeValue),
+          eq(docs.source, "generated")
+        )
+      )
+      .limit(1)
+      .then((rows) => rows[0] || null);
+
+    if (existing) {
+      // Auto-save version before update
+      const existingVersions = await db
+        .select()
+        .from(docVersions)
+        .where(eq(docVersions.docId, existing.id))
+        .orderBy(desc(docVersions.createdAt));
+
+      const nextVersionNum = existingVersions.length + 1;
+      await db.insert(docVersions).values({
+        docId: existing.id,
+        version: `v${nextVersionNum}`,
+        content: existing.content || "",
+        title: existing.title,
+        actor: getActorName(user),
+      });
+
+      // Update the existing doc
+      const updated = await db
+        .update(docs)
+        .set({
+          title: title.trim(),
+          content: content || "",
+          status: status || existing.status,
+          versionId: versionId || existing.versionId,
+          tags: Array.isArray(tags)
+            ? tags.filter((t: string) => typeof t === "string" && t.trim() !== "").map((t: string) => t.trim())
+            : existing.tags,
+          updatedAt: new Date(),
+        })
+        .where(eq(docs.id, existing.id))
+        .returning()
+        .then((rows) => rows[0]);
+
+      await db.insert(activityLogs).values({
+        appId: updated.appId,
+        appName: updated.title,
+        action: "Generated doc updated",
+        actor: updated.author || getActorName(user),
+      });
+
+      return { data: updated };
+    }
+  }
+
+  // ── Create new doc ──────────────────────────────────────────────────────
   const doc = await db
     .insert(docs)
     .values({
@@ -46,6 +111,8 @@ export default defineEventHandler(async (event) => {
       versionId: versionId || null,
       tags: Array.isArray(tags) ? tags.filter((t: string) => typeof t === "string" && t.trim() !== "").map((t: string) => t.trim()) : [],
       author: author || getActorName(user),
+      source: docSource,
+      docType: docTypeValue,
     })
     .returning()
     .then((rows) => rows[0]);

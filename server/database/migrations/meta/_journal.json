@@ -71,6 +71,41 @@
       "when": 1780574308201,
       "tag": "0009_easy_red_shift",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1780660471410,
+      "tag": "0010_add_doc_generation_jobs",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780720948145,
+      "tag": "0011_add_doc_generation_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780722000000,
+      "tag": "0012_add_doc_source_and_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1780722136542,
+      "tag": "0013_vengeful_supreme_intelligence",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1780722136543,
+      "tag": "0014_add_doc_generation_repo_ref",
+      "breakpoints": true
     }
   ]
 }

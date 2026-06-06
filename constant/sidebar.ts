@@ -46,6 +46,7 @@ export const sidebarMenu: ISidebar[] = [
     icon: markRaw(IconsDocEditor),
     active: false,
   },
+
   {
     id: "menu__api_docs",
     label: "API Docs",

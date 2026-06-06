@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
 import type { DocItem } from "~/composables/useDocs";
+import DotsVertical from "~/components/icons/DotsVertical/index.vue";
 
 definePageMeta({
   auth: true,
@@ -157,6 +158,16 @@ const statusLabel: Record<string, string> = {
   published: "Published",
   archived: "Archived",
 };
+
+const sourceLabel: Record<string, string> = {
+  manual: "",
+  generated: "Generated",
+};
+
+const sourceClass: Record<string, string> = {
+  manual: "",
+  generated: "pill-purple",
+};
 </script>
 
 <template>
@@ -180,6 +191,9 @@ const statusLabel: Record<string, string> = {
           placeholder="Filter by app…"
           search-placeholder="Search apps…"
         />
+        <NuxtLink to="/docs/generate" class="btn btn-secondary">
+          ✦ Generate Docs
+        </NuxtLink>
         <button type="button" class="btn btn-primary" @click="openCreateModal">
           + New Doc
         </button>
@@ -213,9 +227,14 @@ const statusLabel: Record<string, string> = {
               <span v-if="doc.app" class="doc-card__meta-item">{{ doc.app.name }}</span>
             </div>
           </div>
-          <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
-            {{ statusLabel[doc.status] || doc.status }}
-          </span>
+          <div class="flex-gap-sm">
+            <span v-if="doc.source === 'generated'" class="pill" :class="sourceClass[doc.source]">
+              {{ sourceLabel[doc.source] }}
+            </span>
+            <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
+              {{ statusLabel[doc.status] || doc.status }}
+            </span>
+          </div>
         </div>
 
         <div v-if="doc.tags && doc.tags.length > 0" class="doc-card__tags">
@@ -229,12 +248,8 @@ const statusLabel: Record<string, string> = {
               Edit
             </NuxtLink>
             <div class="actions-menu">
-              <button type="button" class="btn btn-ghost btn-sm actions-toggle" @click="doc._showActions = !doc._showActions">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="8" cy="4" r="1.5" fill="currentColor"/>
-                  <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
-                  <circle cx="8" cy="12" r="1.5" fill="currentColor"/>
-                </svg>
+              <button type="button" class="btn btn-ghost btn-sm actions-toggle" aria-label="More actions" @click="doc._showActions = !doc._showActions">
+                <DotsVertical />
               </button>
               <div v-if="doc._showActions" class="actions-dropdown" @click.stop>
                 <NuxtLink
@@ -510,6 +525,10 @@ const statusLabel: Record<string, string> = {
   background: color-mix(in oklch, var(--muted) 12%, transparent);
   color: var(--muted);
 }
+.pill-purple {
+  background: color-mix(in oklch, oklch(55% 0.2 295) 12%, transparent);
+  color: oklch(50% 0.16 295);
+}
 
 .empty-state {
   text-align: center;
@@ -535,8 +554,8 @@ const statusLabel: Record<string, string> = {
   position: relative;
 }
 .actions-toggle {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   justify-content: center;
   border-radius: var(--radius);
