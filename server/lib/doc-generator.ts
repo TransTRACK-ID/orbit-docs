@@ -260,26 +260,22 @@ export async function generateDocs(
       }
     }
 
+    // Analysis context for reference hints (Opencode will do the deep analysis itself via its tools)
     const analysisContext = `
 Repository URL: ${repoUrl}
+Local clone path: ${cloneDir}
 
-File Structure:
+File Structure (top-level, for reference):
 ${structure}
 
-Key Files:
-${Object.entries(keyFiles)
-  .map(([name, content]) => `--- ${name} ---\n${content.substring(0, 2000)}`)
-  .join("\n\n")}
+Key configuration files found:
+${Object.keys(keyFiles).join(", ") || "none"}
 
-Route/Controller Files:
-${Object.entries(routeContents)
-  .map(([name, content]) => `--- ${name} ---\n${content.substring(0, 2000)}`)
-  .join("\n\n")}
+Route/controller files found:
+${routeFiles.slice(0, 20).join("\n") || "none"}
 
-Schema Files:
-${Object.entries(schemaContents)
-  .map(([name, content]) => `--- ${name} ---\n${content.substring(0, 2000)}`)
-  .join("\n\n")}
+Schema files found:
+${schemaFiles.slice(0, 10).join("\n") || "none"}
 `;
 
     // Step 3: Generate SRS
@@ -291,18 +287,25 @@ ${Object.entries(schemaContents)
     if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
     const srsTemplate = await loadTemplate("srs");
-    const srsPrompt = `Based on the following codebase analysis, generate a Software Requirements Specification (SRS) document.
+    const srsPrompt = `You are an expert software architect. You have been given access to a cloned Git repository at the path: ${cloneDir}
 
-Follow this template structure and fill in all sections:
+Your task is to deeply analyze the codebase using your available tools (read files, run bash commands like find, cat, grep, etc.) and then generate a complete Software Requirements Specification (SRS) document.
+
+Here is a structural overview to help you get started:
+${analysisContext}
+
+Use the following SRS template structure and fill in ALL sections with real content from the codebase:
 
 ${srsTemplate}
 
-Analysis Context:
-${analysisContext}
+Instructions:
+- Use your file read and bash tools to explore the repository thoroughly before writing.
+- Read the README, package.json, source files, API routes, schemas, and any relevant docs.
+- Fill in all {{placeholders}} with actual content derived from the codebase.
+- Be thorough, specific, and accurate. Do NOT use placeholder text.
+- Output ONLY the completed SRS markdown document.`;
 
-Generate the complete SRS document in markdown format. Fill in all {{placeholders}} with actual content derived from the codebase analysis. Be thorough and specific.`;
-
-    const srsContent = await agent.analyze(srsPrompt);
+    const srsContent = await agent.analyze(srsPrompt, cloneDir);
     await updateJobResult(jobId, "srs", srsContent);
 
     // Step 4: Generate FSD
@@ -314,21 +317,28 @@ Generate the complete SRS document in markdown format. Fill in all {{placeholder
     if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
     const fsdTemplate = await loadTemplate("fsd");
-    const fsdPrompt = `Based on the following codebase analysis, generate a Functional Specification Document (FSD).
+    const fsdPrompt = `You are an expert software architect. You have been given access to a cloned Git repository at the path: ${cloneDir}
 
-Follow this template structure and fill in all sections:
+Your task is to deeply analyze the codebase using your available tools (read files, run bash commands like find, cat, grep, etc.) and then generate a complete Functional Specification Document (FSD).
+
+Here is a structural overview to help you get started:
+${analysisContext}
+
+A Software Requirements Specification was already generated (for reference):
+${srsContent.substring(0, 2000)}
+
+Use the following FSD template structure and fill in ALL sections with real content from the codebase:
 
 ${fsdTemplate}
 
-Analysis Context:
-${analysisContext}
+Instructions:
+- Use your file read and bash tools to explore UI components, pages, API routes, and user flows.
+- Focus on user workflows, UI behavior, and functional requirements.
+- Fill in all {{placeholders}} with actual content derived from the codebase.
+- Be thorough, specific, and accurate. Do NOT use placeholder text.
+- Output ONLY the completed FSD markdown document.`;
 
-Generated SRS (for reference):
-${srsContent.substring(0, 3000)}
-
-Generate the complete FSD document in markdown format. Fill in all {{placeholders}} with actual content derived from the codebase analysis. Focus on user workflows, UI behavior, and functional requirements.`;
-
-    const fsdContent = await agent.analyze(fsdPrompt);
+    const fsdContent = await agent.analyze(fsdPrompt, cloneDir);
     await updateJobResult(jobId, "fsd", fsdContent);
 
     // Step 5: Generate SDD
@@ -340,24 +350,31 @@ Generate the complete FSD document in markdown format. Fill in all {{placeholder
     if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
     const sddTemplate = await loadTemplate("sdd");
-    const sddPrompt = `Based on the following codebase analysis, generate a System Design Document (SDD).
+    const sddPrompt = `You are an expert software architect. You have been given access to a cloned Git repository at the path: ${cloneDir}
 
-Follow this template structure and fill in all sections:
+Your task is to deeply analyze the codebase using your available tools (read files, run bash commands like find, cat, grep, etc.) and then generate a complete System Design Document (SDD).
+
+Here is a structural overview to help you get started:
+${analysisContext}
+
+Previously generated SRS (for reference):
+${srsContent.substring(0, 1500)}
+
+Previously generated FSD (for reference):
+${fsdContent.substring(0, 1500)}
+
+Use the following SDD template structure and fill in ALL sections with real content from the codebase:
 
 ${sddTemplate}
 
-Analysis Context:
-${analysisContext}
+Instructions:
+- Use your file read and bash tools to explore architecture, data models, infrastructure files (Dockerfile, docker-compose), and deployment configs.
+- Focus on architecture, component design, data storage, and deployment.
+- Fill in all {{placeholders}} with actual content derived from the codebase.
+- Be thorough, specific, and accurate. Do NOT use placeholder text.
+- Output ONLY the completed SDD markdown document.`;
 
-Generated SRS (for reference):
-${srsContent.substring(0, 2000)}
-
-Generated FSD (for reference):
-${fsdContent.substring(0, 2000)}
-
-Generate the complete SDD document in markdown format. Fill in all {{placeholders}} with actual content derived from the codebase analysis. Focus on architecture, component design, data storage, and deployment.`;
-
-    const sddContent = await agent.analyze(sddPrompt);
+    const sddContent = await agent.analyze(sddPrompt, cloneDir);
     await updateJobResult(jobId, "sdd", sddContent);
 
     // Step 6: Complete
