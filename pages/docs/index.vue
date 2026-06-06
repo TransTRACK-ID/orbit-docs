@@ -157,6 +157,16 @@ const statusLabel: Record<string, string> = {
   published: "Published",
   archived: "Archived",
 };
+
+const sourceLabel: Record<string, string> = {
+  manual: "",
+  generated: "Generated",
+};
+
+const sourceClass: Record<string, string> = {
+  manual: "",
+  generated: "pill-purple",
+};
 </script>
 
 <template>
@@ -216,9 +226,14 @@ const statusLabel: Record<string, string> = {
               <span v-if="doc.app" class="doc-card__meta-item">{{ doc.app.name }}</span>
             </div>
           </div>
-          <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
-            {{ statusLabel[doc.status] || doc.status }}
-          </span>
+          <div class="flex-gap-sm">
+            <span v-if="doc.source === 'generated'" class="pill" :class="sourceClass[doc.source]">
+              {{ sourceLabel[doc.source] }}
+            </span>
+            <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
+              {{ statusLabel[doc.status] || doc.status }}
+            </span>
+          </div>
         </div>
 
         <div v-if="doc.tags && doc.tags.length > 0" class="doc-card__tags">
@@ -512,6 +527,10 @@ const statusLabel: Record<string, string> = {
 .pill-muted {
   background: color-mix(in oklch, var(--muted) 12%, transparent);
   color: var(--muted);
+}
+.pill-purple {
+  background: color-mix(in oklch, oklch(55% 0.2 295) 12%, transparent);
+  color: oklch(50% 0.16 295);
 }
 
 .empty-state {

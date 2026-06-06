@@ -9,6 +9,8 @@ export interface DocItem {
   versionId: string | null;
   tags: string[] | null;
   author: string | null;
+  source: "manual" | "generated";
+  docType: string | null;
   createdAt: string | null;
   updatedAt: string | null;
   app: { id: string; name: string } | null;
@@ -43,6 +45,8 @@ export interface CreateDocPayload {
   versionId?: string | null;
   tags?: string[];
   author?: string;
+  source?: string;
+  docType?: string;
 }
 
 export const useDocs = () => {

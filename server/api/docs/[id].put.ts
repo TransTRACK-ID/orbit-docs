@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event);
-  const { title, appId, content, status, versionId, tags, author } = body || {};
+  const { title, appId, content, status, versionId, tags, author, source, docType } = body || {};
 
   const existing = await db
     .select()
@@ -93,6 +93,8 @@ export default defineEventHandler(async (event) => {
   if (versionId !== undefined) updateData.versionId = versionId || null;
   if (tags !== undefined) updateData.tags = tags.filter((t: string) => t.trim() !== "").map((t: string) => t.trim());
   if (author !== undefined) updateData.author = author || null;
+  if (source !== undefined) updateData.source = source;
+  if (docType !== undefined) updateData.docType = docType || null;
 
   const updatedRow = await db
     .update(docs)

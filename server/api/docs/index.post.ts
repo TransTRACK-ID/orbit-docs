@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   const db = getDb();
   const body = await readBody(event);
 
-  const { title, appId, content, status, versionId, tags, author } = body || {};
+  const { title, appId, content, status, versionId, tags, author, source, docType } = body || {};
 
   if (!title || typeof title !== "string" || title.trim().length === 0) {
     throw createError({
@@ -46,6 +46,8 @@ export default defineEventHandler(async (event) => {
       versionId: versionId || null,
       tags: Array.isArray(tags) ? tags.filter((t: string) => typeof t === "string" && t.trim() !== "").map((t: string) => t.trim()) : [],
       author: author || getActorName(user),
+      source: source || "manual",
+      docType: docType || null,
     })
     .returning()
     .then((rows) => rows[0]);

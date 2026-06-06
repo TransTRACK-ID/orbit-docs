@@ -27,6 +27,8 @@ export default defineEventHandler(async (event) => {
       versionId: docs.versionId,
       tags: docs.tags,
       author: docs.author,
+      source: docs.source,
+      docType: docs.docType,
       createdAt: docs.createdAt,
       updatedAt: docs.updatedAt,
       appName: apps.name,
