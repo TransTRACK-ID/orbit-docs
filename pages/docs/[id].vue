@@ -40,7 +40,10 @@ const activeHeading = ref("");
 const docLoading = ref(false);
 const docNotFound = ref(false);
 const chatOpen = ref(false);
-const versionTimelineOpen = ref(false);
+const rightSidebarTab = ref<'properties' | 'versions'>('properties');
+const restoreConfirmVisible = ref(false);
+const versionToRestore = ref<any>(null);
+const isRestoring = ref(false);
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -67,6 +70,7 @@ async function saveDraft() {
     versionId: editorVersionId.value ?? null,
     tags: editorTags.value,
   });
+  await fetchDocVersions(docId.value);
 }
 
 async function doPublish() {
@@ -161,27 +165,36 @@ function toggleShortcuts() {
 
 function toggleChat() {
   chatOpen.value = !chatOpen.value;
-  if (chatOpen.value) {
-    versionTimelineOpen.value = false;
-  }
 }
 
-function toggleVersionTimeline() {
-  versionTimelineOpen.value = !versionTimelineOpen.value;
-  if (versionTimelineOpen.value) {
-    chatOpen.value = false;
-  }
+function switchSidebarTab(tab: 'properties' | 'versions') {
+  rightSidebarTab.value = tab;
 }
 
-async function restoreVersion(version: any) {
-  if (!docId.value) return;
+function restoreVersion(version: any) {
+  versionToRestore.value = version;
+  restoreConfirmVisible.value = true;
+}
+
+async function confirmRestore() {
+  if (!docId.value || !versionToRestore.value) return;
+  isRestoring.value = true;
   try {
-    await restoreDocVersion(docId.value, version.id);
+    await restoreDocVersion(docId.value, versionToRestore.value.id);
     await loadDoc();
-    toast.success("Version restored successfully");
+    showToast("Version restored successfully");
   } catch {
-    // Error handled by composable
+    showToast("Failed to restore version");
+  } finally {
+    isRestoring.value = false;
+    restoreConfirmVisible.value = false;
+    versionToRestore.value = null;
   }
+}
+
+function cancelRestore() {
+  restoreConfirmVisible.value = false;
+  versionToRestore.value = null;
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -292,14 +305,6 @@ const lastModified = computed(() => {
         <button
           type="button"
           class="btn btn-ghost"
-          :class="{ active: versionTimelineOpen }"
-          @click="toggleVersionTimeline"
-        >
-          Versions
-        </button>
-        <button
-          type="button"
-          class="btn btn-ghost"
           :class="{ active: chatOpen }"
           @click="toggleChat"
         >
@@ -350,6 +355,9 @@ const lastModified = computed(() => {
           <div v-for="n in 24" :key="n" class="skeleton-line" />
         </div>
         <div class="skeleton-pane" style="width: 280px; height: 100%;">
+          <div class="skeleton-tabs">
+            <div v-for="n in 2" :key="n" class="skeleton-tab" />
+          </div>
           <div class="skeleton-title" />
           <div v-for="n in 6" :key="n" class="skeleton-field" />
         </div>
@@ -367,22 +375,39 @@ const lastModified = computed(() => {
       <div v-else class="doc-shell" :class="{ 'preview-only': previewOnly }">
         <!-- Outline -->
         <div v-if="!previewOnly" class="outline-pane">
-          <div class="outline-title">Document Outline</div>
+          <div class="outline-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6;">
+              <line x1="8" y1="6" x2="21" y2="6"/>
+              <line x1="8" y1="12" x2="21" y2="12"/>
+              <line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/>
+              <line x1="3" y1="12" x2="3.01" y2="12"/>
+              <line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+            <span class="outline-title">Document Outline</span>
+          </div>
           <ul class="outline-tree" role="list">
             <li
               v-for="(h, idx) in headings"
               :key="idx"
-              :class="{ indent: h.level > 1, active: activeHeading === h.text }"
+              :class="['outline-item', `level-${h.level}`, { active: activeHeading === h.text }]"
               role="listitem"
               tabindex="0"
               @click="scrollToHeading(h.text)"
               @keydown.enter="scrollToHeading(h.text)"
               @keydown.space.prevent="scrollToHeading(h.text)"
             >
-              {{ h.text }}
+              <span class="outline-marker" :class="{ 'level-h1': h.level === 1, 'level-h2': h.level === 2, 'level-h3': h.level === 3 }">H{{ h.level }}</span>
+              <span class="outline-text">{{ h.text }}</span>
             </li>
-            <li v-if="headings.length === 0" class="indent" style="opacity:0.6;">
-              No headings yet
+            <li v-if="headings.length === 0" class="outline-empty">
+              <div class="outline-empty-content">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                  <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+                <span>No headings yet</span>
+              </div>
             </li>
           </ul>
         </div>
@@ -407,122 +432,177 @@ const lastModified = computed(() => {
           </div>
         </div>
 
-        <!-- Properties -->
-        <div v-if="!previewOnly" class="props-pane">
-          <div class="props-title">Document Properties</div>
-          <div class="field">
-            <label for="docTitle">Title</label>
-            <input
-              id="docTitle"
-              v-model="editorTitle"
-              class="input"
-            />
-          </div>
-          <div class="field">
-            <label for="docVersion">Bound Version</label>
-            <select
-              id="docVersion"
-              v-model="editorVersionId"
-              class="select"
-            >
-              <option :value="null">Unbound (latest)</option>
-              <option
-                v-for="v in currentDoc?.appVersions || []"
-                :key="v.id"
-                :value="v.id"
-              >
-                {{ v.version }}
-              </option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="docStatus">Status</label>
-            <select id="docStatus" v-model="editorStatus" class="select">
-              <option value="draft">Draft</option>
-              <option value="in_review">In Review</option>
-              <option value="published">Published</option>
-              <option value="archived">Archived</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Tags</label>
-            <div
-              class="tag-input"
-              :class="{ 'tag-input-editing': tagInputVisible }"
-            >
-              <span
-                v-for="(tag, idx) in editorTags"
-                :key="tag"
-                class="tag"
-              >
-                {{ tag }}
-                <span
-                  class="tag-remove"
-                  tabindex="0"
-                  :data-idx="idx"
-                  :aria-label="`Remove tag ${tag}`"
-                  @click="removeTag(idx)"
-                  @keydown.enter.prevent="removeTag(idx)"
-                >
-                  ×
-                </span>
-              </span>
-              <button
-                v-if="!tagInputVisible"
-                type="button"
-                class="tag-add"
-                @click="startAddTag"
-              >
-                + Add tag
-              </button>
-              <input
-                v-else
-                id="tagInputField"
-                v-model="tagInputValue"
-                type="text"
-                placeholder="Tag name…"
-                @blur="finishAddTag"
-                @keydown="onTagKeydown"
-              />
-            </div>
-          </div>
-          <div class="field">
-            <label for="docAuthor">Author</label>
-            <input
-              id="docAuthor"
-              class="input"
-              :value="currentDoc?.author || ''"
-              readonly
-            />
-          </div>
-          <div class="field">
-            <label for="docModified">Last Modified</label>
-            <input
-              id="docModified"
-              class="input num"
-              :value="lastModified"
-              readonly
-            />
-          </div>
-          <div style="margin-top: 8px">
+        <!-- Right Sidebar (Properties + Versions tabs) -->
+        <div v-if="!previewOnly" class="right-sidebar">
+          <div class="sidebar-tabs">
             <button
               type="button"
-              class="btn btn-secondary"
-              style="width: 100%"
-              @click="generatePDF"
+              class="sidebar-tab"
+              :class="{ active: rightSidebarTab === 'properties' }"
+              @click="switchSidebarTab('properties')"
             >
-              Generate PDF
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+              Properties
+            </button>
+            <button
+              type="button"
+              class="sidebar-tab"
+              :class="{ active: rightSidebarTab === 'versions' }"
+              @click="switchSidebarTab('versions')"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              Versions
+              <span v-if="docVersions.length > 0" class="tab-badge">{{ docVersions.length }}</span>
             </button>
           </div>
-        </div>
 
-        <!-- Version Timeline -->
-        <div v-if="versionTimelineOpen && !previewOnly" class="version-pane">
-          <DocsVersionTimeline
-            :versions="docVersions"
-            :is-loading="isLoadingVersions"
-            @restore="restoreVersion"
-          />
+          <div class="sidebar-tab-panel">
+            <Transition name="tab-fade" mode="out-in">
+              <!-- Properties Panel -->
+              <div v-if="rightSidebarTab === 'properties'" key="properties" class="props-panel">
+              <div class="props-section">
+                <div class="props-section-label">Document</div>
+                <div class="field">
+                  <label for="docTitle">Title</label>
+                  <input
+                    id="docTitle"
+                    v-model="editorTitle"
+                    class="input"
+                    placeholder="Enter document title"
+                  />
+                </div>
+                <div class="field">
+                  <label for="docStatus">Status</label>
+                  <select id="docStatus" v-model="editorStatus" class="select">
+                    <option value="draft">Draft</option>
+                    <option value="in_review">In Review</option>
+                    <option value="published">Published</option>
+                    <option value="archived">Archived</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Tags</label>
+                  <div
+                    class="tag-input"
+                    :class="{ 'tag-input-editing': tagInputVisible }"
+                  >
+                    <span
+                      v-for="(tag, idx) in editorTags"
+                      :key="tag"
+                      class="tag"
+                    >
+                      {{ tag }}
+                      <span
+                        class="tag-remove"
+                        tabindex="0"
+                        :data-idx="idx"
+                        :aria-label="`Remove tag ${tag}`"
+                        @click="removeTag(idx)"
+                        @keydown.enter.prevent="removeTag(idx)"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </span>
+                    </span>
+                    <button
+                      v-if="!tagInputVisible"
+                      type="button"
+                      class="tag-add"
+                      @click="startAddTag"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                      Add
+                    </button>
+                    <input
+                      v-else
+                      id="tagInputField"
+                      v-model="tagInputValue"
+                      type="text"
+                      placeholder="Tag name"
+                      @blur="finishAddTag"
+                      @keydown="onTagKeydown"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div class="props-section">
+                <div class="props-section-label">Version</div>
+                <div class="field">
+                  <label for="docVersion">Bound Version</label>
+                  <select
+                    id="docVersion"
+                    v-model="editorVersionId"
+                    class="select"
+                  >
+                    <option :value="null">Unbound (latest)</option>
+                    <option
+                      v-for="v in currentDoc?.appVersions || []"
+                      :key="v.id"
+                      :value="v.id"
+                    >
+                      {{ v.version }}
+                    </option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="props-section">
+                <div class="props-section-label">Metadata</div>
+                <div class="field">
+                  <label for="docAuthor">Author</label>
+                  <input
+                    id="docAuthor"
+                    class="input"
+                    :value="currentDoc?.author || ''"
+                    readonly
+                  />
+                </div>
+                <div class="field">
+                  <label for="docModified">Last Modified</label>
+                  <input
+                    id="docModified"
+                    class="input num"
+                    :value="lastModified"
+                    readonly
+                  />
+                </div>
+              </div>
+
+              <div class="props-actions">
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  style="width: 100%"
+                  @click="generatePDF"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                  Generate PDF
+                </button>
+              </div>
+            </div>
+
+            <!-- Versions Panel -->
+            <div v-else key="versions" class="versions-panel">
+              <DocsVersionTimeline
+                :versions="docVersions"
+                :is-loading="isLoadingVersions"
+                @restore="restoreVersion"
+              />
+            </div>
+            </Transition>
+          </div>
         </div>
 
         <!-- AI Chat -->
@@ -534,6 +614,34 @@ const lastModified = computed(() => {
         </div>
       </div>
     </main>
+
+    <!-- Restore Confirmation Dialog -->
+    <div v-if="restoreConfirmVisible" class="modal-overlay" @click="cancelRestore">
+      <div class="modal-dialog" @click.stop>
+        <div class="modal-header">
+          <h3>Restore Version</h3>
+          <p class="modal-desc">
+            This will replace the current document with version
+            <strong>{{ versionToRestore?.version }}</strong>.
+            The current state will be automatically saved as a new version before restoring.
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" @click="cancelRestore">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="isRestoring"
+            @click="confirmRestore"
+          >
+            <span v-if="isRestoring">Restoring…</span>
+            <span v-else>Restore</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Toast -->
     <div class="toast" :class="{ show: toastVisible }">
@@ -664,10 +772,7 @@ const lastModified = computed(() => {
 .doc-shell.preview-only .outline-pane {
   display: none;
 }
-.doc-shell.preview-only .props-pane {
-  display: none;
-}
-.doc-shell.preview-only .version-pane {
+.doc-shell.preview-only .right-sidebar {
   display: none;
 }
 .doc-shell.preview-only .chat-pane {
@@ -676,14 +781,13 @@ const lastModified = computed(() => {
 .doc-shell.preview-only .editor-pane {
   grid-column: 1 / -1;
 }
+.doc-shell .chat-pane {
+  grid-column: 1 / -1;
+  min-height: 400px;
+}
 @media (max-width: 1400px) {
   .doc-shell {
     grid-template-columns: 220px 1fr 280px;
-  }
-  .doc-shell .version-pane,
-  .doc-shell .chat-pane {
-    grid-column: 1 / -1;
-    min-height: 400px;
   }
 }
 @media (max-width: 1100px) {
@@ -691,10 +795,9 @@ const lastModified = computed(() => {
     grid-template-columns: 1fr;
   }
   .doc-shell .outline-pane,
-  .doc-shell .props-pane {
+  .doc-shell .right-sidebar {
     display: none;
   }
-  .doc-shell .version-pane,
   .doc-shell .chat-pane {
     grid-column: auto;
     min-height: 400px;
@@ -707,21 +810,41 @@ const lastModified = computed(() => {
   border-radius: var(--radius-lg);
   padding: 16px;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
+
+.outline-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+}
+
 .outline-title {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--muted);
-  margin-bottom: 12px;
-  font-weight: 500;
+  font-weight: 600;
 }
+
 .outline-tree {
   list-style: none;
   padding: 0;
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
-.outline-tree li {
+
+.outline-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 6px 8px;
   border-radius: var(--radius);
   font-size: 13px;
@@ -730,21 +853,70 @@ const lastModified = computed(() => {
   outline: none;
   transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
     color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 2px solid transparent;
+  margin-left: -2px;
 }
-.outline-tree li:focus-visible {
+
+.outline-item:focus-visible {
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }
-.outline-tree li:hover {
+
+.outline-item:hover {
   background: var(--fg-soft);
   color: var(--fg);
 }
-.outline-tree li.active {
+
+.outline-item.active {
   background: var(--accent-soft);
   color: var(--accent);
+  border-left-color: var(--accent);
   font-weight: 500;
 }
-.outline-tree .indent {
+
+.outline-item.level-2 {
   padding-left: 20px;
+}
+
+.outline-item.level-3 {
+  padding-left: 32px;
+}
+
+.outline-marker {
+  font-size: 9px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--fg-soft);
+  color: var(--muted);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.outline-item.active .outline-marker {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.outline-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.outline-empty {
+  padding: 24px 8px;
+}
+
+.outline-empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 .editor-pane {
@@ -911,50 +1083,140 @@ const lastModified = computed(() => {
   margin-right: 6px;
 }
 
-.props-pane {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  overflow: auto;
-}
-
-.version-pane {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: auto;
-  min-width: 260px;
-}
-
-.chat-pane {
+.right-sidebar {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  min-width: 320px;
   display: flex;
   flex-direction: column;
+  min-width: 280px;
 }
-.props-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.sidebar-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
   color: var(--muted);
-  margin-bottom: 16px;
+  font-size: 13px;
   font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  flex: 1;
+  justify-content: center;
+  position: relative;
 }
+
+.sidebar-tab:hover {
+  color: var(--fg);
+  background: var(--fg-soft);
+}
+
+.sidebar-tab:active {
+  background: color-mix(in oklch, var(--fg-soft) 70%, transparent);
+  transform: scale(0.98);
+}
+
+.sidebar-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+
+.sidebar-tab.active .tab-badge {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.sidebar-tab-panel {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.props-panel {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.versions-panel {
+  padding: 16px;
+  overflow: auto;
+}
+
+.versions-panel :deep(.version-timeline) {
+  border: none;
+  padding: 0;
+  background: transparent;
+}
+
+.props-section {
+  margin-bottom: 16px;
+}
+
+.props-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.props-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 10px;
+  padding-top: 4px;
+}
+
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 16px;
+  gap: 4px;
+  margin-bottom: 12px;
 }
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
 .field label {
   font-size: 12px;
   color: var(--muted);
   font-weight: 500;
 }
+
 .input,
 .select {
   padding: 8px 12px;
@@ -965,18 +1227,32 @@ const lastModified = computed(() => {
   font-size: 13px;
   color: var(--fg);
   transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+.input:hover,
+.select:hover {
+  border-color: color-mix(in oklch, var(--fg) 30%, var(--border));
+}
+
 .input:focus,
 .select:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface);
 }
+
 .input[readonly] {
   cursor: default;
   opacity: 0.7;
 }
+
+.input[readonly]:hover {
+  border-color: var(--border);
+}
+
 .tag-input {
   display: flex;
   flex-wrap: wrap;
@@ -985,7 +1261,10 @@ const lastModified = computed(() => {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
+  min-height: 36px;
+  align-items: center;
 }
+
 .tag {
   display: inline-flex;
   align-items: center;
@@ -996,7 +1275,9 @@ const lastModified = computed(() => {
   border-radius: 999px;
   font-size: 12px;
   cursor: default;
+  font-weight: 500;
 }
+
 .tag-remove {
   display: inline-flex;
   align-items: center;
@@ -1011,27 +1292,56 @@ const lastModified = computed(() => {
   cursor: pointer;
   border: none;
   padding: 0;
-  transition: background 0.1s;
+  transition: background 0.1s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .tag-remove:hover {
   background: var(--accent);
   color: var(--surface);
 }
+
+.tag-remove:active {
+  transform: scale(0.9);
+}
+
+.tag-remove:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 .tag-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   color: var(--muted);
   font-size: 12px;
-  padding: 3px 4px;
+  padding: 4px 8px;
   cursor: pointer;
-  border: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
   background: transparent;
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .tag-add:hover {
   color: var(--fg);
+  border-color: var(--muted);
+  background: var(--fg-soft);
 }
+
+.tag-add:active {
+  transform: scale(0.96);
+}
+
 .tag-input-editing {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+
 .tag-input input {
   border: none;
   background: transparent;
@@ -1040,6 +1350,23 @@ const lastModified = computed(() => {
   color: var(--fg);
   outline: none;
   width: 100px;
+  padding: 2px;
+}
+
+.props-actions {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.chat-pane {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
 }
 
 .num {
@@ -1146,6 +1473,22 @@ const lastModified = computed(() => {
   opacity: 0.6;
 }
 
+.skeleton-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+}
+
+.skeleton-tab {
+  height: 24px;
+  width: 80px;
+  background: var(--border);
+  border-radius: 4px;
+  opacity: 0.5;
+}
+
 .not-found {
   display: flex;
   flex-direction: column;
@@ -1168,12 +1511,132 @@ const lastModified = computed(() => {
   max-width: 400px;
 }
 
+/* Tab transitions */
+.tab-fade-enter-active,
+.tab-fade-leave-active {
+  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tab-fade-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.tab-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+/* Modal dialog */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: color-mix(in oklch, var(--fg) 25%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: modal-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal-dialog {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 16px 48px color-mix(in oklch, var(--fg) 12%, transparent);
+  animation: dialog-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal-header {
+  margin-bottom: 20px;
+}
+
+.modal-header h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.modal-desc {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.modal-desc strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Focus-visible states */
+.sidebar-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+
+.timeline-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tag-add:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .toast,
   .shortcuts-hint,
   .btn,
-  .tool-btn {
+  .tool-btn,
+  .sidebar-tab,
+  .timeline-btn,
+  .tag-add,
+  .tag-remove,
+  .input,
+  .select,
+  .tab-fade-enter-active,
+  .tab-fade-leave-active,
+  .modal-overlay,
+  .modal-dialog {
     transition: none !important;
+    animation: none !important;
   }
 }
 </style>

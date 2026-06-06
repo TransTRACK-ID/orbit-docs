@@ -81,6 +81,22 @@ export default defineNitroPlugin(async () => {
     )
   `);
 
+  // Migrate existing docs table with new columns
+  await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual'`);
+  await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS doc_type TEXT`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_versions (
+      id TEXT PRIMARY KEY,
+      doc_id TEXT NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
+      version TEXT NOT NULL,
+      content TEXT DEFAULT '',
+      title TEXT,
+      actor TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS owners (
       id TEXT PRIMARY KEY,
@@ -175,6 +191,39 @@ export default defineNitroPlugin(async () => {
 
   // Migrate existing users table that may lack the password column
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT`);
+
+  // doc_generation_jobs table (used by Generate Docs feature)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_generation_jobs (
+      id TEXT PRIMARY KEY,
+      app_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      repo_url TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'cloning',
+      progress_pct INTEGER NOT NULL DEFAULT 0,
+      progress_message TEXT DEFAULT 'Initializing...',
+      srs_content TEXT,
+      fsd_content TEXT,
+      sdd_content TEXT,
+      error_message TEXT,
+      repo_ref TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      completed_at TIMESTAMP WITH TIME ZONE
+    )
+  `);
+
+  await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS repo_ref TEXT`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_generation_versions (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL,
+      doc_type TEXT NOT NULL,
+      content TEXT DEFAULT '',
+      actor TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
 
   // Remove legacy columns from an older schema so the table aligns
   // with the current Drizzle schema (which only uses `password`)

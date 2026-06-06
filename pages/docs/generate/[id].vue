@@ -317,6 +317,7 @@ watch(isSubmitting, (v) => {
             <div class="job-meta">
               <span class="num">{{ job.progressPct }}%</span>
               <span>{{ job.progressMessage || job.status }}</span>
+              <span v-if="job.repoRef" class="job-ref" title="Tag or commit hash">{{ job.repoRef }}</span>
               <span class="job-date">{{ formatDate(job.createdAt) }}</span>
             </div>
           </div>
@@ -672,6 +673,16 @@ watch(isSubmitting, (v) => {
   font-size: 12px;
   color: var(--muted);
   flex-wrap: wrap;
+}
+
+.job-ref {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  background: color-mix(in oklch, var(--fg) 6%, transparent);
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 .job-date {

@@ -54,6 +54,7 @@ export default defineEventHandler(async (event) => {
     status: job.status,
     progressPct: job.progressPct,
     progressMessage: job.progressMessage,
+    repoRef: job.repoRef,
     completedAt: job.completedAt,
     errorMessage: job.errorMessage,
   });
@@ -77,6 +78,7 @@ export default defineEventHandler(async (event) => {
         status: updated.status,
         progressPct: updated.progressPct,
         progressMessage: updated.progressMessage,
+        repoRef: updated.repoRef,
         completedAt: updated.completedAt,
         errorMessage: updated.errorMessage,
       });

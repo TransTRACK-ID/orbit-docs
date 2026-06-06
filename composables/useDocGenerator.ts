@@ -7,6 +7,7 @@ export interface DocGenerationJob {
   status: string;
   progressPct: number;
   progressMessage: string;
+  repoRef: string | null;
   createdAt: string | null;
   completedAt: string | null;
   errorMessage: string | null;
@@ -15,6 +16,7 @@ export interface DocGenerationJob {
 export interface DocGenerationResult {
   jobId: string;
   repoUrl: string;
+  repoRef: string | null;
   status: string;
   srs: string | null;
   fsd: string | null;
@@ -138,6 +140,7 @@ export const useDocGenerator = () => {
           status: data.status,
           progressPct: data.progressPct,
           progressMessage: data.progressMessage,
+          repoRef: data.repoRef ?? currentJob.value?.repoRef ?? null,
           completedAt: data.completedAt,
           errorMessage: data.errorMessage,
         } as DocGenerationJob;

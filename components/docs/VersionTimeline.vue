@@ -33,7 +33,13 @@ function onRestore(version: DocVersion) {
 
 <template>
   <div class="version-timeline">
-    <div class="timeline-title">Version History</div>
+    <div class="timeline-header">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6;">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      <span class="timeline-title">Version History</span>
+    </div>
     <div v-if="isLoading" class="timeline-loading">
       <div v-for="n in 3" :key="n" class="timeline-skeleton">
         <div class="skeleton-dot" />
@@ -41,22 +47,35 @@ function onRestore(version: DocVersion) {
       </div>
     </div>
     <div v-else-if="versions.length === 0" class="timeline-empty">
-      No versions yet
+      <div class="timeline-empty-content">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+          <circle cx="12" cy="12" r="10"/>
+          <polyline points="12 6 12 12 16 14"/>
+        </svg>
+        <span>No versions yet</span>
+      </div>
     </div>
     <ul v-else class="timeline-list" role="list">
-      <li v-for="(version, idx) in versions" :key="version.id" class="timeline-item" role="listitem">
-        <div class="timeline-dot" :class="{ 'timeline-dot-latest': idx === 0 }" />
+      <li v-for="(version, idx) in versions" :key="version.id" class="timeline-item" :class="{ 'timeline-item-latest': idx === 0 }" role="listitem">
+        <div class="timeline-dot-wrapper">
+          <div class="timeline-dot" :class="{ 'timeline-dot-latest': idx === 0 }" />
+          <div v-if="idx !== versions.length - 1" class="timeline-line" />
+        </div>
         <div class="timeline-content">
           <div class="timeline-header">
             <span class="timeline-version">{{ version.version }}</span>
             <span class="timeline-time">{{ timeAgo(version.createdAt) }}</span>
           </div>
           <div class="timeline-meta">
-            <span v-if="version.actor">by {{ version.actor }}</span>
-            <span v-if="version.title">· {{ version.title }}</span>
+            <span v-if="version.actor">{{ version.actor }}</span>
+            <span v-if="version.title"> · {{ version.title }}</span>
           </div>
           <div class="timeline-actions">
             <button type="button" class="timeline-btn" @click="onRestore(version)">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+              </svg>
               Restore
             </button>
           </div>
@@ -73,15 +92,26 @@ function onRestore(version: DocVersion) {
   border-radius: var(--radius-lg);
   padding: 16px;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
 }
 
 .timeline-title {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   color: var(--muted);
-  margin-bottom: 16px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .timeline-loading {
@@ -113,10 +143,17 @@ function onRestore(version: DocVersion) {
 }
 
 .timeline-empty {
+  padding: 24px 8px;
+}
+
+.timeline-empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   color: var(--muted);
   font-size: 13px;
   text-align: center;
-  padding: 16px 0;
 }
 
 .timeline-list {
@@ -125,7 +162,6 @@ function onRestore(version: DocVersion) {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0;
 }
 
 .timeline-item {
@@ -135,14 +171,21 @@ function onRestore(version: DocVersion) {
   position: relative;
 }
 
-.timeline-item:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 28px;
-  bottom: -4px;
-  width: 2px;
-  background: var(--border);
+.timeline-item-latest {
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+  margin: 0 -16px;
+  padding: 12px 16px;
+}
+
+.timeline-dot-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  position: relative;
+  width: 12px;
+  padding-top: 2px;
 }
 
 .timeline-dot {
@@ -150,24 +193,37 @@ function onRestore(version: DocVersion) {
   height: 10px;
   border-radius: 50%;
   background: var(--border);
-  flex-shrink: 0;
-  margin-top: 4px;
   border: 2px solid var(--surface);
   z-index: 1;
+  flex-shrink: 0;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .timeline-dot-latest {
   background: var(--accent);
+  border-color: var(--accent);
+}
+
+.timeline-line {
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2px;
+  bottom: -31px;
+  background: var(--border);
 }
 
 .timeline-content {
   flex: 1;
   min-width: 0;
+  padding-bottom: 4px;
 }
 
 .timeline-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   margin-bottom: 4px;
 }
@@ -176,11 +232,14 @@ function onRestore(version: DocVersion) {
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
+  font-family: var(--font-mono);
 }
 
 .timeline-time {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
+  font-weight: 500;
+  flex-shrink: 0;
 }
 
 .timeline-meta {
@@ -196,6 +255,9 @@ function onRestore(version: DocVersion) {
 }
 
 .timeline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 4px 10px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
@@ -203,12 +265,24 @@ function onRestore(version: DocVersion) {
   color: var(--muted);
   font-size: 12px;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .timeline-btn:hover {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+.timeline-btn:active {
+  transform: scale(0.96);
+}
+
+.timeline-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 </style>

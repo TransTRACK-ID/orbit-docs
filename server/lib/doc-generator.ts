@@ -75,6 +75,41 @@ async function cloneOrPullRepo(repoUrl: string, cloneDir: string): Promise<void>
   }
 }
 
+async function getRepoRef(cloneDir: string): Promise<string | null> {
+  try {
+    // Try to get the latest tag (excluding annotated tag details, just the name)
+    const { stdout: tagStdout } = await execAsync(
+      `git -C "${cloneDir}" describe --tags --abbrev=0`,
+      { timeout: 30000 }
+    );
+    const tag = tagStdout.trim();
+    if (tag) return tag;
+  } catch {
+    // No tags available, fall back to commit hash
+  }
+
+  try {
+    const { stdout: hashStdout } = await execAsync(
+      `git -C "${cloneDir}" rev-parse HEAD`,
+      { timeout: 30000 }
+    );
+    const hash = hashStdout.trim();
+    if (hash) return hash;
+  } catch {
+    // Could not get commit hash either
+  }
+
+  return null;
+}
+
+async function updateJobRepoRef(jobId: string, repoRef: string): Promise<void> {
+  const db = getDb();
+  await db
+    .update(docGenerationJobs)
+    .set({ repoRef })
+    .where(eq(docGenerationJobs.id, jobId));
+}
+
 async function getRepoStructure(repoDir: string): Promise<string> {
   try {
     const { stdout } = await execAsync(
@@ -224,6 +259,12 @@ export async function generateDocs(
     });
     if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
     await cloneOrPullRepo(repoUrl, cloneDir);
+
+    // Record repo tag (or commit hash as fallback)
+    const repoRef = await getRepoRef(cloneDir);
+    if (repoRef) {
+      await updateJobRepoRef(jobId, repoRef);
+    }
 
     // Step 2: Analyze repository
     await onProgress({

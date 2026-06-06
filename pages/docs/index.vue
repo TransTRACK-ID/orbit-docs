@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
 import type { DocItem } from "~/composables/useDocs";
+import DotsVertical from "~/components/icons/DotsVertical/index.vue";
 
 definePageMeta({
   auth: true,
@@ -247,12 +248,8 @@ const sourceClass: Record<string, string> = {
               Edit
             </NuxtLink>
             <div class="actions-menu">
-              <button type="button" class="btn btn-ghost btn-sm actions-toggle" @click="doc._showActions = !doc._showActions">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="8" cy="4" r="1.5" fill="currentColor"/>
-                  <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
-                  <circle cx="8" cy="12" r="1.5" fill="currentColor"/>
-                </svg>
+              <button type="button" class="btn btn-ghost btn-sm actions-toggle" aria-label="More actions" @click="doc._showActions = !doc._showActions">
+                <DotsVertical />
               </button>
               <div v-if="doc._showActions" class="actions-dropdown" @click.stop>
                 <NuxtLink
@@ -557,8 +554,8 @@ const sourceClass: Record<string, string> = {
   position: relative;
 }
 .actions-toggle {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   justify-content: center;
   border-radius: var(--radius);

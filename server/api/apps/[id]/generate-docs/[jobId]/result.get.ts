@@ -60,6 +60,7 @@ export default defineEventHandler(async (event) => {
     data: {
       jobId: job.id,
       repoUrl: job.repoUrl,
+      repoRef: job.repoRef,
       status: job.status,
       srs: latestVersions.srs?.content ?? job.srsContent,
       fsd: latestVersions.fsd?.content ?? job.fsdContent,

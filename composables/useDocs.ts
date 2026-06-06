@@ -213,7 +213,6 @@ export const useDocs = () => {
         toast.error("Failed to load doc versions");
       }
       console.error(e);
-      throw e;
     } finally {
       isLoadingVersions.value = false;
     }

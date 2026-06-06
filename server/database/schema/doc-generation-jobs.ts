@@ -32,6 +32,7 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   fsdContent: text("fsd_content"),
   sddContent: text("sdd_content"),
   errorMessage: text("error_message"),
+  repoRef: text("repo_ref"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });

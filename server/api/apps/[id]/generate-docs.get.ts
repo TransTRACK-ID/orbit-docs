@@ -31,6 +31,7 @@ export default defineEventHandler(async (event) => {
       status: docGenerationJobs.status,
       progressPct: docGenerationJobs.progressPct,
       progressMessage: docGenerationJobs.progressMessage,
+      repoRef: docGenerationJobs.repoRef,
       createdAt: docGenerationJobs.createdAt,
       completedAt: docGenerationJobs.completedAt,
       errorMessage: docGenerationJobs.errorMessage,
