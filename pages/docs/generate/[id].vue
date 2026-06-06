@@ -274,6 +274,10 @@ watch(isSubmitting, (v) => {
         :srs="currentResult.srs"
         :fsd="currentResult.fsd"
         :sdd="currentResult.sdd"
+        :app-id="appId"
+        :job-id="currentResult.jobId"
+        :versions="currentResult.versions"
+        @refresh="handleViewResult(currentResult.jobId)"
       />
     </div>
 

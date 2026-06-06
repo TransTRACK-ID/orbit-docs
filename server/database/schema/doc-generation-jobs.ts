@@ -36,7 +36,18 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   completedAt: timestamp("completed_at", { withTimezone: true }),
 });
 
-export const docGenerationJobsRelations = relations(docGenerationJobs, ({ one }) => ({
+export const docGenerationVersions = pgTable("doc_generation_versions", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  jobId: text("job_id")
+    .notNull()
+    .references(() => docGenerationJobs.id, { onDelete: "cascade" }),
+  docType: text("doc_type", { enum: ["srs", "fsd", "sdd"] }).notNull(),
+  content: text("content").default(""),
+  actor: text("actor"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const docGenerationJobsRelations = relations(docGenerationJobs, ({ one, many }) => ({
   app: one(apps, {
     fields: [docGenerationJobs.appId],
     references: [apps.id],
@@ -44,5 +55,13 @@ export const docGenerationJobsRelations = relations(docGenerationJobs, ({ one })
   user: one(users, {
     fields: [docGenerationJobs.userId],
     references: [users.id],
+  }),
+  versions: many(docGenerationVersions),
+}));
+
+export const docGenerationVersionsRelations = relations(docGenerationVersions, ({ one }) => ({
+  job: one(docGenerationJobs, {
+    fields: [docGenerationVersions.jobId],
+    references: [docGenerationJobs.id],
   }),
 }));

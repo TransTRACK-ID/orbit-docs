@@ -20,6 +20,15 @@ export interface DocGenerationResult {
   fsd: string | null;
   sdd: string | null;
   completedAt: string | null;
+  versions?: DocGenerationVersion[];
+}
+
+export interface DocGenerationVersion {
+  id: string;
+  docType: "srs" | "fsd" | "sdd";
+  content: string | null;
+  actor: string | null;
+  createdAt: string | null;
 }
 
 export interface DocGenerationPayload {
@@ -249,6 +258,52 @@ export const useDocGenerator = () => {
     }
   }
 
+  async function updateResult(
+    appId: string,
+    jobId: string,
+    payload: { srs?: string; fsd?: string; sdd?: string }
+  ) {
+    try {
+      const data = await $fetch<{ data: { success: boolean; message: string; jobId: string } }>(
+        `/api/apps/${appId}/generate-docs/${jobId}/result`,
+        {
+          method: "PUT",
+          body: payload,
+        }
+      );
+      toast.success(data.data.message);
+      return data.data;
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to update generation result";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
+      console.error(e);
+      throw e;
+    }
+  }
+
+  async function fetchResultVersions(appId: string, jobId: string) {
+    try {
+      const data = await $fetch<{ data: DocGenerationVersion[] }>(
+        `/api/apps/${appId}/generate-docs/${jobId}/versions`
+      );
+      return data.data;
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load generation versions");
+      }
+      console.error(e);
+      throw e;
+    }
+  }
+
   function disconnectStream() {
     if (eventSource.value) {
       eventSource.value.close();
@@ -274,6 +329,8 @@ export const useDocGenerator = () => {
     cancelJob,
     removeJob,
     fetchResult,
+    updateResult,
+    fetchResultVersions,
     disconnectStream,
     clearCurrent,
   };

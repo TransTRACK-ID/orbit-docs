@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const job = await db
-    .select()
+    .select({ id: docGenerationJobs.id, appId: docGenerationJobs.appId })
     .from(docGenerationJobs)
     .where(eq(docGenerationJobs.id, jobId))
     .limit(1)
@@ -33,45 +33,13 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  if (job.status !== "completed") {
-    throw createError({
-      statusCode: 409,
-      statusMessage: "Conflict",
-      message: `Job is not completed. Current status: ${job.status}`,
-    });
-  }
-
-  // Fetch latest versions for each doc type
   const versions = await db
     .select()
     .from(docGenerationVersions)
     .where(eq(docGenerationVersions.jobId, jobId))
     .orderBy(desc(docGenerationVersions.createdAt));
 
-  // Group by docType and get latest
-  const latestVersions: Record<string, typeof versions[0] | undefined> = {};
-  for (const v of versions) {
-    if (!latestVersions[v.docType]) {
-      latestVersions[v.docType] = v;
-    }
-  }
-
   return {
-    data: {
-      jobId: job.id,
-      repoUrl: job.repoUrl,
-      status: job.status,
-      srs: latestVersions.srs?.content ?? job.srsContent,
-      fsd: latestVersions.fsd?.content ?? job.fsdContent,
-      sdd: latestVersions.sdd?.content ?? job.sddContent,
-      completedAt: job.completedAt,
-      versions: versions.map((v) => ({
-        id: v.id,
-        docType: v.docType,
-        content: v.content,
-        actor: v.actor,
-        createdAt: v.createdAt,
-      })),
-    },
+    data: versions,
   };
 });

@@ -265,7 +265,7 @@ export function markdownToEditorJs(md: string): EditorJsData {
     // Paragraph (collect until next block)
     const paraLines: string[] = [line];
     i++;
-    while (i < lines.length && lines[i].trim() && !lines[i].match(/^(#{1,3}|>|[-*]|\d+\.|```|!\[|---)/)) {
+    while (i < lines.length && lines[i].trim() && !lines[i].match(/^(#{1,3}|>|[-*]|\d+\.|```|!\[|---|\||:::toggle)/)) {
       paraLines.push(lines[i]);
       i++;
     }
