@@ -3,7 +3,7 @@ import { getDb } from "~/server/database";
 import { docGenerationJobs, apps } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
-import { generateDocs } from "~/server/lib/doc-generator";
+import { generateDocs, updateJobProgress } from "~/server/lib/doc-generator";
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event);
@@ -62,7 +62,7 @@ export default defineEventHandler(async (event) => {
   // Start generation in background (fire-and-forget)
   generateDocs(job.id, repoUrl.trim(), async (update) => {
     // Progress updates are handled inside generateDocs via DB updates
-    // This callback is available for additional logging if needed
+    await updateJobProgress(job.id, update);
   }).catch((error) => {
     console.error(`Doc generation failed for job ${job.id}:`, error);
   });
