@@ -2,7 +2,7 @@ import jwt from 'jsonwebtoken';
 import type { SsoConfig, SsoProvider, KeycloakProvider, AzureProvider, GenericOIDCProvider } from '~/types/sso';
 import { DEFAULT_OAUTH_ENDPOINTS, getAzureEndpoints, getKeycloakEndpoints } from '~/types/sso';
 import { getDb } from '~/server/database';
-import { settings } from '~/server/database/schema';
+import { settings, users } from '~/server/database/schema';
 import { eq } from 'drizzle-orm';
 import { ensureTeamMember } from '~/server/utils/team-access';
 
@@ -234,7 +234,7 @@ export default defineEventHandler(async (event) => {
     // This lets the SSO flow work in development without crashing
     const fallbackPayload = [
       normalizedUserInfo.email || 'unknown',
-      normalizedUserInfo.sub || 'unknown',
+      userId || normalizedUserInfo.sub || 'unknown',
       Date.now().toString()
     ].join('|');
     token = Buffer.from(fallbackPayload).toString('base64');
@@ -242,7 +242,7 @@ export default defineEventHandler(async (event) => {
     const jwtPayload = {
       email: normalizedUserInfo.email,
       name: normalizedUserInfo.name,
-      sub: normalizedUserInfo.sub,
+      sub: userId || normalizedUserInfo.sub,
       authMethod: provider.type,
       providerId: provider.id,
       providerName: provider.name
@@ -279,11 +279,51 @@ export default defineEventHandler(async (event) => {
     path: '/'
   });
 
+  // Auto-register the user if they don't exist in the local database
+  let userId = normalizedUserInfo.sub;
+  if (normalizedUserInfo.email) {
+    try {
+      const db = getDb();
+      // Check if user already exists by email
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, normalizedUserInfo.email))
+        .limit(1)
+        .then((rows) => rows[0]);
+
+      if (existingUser) {
+        userId = existingUser.id;
+        console.log(`[SSO Callback] Existing user found: ${existingUser.email} (id: ${userId})`);
+      } else {
+        // Create new user with a random password (they authenticate via SSO)
+        const newUserId = crypto.randomUUID();
+        const randomPassword = crypto.randomUUID() + crypto.randomUUID();
+        const [newUser] = await db
+          .insert(users)
+          .values({
+            id: newUserId,
+            name: normalizedUserInfo.name || normalizedUserInfo.email.split('@')[0],
+            email: normalizedUserInfo.email,
+            password: randomPassword, // Not used for login, but required by schema
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+
+        userId = newUser.id;
+        console.log(`[SSO Callback] Auto-registered new user: ${newUser.email} (id: ${userId})`);
+      }
+    } catch (e) {
+      console.error('[SSO Callback] Failed to auto-register user:', e);
+    }
+  }
+
   // Auto-provision the user as workspace admin if they don't have a member record
   try {
     if (normalizedUserInfo.email) {
       await ensureTeamMember({
-        id: normalizedUserInfo.sub,
+        id: userId,
         email: normalizedUserInfo.email,
         name: normalizedUserInfo.name,
       });
