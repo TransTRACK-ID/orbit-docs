@@ -11,6 +11,11 @@ const isActive = (path: string) => route.path === path || route.path.startsWith(
 
 const user = computed(() => {
   const d = data.value as any;
+  // v1.2.0 local provider returns a flat session object directly
+  if (d?.id || d?.email) {
+    return d;
+  }
+  // legacy fallback: wrapped response
   return d?.data?.user || d?.user || null;
 });
 

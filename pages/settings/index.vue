@@ -67,6 +67,11 @@ const { data: authData } = useAuth();
 
 const currentUserEmail = computed(() => {
   const d = authData.value as any;
+  // v1.2.0 local provider returns a flat session object directly
+  if (d?.email) {
+    return d.email;
+  }
+  // legacy fallback: wrapped response
   return d?.data?.user?.email || d?.user?.email || null;
 });
 
