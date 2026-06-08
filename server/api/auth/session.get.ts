@@ -145,6 +145,16 @@ export default defineEventHandler(async (event) => {
             },
         });
 
+        // Guard against non-object responses from the external API
+        if (typeof response !== 'object' || response === null || Array.isArray(response)) {
+            console.error('[Session] External API returned non-object response:', response);
+            throw createError({
+                statusCode: 502,
+                statusMessage: 'Bad Gateway',
+                message: 'External authentication service returned an unexpected response format',
+            });
+        }
+
         return response;
     } catch (error: unknown) {
         console.error("Session validation error:", error);
