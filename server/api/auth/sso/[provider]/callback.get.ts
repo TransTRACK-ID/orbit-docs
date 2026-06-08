@@ -221,6 +221,47 @@ export default defineEventHandler(async (event) => {
   // Normalize user info based on provider
   const normalizedUserInfo = normalizeUserInfo(userInfo, provider.type);
 
+  // Auto-register the user if they don't exist in the local database
+  // This MUST happen before token creation so we use the correct local userId
+  let userId = normalizedUserInfo.sub;
+  if (normalizedUserInfo.email) {
+    try {
+      const db = getDb();
+      // Check if user already exists by email
+      const existingUser = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, normalizedUserInfo.email))
+        .limit(1)
+        .then((rows) => rows[0]);
+
+      if (existingUser) {
+        userId = existingUser.id;
+        console.log(`[SSO Callback] Existing user found: ${existingUser.email} (id: ${userId})`);
+      } else {
+        // Create new user with a random password (they authenticate via SSO)
+        const newUserId = crypto.randomUUID();
+        const randomPassword = crypto.randomUUID() + crypto.randomUUID();
+        const [newUser] = await db
+          .insert(users)
+          .values({
+            id: newUserId,
+            name: normalizedUserInfo.name || normalizedUserInfo.email.split('@')[0],
+            email: normalizedUserInfo.email,
+            password: randomPassword, // Not used for login, but required by schema
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning();
+
+        userId = newUser.id;
+        console.log(`[SSO Callback] Auto-registered new user: ${newUser.email} (id: ${userId})`);
+      }
+    } catch (e) {
+      console.error('[SSO Callback] Failed to auto-register user:', e);
+    }
+  }
+
   // Create JWT or fallback token
   const runtimeConfig = useRuntimeConfig();
   const jwtSecret = runtimeConfig.jwtSecret as string;
@@ -278,46 +319,6 @@ export default defineEventHandler(async (event) => {
     maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
     path: '/'
   });
-
-  // Auto-register the user if they don't exist in the local database
-  let userId = normalizedUserInfo.sub;
-  if (normalizedUserInfo.email) {
-    try {
-      const db = getDb();
-      // Check if user already exists by email
-      const existingUser = await db
-        .select()
-        .from(users)
-        .where(eq(users.email, normalizedUserInfo.email))
-        .limit(1)
-        .then((rows) => rows[0]);
-
-      if (existingUser) {
-        userId = existingUser.id;
-        console.log(`[SSO Callback] Existing user found: ${existingUser.email} (id: ${userId})`);
-      } else {
-        // Create new user with a random password (they authenticate via SSO)
-        const newUserId = crypto.randomUUID();
-        const randomPassword = crypto.randomUUID() + crypto.randomUUID();
-        const [newUser] = await db
-          .insert(users)
-          .values({
-            id: newUserId,
-            name: normalizedUserInfo.name || normalizedUserInfo.email.split('@')[0],
-            email: normalizedUserInfo.email,
-            password: randomPassword, // Not used for login, but required by schema
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .returning();
-
-        userId = newUser.id;
-        console.log(`[SSO Callback] Auto-registered new user: ${newUser.email} (id: ${userId})`);
-      }
-    } catch (e) {
-      console.error('[SSO Callback] Failed to auto-register user:', e);
-    }
-  }
 
   // Auto-provision the user as workspace admin if they don't have a member record
   try {
