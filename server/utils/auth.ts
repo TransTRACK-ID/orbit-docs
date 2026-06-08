@@ -138,6 +138,24 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
     }
   }
 
+  // Handle fallback SSO tokens (base64-encoded, no dots)
+  // These are created when JWT_SECRET is not configured
+  if (!token.includes(".")) {
+    try {
+      const decoded = Buffer.from(token, "base64").toString("utf8");
+      const parts = decoded.split("|");
+      if (parts.length >= 2 && parts[0].includes("@")) {
+        return {
+          id: parts[1] || parts[0],
+          email: parts[0],
+          name: parts[0].split("@")[0],
+        };
+      }
+    } catch {
+      // Not a valid fallback token, continue to next check
+    }
+  }
+
   // In preview mode (or when no external API is configured), validate against local DB
   if (isPreviewMode(config) || !apiBaseUrl) {
     const db = getDb();

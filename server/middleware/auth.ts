@@ -25,6 +25,21 @@ export default defineEventHandler((event) => {
             // Try JWT verification first
             if (token.split('.').length === 3 && config.jwtSecret) {
                 decoded = jwt.verify(token, config.jwtSecret as string);
+            } else if (!token.includes('.')) {
+                // Handle fallback SSO tokens (base64-encoded, no dots) when JWT_SECRET is not configured
+                try {
+                    const decodedStr = Buffer.from(token, 'base64').toString('utf8');
+                    const parts = decodedStr.split('|');
+                    if (parts.length >= 2 && parts[0].includes('@')) {
+                        decoded = { id: parts[1] || parts[0], email: parts[0] };
+                    } else {
+                        // Fallback: treat as plain user ID (legacy local auth)
+                        decoded = { id: token, email: token };
+                    }
+                } catch {
+                    // Fallback: treat as plain user ID (legacy local auth)
+                    decoded = { id: token, email: token };
+                }
             } else {
                 // Fallback: treat as plain user ID (legacy local auth)
                 decoded = { id: token, email: token };
