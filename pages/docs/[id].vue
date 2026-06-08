@@ -414,7 +414,7 @@ const lastModified = computed(() => {
 
         <!-- Editor -->
         <div class="editor-pane">
-          <div class="pane-body" style="padding:0;overflow:visible;">
+          <div class="pane-body" style="overflow:visible;">
             <ClientOnly>
               <EditorJs
                 v-if="!previewOnly"
@@ -947,6 +947,9 @@ const lastModified = computed(() => {
   padding: 16px;
   overflow: auto;
   min-height: 0;
+}
+.doc-shell.preview-only .editor-pane .pane-body {
+  padding: 24px 32px;
 }
 
 .toolbar {

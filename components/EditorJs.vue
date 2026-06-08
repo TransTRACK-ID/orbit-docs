@@ -239,7 +239,7 @@ defineExpose({
 .editor-js-container {
   width: 100%;
   height: 100%;
-  padding: 16px;
+  padding: 16px 16px 16px 0;
   overflow: visible;
 }
 
@@ -257,7 +257,7 @@ defineExpose({
 .editor-js-container .ce-block__content {
   max-width: 100%;
   margin: 0;
-  padding: 0 16px 0 68px;
+  padding: 0 16px 0 48px;
 }
 
 .editor-js-container .ce-toolbar__content {
@@ -268,7 +268,7 @@ defineExpose({
 /* Notion-style toolbar: overlay to the left of the block on hover */
 .editor-js-container .ce-toolbar__actions {
   position: absolute;
-  left: 12px;
+  left: -24px;
   top: 0px;
   display: flex;
   flex-direction: row;
