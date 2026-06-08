@@ -158,27 +158,29 @@ export default defineEventHandler(async (event) => {
       }
 
       // Auto-provision the user as workspace admin if they don't have a member record
-      try {
-        const token = response.data.access_token;
-        const sessionResp = await $fetch<{
-          data?: { user?: SessionUser };
-        }>(
-          `${apiBaseUrl}/api/v1/auth/session`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
+      if (response.data?.access_token) {
+        try {
+          const token = response.data.access_token;
+          const sessionResp = await $fetch<{
+            data?: { user?: SessionUser };
+          }>(
+            `${apiBaseUrl}/api/v1/auth/session`,
+            {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+            }
+          );
+          const user = sessionResp.data?.user;
+          if (user) {
+            await ensureTeamMember(user);
           }
-        );
-        const user = sessionResp.data?.user;
-        if (user) {
-          await ensureTeamMember(user);
+        } catch (e) {
+          console.error("Failed to auto-provision team member on login:", e);
         }
-      } catch (e) {
-        console.error("Failed to auto-provision team member on login:", e);
       }
 
       return response;
