@@ -302,7 +302,16 @@ defineExpose({
   position: relative;
 }
 
-.editor-js-container .ce-header::before {
+/* Header placeholder — keep it out of flow so the cursor stays at the start */
+.editor-js-container .ce-header[data-placeholder]:empty::before {
+  position: absolute;
+  pointer-events: none;
+  color: var(--muted);
+  font-weight: 400;
+  opacity: 0.5;
+}
+
+.editor-js-container .ce-header::after {
   content: "";
   position: absolute;
   left: -12px;
@@ -315,7 +324,7 @@ defineExpose({
   transition: opacity 0.15s ease;
 }
 
-.editor-js-container .ce-block:hover .ce-header::before {
+.editor-js-container .ce-block:hover .ce-header::after {
   opacity: 1;
 }
 
