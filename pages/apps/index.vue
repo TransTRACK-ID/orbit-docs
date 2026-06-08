@@ -1241,6 +1241,8 @@ h2 {
   cursor: pointer;
   transition: background .1s;
   user-select: none;
+  width: 100%;
+  box-sizing: border-box;
 }
 .dropdown-item:hover {
   background: var(--fg-soft);
