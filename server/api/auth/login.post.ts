@@ -61,7 +61,9 @@ async function encryptAES(plainText: string, key: string): Promise<string> {
 
 export default defineEventHandler(async (event) => {
   try {
+    console.log("[Login Endpoint] Received login request");
     const body = await readBody(event);
+    console.log("[Login Endpoint] Request body:", { email: body.email, password: body.password ? "***" : "missing" });
     const { email, password } = body;
 
     if (!email || !password) {

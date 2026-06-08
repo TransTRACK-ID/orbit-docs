@@ -18,13 +18,16 @@ export const useAuthStore = defineStore("auth", {
       const { signIn, data } = useAuth();
 
       try {
-        await signIn(
+        console.log("[Auth Store] Starting login with email:", this.email);
+        const result = await signIn(
           {
             email: this.email,
             password: this.password,
           },
           { callbackUrl: `/` }
         );
+        console.log("[Auth Store] signIn result:", result);
+        console.log("[Auth Store] auth data after signIn:", data.value);
 
         // Check if companies data exists and set the company ID
         // TODO: CHECK THIS COMPANY
@@ -43,7 +46,7 @@ export const useAuthStore = defineStore("auth", {
 
         return true;
       } catch (error: unknown) {
-        console.error("Login error:", error);
+        console.error("[Auth Store] Login error:", error);
 
         // Type assertion for error handling
         const err = error as any;
