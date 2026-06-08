@@ -56,15 +56,18 @@ export default defineEventHandler(async (event) => {
         }
 
         let sessionToken = getCookie(event, "session_token");
+        console.log(`[Session] session_token cookie: ${sessionToken ? 'present' : 'missing'}`);
 
         if (!sessionToken) {
             const authHeader = getHeader(event, "authorization");
             if (authHeader && authHeader.startsWith("Bearer ")) {
                 sessionToken = authHeader.slice(7);
+                console.log(`[Session] Found token in Authorization header`);
             }
         }
 
         if (!sessionToken) {
+            console.log(`[Session] No token found — returning 401`);
             throw createError({
                 statusCode: 401,
                 statusMessage: "Unauthorized",
@@ -75,12 +78,15 @@ export default defineEventHandler(async (event) => {
         const config = useRuntimeConfig();
         const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
 
+        console.log(`[Session] Token type: ${sessionToken.split('.').length === 3 ? 'JWT' : sessionToken.includes('.') ? 'unknown' : 'fallback'}`);
+
         // Check if token is a JWT (contains two dots)
         if (sessionToken.split('.').length === 3) {
             const jwtSecret = config.jwtSecret as string;
             if (jwtSecret) {
                 const decoded = verifyJwtToken(sessionToken, jwtSecret);
                 if (decoded && decoded.email) {
+                    console.log(`[Session] JWT valid for user: ${decoded.email}`);
                     return {
                         status: "success",
                         data: {
@@ -100,8 +106,10 @@ export default defineEventHandler(async (event) => {
         if (!sessionToken.includes(".")) {
             try {
                 const decoded = Buffer.from(sessionToken, "base64").toString("utf8");
+                console.log(`[Session] Fallback token decoded: ${decoded}`);
                 const parts = decoded.split("|");
                 if (parts.length >= 2 && parts[0].includes("@")) {
+                    console.log(`[Session] Fallback token valid for user: ${parts[0]}`);
                     return {
                         status: "success",
                         data: {
@@ -114,18 +122,20 @@ export default defineEventHandler(async (event) => {
                         },
                     };
                 }
-            } catch {
-                // Not a valid fallback token, continue
+            } catch (e) {
+                console.log(`[Session] Fallback token decode failed: ${e}`);
             }
         }
 
         // In preview mode (or when no external API is configured), validate against local DB
         if (isPreviewMode(config) || !apiBaseUrl) {
+            console.log(`[Session] Checking local DB for token: ${sessionToken}`);
             const db = getDb();
             const rows = await db.select().from(users).where(eq(users.id, sessionToken)).limit(1);
             const user = rows[0];
 
             if (!user) {
+                console.log(`[Session] No user found in DB for token: ${sessionToken}`);
                 throw createError({
                     statusCode: 401,
                     statusMessage: "Unauthorized",
@@ -133,6 +143,7 @@ export default defineEventHandler(async (event) => {
                 });
             }
 
+            console.log(`[Session] Local DB user found: ${user.email}`);
             return {
                 status: "success",
                 data: {
@@ -142,6 +153,7 @@ export default defineEventHandler(async (event) => {
             };
         }
 
+        console.log(`[Session] Forwarding to external API: ${apiBaseUrl}`);
         const response = await $fetch<SessionResponse>(`${apiBaseUrl}/api/v1/auth/session`, {
             method: "GET",
             headers: {
