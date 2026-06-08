@@ -36,7 +36,12 @@ const sortBy = ref<"updatedAt" | "name" | "status">("updatedAt");
 const sortOrder = ref<"asc" | "desc">("desc");
 const showFilterMenu = ref(false);
 const showSortMenu = ref(false);
+const openAppMenu = ref<string | null>(null);
 const ownerList = ref<string[]>([]);
+
+function toggleAppMenu(appId: string) {
+  openAppMenu.value = openAppMenu.value === appId ? null : appId;
+}
 
 onMounted(() => {
   fetchApps();
@@ -137,6 +142,7 @@ function onDocClick(e: MouseEvent) {
   const t = e.target as HTMLElement;
   if (!t.closest(".filter-dropdown-wrap")) showFilterMenu.value = false;
   if (!t.closest(".sort-dropdown-wrap")) showSortMenu.value = false;
+  if (!t.closest(".action-dropdown-wrap")) openAppMenu.value = null;
 }
 
 // Create modal
@@ -510,34 +516,57 @@ const statusLabel: Record<string, string> = {
 
         <div class="app-card-foot">
           <div class="app-card-links">
-            <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm">
-              Versions &rarr;
-            </NuxtLink>
-            <NuxtLink :to="`/releases?app=${app.name}`" class="btn btn-ghost btn-sm">
-              Releases &rarr;
-            </NuxtLink>
             <NuxtLink :to="`/docs?app=${app.id}`" class="btn btn-ghost btn-sm">
               Docs &rarr;
             </NuxtLink>
-            <NuxtLink :to="`/docs/generate/${app.id}`" class="btn btn-ghost btn-sm">
-              Generate Docs &rarr;
+            <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm">
+              Versions &rarr;
             </NuxtLink>
           </div>
           <div class="app-card-actions">
-            <button
-              class="btn btn-ghost btn-sm action-btn"
-              title="Edit app"
-              @click="openEditModal(app)"
-            >
-              <IconsPencil size="14" />
-            </button>
-            <button
-              class="btn btn-ghost btn-sm action-btn"
-              title="Delete app"
-              @click="confirmDelete(app)"
-            >
-              <IconsTrash size="14" />
-            </button>
+            <div class="action-dropdown-wrap" style="position: relative;">
+              <button
+                class="btn btn-ghost btn-sm action-btn"
+                title="More actions"
+                @click.stop="toggleAppMenu(app.id)"
+              >
+                <IconsDotsVertical size="14" />
+              </button>
+              <div
+                v-if="openAppMenu === app.id"
+                class="dropdown-menu app-card-dropdown"
+              >
+                <NuxtLink
+                  :to="`/releases?app=${app.name}`"
+                  class="dropdown-item"
+                  @click="openAppMenu = null"
+                >
+                  Releases
+                </NuxtLink>
+                <NuxtLink
+                  :to="`/docs/generate/${app.id}`"
+                  class="dropdown-item"
+                  @click="openAppMenu = null"
+                >
+                  Generate Docs
+                </NuxtLink>
+                <div class="dropdown-divider" />
+                <button
+                  class="dropdown-item"
+                  @click="openEditModal(app); openAppMenu = null"
+                >
+                  <IconsPencil size="14" />
+                  Edit
+                </button>
+                <button
+                  class="dropdown-item"
+                  @click="confirmDelete(app); openAppMenu = null"
+                >
+                  <IconsTrash size="14" />
+                  Delete
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -881,6 +910,12 @@ h2 {
 }
 .app-card:hover .app-card-actions {
   opacity: 1;
+}
+
+.app-card-dropdown {
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
 }
 
 .pill {
