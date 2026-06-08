@@ -295,30 +295,26 @@ export default defineEventHandler(async (event) => {
   }
 
   // Set cookies
-  setCookie(event, 'session_token', token, {
+  const cookieOptions = {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: true,
+    sameSite: 'lax' as const,
     maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
     path: '/'
-  });
-
-  setCookie(event, 'auth.token', token, {
+  };
+  const clientCookieOptions = {
+    ...cookieOptions,
     httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
-    path: '/'
-  });
+  };
+
+  setCookie(event, 'session_token', token, cookieOptions);
+  setCookie(event, 'auth.token', token, clientCookieOptions);
 
   const userInfoCookie = Buffer.from(JSON.stringify(normalizedUserInfo)).toString('base64');
-  setCookie(event, 'user_info', userInfoCookie, {
-    httpOnly: false,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
-    path: '/'
-  });
+  setCookie(event, 'user_info', userInfoCookie, clientCookieOptions);
+
+  console.log(`[SSO Callback] Cookies set: session_token=${token.substring(0, 20)}..., auth.token=${token.substring(0, 20)}..., user_info=${userInfoCookie.substring(0, 20)}...`);
+  console.log(`[SSO Callback] Cookie options: httpOnly=${cookieOptions.httpOnly}, secure=${cookieOptions.secure}, sameSite=${cookieOptions.sameSite}, path=${cookieOptions.path}`);
 
   // Auto-provision the user as workspace admin if they don't have a member record
   try {

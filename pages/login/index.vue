@@ -77,8 +77,20 @@ function getSsoLoginUrl(provider: SsoProviderUI) {
 }
 
 onMounted(async () => {
+  console.log('[Login] onMounted');
+  console.log('[Login] Cookies:', document.cookie);
   await getSession();
   await fetchSsoProviders();
+  
+  // Debug: check session after SSO redirect
+  setTimeout(async () => {
+    try {
+      const debug = await $fetch('/api/debug/session');
+      console.log('[Login] Debug session:', debug);
+    } catch (e) {
+      console.log('[Login] Debug session error:', e);
+    }
+  }, 500);
 });
 </script>
 

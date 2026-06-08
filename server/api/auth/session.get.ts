@@ -55,11 +55,16 @@ export default defineEventHandler(async (event) => {
             };
         }
 
+        const allCookies = getHeader(event, "cookie");
+        console.log(`[Session] Request path: ${event.path}`);
+        console.log(`[Session] All cookies: ${allCookies ? 'present' : 'missing'}`);
+        
         let sessionToken = getCookie(event, "session_token");
         console.log(`[Session] session_token cookie: ${sessionToken ? 'present' : 'missing'}`);
 
         if (!sessionToken) {
             const authHeader = getHeader(event, "authorization");
+            console.log(`[Session] Authorization header: ${authHeader ? 'present' : 'missing'}`);
             if (authHeader && authHeader.startsWith("Bearer ")) {
                 sessionToken = authHeader.slice(7);
                 console.log(`[Session] Found token in Authorization header`);
