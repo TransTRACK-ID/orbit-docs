@@ -570,6 +570,11 @@ function providerTypeColor(type: string) {
 
 const ssoProviderTypeList: SsoProviderType[] = ["google", "github", "azure", "keycloak", "oidc"];
 
+function getCallbackUrl(provider: SsoProvider): string {
+  const origin = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
+  return `${origin}/api/auth/sso/${provider.type}/callback`;
+}
+
 </script>
 
 <template>
@@ -928,8 +933,8 @@ const ssoProviderTypeList: SsoProviderType[] = ["google", "github", "azure", "ke
                   </span>
                 </div>
                 <div class="token-box">
-                  <span class="token-value">{{ provider.callbackUrl || `${window.location.origin}/api/auth/sso/${provider.type}/callback` }}</span>
-                  <button class="btn btn-ghost btn-sm" @click="copyToken(provider.callbackUrl || `${window.location.origin}/api/auth/sso/${provider.type}/callback`)">Copy</button>
+                  <span class="token-value">{{ provider.callbackUrl || getCallbackUrl(provider) }}</span>
+                  <button class="btn btn-ghost btn-sm" @click="copyToken(provider.callbackUrl || getCallbackUrl(provider))">Copy</button>
                 </div>
               </div>
             </div>
