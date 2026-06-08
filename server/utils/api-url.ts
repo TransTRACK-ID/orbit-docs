@@ -19,3 +19,21 @@ export function resolveApiBaseUrl(baseAPI: string | undefined): string {
 export function isPreviewMode(config: any): boolean {
   return config.isPreview === true || config.isPreview === 'true'
 }
+
+/**
+ * Checks whether the given API base URL points back to the current app.
+ * This prevents auth forwarding loops when API_BASE_URL is set to the app's own URL.
+ */
+export function isSelfReferencingUrl(apiUrl: string, requestHost: string | undefined): boolean {
+  if (!apiUrl || !requestHost) {
+    return false
+  }
+  try {
+    const parsed = new URL(apiUrl)
+    // Strip port from requestHost for comparison
+    const hostWithoutPort = requestHost.split(':')[0]
+    return parsed.hostname === hostWithoutPort || parsed.hostname === requestHost
+  } catch {
+    return false
+  }
+}

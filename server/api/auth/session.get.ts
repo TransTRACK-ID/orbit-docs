@@ -1,10 +1,10 @@
 // Session endpoint — validates the session token against the local database
 // or forwards it to the third-party auth API when configured.
 
-import { defineEventHandler, getCookie, getHeader, createError } from "h3";
+import { defineEventHandler, getCookie, getHeader, createError, getRequestHeader } from "h3";
 import { $fetch } from "ofetch";
 import { useRuntimeConfig } from "#imports";
-import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
+import { resolveApiBaseUrl, isPreviewMode, isSelfReferencingUrl } from "../../utils/api-url";
 import { getDb } from "~/server/database";
 import { users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
@@ -81,6 +81,7 @@ export default defineEventHandler(async (event) => {
 
         const config = useRuntimeConfig();
         const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+        const requestHost = getRequestHeader(event, 'host') || '';
 
         // Check if token is a JWT (contains two dots)
         if (sessionToken.split('.').length === 3) {
@@ -114,8 +115,9 @@ export default defineEventHandler(async (event) => {
             }
         }
 
-        // In preview mode (or when no external API is configured), validate against local DB
-        if (isPreviewMode(config) || !apiBaseUrl) {
+        // In preview mode, when no external API is configured, or when URL points to ourselves,
+        // validate against local DB
+        if (isPreviewMode(config) || !apiBaseUrl || isSelfReferencingUrl(apiBaseUrl, requestHost)) {
             const db = getDb();
             const rows = await db.select().from(users).where(eq(users.id, sessionToken)).limit(1);
             const user = rows[0];

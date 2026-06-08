@@ -4,9 +4,9 @@
 
 import { useRuntimeConfig } from "#imports";
 import crypto from "crypto";
-import { createError, defineEventHandler, readBody, setCookie } from "h3";
+import { createError, defineEventHandler, readBody, setCookie, getRequestHeader } from "h3";
 import { $fetch } from "ofetch";
-import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
+import { resolveApiBaseUrl, isPreviewMode, isSelfReferencingUrl } from "../../utils/api-url";
 import { ensureTeamMember } from "~/server/utils/team-access";
 import { verifyPassword, signJwtToken, type SessionUser } from "~/server/utils/auth";
 import { getDb } from "~/server/database";
@@ -127,9 +127,10 @@ export default defineEventHandler(async (event) => {
     }
 
     const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+    const requestHost = getRequestHeader(event, 'host') || '';
 
-    // External API path (only when not in preview mode and URL is configured)
-    if (!isPreviewMode(config) && apiBaseUrl) {
+    // External API path (only when not in preview mode, URL is configured, and not pointing to ourselves)
+    if (!isPreviewMode(config) && apiBaseUrl && !isSelfReferencingUrl(apiBaseUrl, requestHost)) {
       const plainText = JSON.stringify({ email, password });
       const encryptedPayload = await encryptAES(plainText, appKey);
 
@@ -196,7 +197,7 @@ export default defineEventHandler(async (event) => {
       return response;
     }
 
-    // Local database path (preview mode or no external API)
+    // Local database path (preview mode, no external API, or self-referencing URL)
     const db = getDb();
 
     const rows = await db.select().from(users).where(eq(users.email, email)).limit(1);
