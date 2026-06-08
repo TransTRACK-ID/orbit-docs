@@ -8,7 +8,7 @@ import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { $fetch } from "ofetch";
 import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
 import { ensureTeamMember } from "~/server/utils/team-access";
-import { verifyPassword, type SessionUser } from "~/server/utils/auth";
+import { verifyPassword, signJwtToken, type SessionUser } from "~/server/utils/auth";
 import { getDb } from "~/server/database";
 import { users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
@@ -81,6 +81,49 @@ export default defineEventHandler(async (event) => {
         statusMessage: "Server Error",
         message: "Encryption key not configured",
       });
+    }
+
+    // Check for admin login (similar to mock-service)
+    const adminEmail = config.adminEmail as string;
+    const adminPassword = config.adminPassword as string;
+    const jwtSecret = config.jwtSecret as string;
+    const AUTH_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 5; // 5 days
+
+    if (adminEmail && adminPassword && email === adminEmail && password === adminPassword) {
+      // Generate JWT for admin
+      const token = jwtSecret
+        ? signJwtToken({ sub: email, email, name: 'Admin' }, jwtSecret, AUTH_SESSION_MAX_AGE_SECONDS)
+        : email;
+
+      setCookie(event, "session_token", token, {
+        httpOnly: true,
+        path: "/",
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
+      });
+      setCookie(event, "auth.token", token, {
+        httpOnly: false,
+        path: "/",
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
+      });
+
+      // Auto-provision admin as workspace member
+      try {
+        await ensureTeamMember({ id: email, email, name: 'Admin' });
+      } catch (e) {
+        console.error("Failed to auto-provision admin team member:", e);
+      }
+
+      return {
+        status: "success",
+        data: {
+          access_token: token,
+          user: { id: email, email, name: 'Admin' },
+        },
+      };
     }
 
     const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);

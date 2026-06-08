@@ -6,6 +6,7 @@ import { getDb } from "~/server/database";
 import { users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { scryptSync, randomBytes, timingSafeEqual } from "crypto";
+import jwt from "jsonwebtoken";
 
 export interface SessionUser {
   id: string;
@@ -82,7 +83,29 @@ export function getSessionToken(event: H3Event): string | undefined {
 }
 
 /**
- * Validate the session token against the local database or third-party auth API.
+ * Decode and verify a JWT token.
+ */
+export function verifyJwtToken(token: string, secret: string): any | null {
+  try {
+    return jwt.verify(token, secret);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sign a JWT payload.
+ */
+export function signJwtToken(payload: any, secret: string, expiresInSeconds?: number): string {
+  const options: jwt.SignOptions = {};
+  if (expiresInSeconds) {
+    options.expiresIn = expiresInSeconds;
+  }
+  return jwt.sign(payload, secret, options);
+}
+
+/**
+ * Validate the session token against the local database, third-party auth API, or JWT.
  * Returns the user object when the session is valid.
  * Throws a 401 error if the session is invalid or missing.
  */
@@ -99,6 +122,21 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
 
   const config = useRuntimeConfig();
   const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+
+  // Check if token is a JWT (contains two dots)
+  if (token.split(".").length === 3) {
+    const jwtSecret = config.jwtSecret as string;
+    if (jwtSecret) {
+      const decoded = verifyJwtToken(token, jwtSecret);
+      if (decoded && decoded.email) {
+        return {
+          id: decoded.sub || decoded.email,
+          email: decoded.email,
+          name: decoded.name,
+        };
+      }
+    }
+  }
 
   // In preview mode (or when no external API is configured), validate against local DB
   if (isPreviewMode(config) || !apiBaseUrl) {

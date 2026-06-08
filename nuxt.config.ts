@@ -70,6 +70,11 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     appKey: process.env.APP_KEY,
+    // Admin credentials for direct login
+    adminEmail: process.env.ADMIN_EMAIL || '',
+    adminPassword: process.env.ADMIN_PASSWORD || '',
+    // JWT secret for SSO and admin token signing
+    jwtSecret: process.env.JWT_SECRET || '',
     public: {
       // Client-side base URL — should be relative so requests go through the preview proxy
       baseAPI: process.env.NUXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL,

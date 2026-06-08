@@ -8,6 +8,7 @@ import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
 import { getDb } from "~/server/database";
 import { users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
+import { verifyJwtToken } from "~/server/utils/auth";
 
 interface SessionResponse {
     status: string;
@@ -73,6 +74,27 @@ export default defineEventHandler(async (event) => {
 
         const config = useRuntimeConfig();
         const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+
+        // Check if token is a JWT (contains two dots)
+        if (sessionToken.split('.').length === 3) {
+            const jwtSecret = config.jwtSecret as string;
+            if (jwtSecret) {
+                const decoded = verifyJwtToken(sessionToken, jwtSecret);
+                if (decoded && decoded.email) {
+                    return {
+                        status: "success",
+                        data: {
+                            user: {
+                                id: decoded.sub || decoded.email,
+                                email: decoded.email,
+                                name: decoded.name,
+                            },
+                            companies: [{ id: "local", name: "Local Workspace" }],
+                        },
+                    };
+                }
+            }
+        }
 
         // In preview mode (or when no external API is configured), validate against local DB
         if (isPreviewMode(config) || !apiBaseUrl) {

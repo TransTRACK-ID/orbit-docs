@@ -4,6 +4,13 @@ import { object, string } from "yup";
 import { useAuthStore } from "~/store/auth";
 import { usePageStore } from "~/store/page";
 
+interface SsoProviderUI {
+  id: string;
+  type: string;
+  name: string;
+  callbackUrlHint: string;
+}
+
 definePageMeta({
   auth: {
     unauthenticatedOnly: true,
@@ -24,6 +31,8 @@ $page.setTitle("Sign in");
 const isShowPw = ref(false);
 const isShowNotificationError = ref(false);
 const rememberMe = ref(false);
+const ssoProviders = ref<SsoProviderUI[]>([]);
+const isLoadingSso = ref(false);
 
 const schema = object({
   email: string()
@@ -49,8 +58,27 @@ const onSubmitLogin = handleSubmit(async (values) => {
   });
 });
 
+async function fetchSsoProviders() {
+  isLoadingSso.value = true;
+  try {
+    const response = await $fetch<{ providers: SsoProviderUI[] }>('/api/auth/sso/providers');
+    ssoProviders.value = response.providers || [];
+  } catch (e) {
+    console.error('Failed to fetch SSO providers:', e);
+    ssoProviders.value = [];
+  } finally {
+    isLoadingSso.value = false;
+  }
+}
+
+function getSsoLoginUrl(provider: SsoProviderUI) {
+  const redirect = useRoute().query.redirect as string || '/';
+  return `/api/auth/sso/${provider.type}/login?providerId=${encodeURIComponent(provider.id)}&redirect=${encodeURIComponent(redirect)}`;
+}
+
 onMounted(async () => {
   await getSession();
+  await fetchSsoProviders();
 });
 </script>
 
@@ -205,6 +233,29 @@ onMounted(async () => {
           <span v-else>Sign in</span>
         </button>
       </form>
+
+      <!-- SSO Providers (only when providers are configured) -->
+      <div v-if="ssoProviders.length > 0" class="mt-6">
+        <div class="relative flex items-center justify-center mb-4">
+          <div class="absolute inset-0 flex items-center">
+            <div class="w-full border-t border-[var(--od-border)]"></div>
+          </div>
+          <span class="relative bg-[var(--od-surface)] px-3 text-[12px] text-[var(--od-muted)] uppercase tracking-wider">
+            Or continue with
+          </span>
+        </div>
+
+        <div class="space-y-2">
+          <a
+            v-for="provider in ssoProviders"
+            :key="provider.id"
+            :href="getSsoLoginUrl(provider)"
+            class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] transition-colors hover:bg-[var(--od-surface-hover)] hover:border-[var(--od-border-hover)]"
+          >
+            <span class="capitalize">{{ provider.name }}</span>
+          </a>
+        </div>
+      </div>
 
       <!-- Footer -->
       <div
