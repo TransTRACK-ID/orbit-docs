@@ -55,33 +55,23 @@ export default defineEventHandler(async (event) => {
             };
         }
 
-        const allCookies = getHeader(event, "cookie");
-        console.log(`[Session] Request path: ${event.path}`);
-        console.log(`[Session] All cookies: ${allCookies ? 'present' : 'missing'}`);
-        
         let sessionToken = getCookie(event, "session_token");
-        console.log(`[Session] session_token cookie: ${sessionToken ? 'present' : 'missing'}`);
 
         if (!sessionToken) {
             const authToken = getCookie(event, "auth.token");
-            console.log(`[Session] auth.token cookie: ${authToken ? 'present' : 'missing'}`);
             if (authToken) {
                 sessionToken = authToken;
-                console.log(`[Session] Using auth.token as session token`);
             }
         }
 
         if (!sessionToken) {
             const authHeader = getHeader(event, "authorization");
-            console.log(`[Session] Authorization header: ${authHeader ? 'present' : 'missing'}`);
             if (authHeader && authHeader.startsWith("Bearer ")) {
                 sessionToken = authHeader.slice(7);
-                console.log(`[Session] Found token in Authorization header`);
             }
         }
 
         if (!sessionToken) {
-            console.log(`[Session] No token found — returning 401`);
             throw createError({
                 statusCode: 401,
                 statusMessage: "Unauthorized",
@@ -92,15 +82,12 @@ export default defineEventHandler(async (event) => {
         const config = useRuntimeConfig();
         const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
 
-        console.log(`[Session] Token type: ${sessionToken.split('.').length === 3 ? 'JWT' : sessionToken.includes('.') ? 'unknown' : 'fallback'}`);
-
         // Check if token is a JWT (contains two dots)
         if (sessionToken.split('.').length === 3) {
             const jwtSecret = config.jwtSecret as string;
             if (jwtSecret) {
                 const decoded = verifyJwtToken(sessionToken, jwtSecret);
                 if (decoded && decoded.email) {
-                    console.log(`[Session] JWT valid for user: ${decoded.email}`);
                     return {
                         id: decoded.sub || decoded.email,
                         email: decoded.email,
@@ -114,10 +101,8 @@ export default defineEventHandler(async (event) => {
         if (!sessionToken.includes(".")) {
             try {
                 const decoded = Buffer.from(sessionToken, "base64").toString("utf8");
-                console.log(`[Session] Fallback token decoded: ${decoded}`);
                 const parts = decoded.split("|");
                 if (parts.length >= 2 && parts[0].includes("@")) {
-                    console.log(`[Session] Fallback token valid for user: ${parts[0]}`);
                     return {
                         id: parts[1] || parts[0],
                         email: parts[0],
@@ -125,19 +110,17 @@ export default defineEventHandler(async (event) => {
                     };
                 }
             } catch (e) {
-                console.log(`[Session] Fallback token decode failed: ${e}`);
+                // Fallback: treat as plain user ID
             }
         }
 
         // In preview mode (or when no external API is configured), validate against local DB
         if (isPreviewMode(config) || !apiBaseUrl) {
-            console.log(`[Session] Checking local DB for token: ${sessionToken}`);
             const db = getDb();
             const rows = await db.select().from(users).where(eq(users.id, sessionToken)).limit(1);
             const user = rows[0];
 
             if (!user) {
-                console.log(`[Session] No user found in DB for token: ${sessionToken}`);
                 throw createError({
                     statusCode: 401,
                     statusMessage: "Unauthorized",
@@ -145,7 +128,6 @@ export default defineEventHandler(async (event) => {
                 });
             }
 
-            console.log(`[Session] Local DB user found: ${user.email}`);
             return {
                 id: user.id,
                 email: user.email,

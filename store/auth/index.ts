@@ -18,7 +18,6 @@ export const useAuthStore = defineStore("auth", {
       const { signIn, data } = useAuth();
 
       try {
-        console.log("[Auth Store] Starting login with email:", this.email);
         const result = await signIn(
           {
             email: this.email,
@@ -26,8 +25,6 @@ export const useAuthStore = defineStore("auth", {
           },
           { callbackUrl: `/` }
         );
-        console.log("[Auth Store] signIn result:", result);
-        console.log("[Auth Store] auth data after signIn:", data.value);
 
         // Check if companies data exists and set the company ID
         // TODO: CHECK THIS COMPANY
