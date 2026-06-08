@@ -297,23 +297,43 @@ defineExpose({
   padding: 0;
   margin: 0;
   line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  position: relative;
+}
+
+.editor-js-container .ce-header::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent, #2C9EEC);
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.editor-js-container .ce-block:hover .ce-header::before {
+  opacity: 1;
 }
 
 .editor-js-container .ce-header.ce-header--h1 {
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 800;
   margin-bottom: 16px;
 }
 
 .editor-js-container .ce-header.ce-header--h2 {
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
   margin: 24px 0 12px;
 }
 
 .editor-js-container .ce-header.ce-header--h3 {
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 700;
   margin: 20px 0 10px;
 }
 
