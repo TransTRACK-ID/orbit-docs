@@ -9,7 +9,10 @@ export default defineEventHandler((event) => {
     const isProtectedPage = path.startsWith('/admin/sso');
 
     if (isApiRoute || isProtectedPage) {
-        const token = getCookie(event, 'session_token');
+        let token = getCookie(event, 'session_token');
+        if (!token) {
+            token = getCookie(event, 'auth.token');
+        }
         const config = useRuntimeConfig();
 
         if (!token) {

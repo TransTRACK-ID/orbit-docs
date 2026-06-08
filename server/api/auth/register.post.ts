@@ -185,7 +185,23 @@ export default defineEventHandler(async (event) => {
       password: hashedPassword,
     });
 
-    setCookie(event, "session_token", userId, { httpOnly: true, path: "/" });
+    const isProd = process.env.NODE_ENV === 'production';
+    const COOKIE_MAX_AGE = 60 * 60 * 24 * 5; // 5 days
+
+    setCookie(event, "session_token", userId, {
+      httpOnly: true,
+      path: "/",
+      secure: isProd,
+      sameSite: 'lax',
+      maxAge: COOKIE_MAX_AGE,
+    });
+    setCookie(event, "auth.token", userId, {
+      httpOnly: false,
+      path: "/",
+      secure: isProd,
+      sameSite: 'lax',
+      maxAge: COOKIE_MAX_AGE,
+    });
 
     // Auto-provision the registering user as workspace admin
     try {

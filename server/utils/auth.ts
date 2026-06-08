@@ -1,7 +1,7 @@
-import { type H3Event, getCookie, getHeader, createError } from "h3";
+import { type H3Event, getCookie, getHeader, createError, getRequestHeader } from "h3";
 import { $fetch } from "ofetch";
 import { useRuntimeConfig } from "#imports";
-import { resolveApiBaseUrl, isPreviewMode } from "./api-url";
+import { resolveApiBaseUrl, isPreviewMode, isSelfReferencingUrl } from "./api-url";
 import { getDb } from "~/server/database";
 import { users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
@@ -67,10 +67,17 @@ export function verifyPassword(password: string, hash: string | null | undefined
 /**
  * Extract the session token from the request.
  * Checks the httpOnly `session_token` cookie first, then falls back
- * to the `Authorization: Bearer <token>` header.
+ * to the `auth.token` cookie and finally the `Authorization: Bearer <token>` header.
  */
 export function getSessionToken(event: H3Event): string | undefined {
   let token = getCookie(event, "session_token");
+
+  if (!token) {
+    const authToken = getCookie(event, "auth.token");
+    if (authToken) {
+      token = authToken;
+    }
+  }
 
   if (!token) {
     const authHeader = getHeader(event, "authorization");
@@ -122,6 +129,7 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
 
   const config = useRuntimeConfig();
   const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+  const requestHost = getRequestHeader(event, 'host') || '';
 
   // Check if token is a JWT (contains two dots)
   if (token.split(".").length === 3) {
@@ -156,8 +164,9 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
     }
   }
 
-  // In preview mode (or when no external API is configured), validate against local DB
-  if (isPreviewMode(config) || !apiBaseUrl) {
+  // In preview mode, when no external API is configured, or when the URL points to ourselves,
+  // validate against local DB
+  if (isPreviewMode(config) || !apiBaseUrl || isSelfReferencingUrl(apiBaseUrl, requestHost)) {
     const db = getDb();
     const rows = await db.select().from(users).where(eq(users.id, token)).limit(1);
     const user = rows[0];
