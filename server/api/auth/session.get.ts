@@ -63,6 +63,15 @@ export default defineEventHandler(async (event) => {
         console.log(`[Session] session_token cookie: ${sessionToken ? 'present' : 'missing'}`);
 
         if (!sessionToken) {
+            const authToken = getCookie(event, "auth.token");
+            console.log(`[Session] auth.token cookie: ${authToken ? 'present' : 'missing'}`);
+            if (authToken) {
+                sessionToken = authToken;
+                console.log(`[Session] Using auth.token as session token`);
+            }
+        }
+
+        if (!sessionToken) {
             const authHeader = getHeader(event, "authorization");
             console.log(`[Session] Authorization header: ${authHeader ? 'present' : 'missing'}`);
             if (authHeader && authHeader.startsWith("Bearer ")) {
@@ -93,15 +102,9 @@ export default defineEventHandler(async (event) => {
                 if (decoded && decoded.email) {
                     console.log(`[Session] JWT valid for user: ${decoded.email}`);
                     return {
-                        status: "success",
-                        data: {
-                            user: {
-                                id: decoded.sub || decoded.email,
-                                email: decoded.email,
-                                name: decoded.name,
-                            },
-                            companies: [{ id: "local", name: "Local Workspace" }],
-                        },
+                        id: decoded.sub || decoded.email,
+                        email: decoded.email,
+                        name: decoded.name,
                     };
                 }
             }
@@ -116,15 +119,9 @@ export default defineEventHandler(async (event) => {
                 if (parts.length >= 2 && parts[0].includes("@")) {
                     console.log(`[Session] Fallback token valid for user: ${parts[0]}`);
                     return {
-                        status: "success",
-                        data: {
-                            user: {
-                                id: parts[1] || parts[0],
-                                email: parts[0],
-                                name: parts[0].split("@")[0],
-                            },
-                            companies: [{ id: "local", name: "Local Workspace" }],
-                        },
+                        id: parts[1] || parts[0],
+                        email: parts[0],
+                        name: parts[0].split("@")[0],
                     };
                 }
             } catch (e) {
@@ -150,11 +147,9 @@ export default defineEventHandler(async (event) => {
 
             console.log(`[Session] Local DB user found: ${user.email}`);
             return {
-                status: "success",
-                data: {
-                    user: { id: user.id, email: user.email, name: user.name },
-                    companies: [{ id: "local", name: "Local Workspace" }],
-                },
+                id: user.id,
+                email: user.email,
+                name: user.name,
             };
         }
 

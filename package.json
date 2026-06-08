@@ -42,7 +42,7 @@
     "@opencode-ai/sdk": "^1.16.2",
     "@pinia-plugin-persistedstate/nuxt": "^1.2.0",
     "@pinia/nuxt": "^0.5.1",
-    "@sidebase/nuxt-auth": "^0.6.2",
+    "@sidebase/nuxt-auth": "^1.2.0",
     "@transtrack/ui": "^1.0.19",
     "@vite-pwa/nuxt": "^1.1.1",
     "@vuepic/vue-datepicker": "^7.3.0",

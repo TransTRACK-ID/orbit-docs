@@ -58,11 +58,18 @@ export default defineNuxtConfig({
       },
       pages: {
         login: "/login",
-        navigateUnauthenticatedTo: "/login",
       },
       token: {
         signInResponseTokenPointer: "/data/access_token",
         maxAgeInSeconds: 60 * 60 * 24,
+        httpOnlyCookieAttribute: false,
+      },
+      session: {
+        dataType: {
+          id: 'string',
+          email: 'string',
+          name: 'string',
+        },
       },
     },
     globalAppMiddleware: true,
