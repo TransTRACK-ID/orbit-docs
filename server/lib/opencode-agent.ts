@@ -3,20 +3,24 @@ import { createOpencodeClient } from "@opencode-ai/sdk";
 import { useRuntimeConfig } from "#imports";
 import type { Config } from "@opencode-ai/sdk";
 import * as net from "net";
+import { Agent } from "undici";
 
-// Opencode agent operations can take several minutes (exploring repos, running
-// tools, generating documents). Undici's default 30 s header timeout is far
-// too short. We raise it here before any fetch calls are made.
+// Opencode agent operations are blocking HTTP calls — `session.prompt` does
+// not send response headers until the LLM finishes generating, which on big
+// repositories can easily take 5–10+ minutes. Node's built-in fetch (undici)
+// defaults to a 5 min headersTimeout, so without this we get
+// UND_ERR_HEADERS_TIMEOUT. Undici does NOT read env vars; the dispatcher must
+// be configured explicitly. We scope this Agent to the Opencode client only so
+// other fetches in the process keep their normal timeouts.
 const TEN_MINUTES_MS = 600_000;
-if (!process.env.UNDICI_HEADERS_TIMEOUT) {
-  process.env.UNDICI_HEADERS_TIMEOUT = String(TEN_MINUTES_MS);
-}
-if (!process.env.UNDICI_BODY_TIMEOUT) {
-  process.env.UNDICI_BODY_TIMEOUT = String(TEN_MINUTES_MS);
-}
-if (!process.env.UNDICI_CONNECT_TIMEOUT) {
-  process.env.UNDICI_CONNECT_TIMEOUT = String(30_000);
-}
+const opencodeDispatcher = new Agent({
+  headersTimeout: TEN_MINUTES_MS,
+  bodyTimeout: TEN_MINUTES_MS,
+  connect: { timeout: 30_000 },
+});
+
+const opencodeFetch: typeof fetch = (input, init) =>
+  fetch(input, { ...(init ?? {}), dispatcher: opencodeDispatcher } as RequestInit);
 
 interface OpencodeConfig extends Config {
   provider?: Record<string, unknown>;
@@ -97,6 +101,7 @@ async function resolveClient(
   const client = createOpencodeClient({
     baseUrl: server.url,
     directory: workdir,
+    fetch: opencodeFetch,
   });
   return { client, close: () => { server.close(); } };
 }
