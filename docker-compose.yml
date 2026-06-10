@@ -1,67 +1,33 @@
-version: '3'
+version: '3.8'
+
 services:
-    application:
-        build:
-            context: .
-            dockerfile: Dockerfile
-        image: ${IMAGE_NAME}
-        restart: unless-stopped
-        tty: true
-        environment:
-            SERVICE_NAME: ${IMAGE_NAME}-${APP_ENV}-application
-            SERVICE_TAGS: dev
-        working_dir: /home/node/app
-        deploy:
-            replicas: ${COMPOSE_REPLICAS:-1}
-        ports:
-          - "${COMPOSE_PUBLIC_PORT}:3000"
-        volumes:
-            - ./:/home/node/app
-        networks:
-            - proxy
-        labels:
-            - "traefik.enable=true"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}.entrypoints=http"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}.rule=Host(`${APP_HOST}`)"
-            - "traefik.http.middlewares.${IMAGE_NAME}-${APP_ENV}-https-redirect.redirectscheme.scheme=https"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}.middlewares=${IMAGE_NAME}-${APP_ENV}-https-redirect"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-secure.entrypoints=https"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-secure.rule=Host(`${APP_HOST}`)"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-secure.tls=true"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-secure.tls.certresolver=http"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-secure.service=${IMAGE_NAME}-${APP_ENV}"
-            - "traefik.http.services.${IMAGE_NAME}-${APP_ENV}.loadbalancer.server.port=3000"
-            - "traefik.docker.network=proxy"
+  application:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${IMAGE_NAME:-orbit-docs}
+    restart: unless-stopped
+    tty: true
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      POSTGRES_URL: ${DATABASE_URL}
+      APP_KEY: ${APP_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_API_BASE_URL: ${OPENAI_API_BASE_URL:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      NUXT_PUBLIC_APP_URL: ${NUXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NUXT_APP_BASE_URL: ${NUXT_APP_BASE_URL:-}
+      OPENCODE_CONFIG_B64: ${OPENCODE_CONFIG_B64:-}
+    ports:
+      - "${COMPOSE_PUBLIC_PORT:-3000}:3000"
+    volumes:
+      - /tmp/orbit-docs-repositories:/tmp/orbit-docs-repositories
+    networks:
+      - orbit-network
 
-    mcp-server:
-        build:
-            context: .
-            dockerfile: Dockerfile.mcp
-        image: ${IMAGE_NAME}-mcp
-        restart: unless-stopped
-        environment:
-            POSTGRES_URL: ${POSTGRES_URL}
-            MCP_PORT: ${MCP_PORT:-41244}
-            MCP_API_KEY: ${MCP_API_KEY}
-        ports:
-            - "${MCP_PORT:-41244}:41244"
-        networks:
-            - proxy
-        labels:
-            - "traefik.enable=true"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp.entrypoints=http"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp.rule=Host(`${MCP_HOST:-mcp.${APP_HOST}`)"
-            - "traefik.http.middlewares.${IMAGE_NAME}-${APP_ENV}-mcp-https-redirect.redirectscheme.scheme=https"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp.middlewares=${IMAGE_NAME}-${APP_ENV}-mcp-https-redirect"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp-secure.entrypoints=https"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp-secure.rule=Host(`${MCP_HOST:-mcp.${APP_HOST}`)"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp-secure.tls=true"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp-secure.tls.certresolver=http"
-            - "traefik.http.routers.${IMAGE_NAME}-${APP_ENV}-mcp-secure.service=${IMAGE_NAME}-${APP_ENV}-mcp"
-            - "traefik.http.services.${IMAGE_NAME}-${APP_ENV}-mcp.loadbalancer.server.port=41244"
-            - "traefik.docker.network=proxy"
-
-#Docker Networks
 networks:
-    proxy:
-        external: true
+  orbit-network:
+    driver: bridge

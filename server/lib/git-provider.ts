@@ -5,6 +5,24 @@ import { dirname, join } from "path";
 
 const execAsync = promisify(exec);
 
+// Ensure `git` is findable regardless of how the server process was started.
+// Serverless / container runtimes often strip PATH down to /usr/bin or less.
+const GIT_ENV = {
+  ...process.env,
+  PATH: [
+    process.env.PATH,
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+    "/usr/local/git/bin",
+  ]
+    .filter(Boolean)
+    .join(":"),
+};
+
+const execGit = (cmd: string, opts?: { timeout?: number; maxBuffer?: number }) =>
+  execAsync(cmd, { env: GIT_ENV, ...opts });
+
 export type GitProvider = "github" | "gitlab";
 
 /**
@@ -142,21 +160,21 @@ export async function cloneOrPull(
 
   if (existsSync(join(cloneDir, ".git"))) {
     // Make sure tags are fetched (needed for diffing between tags)
-    await execAsync(
+    await execGit(
       `git -C "${cloneDir}" remote set-url origin "${authUrl}"`,
       { timeout: 60000 }
     ).catch(() => {});
-    await execAsync(`git -C "${cloneDir}" fetch --all --tags --prune`, {
+    await execGit(`git -C "${cloneDir}" fetch --all --tags --prune`, {
       timeout: 180000,
     });
     // Best-effort fast-forward of the current branch
-    await execAsync(`git -C "${cloneDir}" pull --ff-only`, {
+    await execGit(`git -C "${cloneDir}" pull --ff-only`, {
       timeout: 180000,
     }).catch(() => {});
   } else {
     await mkdir(dirname(cloneDir), { recursive: true }).catch(() => {});
     const depthFlag = fullHistory ? "" : "--depth 1";
-    const { stderr } = await execAsync(
+    const { stderr } = await execGit(
       `git clone ${depthFlag} "${authUrl}" "${cloneDir}"`,
       { timeout: 300000 }
     );
@@ -164,7 +182,7 @@ export async function cloneOrPull(
       throw new Error(`Git clone failed: ${stderr}`);
     }
     // Ensure tags available for diffing
-    await execAsync(`git -C "${cloneDir}" fetch --tags`, {
+    await execGit(`git -C "${cloneDir}" fetch --tags`, {
       timeout: 120000,
     }).catch(() => {});
   }
@@ -175,7 +193,7 @@ export async function checkoutRef(
   cloneDir: string,
   ref: string
 ): Promise<void> {
-  await execAsync(`git -C "${cloneDir}" checkout -q "${ref}"`, {
+  await execGit(`git -C "${cloneDir}" checkout -q "${ref}"`, {
     timeout: 60000,
   });
 }
@@ -202,7 +220,7 @@ export async function diffSinceRef(
 
   let changedFiles: string[] = [];
   try {
-    const { stdout } = await execAsync(
+    const { stdout } = await execGit(
       `git -C "${cloneDir}" diff --name-only "${fromRef}" "${toRef}"`,
       { timeout: 60000 }
     );
@@ -214,7 +232,7 @@ export async function diffSinceRef(
 
   let patch = "";
   try {
-    const { stdout } = await execAsync(
+    const { stdout } = await execGit(
       `git -C "${cloneDir}" diff "${fromRef}" "${toRef}" -- . ':(exclude)*.lock' ':(exclude)package-lock.json' ':(exclude)pnpm-lock.yaml' ':(exclude)yarn.lock'`,
       { timeout: 120000, maxBuffer: 1024 * 1024 * 50 }
     );
@@ -272,22 +290,22 @@ export async function openPullRequest(
   const authUrl = authenticatedUrl(repoUrl, provider, token, hostUrl);
 
   // Configure a committer identity for this repo (local scope only)
-  await execAsync(
+  await execGit(
     `git -C "${cloneDir}" config user.email "orbit-docs-bot@users.noreply.github.com"`,
     { timeout: 30000 }
   ).catch(() => {});
-  await execAsync(
+  await execGit(
     `git -C "${cloneDir}" config user.name "Orbit Docs Bot"`,
     { timeout: 30000 }
   ).catch(() => {});
 
   // Start the branch from the base
-  await execAsync(
+  await execGit(
     `git -C "${cloneDir}" checkout -B "${branchName}" "origin/${baseBranch}"`,
     { timeout: 60000 }
   ).catch(async () => {
     // origin/base may not exist locally on a shallow clone — create from HEAD
-    await execAsync(`git -C "${cloneDir}" checkout -B "${branchName}"`, {
+    await execGit(`git -C "${cloneDir}" checkout -B "${branchName}"`, {
       timeout: 60000,
     });
   });
@@ -298,22 +316,22 @@ export async function openPullRequest(
   await writeFile(absPath, fileContent, "utf-8");
 
   // Commit
-  await execAsync(`git -C "${cloneDir}" add "${filePath}"`, { timeout: 30000 });
+  await execGit(`git -C "${cloneDir}" add "${filePath}"`, { timeout: 30000 });
   const escapedMsg = commitMessage.replace(/"/g, '\\"');
-  const { stdout: statusOut } = await execAsync(
+  const { stdout: statusOut } = await execGit(
     `git -C "${cloneDir}" status --porcelain`,
     { timeout: 30000 }
   );
   if (!statusOut.trim()) {
     throw new Error("No changes to commit for SDD update");
   }
-  await execAsync(
+  await execGit(
     `git -C "${cloneDir}" commit -m "${escapedMsg}"`,
     { timeout: 60000 }
   );
 
   // Push the branch
-  await execAsync(
+  await execGit(
     `git -C "${cloneDir}" push -u "${authUrl}" "${branchName}" --force`,
     { timeout: 180000 }
   );

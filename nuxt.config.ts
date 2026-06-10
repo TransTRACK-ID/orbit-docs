@@ -110,7 +110,7 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-01-31",
 
   nitro: {
-    preset: "vercel",
+    preset: process.env.NITRO_PRESET || "node-server",
     routeRules: {
       "/p/**": {
         headers: {

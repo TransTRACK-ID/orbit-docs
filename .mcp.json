@@ -2,9 +2,6 @@
   "mcpServers": {
     "forge_extension": {
       "url": "http://localhost:41243/mcp"
-    },
-    "orbit_docs": {
-      "url": "http://localhost:41244/mcp"
     }
   }
 }
