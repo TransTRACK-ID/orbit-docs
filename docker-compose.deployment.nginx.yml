@@ -41,7 +41,7 @@ services:
     container_name: orbit-nginx
     restart: unless-stopped
     ports:
-      - "80:80"
+      - "3031:3031"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - /etc/localtime:/etc/localtime:ro
