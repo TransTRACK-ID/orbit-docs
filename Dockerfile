@@ -45,10 +45,11 @@ RUN mkdir -p /usr/local/bun && \
     opencode --version
 
 COPY --from=builder /app/.output /app/.output
+COPY --from=builder /app/templates /app/templates
 
 # Writable dirs: git clones, opencode provider cache, agent config
 RUN mkdir -p /tmp/orbit-docs-repositories /home/nodejs/.config/opencode && \
-    chown -R nodejs:nodejs /app/.output /tmp/orbit-docs-repositories /usr/local/bun /home/nodejs
+    chown -R nodejs:nodejs /app/.output /app/templates /tmp/orbit-docs-repositories /usr/local/bun /home/nodejs
 
 USER nodejs
 
