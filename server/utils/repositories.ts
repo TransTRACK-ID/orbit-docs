@@ -16,7 +16,7 @@ export function buildWebhookUrl(
     return `${appUrl.replace(/\/$/, "")}${withBaseURL(`/api/webhooks/git/${repoId}`)}`;
   }
   if (host) {
-    const base = useRuntimeConfig().app.baseURL || '/';
+    const base = process.env.NUXT_APP_BASE_URL || '/';
     const basePath = base.replace(/\/$/, '');
     return `${proto || "https"}://${host}${basePath}/api/webhooks/git/${repoId}`;
   }
