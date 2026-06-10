@@ -575,9 +575,12 @@ function providerTypeColor(type: string) {
 
 const ssoProviderTypeList: SsoProviderType[] = ["google", "github", "azure", "keycloak", "oidc"];
 
+const baseURL = useRuntimeConfig().app.baseURL || '/';
+const basePath = baseURL.replace(/\/$/, '');
+
 function getCallbackUrl(provider: SsoProvider): string {
   const origin = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
-  return `${origin}/api/auth/sso/${provider.type}/callback`;
+  return `${origin}${basePath}/api/auth/sso/${provider.type}/callback`;
 }
 
 </script>
