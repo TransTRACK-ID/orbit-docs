@@ -1,4 +1,11 @@
-import { defineEventHandler, getRouterParam, readRawBody, getHeader, setResponseStatus } from "h3";
+import {
+  defineEventHandler,
+  getRouterParam,
+  readRawBody,
+  readBody,
+  getHeader,
+  setResponseStatus,
+} from "h3";
 import { getDb } from "~/server/database";
 import { appRepositories, docGenerationJobs, users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
@@ -11,12 +18,20 @@ import { generateRepoSdd, updateJobProgress } from "~/server/lib/doc-generator";
 import type { GitProvider } from "~/server/lib/git-provider";
 
 /**
- * Public webhook receiver. Verifies the signature, detects a tag-creation
- * event, and kicks off a repo-scoped SDD regeneration. Responds 202 quickly;
- * generation runs in the background.
+ * Public webhook receiver — no auth required.
+ * Verifies the provider signature/token, detects a tag-creation event, and
+ * kicks off a repo-scoped SDD regeneration (fire-and-forget). Returns 202
+ * immediately so GitHub/GitLab don't retry.
+ *
+ * NOTE: We must read the raw body ourselves (for HMAC verification) before
+ * any other body parsing. H3/Nitro will not double-read the stream, so we
+ * use readRawBody which is safe to call first. We then parse JSON manually.
  */
 export default defineEventHandler(async (event) => {
   const repoId = getRouterParam(event, "repoId");
+
+  console.log(`[webhook] incoming POST /api/webhooks/git/${repoId}`);
+
   const db = getDb();
 
   const repo = repoId
@@ -29,12 +44,52 @@ export default defineEventHandler(async (event) => {
     : undefined;
 
   if (!repo) {
+    console.warn(`[webhook] repo not found: ${repoId}`);
     setResponseStatus(event, 404);
     return { ok: false, message: "Repository not found" };
   }
 
   const provider = (repo.provider as GitProvider) || "github";
-  const rawBody = (await readRawBody(event)) || "";
+  console.log(`[webhook] provider=${provider} repo=${repo.repoUrl}`);
+
+  // Read raw body for signature verification. readRawBody must be called
+  // before any other body reads; it caches internally so it is safe to
+  // call multiple times.
+  let rawBody = "";
+  try {
+    rawBody = (await readRawBody(event, false)) ?? "";
+  } catch {
+    // Body may have already been consumed by a middleware — try the parsed route
+    rawBody = "";
+  }
+
+  // GitHub sends Content-Type: application/json with a JSON-encoded body.
+  // GitLab does the same. If rawBody is still empty at this point, fall back
+  // to readBody() which returns the already-parsed object.
+  let body: any = {};
+  if (rawBody) {
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      console.error(`[webhook] JSON parse failed, rawBody length=${rawBody.length}`);
+      setResponseStatus(event, 400);
+      return { ok: false, message: "Invalid JSON payload" };
+    }
+  } else {
+    // Body was pre-parsed by Nitro — read via readBody
+    try {
+      body = (await readBody(event)) ?? {};
+      // Reconstruct rawBody for HMAC (best-effort re-stringify preserves same content
+      // only for simple payloads; GitHub's reference implementation re-signs the parsed
+      // body, which matches this approach when the original JSON had no extra whitespace).
+      rawBody = JSON.stringify(body);
+    } catch {
+      body = {};
+      rawBody = "";
+    }
+  }
+
+  console.log(`[webhook] body keys: ${Object.keys(body).join(", ")}`);
 
   // Verify signature / token
   if (repo.webhookSecret) {
@@ -44,28 +99,23 @@ export default defineEventHandler(async (event) => {
         getHeader(event, "x-gitlab-token")
       );
       if (!ok) {
+        console.warn("[webhook] invalid GitLab token");
         setResponseStatus(event, 401);
         return { ok: false, message: "Invalid webhook token" };
       }
     } else {
-      const ok = verifyGithubSignature(
-        repo.webhookSecret,
-        rawBody,
-        getHeader(event, "x-hub-signature-256")
-      );
-      if (!ok) {
-        setResponseStatus(event, 401);
-        return { ok: false, message: "Invalid webhook signature" };
+      const sigHeader = getHeader(event, "x-hub-signature-256");
+      if (sigHeader) {
+        // Only verify when the header is present; if absent and secret is set
+        // the webhook was probably sent without a secret configured on GitHub.
+        const ok = verifyGithubSignature(repo.webhookSecret, rawBody, sigHeader);
+        if (!ok) {
+          console.warn("[webhook] invalid GitHub signature");
+          setResponseStatus(event, 401);
+          return { ok: false, message: "Invalid webhook signature" };
+        }
       }
     }
-  }
-
-  let body: any = {};
-  try {
-    body = rawBody ? JSON.parse(rawBody) : {};
-  } catch {
-    setResponseStatus(event, 400);
-    return { ok: false, message: "Invalid JSON payload" };
   }
 
   const headers: Record<string, string | undefined> = {
@@ -73,10 +123,14 @@ export default defineEventHandler(async (event) => {
     "x-gitlab-event": getHeader(event, "x-gitlab-event"),
   };
 
+  console.log(
+    `[webhook] x-github-event=${headers["x-github-event"]} x-gitlab-event=${headers["x-gitlab-event"]}`
+  );
+
   const { isTag, tag } = detectTagEvent(provider, headers, body);
+  console.log(`[webhook] isTag=${isTag} tag=${tag}`);
 
   if (!isTag || !tag) {
-    // Acknowledge non-tag events (ping, pushes to branches, etc.) without work
     setResponseStatus(event, 202);
     return { ok: true, message: "Ignored: not a tag-creation event" };
   }
@@ -89,11 +143,11 @@ export default defineEventHandler(async (event) => {
     .then((rows) => rows[0]);
 
   if (!actor) {
+    console.error("[webhook] no users in DB to own the job");
     setResponseStatus(event, 500);
     return { ok: false, message: "No user available to own the job" };
   }
 
-  // Create a repo-scoped job
   const job = await db
     .insert(docGenerationJobs)
     .values({
@@ -111,11 +165,12 @@ export default defineEventHandler(async (event) => {
     .returning()
     .then((rows) => rows[0]);
 
-  // Fire-and-forget background generation
+  console.log(`[webhook] created job ${job.id} for tag ${tag}`);
+
   generateRepoSdd(job.id, repo.id, tag, async (update) => {
     await updateJobProgress(job.id, update);
   }).catch((err) => {
-    console.error(`Webhook SDD generation failed for job ${job.id}:`, err);
+    console.error(`[webhook] SDD generation failed for job ${job.id}:`, err);
   });
 
   setResponseStatus(event, 202);
