@@ -63,25 +63,43 @@ export default defineEventHandler(async (event) => {
     rawBody = "";
   }
 
-  // GitHub sends Content-Type: application/json with a JSON-encoded body.
-  // GitLab does the same. If rawBody is still empty at this point, fall back
-  // to readBody() which returns the already-parsed object.
+  // Parse the body.
+  // GitHub defaults to Content-Type: application/x-www-form-urlencoded with
+  // the JSON payload in the "payload" field. Only when you explicitly choose
+  // "application/json" in the webhook settings does GitHub send raw JSON.
+  // GitLab always sends application/json.
   let body: any = {};
+  const contentType = getHeader(event, "content-type") || "";
+  console.log(`[webhook] content-type=${contentType} rawBody.length=${rawBody.length}`);
+
   if (rawBody) {
-    try {
-      body = JSON.parse(rawBody);
-    } catch {
-      console.error(`[webhook] JSON parse failed, rawBody length=${rawBody.length}`);
-      setResponseStatus(event, 400);
-      return { ok: false, message: "Invalid JSON payload" };
+    if (contentType.includes("application/x-www-form-urlencoded")) {
+      // URL-encoded: payload=<url-encoded JSON>
+      try {
+        const params = new URLSearchParams(rawBody);
+        const payloadStr = params.get("payload") ?? "";
+        body = payloadStr ? JSON.parse(payloadStr) : {};
+        // Re-encode rawBody as the parsed JSON for consistent HMAC signing
+        rawBody = payloadStr;
+      } catch {
+        console.error("[webhook] failed to decode form-encoded payload");
+        setResponseStatus(event, 400);
+        return { ok: false, message: "Invalid webhook payload encoding" };
+      }
+    } else {
+      // application/json (or unknown — attempt JSON parse)
+      try {
+        body = JSON.parse(rawBody);
+      } catch {
+        console.error(`[webhook] JSON parse failed, rawBody prefix: ${rawBody.slice(0, 120)}`);
+        setResponseStatus(event, 400);
+        return { ok: false, message: "Invalid JSON payload" };
+      }
     }
   } else {
     // Body was pre-parsed by Nitro — read via readBody
     try {
       body = (await readBody(event)) ?? {};
-      // Reconstruct rawBody for HMAC (best-effort re-stringify preserves same content
-      // only for simple payloads; GitHub's reference implementation re-signs the parsed
-      // body, which matches this approach when the original JSON had no extra whitespace).
       rawBody = JSON.stringify(body);
     } catch {
       body = {};
