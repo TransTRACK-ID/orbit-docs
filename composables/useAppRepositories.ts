@@ -112,6 +112,44 @@ export const useAppRepositories = () => {
     }
   }
 
+  async function checkConnection(
+    appId: string,
+    payload: {
+      repoUrl: string;
+      provider?: "github" | "gitlab";
+      hostUrl?: string | null;
+      accessToken?: string | null;
+    }
+  ): Promise<{
+    ok: boolean;
+    message: string;
+    repo?: {
+      name: string;
+      fullName: string;
+      defaultBranch?: string;
+      visibility?: string;
+      url?: string;
+    };
+  }> {
+    const data = await $fetch<{
+      data: {
+        ok: boolean;
+        message: string;
+        repo?: {
+          name: string;
+          fullName: string;
+          defaultBranch?: string;
+          visibility?: string;
+          url?: string;
+        };
+      };
+    }>(`/api/apps/${appId}/repositories/check-connection`, {
+      method: "POST",
+      body: payload,
+    });
+    return data.data;
+  }
+
   return {
     repositories,
     isLoading,
@@ -120,5 +158,6 @@ export const useAppRepositories = () => {
     addRepository,
     updateRepository,
     removeRepository,
+    checkConnection,
   };
 };

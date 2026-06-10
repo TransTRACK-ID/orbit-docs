@@ -15,6 +15,7 @@ const {
   addRepository,
   updateRepository,
   removeRepository,
+  checkConnection,
 } = useAppRepositories();
 
 const showForm = ref(false);
@@ -63,6 +64,7 @@ function openAdd() {
   Object.assign(form, blankForm());
   editingId.value = null;
   showForm.value = true;
+  resetCheckState();
 }
 
 function openEdit(repo: AppRepository) {
@@ -83,11 +85,19 @@ function openEdit(repo: AppRepository) {
   });
   editingId.value = repo.id;
   showForm.value = true;
+  resetCheckState();
 }
 
 function cancelForm() {
   showForm.value = false;
   editingId.value = null;
+  resetCheckState();
+}
+
+function resetCheckState() {
+  checkStatus.value = "idle";
+  checkMessage.value = "";
+  checkResult.value = null;
 }
 
 async function save() {
@@ -119,6 +129,7 @@ async function save() {
   }
   showForm.value = false;
   editingId.value = null;
+  resetCheckState();
 }
 
 async function remove(repo: AppRepository) {
@@ -127,6 +138,58 @@ async function remove(repo: AppRepository) {
 }
 
 const copiedField = ref<string | null>(null);
+
+// Connection check state
+type CheckStatus = "idle" | "checking" | "success" | "error";
+const checkStatus = ref<CheckStatus>("idle");
+const checkMessage = ref("");
+const checkResult = ref<{
+  name: string;
+  fullName: string;
+  defaultBranch?: string;
+  visibility?: string;
+  url?: string;
+} | null>(null);
+
+async function handleCheckConnection() {
+  if (!form.repoUrl?.trim()) {
+    toast.error("Repository URL is required");
+    return;
+  }
+  if (needsHostUrl.value && !form.hostUrl?.trim()) {
+    toast.error(`Instance URL is required for ${providerLabel.value}`);
+    return;
+  }
+
+  checkStatus.value = "checking";
+  checkMessage.value = "";
+  checkResult.value = null;
+
+  try {
+    const result = await checkConnection(props.appId, {
+      repoUrl: form.repoUrl.trim(),
+      provider: form.provider,
+      hostUrl: needsHostUrl.value ? (form.hostUrl?.trim() || null) : null,
+      accessToken: form.accessToken?.trim() || null,
+    });
+
+    checkMessage.value = result.message;
+    if (result.ok) {
+      checkStatus.value = "success";
+      checkResult.value = result.repo || null;
+      // Optionally auto-fill detected branch
+      if (result.repo?.defaultBranch && !form.defaultBranch?.trim()) {
+        form.defaultBranch = result.repo.defaultBranch;
+      }
+    } else {
+      checkStatus.value = "error";
+    }
+  } catch (e: any) {
+    checkStatus.value = "error";
+    checkMessage.value = e?.data?.message || "Connection check failed";
+  }
+}
+
 async function copyToClipboard(text: string | undefined | null, field: string) {
   if (!text) return;
   try {
@@ -284,7 +347,26 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
         <button class="btn btn-primary btn-sm" :disabled="isSaving" @click="save">
           {{ isSaving ? 'Saving…' : editingId ? 'Save Changes' : 'Add Repository' }}
         </button>
+        <button
+          class="btn btn-secondary btn-sm"
+          :disabled="isSaving || checkStatus === 'checking'"
+          @click="handleCheckConnection"
+        >
+          <span v-if="checkStatus === 'checking'" class="spinner" />
+          {{ checkStatus === 'checking' ? 'Checking…' : 'Check Connection' }}
+        </button>
         <button class="btn btn-ghost btn-sm" @click="cancelForm">Cancel</button>
+      </div>
+
+      <!-- Connection check feedback -->
+      <div v-if="checkStatus !== 'idle'" class="check-feedback" :class="`check-${checkStatus}`">
+        <p class="check-message">{{ checkMessage }}</p>
+        <div v-if="checkResult" class="check-details">
+          <span class="pill pill-green">Connected</span>
+          <span v-if="checkResult.fullName" class="check-meta">{{ checkResult.fullName }}</span>
+          <span v-if="checkResult.defaultBranch" class="check-meta">branch: {{ checkResult.defaultBranch }}</span>
+          <span v-if="checkResult.visibility" class="check-meta">{{ checkResult.visibility }}</span>
+        </div>
       </div>
     </div>
   </div>
@@ -565,6 +647,21 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
   cursor: not-allowed;
 }
 
+.btn-secondary {
+  background: color-mix(in oklch, var(--fg) 8%, transparent);
+  color: var(--fg);
+  border-color: var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--fg) 14%, transparent);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-ghost {
   color: var(--muted);
 }
@@ -586,6 +683,71 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
 .btn-xs {
   padding: 4px 10px;
   font-size: 11px;
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid color-mix(in oklch, var(--fg) 20%, transparent);
+  border-top-color: var(--fg);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.check-feedback {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.check-checking {
+  background: color-mix(in oklch, oklch(75% 0.14 85) 10%, transparent);
+  border: 1px solid color-mix(in oklch, oklch(75% 0.14 85) 20%, transparent);
+}
+
+.check-success {
+  background: color-mix(in oklch, oklch(60% 0.18 145) 8%, transparent);
+  border: 1px solid color-mix(in oklch, oklch(60% 0.18 145) 16%, transparent);
+}
+
+.check-error {
+  background: color-mix(in oklch, oklch(55% 0.16 25) 8%, transparent);
+  border: 1px solid color-mix(in oklch, oklch(55% 0.16 25) 16%, transparent);
+}
+
+.check-message {
+  margin: 0;
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.check-error .check-message {
+  color: oklch(50% 0.14 25);
+}
+
+.check-success .check-message {
+  color: oklch(45% 0.12 145);
+}
+
+.check-details {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.check-meta {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
 }
 
 @media (max-width: 640px) {
