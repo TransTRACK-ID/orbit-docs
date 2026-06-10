@@ -1,6 +1,10 @@
 import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { docGenerationJobs, docGenerationVersions } from "~/server/database/schema";
+import {
+  docGenerationJobs,
+  docGenerationVersions,
+  docGenerationRepoResults,
+} from "~/server/database/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
 
@@ -56,16 +60,34 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // Per-repository SDD results
+  const repoResults = await db
+    .select()
+    .from(docGenerationRepoResults)
+    .where(eq(docGenerationRepoResults.jobId, jobId))
+    .orderBy(desc(docGenerationRepoResults.createdAt));
+
   return {
     data: {
       jobId: job.id,
       repoUrl: job.repoUrl,
       repoRef: job.repoRef,
+      scope: job.scope,
       status: job.status,
       srs: latestVersions.srs?.content ?? job.srsContent,
       fsd: latestVersions.fsd?.content ?? job.fsdContent,
       sdd: latestVersions.sdd?.content ?? job.sddContent,
       completedAt: job.completedAt,
+      repoResults: repoResults.map((r) => ({
+        id: r.id,
+        repoId: r.repoId,
+        repoUrl: r.repoUrl,
+        repoRef: r.repoRef,
+        sdd: r.sddContent,
+        status: r.status,
+        prUrl: r.prUrl,
+        errorMessage: r.errorMessage,
+      })),
       versions: versions.map((v) => ({
         id: v.id,
         docType: v.docType,

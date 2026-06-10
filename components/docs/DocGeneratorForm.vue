@@ -1,62 +1,40 @@
 <script setup lang="ts">
 interface Props {
   appId: string;
-  repoUrl?: string;
+  repoCount?: number;
   disabled?: boolean;
 }
 
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
-  (e: "generate", payload: { repoUrl: string }): void;
+  (e: "generate"): void;
 }>();
 
-const form = reactive({
-  repoUrl: props.repoUrl || "",
-});
-
-const repoUrlError = ref(false);
-
-watch(
-  () => props.repoUrl,
-  (val) => {
-    if (val) form.repoUrl = val;
-  }
-);
+const hasRepos = computed(() => (props.repoCount ?? 0) > 0);
 
 function submit() {
-  if (!form.repoUrl.trim()) {
-    repoUrlError.value = true;
-    return;
-  }
-  repoUrlError.value = false;
-  emit("generate", { repoUrl: form.repoUrl.trim() });
+  if (!hasRepos.value) return;
+  emit("generate");
 }
 </script>
 
 <template>
   <div class="doc-gen-form">
-    <div class="form-group">
-      <label for="repoUrl">Repository URL</label>
-      <input
-        id="repoUrl"
-        v-model="form.repoUrl"
-        type="url"
-        placeholder="https://github.com/username/repo"
-        required
-        :class="{ 'input-error': repoUrlError }"
-        :disabled="disabled"
-        @input="repoUrlError = false"
-      />
-      <span class="error-msg" :class="{ show: repoUrlError }">
-        Repository URL is required
-      </span>
-    </div>
+    <p class="form-hint">
+      Generates a product-level PRD and FSD across all repositories, plus a
+      System Design Document for each repository (written back via Pull Request
+      when an access token is set).
+    </p>
+
+    <p v-if="!hasRepos" class="empty-hint">
+      Add at least one repository above before generating.
+    </p>
 
     <button
       type="button"
       class="btn btn-primary"
-      :disabled="disabled"
+      :disabled="disabled || !hasRepos"
       @click="submit"
     >
       <span v-if="disabled">Generating...</span>
@@ -70,6 +48,20 @@ function submit() {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  align-items: flex-start;
+}
+
+.form-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.empty-hint {
+  margin: 0;
+  font-size: 13px;
+  color: oklch(50% 0.14 60);
 }
 
 .form-group {

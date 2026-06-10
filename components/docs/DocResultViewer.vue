@@ -1,27 +1,54 @@
 <script setup lang="ts">
 import { marked } from "marked";
+import type { DocGenerationRepoResult } from "~/composables/useDocGenerator";
 
 interface Props {
   srs: string | null;
   fsd: string | null;
   sdd: string | null;
   appId?: string;
+  repoResults?: DocGenerationRepoResult[];
 }
 
 const props = defineProps<Props>();
 
-const activeTab = ref<"srs" | "fsd" | "sdd">("srs");
+// Tab keys: "srs" (shown as PRD), "fsd", and one per repo SDD ("sdd:<id>"),
+// or a single "sdd" tab when there are no per-repo results.
+const tabs = computed(() => {
+  const base = [
+    { key: "srs", label: "PRD" },
+    { key: "fsd", label: "FSD" },
+  ];
+  if (props.repoResults && props.repoResults.length > 0) {
+    for (const r of props.repoResults) {
+      const name = r.repoUrl.replace(/\.git$/, "").split("/").pop() || "repo";
+      base.push({ key: `sdd:${r.id}`, label: `SDD · ${name}` });
+    }
+  } else {
+    base.push({ key: "sdd", label: "SDD" });
+  }
+  return base;
+});
 
-const tabs = [
-  { key: "srs" as const, label: "SRS" },
-  { key: "fsd" as const, label: "FSD" },
-  { key: "sdd" as const, label: "SDD" },
-];
+const activeTab = ref<string>("srs");
+
+const activeRepoResult = computed<DocGenerationRepoResult | null>(() => {
+  if (!activeTab.value.startsWith("sdd:")) return null;
+  const id = activeTab.value.slice(4);
+  return props.repoResults?.find((r) => r.id === id) || null;
+});
 
 const currentContent = computed(() => {
   if (activeTab.value === "srs") return props.srs || "";
   if (activeTab.value === "fsd") return props.fsd || "";
-  return props.sdd || "";
+  if (activeTab.value === "sdd") return props.sdd || "";
+  return activeRepoResult.value?.sdd || "";
+});
+
+const currentDocType = computed<"srs" | "fsd" | "sdd">(() => {
+  if (activeTab.value === "srs") return "srs";
+  if (activeTab.value === "fsd") return "fsd";
+  return "sdd";
 });
 
 const renderedContent = computed(() => {
@@ -46,7 +73,7 @@ function downloadContent() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${activeTab.value.toUpperCase()}.md`;
+  a.download = `${currentDocType.value.toUpperCase()}.md`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -61,14 +88,14 @@ async function saveAsDocument() {
   if (!props.appId) return;
   isSaving.value = true;
   try {
-    const tabLabel = tabs.find((t) => t.key === activeTab.value)?.label || "Document";
+    const tabLabel = tabs.value.find((t) => t.key === activeTab.value)?.label || "Document";
     const doc = await createDoc({
       title: `${tabLabel} — Generated`,
       appId: props.appId,
       content: currentContent.value,
       status: "draft",
       source: "generated",
-      docType: activeTab.value,
+      docType: currentDocType.value,
     });
     await navigateTo(`/docs/${doc.id}`);
   } catch {
@@ -107,6 +134,24 @@ async function saveAsDocument() {
       </div>
     </div>
 
+    <div v-if="activeRepoResult" class="repo-banner">
+      <span class="repo-banner-label">{{ activeRepoResult.repoUrl }}</span>
+      <span v-if="activeRepoResult.repoRef" class="repo-banner-ref">{{ activeRepoResult.repoRef }}</span>
+      <a
+        v-if="activeRepoResult.prUrl"
+        :href="activeRepoResult.prUrl"
+        target="_blank"
+        rel="noopener"
+        class="repo-banner-pr"
+      >
+        View Pull Request ↗
+      </a>
+      <span v-else-if="activeRepoResult.status === 'failed'" class="repo-banner-error">
+        {{ activeRepoResult.errorMessage || 'SDD generation failed' }}
+      </span>
+      <span v-else class="repo-banner-muted">No PR (no access token configured)</span>
+    </div>
+
     <div class="result-body">
       <div class="result-content">
         <div class="markdown-body" v-html="renderedContent" />
@@ -114,6 +159,7 @@ async function saveAsDocument() {
     </div>
   </div>
 </template>
+
 
 <style scoped>
 .result-viewer {
@@ -159,6 +205,52 @@ async function saveAsDocument() {
   margin-left: auto;
   display: flex;
   gap: 8px;
+}
+
+.repo-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.repo-banner-label {
+  font-family: var(--font-mono);
+  color: var(--fg);
+  word-break: break-all;
+}
+
+.repo-banner-ref {
+  font-family: var(--font-mono);
+  background: color-mix(in oklch, var(--fg) 8%, transparent);
+  color: var(--muted);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.repo-banner-pr {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.repo-banner-pr:hover {
+  text-decoration: underline;
+}
+
+.repo-banner-muted {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.repo-banner-error {
+  margin-left: auto;
+  color: oklch(50% 0.16 25);
 }
 
 .result-body {

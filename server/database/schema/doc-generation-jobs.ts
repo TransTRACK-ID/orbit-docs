@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, integer } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
-import { apps } from "./apps";
+import { apps, appRepositories } from "./apps";
 import { users } from "./settings";
 
 export const docGenerationJobs = pgTable("doc_generation_jobs", {
@@ -11,7 +11,19 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  repoUrl: text("repo_url").notNull(),
+  // Nullable: product-scoped jobs span many repos and have no single URL.
+  repoUrl: text("repo_url"),
+  // 'product' = PRD + FSD aggregate + per-repo SDD; 'repo' = single repo SDD (webhook).
+  scope: text("scope", { enum: ["product", "repo"] })
+    .notNull()
+    .default("product"),
+  trigger: text("trigger", { enum: ["manual", "webhook"] })
+    .notNull()
+    .default("manual"),
+  // Set for repo-scoped jobs.
+  repoId: text("repo_id").references(() => appRepositories.id, {
+    onDelete: "set null",
+  }),
   status: text("status", {
     enum: [
       "cloning",
@@ -19,6 +31,7 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
       "generating_srs",
       "generating_fsd",
       "generating_sdd",
+      "writing_back",
       "completed",
       "failed",
       "cancelled",
@@ -35,6 +48,28 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   repoRef: text("repo_ref"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+export const docGenerationRepoResults = pgTable("doc_generation_repo_results", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  jobId: text("job_id")
+    .notNull()
+    .references(() => docGenerationJobs.id, { onDelete: "cascade" }),
+  repoId: text("repo_id").references(() => appRepositories.id, {
+    onDelete: "set null",
+  }),
+  repoUrl: text("repo_url").notNull(),
+  repoRef: text("repo_ref"),
+  sddContent: text("sdd_content"),
+  status: text("status", {
+    enum: ["pending", "generating", "writing_back", "completed", "failed"],
+  })
+    .notNull()
+    .default("pending"),
+  prUrl: text("pr_url"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
 export const docGenerationVersions = pgTable("doc_generation_versions", {
@@ -58,7 +93,22 @@ export const docGenerationJobsRelations = relations(docGenerationJobs, ({ one, m
     references: [users.id],
   }),
   versions: many(docGenerationVersions),
+  repoResults: many(docGenerationRepoResults),
 }));
+
+export const docGenerationRepoResultsRelations = relations(
+  docGenerationRepoResults,
+  ({ one }) => ({
+    job: one(docGenerationJobs, {
+      fields: [docGenerationRepoResults.jobId],
+      references: [docGenerationJobs.id],
+    }),
+    repo: one(appRepositories, {
+      fields: [docGenerationRepoResults.repoId],
+      references: [appRepositories.id],
+    }),
+  })
+);
 
 export const docGenerationVersionsRelations = relations(docGenerationVersions, ({ one }) => ({
   job: one(docGenerationJobs, {

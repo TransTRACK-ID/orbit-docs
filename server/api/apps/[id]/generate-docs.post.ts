@@ -1,9 +1,9 @@
-import { defineEventHandler, readBody, createError, getRouterParam } from "h3";
+import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { docGenerationJobs, apps } from "~/server/database/schema";
+import { docGenerationJobs, apps, appRepositories } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
-import { requireAuth, getActorName } from "~/server/utils/auth";
-import { generateDocs, updateJobProgress } from "~/server/lib/doc-generator";
+import { requireAuth } from "~/server/utils/auth";
+import { generateProductDocs, updateJobProgress } from "~/server/lib/doc-generator";
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event);
@@ -34,24 +34,30 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const body = await readBody(event);
-  const repoUrl = body?.repoUrl || app.repoUrl;
+  // A product run needs at least one configured repository (or the legacy
+  // single repoUrl on the app for backward compatibility).
+  const repos = await db
+    .select({ id: appRepositories.id })
+    .from(appRepositories)
+    .where(eq(appRepositories.appId, appId));
 
-  if (!repoUrl || typeof repoUrl !== "string" || !repoUrl.trim()) {
+  if (repos.length === 0 && !app.repoUrl) {
     throw createError({
       statusCode: 400,
       statusMessage: "Bad Request",
-      message: "Repository URL is required",
+      message: "Add at least one repository before generating docs",
     });
   }
 
-  // Create the job record
+  // Create the product-scoped job record
   const job = await db
     .insert(docGenerationJobs)
     .values({
       appId,
       userId: user.id,
-      repoUrl: repoUrl.trim(),
+      repoUrl: app.repoUrl ?? null,
+      scope: "product",
+      trigger: "manual",
       status: "cloning",
       progressPct: 0,
       progressMessage: "Initializing...",
@@ -60,8 +66,7 @@ export default defineEventHandler(async (event) => {
     .then((rows) => rows[0]);
 
   // Start generation in background (fire-and-forget)
-  generateDocs(job.id, repoUrl.trim(), async (update) => {
-    // Progress updates are handled inside generateDocs via DB updates
+  generateProductDocs(job.id, appId, async (update) => {
     await updateJobProgress(job.id, update);
   }).catch((error) => {
     console.error(`Doc generation failed for job ${job.id}:`, error);

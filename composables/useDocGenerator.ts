@@ -3,7 +3,9 @@ import { toast } from "vue3-toastify";
 export interface DocGenerationJob {
   id: string;
   appId: string;
-  repoUrl: string;
+  repoUrl: string | null;
+  scope?: "product" | "repo";
+  trigger?: "manual" | "webhook";
   status: string;
   progressPct: number;
   progressMessage: string;
@@ -13,15 +15,28 @@ export interface DocGenerationJob {
   errorMessage: string | null;
 }
 
-export interface DocGenerationResult {
-  jobId: string;
+export interface DocGenerationRepoResult {
+  id: string;
+  repoId: string | null;
   repoUrl: string;
   repoRef: string | null;
+  sdd: string | null;
+  status: string;
+  prUrl: string | null;
+  errorMessage: string | null;
+}
+
+export interface DocGenerationResult {
+  jobId: string;
+  repoUrl: string | null;
+  repoRef: string | null;
+  scope?: "product" | "repo";
   status: string;
   srs: string | null;
   fsd: string | null;
   sdd: string | null;
   completedAt: string | null;
+  repoResults?: DocGenerationRepoResult[];
   versions?: DocGenerationVersion[];
 }
 
@@ -72,7 +87,7 @@ export const useDocGenerator = () => {
     }
   }
 
-  async function generateDocs(appId: string, payload: DocGenerationPayload) {
+  async function generateDocs(appId: string, payload: DocGenerationPayload = {}) {
     isGenerating.value = true;
     try {
       const data = await $fetch<{
@@ -91,7 +106,8 @@ export const useDocGenerator = () => {
       const job: DocGenerationJob = {
         id: data.data.jobId,
         appId,
-        repoUrl: payload.repoUrl || "",
+        repoUrl: payload.repoUrl || null,
+        scope: "product",
         status: data.data.status,
         progressPct: data.data.progressPct,
         progressMessage: data.data.progressMessage,

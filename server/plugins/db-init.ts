@@ -214,6 +214,47 @@ export default defineNitroPlugin(async () => {
 
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS repo_ref TEXT`);
 
+  // Multi-repo support: jobs can be product-scoped (PRD+FSD+per-repo SDD) or repo-scoped (single SDD)
+  await pool.query(`ALTER TABLE doc_generation_jobs ALTER COLUMN repo_url DROP NOT NULL`);
+  await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'product'`);
+  await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS trigger TEXT NOT NULL DEFAULT 'manual'`);
+  await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS repo_id TEXT`);
+
+  // app_repositories table (multiple repositories per app)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_repositories (
+      id TEXT PRIMARY KEY,
+      app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      repo_url TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT 'github',
+      default_branch TEXT NOT NULL DEFAULT 'main',
+      access_token TEXT,
+      webhook_secret TEXT,
+      sdd_doc_path TEXT NOT NULL DEFAULT 'docs/SDD.md',
+      last_processed_ref TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  // doc_generation_repo_results table (per-repo SDD results within a job)
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_generation_repo_results (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL REFERENCES doc_generation_jobs(id) ON DELETE CASCADE,
+      repo_id TEXT REFERENCES app_repositories(id) ON DELETE SET NULL,
+      repo_url TEXT NOT NULL,
+      repo_ref TEXT,
+      sdd_content TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      pr_url TEXT,
+      error_message TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS doc_generation_versions (
       id TEXT PRIMARY KEY,

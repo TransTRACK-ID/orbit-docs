@@ -2,6 +2,7 @@
 import { usePageStore } from "~/store/page";
 import DocGeneratorForm from "~/components/docs/DocGeneratorForm.vue";
 import DocResultViewer from "~/components/docs/DocResultViewer.vue";
+import RepositoryManager from "~/components/docs/RepositoryManager.vue";
 
 definePageMeta({
   auth: true,
@@ -40,9 +41,14 @@ async function loadAppInfo() {
   }
 }
 
+// Track configured repositories so the Generate button can be enabled/disabled
+const { repositories, fetchRepositories } = useAppRepositories();
+const repoCount = computed(() => repositories.value.length);
+
 onMounted(() => {
   $page.setTitle("Generate Docs");
   loadAppInfo();
+  fetchRepositories(appId);
   fetchJobs(appId);
 });
 
@@ -53,10 +59,10 @@ onBeforeUnmount(() => {
 // ── Submitting state shown before API returns ──────────────────
 const isSubmitting = ref(false);
 
-async function handleGenerate(payload: { repoUrl: string }) {
+async function handleGenerate() {
   isSubmitting.value = true;
   try {
-    const job = await generateDocs(appId, { repoUrl: payload.repoUrl });
+    const job = await generateDocs(appId);
     connectToProgressStream(appId, job.id);
   } finally {
     isSubmitting.value = false;
@@ -96,6 +102,7 @@ const statusClass: Record<string, string> = {
   generating_srs: "pill-accent",
   generating_fsd: "pill-accent",
   generating_sdd: "pill-accent",
+  writing_back: "pill-accent",
   completed: "pill-green",
   failed: "pill-danger",
   cancelled: "pill-muted",
@@ -104,9 +111,10 @@ const statusClass: Record<string, string> = {
 const statusLabel: Record<string, string> = {
   cloning: "Cloning",
   analyzing: "Analyzing",
-  generating_srs: "Generating SRS",
+  generating_srs: "Generating PRD",
   generating_fsd: "Generating FSD",
   generating_sdd: "Generating SDD",
+  writing_back: "Writing back",
   completed: "Done",
   failed: "Failed",
   cancelled: "Cancelled",
@@ -114,11 +122,12 @@ const statusLabel: Record<string, string> = {
 
 // Friendly status for the progress header
 const statusFull: Record<string, string> = {
-  cloning: "Cloning repository…",
-  analyzing: "Analyzing codebase…",
-  generating_srs: "Writing Software Requirements Specification…",
+  cloning: "Cloning repositories…",
+  analyzing: "Analyzing codebases…",
+  generating_srs: "Writing Product Requirements Document…",
   generating_fsd: "Writing Functional Specification Document…",
-  generating_sdd: "Writing System Design Document…",
+  generating_sdd: "Writing System Design Documents…",
+  writing_back: "Opening pull requests…",
   completed: "All documents generated!",
   failed: "Generation failed",
   cancelled: "Generation cancelled",
@@ -180,12 +189,17 @@ watch(isSubmitting, (v) => {
       </NuxtLink>
     </header>
 
+    <!-- Repositories -->
+    <div class="form-section">
+      <RepositoryManager :app-id="appId" />
+    </div>
+
     <!-- Form -->
     <div class="form-section">
       <h2>New Generation</h2>
       <DocGeneratorForm
         :app-id="appId"
-        :repo-url="appInfo?.repoUrl || undefined"
+        :repo-count="repoCount"
         :disabled="isSubmitting || isGenerating || hasPendingJob"
         @generate="handleGenerate"
       />
@@ -274,6 +288,7 @@ watch(isSubmitting, (v) => {
         :srs="currentResult.srs"
         :fsd="currentResult.fsd"
         :sdd="currentResult.sdd"
+        :repo-results="currentResult.repoResults"
         :app-id="appId"
       />
     </div>
@@ -309,9 +324,14 @@ watch(isSubmitting, (v) => {
         >
           <div class="job-main">
             <div class="job-title-row">
-              <span class="job-repo">{{ job.repoUrl }}</span>
+              <span class="job-repo">
+                {{ job.scope === 'repo' ? (job.repoUrl || 'Repository SDD') : 'Product (all repos)' }}
+              </span>
               <span class="pill" :class="statusClass[job.status] || 'pill-blue'">
                 {{ statusLabel[job.status] || job.status }}
+              </span>
+              <span v-if="job.trigger === 'webhook'" class="pill pill-muted" title="Triggered by a git tag webhook">
+                webhook
               </span>
             </div>
             <div class="job-meta">

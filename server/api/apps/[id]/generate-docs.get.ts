@@ -28,6 +28,8 @@ export default defineEventHandler(async (event) => {
       id: docGenerationJobs.id,
       appId: docGenerationJobs.appId,
       repoUrl: docGenerationJobs.repoUrl,
+      scope: docGenerationJobs.scope,
+      trigger: docGenerationJobs.trigger,
       status: docGenerationJobs.status,
       progressPct: docGenerationJobs.progressPct,
       progressMessage: docGenerationJobs.progressMessage,

@@ -46,9 +46,36 @@ export const activityLogs = pgTable("activity_logs", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
+export const appRepositories = pgTable("app_repositories", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  appId: text("app_id")
+    .notNull()
+    .references(() => apps.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  repoUrl: text("repo_url").notNull(),
+  provider: text("provider", { enum: ["github", "gitlab"] })
+    .notNull()
+    .default("github"),
+  defaultBranch: text("default_branch").notNull().default("main"),
+  accessToken: text("access_token"),
+  webhookSecret: text("webhook_secret"),
+  sddDocPath: text("sdd_doc_path").notNull().default("docs/SDD.md"),
+  lastProcessedRef: text("last_processed_ref"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export const appsRelations = relations(apps, ({ many }) => ({
   versions: many(appVersions),
   activities: many(activityLogs),
+  repositories: many(appRepositories),
+}));
+
+export const appRepositoriesRelations = relations(appRepositories, ({ one }) => ({
+  app: one(apps, {
+    fields: [appRepositories.appId],
+    references: [apps.id],
+  }),
 }));
 
 export const appVersionsRelations = relations(appVersions, ({ one }) => ({

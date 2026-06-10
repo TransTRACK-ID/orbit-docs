@@ -87,6 +87,8 @@ export default defineNuxtConfig({
       baseAPI: process.env.NUXT_PUBLIC_API_BASE_URL || process.env.API_BASE_URL,
       // MCP Server endpoint (shown in settings page)
       mcpHost: process.env.NUXT_PUBLIC_MCP_HOST || 'localhost:41244',
+      // Public app URL used to build git webhook URLs (falls back to request host)
+      appUrl: process.env.NUXT_PUBLIC_APP_URL || process.env.NUXT_APP_BASE_URL || '',
     },
     // Server-only base URL — can be absolute (e.g. http://127.0.0.1:port/api/preview/taskId)
     // so server-side $fetch gets a valid URL instead of crashing on relative paths
