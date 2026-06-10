@@ -148,32 +148,98 @@ const isFailed = computed(() => currentJob.value?.status === "failed");
 // Show progress panel if: submitting, actively generating, OR just completed/failed
 const showProgress = computed(() => isSubmitting.value || !!currentJob.value);
 
-// Agent log entries — append each status change as a timestamped line
-interface LogEntry { ts: string; text: string; type: "info" | "success" | "error" }
+// Agent log entries — append each status / activity change as a timestamped line
+interface LogEntry { ts: string; text: string; type: "info" | "activity" | "success" | "error" }
 const agentLogs = ref<LogEntry[]>([]);
 const logsEl = ref<HTMLElement | null>(null);
 
-watch(currentJob, (job) => {
-  if (!job) return;
-  const ts = new Date().toLocaleTimeString("en-US", { hour12: false });
-  const text = job.progressMessage || statusFull[job.status] || job.status;
-  const type = job.status === "failed" ? "error" : job.status === "completed" ? "success" : "info";
-
-  // Only push if it's a new message
+const pushLog = (text: string, type: LogEntry["type"]) => {
+  if (!text) return;
   const last = agentLogs.value[agentLogs.value.length - 1];
-  if (!last || last.text !== text) {
-    agentLogs.value.push({ ts, text, type });
-    // Auto-scroll to bottom
-    nextTick(() => {
-      if (logsEl.value) logsEl.value.scrollTop = logsEl.value.scrollHeight;
-    });
+  if (last && last.text === text && last.type === type) return;
+  const ts = new Date().toLocaleTimeString("en-US", { hour12: false });
+  agentLogs.value.push({ ts, text, type });
+  nextTick(() => {
+    if (logsEl.value) logsEl.value.scrollTop = logsEl.value.scrollHeight;
+  });
+};
+
+// Status / progressMessage changes — coarse pipeline steps
+watch(
+  () => currentJob.value?.progressMessage,
+  (msg, prev) => {
+    if (!msg || msg === prev) return;
+    const status = currentJob.value?.status;
+    const type: LogEntry["type"] =
+      status === "failed" ? "error" : status === "completed" ? "success" : "info";
+    pushLog(msg, type);
   }
-}, { deep: true });
+);
+
+// Live agent activity — fine-grained tool calls / "Reading: …" / "Running: …"
+watch(
+  () => currentJob.value?.currentActivity,
+  (activity) => {
+    if (activity) pushLog(activity, "activity");
+  }
+);
 
 // Clear logs when starting a new generation
 watch(isSubmitting, (v) => {
   if (v) agentLogs.value = [];
 });
+
+// ── Stale detection: if no event for >60s while running, warn the user.
+const now = ref(Date.now());
+let nowTimer: ReturnType<typeof setInterval> | null = null;
+onMounted(() => {
+  nowTimer = setInterval(() => { now.value = Date.now(); }, 1000);
+});
+onBeforeUnmount(() => {
+  if (nowTimer) clearInterval(nowTimer);
+});
+
+const secondsSinceLastEvent = computed(() => {
+  const ts = currentJob.value?.lastEventAt;
+  if (!ts) return null;
+  const diff = Math.max(0, Math.floor((now.value - new Date(ts).getTime()) / 1000));
+  return diff;
+});
+const isStale = computed(() => {
+  if (!hasPendingJob.value) return false;
+  const s = secondsSinceLastEvent.value;
+  return s !== null && s > 60;
+});
+
+// Token usage display
+const tokenSummary = computed(() => {
+  const j = currentJob.value;
+  if (!j) return null;
+  const i = j.tokensInput ?? 0;
+  const o = j.tokensOutput ?? 0;
+  if (i === 0 && o === 0) return null;
+  const fmt = (n: number) => n.toLocaleString("en-US");
+  return `${fmt(i)} in · ${fmt(o)} out`;
+});
+
+// Streamed preview (truncated to tail so we don't render 100k chars)
+const previewText = computed(() => {
+  const text = currentJob.value?.partialContent;
+  if (!text) return "";
+  const MAX = 4000;
+  return text.length > MAX ? `…${text.slice(-MAX)}` : text;
+});
+const showPreview = ref(false);
+
+// Auto-collapse preview when the job ends (final result has its own viewer).
+watch(
+  () => currentJob.value?.status,
+  (s) => {
+    if (s === "completed" || s === "failed" || s === "cancelled") {
+      showPreview.value = false;
+    }
+  }
+);
 </script>
 
 <template>
@@ -235,6 +301,42 @@ watch(isSubmitting, (v) => {
           />
         </div>
         <p v-if="currentJob.progressMessage" class="progress-msg">{{ currentJob.progressMessage }}</p>
+
+        <!-- Live activity line + token/heartbeat meta ───────────────── -->
+        <div v-if="hasPendingJob" class="live-meta">
+          <div v-if="currentJob.currentActivity" class="activity-row" :class="{ stale: isStale }">
+            <span class="activity-spinner" aria-hidden="true" />
+            <span class="activity-text">{{ currentJob.currentActivity }}</span>
+          </div>
+          <div class="meta-row">
+            <span v-if="tokenSummary" class="meta-pill" title="Token usage">
+              {{ tokenSummary }} tokens
+            </span>
+            <span
+              v-if="secondsSinceLastEvent !== null"
+              class="meta-pill"
+              :class="{ 'meta-warn': isStale }"
+              :title="isStale ? 'No activity from agent recently' : 'Last agent event'"
+            >
+              {{ secondsSinceLastEvent }}s since last event
+            </span>
+            <button
+              v-if="currentJob.partialContent"
+              class="btn btn-ghost btn-sm preview-toggle"
+              @click="showPreview = !showPreview"
+            >
+              {{ showPreview ? "Hide" : "Show" }} live output preview
+            </button>
+          </div>
+          <p v-if="isStale" class="warn-msg">
+            The agent hasn't produced output in over a minute. This can be normal for
+            very large repos, but if it persists you may want to cancel and retry.
+          </p>
+        </div>
+
+        <!-- Streamed live preview of the document currently being generated -->
+        <pre v-if="hasPendingJob && showPreview && previewText" class="preview-pane">{{ previewText }}</pre>
+
         <p v-if="currentJob.errorMessage" class="error-msg">{{ currentJob.errorMessage }}</p>
 
         <!-- Cancel button when job is active -->
@@ -601,12 +703,126 @@ watch(isSubmitting, (v) => {
   color: var(--fg);
 }
 
+.log-activity .log-text {
+  color: var(--muted);
+  font-style: italic;
+}
+
 .log-success .log-text {
   color: oklch(50% 0.14 145);
 }
 
 .log-error .log-text {
   color: oklch(50% 0.16 25);
+}
+
+/* ── Live activity row ─────────────────────────────────────────── */
+.live-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in oklch, var(--fg) 6%, transparent);
+}
+
+.activity-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--fg);
+  font-family: var(--font-mono, monospace);
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  border: 1px solid color-mix(in oklch, var(--accent) 18%, transparent);
+}
+
+.activity-row.stale {
+  background: color-mix(in oklch, oklch(70% 0.16 75) 8%, transparent);
+  border-color: color-mix(in oklch, oklch(70% 0.16 75) 30%, transparent);
+}
+
+.activity-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in oklch, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  animation: activity-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
+.activity-row.stale .activity-spinner {
+  animation-duration: 2.5s;
+  border-top-color: oklch(70% 0.16 75);
+}
+
+@keyframes activity-spin {
+  to { transform: rotate(360deg); }
+}
+
+.activity-text {
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in oklch, var(--fg) 6%, transparent);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.meta-pill.meta-warn {
+  background: color-mix(in oklch, oklch(70% 0.16 75) 14%, transparent);
+  color: oklch(55% 0.14 75);
+}
+
+.preview-toggle {
+  margin-left: auto;
+}
+
+.warn-msg {
+  margin: 0;
+  font-size: 12px;
+  color: oklch(55% 0.14 75);
+  line-height: 1.45;
+}
+
+/* ── Streaming preview pane ────────────────────────────────────── */
+.preview-pane {
+  margin: 0;
+  background: color-mix(in oklch, var(--fg) 3%, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  max-height: 280px;
+  overflow-y: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--fg);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-spinner {
+    animation: none;
+  }
 }
 
 /* ── Result & history sections ────────────────────────────────── */

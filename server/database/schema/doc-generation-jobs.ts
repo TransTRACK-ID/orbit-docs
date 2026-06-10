@@ -41,6 +41,16 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
     .default("cloning"),
   progressPct: integer("progress_pct").notNull().default(0),
   progressMessage: text("progress_message").default("Initializing..."),
+  // Fine-grained live progress (populated while the agent is streaming).
+  // currentActivity = what the agent is doing right now ("Reading: …", "Running: …")
+  // partialContent  = streamed text accumulated for the document currently being written
+  // lastEventAt     = timestamp of the last streaming event (UI stale-detection)
+  // tokens*         = running token usage from the agent's step-finish events
+  currentActivity: text("current_activity"),
+  partialContent: text("partial_content"),
+  lastEventAt: timestamp("last_event_at", { withTimezone: true }),
+  tokensInput: integer("tokens_input").notNull().default(0),
+  tokensOutput: integer("tokens_output").notNull().default(0),
   srsContent: text("srs_content"),
   fsdContent: text("fsd_content"),
   sddContent: text("sdd_content"),

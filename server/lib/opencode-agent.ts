@@ -106,31 +106,23 @@ async function resolveClient(
   return { client, close: () => { server.close(); } };
 }
 
-/** Determine whether an error is retryable (network / timeout / 5xx). */
+/** Determine whether an error is retryable (network / connect-level only). */
 function isRetryableError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
-  // Timeout variants
+  // Connection-level issues — worth retrying because the SDK request never
+  // reached the Opencode server.
   if (
-    msg.includes("timeout") ||
-    msg.includes("timed out") ||
-    msg.includes("headers timeout") ||
-    msg.includes("body timeout") ||
-    msg.includes("connect timeout")
-  ) {
-    return true;
-  }
-  // Network / fetch failures
-  if (
-    msg.includes("fetch failed") ||
-    msg.includes("network") ||
     msg.includes("econnrefused") ||
     msg.includes("econnreset") ||
-    msg.includes("socket") ||
-    msg.includes("undici")
+    msg.includes("socket hang up") ||
+    msg.includes("connect timeout") ||
+    msg.includes("network")
   ) {
     return true;
   }
+  // Header/body timeouts mean the LLM itself is slow — retrying just burns
+  // tokens and fails the same way. Treat as non-retryable.
   return false;
 }
 
@@ -160,185 +152,325 @@ async function withRetry<T>(
   throw lastErr;
 }
 
+/** Turn a tool invocation into a short human-readable activity line. */
+function formatToolActivity(tool: string, input: Record<string, unknown>): string {
+  const get = (k: string) => {
+    const v = input?.[k];
+    return typeof v === "string" ? v : undefined;
+  };
+  const truncate = (s: string, n = 140) => (s.length > n ? `${s.slice(0, n)}…` : s);
+
+  if (tool === "bash") {
+    const cmd = get("command");
+    if (cmd) return `Running: ${truncate(cmd.split("\n")[0], 140)}`;
+  }
+  if (tool === "read") {
+    const path = get("path") ?? get("filePath");
+    if (path) return `Reading ${path}`;
+  }
+  if (tool === "write" || tool === "edit") {
+    const path = get("path") ?? get("filePath");
+    if (path) return `${tool === "write" ? "Writing" : "Editing"} ${path}`;
+  }
+  if (tool === "glob") {
+    const pattern = get("pattern") ?? get("glob_pattern");
+    if (pattern) return `Searching files: ${pattern}`;
+  }
+  if (tool === "grep") {
+    const pattern = get("pattern");
+    if (pattern) return `Grepping: ${pattern}`;
+  }
+  if (tool === "list" || tool === "ls") {
+    const path = get("path");
+    if (path) return `Listing ${path}`;
+  }
+  if (tool === "webfetch") {
+    const url = get("url");
+    if (url) return `Fetching ${url}`;
+  }
+  return `Tool: ${tool}`;
+}
+
+export interface AnalyzeOptions {
+  /** Working directory for the Opencode session (cloned repo path). */
+  workdir?: string;
+  /** Abort the analyze early (forwarded to Opencode's session.abort). */
+  signal?: AbortSignal;
+  /**
+   * Called whenever a chunk of assistant text arrives. `accumulated` is the
+   * full concatenated text so far across all text parts.
+   */
+  onText?: (delta: string, accumulated: string) => void;
+  /**
+   * Called when the agent's activity changes (running a tool, reading a file,
+   * thinking, etc.). Useful to drive a live status line in the UI.
+   */
+  onActivity?: (activity: string) => void;
+  /** Called when the agent reports updated token usage (per step). */
+  onTokens?: (tokens: { input: number; output: number }) => void;
+}
+
+interface PartLike {
+  id?: string;
+  type?: string;
+  text?: string;
+  sessionID?: string;
+  tool?: string;
+  state?: {
+    status?: string;
+    input?: Record<string, unknown>;
+    title?: string;
+    error?: string;
+  };
+  tokens?: { input: number; output: number };
+}
+
+interface EventLike {
+  type?: string;
+  properties?: {
+    part?: PartLike;
+    delta?: string;
+    sessionID?: string;
+    info?: { id?: string };
+    error?: { message?: string; name?: string };
+  };
+}
+
+interface GlobalEventLike {
+  directory?: string;
+  payload?: EventLike;
+}
+
 export function createOpencodeAgent() {
   const cfg = getConfig();
 
   return {
     /**
-     * Analyze a codebase by sending a prompt to Opencode as a real agent.
-     * Opencode explores the repo with its tools (read files, bash, etc.)
-     * and returns the assistant's final text response.
+     * Run the Opencode agent against a prompt and return the assistant's final
+     * text. Uses the async + SSE event pattern so:
+     *  - The HTTP request that submits the prompt returns quickly (no 5/10 min
+     *    blocking request that can be killed by undici / proxy timeouts).
+     *  - Each streamed event resets undici's body timer, so the run can be
+     *    arbitrarily long as long as the agent is making progress.
+     *  - Callers can react to live progress (text deltas, tool calls, tokens).
+     *  - Callers can cancel mid-run via AbortSignal.
      */
-    async analyze(prompt: string, workdir?: string): Promise<string> {
-      const { client, close } = await resolveClient(cfg, workdir);
+    async analyze(prompt: string, options: AnalyzeOptions = {}): Promise<string> {
+      const { workdir, signal, onText, onActivity, onTokens } = options;
 
-      try {
-        const text = await withRetry(
-          async () => {
-            // Create a fresh session
+      return await withRetry(
+        async () => {
+          const { client, close } = await resolveClient(cfg, workdir);
+
+          // Track text per part-id so concatenation order matches the parts as
+          // they appear in the final message (parts can interleave with tool
+          // calls). Map preserves insertion order.
+          const textByPartId = new Map<string, string>();
+          const partOrder: string[] = [];
+          let sessionId: string | null = null;
+          let lastEmittedAccum = "";
+
+          const abortHandlers: Array<() => void> = [];
+          const cleanup = async () => {
+            for (const fn of abortHandlers.splice(0)) {
+              try { fn(); } catch { /* noop */ }
+            }
+            if (sessionId) {
+              try {
+                await client.session.delete({ path: { id: sessionId } });
+              } catch { /* non-fatal */ }
+            }
+            close();
+          };
+
+          try {
+            // 1. Create the session.
             const sessionResult = await client.session.create({});
             const session =
-              (sessionResult as { data: { id: string } }).data ?? sessionResult;
-
-            if (!session?.id) {
-              throw new Error("Failed to create Opencode session");
-            }
-            const sessionId = session.id;
+              (sessionResult as { data?: { id?: string } }).data ?? sessionResult;
+            sessionId = (session as { id?: string })?.id ?? null;
+            if (!sessionId) throw new Error("Failed to create Opencode session");
             console.log("[OpencodeAgent] Session created:", sessionId);
 
-            // Send the prompt and wait for the agent to finish
-            // session.prompt() is a blocking call — returns after the agent completes its turn
-            const promptResult = await client.session.prompt({
-              path: { id: sessionId },
-              body: {
-                parts: [{ type: "text", text: prompt }],
-              },
+            // 2. Subscribe to the global event stream BEFORE sending the prompt
+            //    so we don't miss early events.
+            const sseAbort = new AbortController();
+            abortHandlers.push(() => sseAbort.abort());
+            const sse = await client.global.event({
+              signal: sseAbort.signal,
+            } as Parameters<typeof client.global.event>[0]);
+
+            const accumulate = (): string => {
+              let acc = "";
+              for (const id of partOrder) acc += textByPartId.get(id) ?? "";
+              return acc;
+            };
+
+            // 3. Set up the idle / error promise driven by SSE events.
+            let resolveIdle: (() => void) | undefined;
+            let rejectIdle: ((err: Error) => void) | undefined;
+            const donePromise = new Promise<void>((resolve, reject) => {
+              resolveIdle = resolve;
+              rejectIdle = reject;
             });
 
-            // Extract all text parts from the response
-            const response =
-              (promptResult as { data: { parts: Array<{ type: string; text?: string }> } }).data ??
-              promptResult;
+            // 4. Pump the SSE stream in the background.
+            const streamPromise = (async () => {
+              try {
+                for await (const raw of sse.stream as AsyncGenerator<unknown>) {
+                  if (signal?.aborted) {
+                    rejectIdle?.(new Error("Generation cancelled"));
+                    return;
+                  }
+                  const globalEvent = raw as GlobalEventLike;
+                  const payload = globalEvent?.payload;
+                  if (!payload) continue;
+                  const props = payload.properties;
 
-            let resultText = "";
-            if (response?.parts && Array.isArray(response.parts)) {
-              for (const part of response.parts) {
-                if (part.type === "text" && part.text) {
-                  resultText += part.text;
-                }
-              }
-            }
+                  // Some payload shapes carry the sessionID at the top level;
+                  // others embed it on the part. Filter to our own session
+                  // when we can identify it.
+                  const partSession = props?.part?.sessionID;
+                  const propsSession = props?.sessionID;
+                  const eventSession = partSession ?? propsSession;
+                  if (eventSession && eventSession !== sessionId) continue;
 
-            if (!resultText) {
-              const info = (response as { info?: { content?: string } })?.info;
-              if (info?.content) resultText = info.content;
-            }
+                  switch (payload.type) {
+                    case "message.part.updated": {
+                      const part = props?.part;
+                      if (!part?.id) break;
 
-            console.log(
-              "[OpencodeAgent] Analysis complete, response length:",
-              resultText.length
-            );
+                      if (!textByPartId.has(part.id) && (part.type === "text" || part.type === "tool")) {
+                        partOrder.push(part.id);
+                        if (part.type === "text") textByPartId.set(part.id, "");
+                      }
 
-            // Clean up the session to avoid leaking state
-            try {
-              await client.session.delete({ path: { id: sessionId } });
-            } catch {
-              // Non-fatal — session will expire on its own
-            }
-
-            return resultText;
-          },
-          { retries: 2, baseDelayMs: 5_000, label: "analyze" }
-        );
-
-        return text;
-      } finally {
-        close();
-      }
-    },
-
-    /**
-     * Same as analyze() but calls onChunk for each text fragment as it arrives.
-     * Uses SSE events from the global event stream to stream partial output.
-     */
-    async analyzeStreaming(
-      prompt: string,
-      onChunk: (chunk: string) => void,
-      workdir?: string
-    ): Promise<string> {
-      const { client, close } = await resolveClient(cfg, workdir);
-
-      try {
-        // Create session
-        const sessionResult = await client.session.create({});
-        const session =
-          (sessionResult as { data: { id: string } }).data ?? sessionResult;
-
-        if (!session?.id) {
-          throw new Error("Failed to create Opencode session");
-        }
-        const sessionId = session.id;
-        console.log("[OpencodeAgent] Session created:", sessionId);
-
-        const fullText: string[] = [];
-
-        // Subscribe to global events to receive streaming text deltas
-        const eventPromise = new Promise<void>((resolve) => {
-          client.global.event().then((sse) => {
-            sse.on(
-              "message",
-              (event: {
-                data: {
-                  payload?: {
-                    type: string;
-                    properties?: {
-                      info?: { role?: string };
-                      part?: { type: string; text?: string };
-                      sessionID?: string;
-                    };
-                  };
-                };
-              }) => {
-                const payload = event?.data?.payload;
-                if (!payload) return;
-
-                if (
-                  payload.type === "message.part.updated" &&
-                  payload.properties?.info?.role === "assistant"
-                ) {
-                  const part = payload.properties?.part;
-                  if (part?.type === "text" && part.text) {
-                    onChunk(part.text);
-                    fullText.push(part.text);
+                      if (part.type === "text" && typeof part.text === "string") {
+                        const prev = textByPartId.get(part.id) ?? "";
+                        const next = part.text;
+                        if (next !== prev) {
+                          textByPartId.set(part.id, next);
+                          const accumulated = accumulate();
+                          const delta =
+                            props?.delta ??
+                            (accumulated.length > lastEmittedAccum.length
+                              ? accumulated.slice(lastEmittedAccum.length)
+                              : "");
+                          lastEmittedAccum = accumulated;
+                          if (delta) onText?.(delta, accumulated);
+                        }
+                      } else if (part.type === "tool" && part.tool && part.state) {
+                        const status = part.state.status;
+                        if (status === "running" || status === "pending") {
+                          onActivity?.(formatToolActivity(part.tool, part.state.input ?? {}));
+                        } else if (status === "completed") {
+                          onActivity?.(`Done: ${part.state.title ?? part.tool}`);
+                        } else if (status === "error") {
+                          onActivity?.(
+                            `Tool failed (${part.tool}): ${part.state.error ?? "unknown error"}`
+                          );
+                        }
+                      } else if (part.type === "step-finish" && part.tokens) {
+                        onTokens?.({
+                          input: part.tokens.input,
+                          output: part.tokens.output,
+                        });
+                      } else if (part.type === "reasoning" && part.text) {
+                        const line = part.text.split("\n")[0];
+                        if (line) onActivity?.(`Thinking: ${line.slice(0, 140)}`);
+                      }
+                      break;
+                    }
+                    case "session.error": {
+                      const err = props?.error;
+                      const msg = err?.message ?? err?.name ?? "Opencode agent error";
+                      rejectIdle?.(new Error(`Agent error: ${msg}`));
+                      return;
+                    }
+                    case "session.idle": {
+                      resolveIdle?.();
+                      return;
+                    }
                   }
                 }
-
-                if (
-                  payload.type === "session.idle" &&
-                  payload.properties?.sessionID === sessionId
-                ) {
-                  resolve();
+              } catch (err) {
+                if (!signal?.aborted) {
+                  rejectIdle?.(err instanceof Error ? err : new Error(String(err)));
                 }
               }
+            })();
+            // Prevent "unhandled promise rejection" if donePromise resolves first.
+            streamPromise.catch(() => { /* swallowed */ });
+
+            // 5. Wire up the abort signal — abort the Opencode session AND the
+            //    SSE stream so the run stops promptly.
+            const onAbort = () => {
+              try {
+                if (sessionId) {
+                  client.session.abort({ path: { id: sessionId } }).catch(() => {});
+                }
+              } finally {
+                sseAbort.abort();
+                rejectIdle?.(new Error("Generation cancelled"));
+              }
+            };
+            if (signal) {
+              if (signal.aborted) {
+                onAbort();
+              } else {
+                signal.addEventListener("abort", onAbort, { once: true });
+                abortHandlers.push(() => signal.removeEventListener("abort", onAbort));
+              }
+            }
+
+            // 6. Submit the prompt asynchronously — server starts working
+            //    immediately and the HTTP request returns once accepted.
+            await client.session.promptAsync({
+              path: { id: sessionId },
+              body: { parts: [{ type: "text", text: prompt }] },
+            });
+
+            // 7. Wait for either session.idle, a session error, or abort.
+            await donePromise;
+
+            // 8. Fetch the canonical final message text. We prefer this over
+            //    the streamed accumulation because parts can be reordered or
+            //    truncated by the server when the run finishes.
+            let finalText = accumulate();
+            try {
+              const messagesResult = await client.session.messages({
+                path: { id: sessionId },
+              });
+              const messages =
+                (messagesResult as { data?: Array<{ info?: { role?: string }; parts?: Array<{ type?: string; text?: string }> }> }).data ??
+                (messagesResult as Array<{ info?: { role?: string }; parts?: Array<{ type?: string; text?: string }> }>);
+              if (Array.isArray(messages)) {
+                const lastAssistant = [...messages]
+                  .reverse()
+                  .find((m) => m?.info?.role === "assistant");
+                if (lastAssistant?.parts) {
+                  const text = lastAssistant.parts
+                    .filter((p) => p.type === "text" && typeof p.text === "string")
+                    .map((p) => p.text as string)
+                    .join("");
+                  if (text.length >= finalText.length) {
+                    finalText = text;
+                  }
+                }
+              }
+            } catch { /* fall back to streamed accumulation */ }
+
+            console.log(
+              `[OpencodeAgent] Analysis complete, length=${finalText.length}, parts=${partOrder.length}`
             );
-          });
-        });
 
-        // Send asynchronously so events fire while we listen
-        await client.session.promptAsync({
-          path: { id: sessionId },
-          body: {
-            parts: [{ type: "text", text: prompt }],
-          },
-        });
-
-        // Wait for the session to go idle (agent finished) or timeout
-        await Promise.race([
-          eventPromise,
-          new Promise<void>((_, reject) =>
-            setTimeout(
-              () => reject(new Error("Opencode agent timed out after 10 minutes")),
-              600000
-            )
-          ),
-        ]);
-
-        const result = fullText.join("");
-        console.log(
-          "[OpencodeAgent] Streaming complete, total length:",
-          result.length
-        );
-
-        try {
-          await client.session.delete({ path: { id: sessionId } });
-        } catch {
-          // Non-fatal
-        }
-
-        return result;
-      } finally {
-        close();
-      }
+            return finalText;
+          } finally {
+            await cleanup();
+          }
+        },
+        { retries: 2, baseDelayMs: 5_000, label: "analyze" }
+      );
     },
   };
 }

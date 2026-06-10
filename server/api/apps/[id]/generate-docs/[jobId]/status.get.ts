@@ -50,16 +50,26 @@ export default defineEventHandler(async (event) => {
     }
   };
 
-  sendEvent({
-    status: job.status,
-    progressPct: job.progressPct,
-    progressMessage: job.progressMessage,
-    repoRef: job.repoRef,
-    completedAt: job.completedAt,
-    errorMessage: job.errorMessage,
+  const serializeJob = (j: typeof job) => ({
+    status: j.status,
+    progressPct: j.progressPct,
+    progressMessage: j.progressMessage,
+    repoRef: j.repoRef,
+    completedAt: j.completedAt,
+    errorMessage: j.errorMessage,
+    // Live-progress fields driven by the streaming agent.
+    currentActivity: j.currentActivity,
+    partialContent: j.partialContent,
+    lastEventAt: j.lastEventAt,
+    tokensInput: j.tokensInput,
+    tokensOutput: j.tokensOutput,
   });
 
-  // Poll for updates every 2 seconds
+  sendEvent(serializeJob(job));
+
+  // Poll faster (1s) — the agent now emits live activity / streaming text and
+  // the UI benefits from a responsive feed. DB load is unchanged from the
+  // previous 2s poll because we only run one SELECT per tick.
   const interval = setInterval(async () => {
     try {
       const updated = await db
@@ -74,14 +84,7 @@ export default defineEventHandler(async (event) => {
         return;
       }
 
-      sendEvent({
-        status: updated.status,
-        progressPct: updated.progressPct,
-        progressMessage: updated.progressMessage,
-        repoRef: updated.repoRef,
-        completedAt: updated.completedAt,
-        errorMessage: updated.errorMessage,
-      });
+      sendEvent(serializeJob(updated));
 
       // Close connection if completed, failed, or cancelled
       if (updated.status === "completed" || updated.status === "failed" || updated.status === "cancelled") {
@@ -96,7 +99,7 @@ export default defineEventHandler(async (event) => {
         event.node.res.end();
       }
     }
-  }, 2000);
+  }, 1000);
 
   // Handle client disconnect
   event.node.res.on("close", () => {

@@ -12,7 +12,7 @@ import {
   apps,
 } from "~/server/database/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { createOpencodeAgent } from "./opencode-agent";
+import { createOpencodeAgent, type AnalyzeOptions } from "./opencode-agent";
 import {
   cloneOrPull,
   diffSinceRef,
@@ -159,6 +159,10 @@ async function updateJobCompletion(
       progressMessage: success ? "Generation completed" : error || "Failed",
       completedAt: success ? new Date() : null,
       errorMessage: success ? null : error || null,
+      // Clear the live-progress fields so the UI shows the final state, not
+      // whatever the agent was doing right before completion/failure.
+      currentActivity: null,
+      partialContent: null,
     })
     .where(eq(docGenerationJobs.id, jobId));
 }
@@ -172,6 +176,109 @@ async function isJobCancelled(jobId: string): Promise<boolean> {
     .limit(1)
     .then((rows) => rows[0]);
   return job?.status === "cancelled";
+}
+
+/**
+ * Update the live progress fields on a job. Coalesces partial writes so the
+ * caller can fire it on every event without hammering Postgres.
+ */
+async function updateJobLiveProgress(
+  jobId: string,
+  patch: Partial<{
+    currentActivity: string | null;
+    partialContent: string | null;
+    tokensInput: number;
+    tokensOutput: number;
+  }>
+): Promise<void> {
+  const db = getDb();
+  await db
+    .update(docGenerationJobs)
+    .set({ ...patch, lastEventAt: new Date() })
+    .where(eq(docGenerationJobs.id, jobId));
+}
+
+/**
+ * Wrap `agent.analyze` so it streams live progress (activity line + partial
+ * content + token counts) into the job row at most every `flushMs`, and so
+ * the run is automatically aborted when the job is cancelled in the DB.
+ */
+async function runAgentAnalyze(
+  agent: ReturnType<typeof createOpencodeAgent>,
+  jobId: string,
+  prompt: string,
+  workdir: string,
+  opts: { partialField?: "srs" | "fsd" | "sdd"; flushMs?: number } = {}
+): Promise<string> {
+  const { flushMs = 1500 } = opts;
+
+  let pendingActivity: string | null = null;
+  let pendingPartial: string | null = null;
+  let pendingTokens: { input: number; output: number } | null = null;
+  let dirty = false;
+  let flushing = false;
+
+  const flush = async () => {
+    if (!dirty || flushing) return;
+    flushing = true;
+    try {
+      const patch: Parameters<typeof updateJobLiveProgress>[1] = {};
+      if (pendingActivity !== null) patch.currentActivity = pendingActivity;
+      if (pendingPartial !== null) patch.partialContent = pendingPartial;
+      if (pendingTokens) {
+        patch.tokensInput = pendingTokens.input;
+        patch.tokensOutput = pendingTokens.output;
+      }
+      dirty = false;
+      await updateJobLiveProgress(jobId, patch);
+    } catch (e) {
+      console.warn("[doc-generator] live-progress flush failed:", e);
+    } finally {
+      flushing = false;
+    }
+  };
+
+  const flushTimer = setInterval(flush, flushMs);
+
+  // Poll the job status so an external "cancel" in the DB aborts the run.
+  const ac = new AbortController();
+  const cancelPoll = setInterval(async () => {
+    try {
+      if (await isJobCancelled(jobId)) {
+        ac.abort();
+      }
+    } catch { /* swallow */ }
+  }, 2_000);
+
+  try {
+    const result = await agent.analyze(prompt, {
+      workdir,
+      signal: ac.signal,
+      onActivity: (activity) => {
+        pendingActivity = activity;
+        dirty = true;
+      },
+      onText: (_delta, accumulated) => {
+        pendingPartial = accumulated;
+        dirty = true;
+      },
+      onTokens: (tokens) => {
+        pendingTokens = tokens;
+        dirty = true;
+      },
+    } satisfies AnalyzeOptions);
+
+    // Final flush so the UI sees the last activity update.
+    pendingActivity = null;
+    pendingPartial = null;
+    dirty = true;
+    await flush();
+
+    return result;
+  } finally {
+    clearInterval(flushTimer);
+    clearInterval(cancelPoll);
+  }
 }
 
 // ── Repo result helpers ────────────────────────────────────────
@@ -426,8 +533,12 @@ Instructions:
 - Fill in all {{placeholders}} with actual content. Do NOT use placeholder text.
 - Output ONLY the completed markdown document.`;
 
-    const prdContent = await agent.analyze(prdPrompt, baseDir);
+    const prdContent = await runAgentAnalyze(agent, jobId, prdPrompt, baseDir, {
+      partialField: "srs",
+    });
     await updateJobResult(jobId, "srs", prdContent);
+    // Clear the live partial buffer now that the PRD is final.
+    await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
 
     // Step 4: FSD (product-level)
     await onProgress({
@@ -456,8 +567,11 @@ Instructions:
 - Fill in all {{placeholders}} with actual content. Do NOT use placeholder text.
 - Output ONLY the completed markdown document.`;
 
-    const fsdContent = await agent.analyze(fsdPrompt, baseDir);
+    const fsdContent = await runAgentAnalyze(agent, jobId, fsdPrompt, baseDir, {
+      partialField: "fsd",
+    });
     await updateJobResult(jobId, "fsd", fsdContent);
+    await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
 
     // Step 5: Per-repo SDD + write-back
     await onProgress({
@@ -489,7 +603,9 @@ Instructions:
           fsdContent.substring(0, 1500)
         );
 
-        const sddContent = await agent.analyze(sddPrompt, dir);
+        const sddContent = await runAgentAnalyze(agent, jobId, sddPrompt, dir, {
+          partialField: "sdd",
+        });
         lastSdd = sddContent;
         const ref = await getRepoRef(dir);
         await updateRepoResult(resultId, {
@@ -663,7 +779,9 @@ Instructions:
 - Preserve the existing structure and headings.
 - Do NOT use placeholder text.
 - Output ONLY the markdown document.`;
-      sddContent = await agent.analyze(prompt, dir);
+      sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
+        partialField: "sdd",
+      });
     } else {
       // No prior SDD or no usable diff — do a full generation
       const structure = await getRepoStructure(dir);
@@ -677,7 +795,9 @@ Instructions:
         "(not available for repo-scoped run)",
         "(not available for repo-scoped run)"
       );
-      sddContent = await agent.analyze(prompt, dir);
+      sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
+        partialField: "sdd",
+      });
     }
 
     await updateRepoResult(resultId, {

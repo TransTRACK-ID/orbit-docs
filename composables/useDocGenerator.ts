@@ -13,6 +13,12 @@ export interface DocGenerationJob {
   createdAt: string | null;
   completedAt: string | null;
   errorMessage: string | null;
+  // ── Live progress, populated by the SSE status stream while the agent runs.
+  currentActivity?: string | null;
+  partialContent?: string | null;
+  lastEventAt?: string | null;
+  tokensInput?: number;
+  tokensOutput?: number;
 }
 
 export interface DocGenerationRepoResult {
@@ -159,6 +165,11 @@ export const useDocGenerator = () => {
           repoRef: data.repoRef ?? currentJob.value?.repoRef ?? null,
           completedAt: data.completedAt,
           errorMessage: data.errorMessage,
+          currentActivity: data.currentActivity ?? null,
+          partialContent: data.partialContent ?? null,
+          lastEventAt: data.lastEventAt ?? null,
+          tokensInput: data.tokensInput ?? 0,
+          tokensOutput: data.tokensOutput ?? 0,
         } as DocGenerationJob;
 
         if (data.status === "completed" || data.status === "failed") {
