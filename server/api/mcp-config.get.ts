@@ -4,11 +4,11 @@ export default defineEventHandler((event) => {
   const config = useRuntimeConfig();
   const protocol = getRequestProtocol(event);
   const host = getRequestHost(event);
-  
+
   // Priority: explicit MCP_HOST env var > inferred from request host
   const mcpHost = config.mcpHost || `mcp.${host}`;
-  const mcpUrl = `${protocol}://${host}/api/mcp/connect`;
-  
+  const mcpUrl = `${protocol}://${host}${withBaseURL('/api/mcp/connect')}`;
+
   return {
     data: {
       host: mcpHost,

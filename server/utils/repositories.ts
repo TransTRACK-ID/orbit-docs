@@ -11,14 +11,16 @@ export function buildWebhookUrl(
   host: string | undefined,
   repoId: string
 ): string {
-  const base = process.env.NUXT_PUBLIC_APP_URL || process.env.NUXT_APP_BASE_URL;
-  if (base) {
-    return `${base.replace(/\/$/, "")}/api/webhooks/git/${repoId}`;
+  const appUrl = process.env.NUXT_PUBLIC_APP_URL;
+  if (appUrl) {
+    return `${appUrl.replace(/\/$/, "")}${withBaseURL(`/api/webhooks/git/${repoId}`)}`;
   }
   if (host) {
-    return `${proto || "https"}://${host}/api/webhooks/git/${repoId}`;
+    const base = useRuntimeConfig().app.baseURL || '/';
+    const basePath = base.replace(/\/$/, '');
+    return `${proto || "https"}://${host}${basePath}/api/webhooks/git/${repoId}`;
   }
-  return `/api/webhooks/git/${repoId}`;
+  return withBaseURL(`/api/webhooks/git/${repoId}`);
 }
 
 /** Mask an access token for display, keeping only the last 4 chars. */

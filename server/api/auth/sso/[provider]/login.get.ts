@@ -58,8 +58,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const runtimeConfig = useRuntimeConfig();
-  const baseCallbackUrl = `${runtimeConfig.public?.baseAPI || 'http://localhost:3000'}/api/auth/sso/${providerType}/callback`;
-  const callbackUrl = provider.callbackUrl || baseCallbackUrl;
+  const protocol = getRequestProtocol(event);
+  const host = getRequestHost(event);
+  const baseURL = runtimeConfig.app.baseURL || '/';
+  const base = baseURL.replace(/\/$/, '');
+  const baseCallbackUrl = provider.callbackUrl || `${runtimeConfig.public?.baseAPI || `${protocol}://${host}${base}`}/api/auth/sso/${providerType}/callback`;
+  const callbackUrl = baseCallbackUrl;
   
   // Generate PKCE parameters
   const state = crypto.randomUUID();

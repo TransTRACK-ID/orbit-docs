@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
         type: p.type,
         name: p.name,
         // Include callback URL hint for configuration
-        callbackUrlHint: `/api/auth/sso/${p.type}/callback`
+        callbackUrlHint: withBaseURL(`/api/auth/sso/${p.type}/callback`)
       }));
 
     return {
