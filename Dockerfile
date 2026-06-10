@@ -16,6 +16,9 @@ RUN bun install --frozen-lockfile
 
 COPY . .
 
+# Must match runtime NUXT_APP_BASE_URL so SPA asset URLs are baked correctly.
+ARG NUXT_APP_BASE_URL=/docs
+ENV NUXT_APP_BASE_URL=${NUXT_APP_BASE_URL}
 ENV NITRO_PRESET=node-server
 RUN bun run build
 

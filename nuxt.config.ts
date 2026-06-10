@@ -1,5 +1,14 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
+/** Normalize NUXT_APP_BASE_URL to a leading-slash path without trailing slash. */
+function normalizeAppBaseURL(v?: string): string {
+  if (!v || v === "/") return "/";
+  const trimmed = v.replace(/\/+$/, "");
+  return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+}
+
+const appBaseURL = normalizeAppBaseURL(process.env.NUXT_APP_BASE_URL);
+
 export default defineNuxtConfig({
   devtools: {
     enabled: process.env.NODE_ENV === 'development',
@@ -10,6 +19,11 @@ export default defineNuxtConfig({
   },
 
   app: {
+    // Required when the app is served under a subpath (e.g. /docs behind nginx).
+    // Must be set at BUILD time so SPA asset URLs are baked correctly.
+    baseURL: appBaseURL,
+    // Relative to baseURL — do NOT use a leading slash or assets resolve from domain root.
+    buildAssetsDir: "_nuxt/",
     pageTransition: { name: "page", mode: "out-in" },
     layoutTransition: { name: "layout", mode: "out-in" },
     head: {
@@ -37,9 +51,9 @@ export default defineNuxtConfig({
   ssr: false,
 
   auth: {
-    baseURL: process.env.NUXT_APP_BASE_URL
-      ? `${process.env.NUXT_APP_BASE_URL}api/auth`
-      : '/api/auth',
+    baseURL: appBaseURL === "/"
+      ? "/api/auth"
+      : `${appBaseURL}/api/auth`,
     provider: {
       type: "local",
       endpoints: {
