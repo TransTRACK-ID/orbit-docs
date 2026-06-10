@@ -56,6 +56,9 @@ export const appRepositories = pgTable("app_repositories", {
   provider: text("provider", { enum: ["github", "gitlab"] })
     .notNull()
     .default("github"),
+  // Non-null when the provider is self-hosted (e.g. https://gitlab.mycompany.com).
+  // For github.com / gitlab.com leave null.
+  hostUrl: text("host_url"),
   defaultBranch: text("default_branch").notNull().default("main"),
   accessToken: text("access_token"),
   webhookSecret: text("webhook_secret"),

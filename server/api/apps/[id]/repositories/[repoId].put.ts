@@ -6,6 +6,19 @@ import { requireAuth } from "~/server/utils/auth";
 
 const VALID_PROVIDERS = ["github", "gitlab"] as const;
 
+function normaliseHostUrl(raw: unknown): string | null | undefined {
+  if (raw === null) return null;           // explicit clear
+  if (raw === undefined) return undefined; // not sent — skip update
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  const h = raw.trim();
+  try {
+    const url = new URL(h.startsWith("http") ? h : `https://${h}`);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return undefined;
+  }
+}
+
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
   const db = getDb();
@@ -46,6 +59,9 @@ export default defineEventHandler(async (event) => {
     patch.accessToken = body.accessToken.trim();
   // Allow explicit clearing of the token
   if (body?.accessToken === null) patch.accessToken = null;
+  // hostUrl: update when sent, clear when null, skip when absent
+  const hostUrlUpdate = normaliseHostUrl(body?.hostUrl);
+  if (hostUrlUpdate !== undefined) patch.hostUrl = hostUrlUpdate;
 
   const row = await db
     .update(appRepositories)
@@ -61,6 +77,7 @@ export default defineEventHandler(async (event) => {
       name: row.name,
       repoUrl: row.repoUrl,
       provider: row.provider,
+      hostUrl: row.hostUrl,
       defaultBranch: row.defaultBranch,
       sddDocPath: row.sddDocPath,
       hasAccessToken: !!row.accessToken,

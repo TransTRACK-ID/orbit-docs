@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
       name: r.name,
       repoUrl: r.repoUrl,
       provider: r.provider,
+      hostUrl: r.hostUrl,
       defaultBranch: r.defaultBranch,
       hasAccessToken: !!r.accessToken,
       accessTokenPreview: redactToken(r.accessToken),

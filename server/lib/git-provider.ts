@@ -7,6 +7,32 @@ const execAsync = promisify(exec);
 
 export type GitProvider = "github" | "gitlab";
 
+/**
+ * Resolve the effective API host for a repository.
+ * `hostUrl` wins when set (self-hosted GitLab / GitHub Enterprise).
+ * Falls back to the host parsed from the repo URL, then the provider default.
+ */
+export function resolveApiHost(
+  provider: GitProvider,
+  repoUrl: string,
+  hostUrl?: string | null
+): string {
+  if (hostUrl) {
+    try {
+      return new URL(hostUrl).host;
+    } catch {
+      return hostUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    }
+  }
+  // Derive from the repo URL itself (handles custom domains)
+  try {
+    const parsed = new URL(repoUrl.replace(/^git@([^:]+):/, "https://$1/"));
+    return parsed.host;
+  } catch {
+    return provider === "gitlab" ? "gitlab.com" : "github.com";
+  }
+}
+
 export interface ParsedRepo {
   host: string;
   owner: string;
@@ -55,11 +81,13 @@ export function parseRepo(repoUrl: string): ParsedRepo {
 /**
  * Build an authenticated HTTPS clone URL embedding the access token.
  * Falls back to the original URL when no token is provided.
+ * When `hostUrl` is set (self-hosted), that host is used in the returned URL.
  */
 function authenticatedUrl(
   repoUrl: string,
   provider: GitProvider,
-  token?: string | null
+  token?: string | null,
+  hostUrl?: string | null
 ): string {
   if (!token) return repoUrl;
 
@@ -81,7 +109,17 @@ function authenticatedUrl(
     }
   }
 
-  // GitHub: x-access-token:<token>@host ; GitLab: oauth2:<token>@host
+  // When a custom host is provided, override the host portion
+  if (hostUrl) {
+    try {
+      host = new URL(hostUrl).host;
+    } catch {
+      host = hostUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    }
+  }
+
+  // GitHub / GitHub Enterprise: x-access-token:<token>@host
+  // GitLab / GitLab Self-Hosted: oauth2:<token>@host
   const userInfo =
     provider === "gitlab"
       ? `oauth2:${token}`
@@ -96,10 +134,11 @@ export async function cloneOrPull(
   cloneDir: string,
   provider: GitProvider,
   token?: string | null,
-  fullHistory = false
+  fullHistory = false,
+  hostUrl?: string | null
 ): Promise<void> {
   const { existsSync } = await import("fs");
-  const authUrl = authenticatedUrl(repoUrl, provider, token);
+  const authUrl = authenticatedUrl(repoUrl, provider, token, hostUrl);
 
   if (existsSync(join(cloneDir, ".git"))) {
     // Make sure tags are fetched (needed for diffing between tags)
@@ -192,6 +231,8 @@ export async function diffSinceRef(
 export interface OpenPullRequestParams {
   provider: GitProvider;
   repoUrl: string;
+  /** Optional custom host for self-hosted GitLab / GitHub Enterprise */
+  hostUrl?: string | null;
   token: string;
   cloneDir: string;
   baseBranch: string;
@@ -214,6 +255,7 @@ export async function openPullRequest(
   const {
     provider,
     repoUrl,
+    hostUrl,
     token,
     cloneDir,
     baseBranch,
@@ -225,8 +267,9 @@ export async function openPullRequest(
     prBody,
   } = params;
 
-  const { owner, repo, host } = parseRepo(repoUrl);
-  const authUrl = authenticatedUrl(repoUrl, provider, token);
+  const { owner, repo } = parseRepo(repoUrl);
+  const host = resolveApiHost(provider, repoUrl, hostUrl);
+  const authUrl = authenticatedUrl(repoUrl, provider, token, hostUrl);
 
   // Configure a committer identity for this repo (local scope only)
   await execAsync(
@@ -275,7 +318,7 @@ export async function openPullRequest(
     { timeout: 180000 }
   );
 
-  // Open the PR / MR via REST API
+  // Open the PR / MR via REST API — `host` is already resolved (self-hosted aware)
   if (provider === "gitlab") {
     return await createGitlabMergeRequest({
       host,

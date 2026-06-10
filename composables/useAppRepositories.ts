@@ -6,6 +6,8 @@ export interface AppRepository {
   name: string;
   repoUrl: string;
   provider: "github" | "gitlab";
+  /** Non-null for self-hosted GitLab / GitHub Enterprise, e.g. https://gitlab.myco.com */
+  hostUrl?: string | null;
   defaultBranch: string;
   sddDocPath: string;
   hasAccessToken: boolean;
@@ -21,6 +23,8 @@ export interface RepositoryPayload {
   name?: string;
   repoUrl: string;
   provider?: "github" | "gitlab";
+  /** Custom host for self-hosted GitLab / GitHub Enterprise */
+  hostUrl?: string | null;
   defaultBranch?: string;
   accessToken?: string | null;
   sddDocPath?: string;

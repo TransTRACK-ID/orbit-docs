@@ -222,6 +222,7 @@ interface RepoRow {
   name: string;
   repoUrl: string;
   provider: GitProvider;
+  hostUrl: string | null;
   defaultBranch: string;
   accessToken: string | null;
   sddDocPath: string;
@@ -245,6 +246,7 @@ async function loadAppRepos(appId: string): Promise<RepoRow[]> {
       name: r.name,
       repoUrl: r.repoUrl,
       provider: (r.provider as GitProvider) || "github",
+      hostUrl: r.hostUrl ?? null,
       defaultBranch: r.defaultBranch || "main",
       accessToken: r.accessToken,
       sddDocPath: r.sddDocPath || "docs/SDD.md",
@@ -266,6 +268,7 @@ async function loadAppRepos(appId: string): Promise<RepoRow[]> {
         name: getRepoName(app.repoUrl),
         repoUrl: app.repoUrl,
         provider: "github",
+        hostUrl: null,
         defaultBranch: "main",
         accessToken: null,
         sddDocPath: "docs/SDD.md",
@@ -330,6 +333,7 @@ async function writeSddBack(
 
   return await openPullRequest({
     provider: repo.provider,
+    hostUrl: repo.hostUrl,
     repoUrl: repo.repoUrl,
     token: repo.accessToken,
     cloneDir,
@@ -375,7 +379,7 @@ export async function generateProductDocs(
     const cloneDirs: Record<string, string> = {};
     for (const repo of repos) {
       const dir = join(baseDir, getRepoName(repo.repoUrl));
-      await cloneOrPull(repo.repoUrl, dir, repo.provider, repo.accessToken);
+      await cloneOrPull(repo.repoUrl, dir, repo.provider, repo.accessToken, false, repo.hostUrl);
       cloneDirs[repo.repoUrl] = dir;
     }
 
@@ -579,6 +583,7 @@ export async function generateRepoSdd(
       name: repoRow.name,
       repoUrl: repoRow.repoUrl,
       provider: (repoRow.provider as GitProvider) || "github",
+      hostUrl: repoRow.hostUrl ?? null,
       defaultBranch: repoRow.defaultBranch || "main",
       accessToken: repoRow.accessToken,
       sddDocPath: repoRow.sddDocPath || "docs/SDD.md",
@@ -595,7 +600,7 @@ export async function generateRepoSdd(
       progressMessage: `Updating ${repo.name}...`,
     });
     await ensureDir(join(REPO_DIR, repoRow.appId));
-    await cloneOrPull(repo.repoUrl, dir, repo.provider, repo.accessToken, true);
+    await cloneOrPull(repo.repoUrl, dir, repo.provider, repo.accessToken, true, repo.hostUrl);
 
     // Step 2: Compute diff since the last processed ref
     await onProgress({

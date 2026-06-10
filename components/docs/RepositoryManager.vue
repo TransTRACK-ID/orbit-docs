@@ -20,16 +20,42 @@ const {
 const showForm = ref(false);
 const editingId = ref<string | null>(null);
 
-const blankForm = (): RepositoryPayload & { id?: string } => ({
+type ProviderChoice = "github" | "gitlab" | "github-enterprise" | "gitlab-self-hosted";
+
+const blankForm = (): RepositoryPayload & { id?: string; providerChoice: ProviderChoice } => ({
   name: "",
   repoUrl: "",
   provider: "github",
+  providerChoice: "github",
+  hostUrl: null,
   defaultBranch: "main",
   accessToken: "",
   sddDocPath: "docs/SDD.md",
 });
 
 const form = reactive(blankForm());
+
+// Derive actual provider + whether host URL is required from the choice
+const needsHostUrl = computed(
+  () => form.providerChoice === "github-enterprise" || form.providerChoice === "gitlab-self-hosted"
+);
+const providerLabel = computed(() => {
+  if (form.providerChoice === "github-enterprise") return "GitHub Enterprise";
+  if (form.providerChoice === "gitlab-self-hosted") return "GitLab Self-Hosted";
+  if (form.providerChoice === "gitlab") return "GitLab";
+  return "GitHub";
+});
+
+function onProviderChange() {
+  if (form.providerChoice === "github" || form.providerChoice === "github-enterprise") {
+    form.provider = "github";
+  } else {
+    form.provider = "gitlab";
+  }
+  if (!needsHostUrl.value) {
+    form.hostUrl = null;
+  }
+}
 
 onMounted(() => fetchRepositories(props.appId));
 
@@ -40,11 +66,17 @@ function openAdd() {
 }
 
 function openEdit(repo: AppRepository) {
+  let choice: ProviderChoice = repo.provider;
+  if (repo.provider === "github" && repo.hostUrl) choice = "github-enterprise";
+  if (repo.provider === "gitlab" && repo.hostUrl) choice = "gitlab-self-hosted";
+
   Object.assign(form, {
     id: repo.id,
     name: repo.name,
     repoUrl: repo.repoUrl,
     provider: repo.provider,
+    providerChoice: choice,
+    hostUrl: repo.hostUrl ?? null,
     defaultBranch: repo.defaultBranch,
     accessToken: "",
     sddDocPath: repo.sddDocPath,
@@ -63,10 +95,15 @@ async function save() {
     toast.error("Repository URL is required");
     return;
   }
+  if (needsHostUrl.value && !form.hostUrl?.trim()) {
+    toast.error(`Instance URL is required for ${providerLabel.value}`);
+    return;
+  }
   const payload: RepositoryPayload = {
     name: form.name?.trim() || undefined,
     repoUrl: form.repoUrl.trim(),
     provider: form.provider,
+    hostUrl: needsHostUrl.value ? (form.hostUrl?.trim() || null) : null,
     defaultBranch: form.defaultBranch?.trim() || "main",
     sddDocPath: form.sddDocPath?.trim() || "docs/SDD.md",
   };
@@ -126,7 +163,7 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
           <div class="repo-title-row">
             <span class="repo-name">{{ repo.name }}</span>
             <span class="pill" :class="repo.provider === 'gitlab' ? 'pill-orange' : 'pill-dark'">
-              {{ repo.provider }}
+              {{ repo.hostUrl ? (repo.provider === 'gitlab' ? 'GitLab Self-Hosted' : 'GitHub Enterprise') : (repo.provider === 'gitlab' ? 'GitLab' : 'GitHub') }}
             </span>
             <span v-if="!repo.hasAccessToken" class="pill pill-warn" title="No token: write-back PRs disabled">
               no token
@@ -134,6 +171,9 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
           </div>
           <div class="repo-url">{{ repo.repoUrl }}</div>
           <div class="repo-meta">
+            <span v-if="repo.hostUrl" class="repo-host">
+              instance: <code>{{ repo.hostUrl }}</code>
+            </span>
             <span>branch: <code>{{ repo.defaultBranch }}</code></span>
             <span>SDD: <code>{{ repo.sddDocPath }}</code></span>
             <span v-if="repo.lastProcessedRef">last tag: <code>{{ repo.lastProcessedRef }}</code></span>
@@ -184,14 +224,34 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
         </div>
         <div class="form-group">
           <label>Provider</label>
-          <select v-model="form.provider">
+          <select v-model="form.providerChoice" @change="onProviderChange">
             <option value="github">GitHub</option>
+            <option value="github-enterprise">GitHub Enterprise</option>
             <option value="gitlab">GitLab</option>
+            <option value="gitlab-self-hosted">GitLab Self-Hosted</option>
           </select>
         </div>
+
+        <!-- Instance URL — shown only for self-hosted / enterprise -->
+        <div v-if="needsHostUrl" class="form-group full">
+          <label>
+            Instance URL *
+            <span class="optional">e.g. https://gitlab.mycompany.com</span>
+          </label>
+          <input
+            v-model="form.hostUrl"
+            type="url"
+            :placeholder="form.providerChoice === 'github-enterprise' ? 'https://github.mycompany.com' : 'https://gitlab.mycompany.com'"
+          />
+        </div>
+
         <div class="form-group full">
           <label>Repository URL *</label>
-          <input v-model="form.repoUrl" type="url" placeholder="https://github.com/org/repo" />
+          <input
+            v-model="form.repoUrl"
+            type="url"
+            :placeholder="needsHostUrl ? 'https://gitlab.mycompany.com/org/repo' : 'https://github.com/org/repo'"
+          />
         </div>
         <div class="form-group">
           <label>Default Branch</label>
@@ -206,7 +266,18 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
             Access Token
             <span class="optional">{{ editingId ? '(leave blank to keep current)' : '(required for write-back PRs)' }}</span>
           </label>
-          <input v-model="form.accessToken" type="password" placeholder="ghp_… or glpat-…" autocomplete="off" />
+          <input
+            v-model="form.accessToken"
+            type="password"
+            :placeholder="form.provider === 'gitlab' ? 'glpat-…' : 'ghp_…'"
+            autocomplete="off"
+          />
+          <p v-if="form.providerChoice === 'gitlab-self-hosted'" class="field-hint">
+            Use a Personal Access Token with <strong>api</strong> scope (GitLab → Profile → Access Tokens).
+          </p>
+          <p v-else-if="form.providerChoice === 'github-enterprise'" class="field-hint">
+            Use a Personal Access Token (classic) with <strong>repo</strong> scope.
+          </p>
         </div>
       </div>
       <div class="form-actions">
@@ -411,6 +482,18 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
 .optional {
   font-weight: 400;
   color: var(--muted);
+}
+
+.field-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.repo-host {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .form-group input,

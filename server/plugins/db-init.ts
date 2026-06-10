@@ -228,6 +228,7 @@ export default defineNitroPlugin(async () => {
       name TEXT NOT NULL,
       repo_url TEXT NOT NULL,
       provider TEXT NOT NULL DEFAULT 'github',
+      host_url TEXT,
       default_branch TEXT NOT NULL DEFAULT 'main',
       access_token TEXT,
       webhook_secret TEXT,
@@ -237,6 +238,8 @@ export default defineNitroPlugin(async () => {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+  // Self-hosted support: host_url for GitHub Enterprise / GitLab Self-Hosted
+  await pool.query(`ALTER TABLE app_repositories ADD COLUMN IF NOT EXISTS host_url TEXT`);
 
   // doc_generation_repo_results table (per-repo SDD results within a job)
   await pool.query(`

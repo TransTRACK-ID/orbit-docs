@@ -7,6 +7,18 @@ import { buildWebhookUrl, generateWebhookSecret } from "~/server/utils/repositor
 
 const VALID_PROVIDERS = ["github", "gitlab"] as const;
 
+function normaliseHostUrl(raw: unknown): string | null {
+  if (typeof raw !== "string" || !raw.trim()) return null;
+  const h = raw.trim();
+  try {
+    const url = new URL(h.startsWith("http") ? h : `https://${h}`);
+    // Preserve only scheme + host (no path)
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return null;
+  }
+}
+
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
   const db = getDb();
@@ -35,6 +47,7 @@ export default defineEventHandler(async (event) => {
   const name = typeof body?.name === "string" ? body.name.trim() : "";
   const repoUrl = typeof body?.repoUrl === "string" ? body.repoUrl.trim() : "";
   const provider = VALID_PROVIDERS.includes(body?.provider) ? body.provider : "github";
+  const hostUrl = normaliseHostUrl(body?.hostUrl);
 
   if (!repoUrl) {
     throw createError({
@@ -51,6 +64,7 @@ export default defineEventHandler(async (event) => {
       name: name || repoUrl.replace(/\.git$/, "").split("/").pop() || "repo",
       repoUrl,
       provider,
+      hostUrl,
       defaultBranch:
         typeof body?.defaultBranch === "string" && body.defaultBranch.trim()
           ? body.defaultBranch.trim()
@@ -78,6 +92,7 @@ export default defineEventHandler(async (event) => {
       name: row.name,
       repoUrl: row.repoUrl,
       provider: row.provider,
+      hostUrl: row.hostUrl,
       defaultBranch: row.defaultBranch,
       sddDocPath: row.sddDocPath,
       hasAccessToken: !!row.accessToken,
