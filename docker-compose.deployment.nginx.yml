@@ -2,7 +2,10 @@ version: '3.8'
 
 services:
   orbit-docs-app:
-    image: ${CI_REGISTRY_IMAGE}/application:${CI_COMMIT_TAG}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${CI_REGISTRY_IMAGE:-orbit-docs}/application:${CI_COMMIT_TAG:-latest}
     container_name: orbit-docs-app
     restart: unless-stopped
     tty: true
