@@ -36,7 +36,7 @@ ENV NODE_ENV=production
 # - bash: opencode agent tool execution
 # - curl: used to install cursor-agent below
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends bash curl git openssh-client ca-certificates && \
+    apt-get install -y --no-install-recommends bash curl git openssh-client ca-certificates unzip && \
     rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r nodejs --gid=1001 && \
