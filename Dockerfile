@@ -37,15 +37,18 @@ RUN apk add --no-cache bash curl git openssh-client
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 -G nodejs
 
-# Install bun + opencode-ai CLI to a shared path so the nodejs user can run them.
+# Install bun + opencode-ai CLI + cursor-agent to a shared path so the nodejs user can run them.
 # @opencode-ai/sdk spawns `opencode serve` as a subprocess — it must be on PATH.
+# cursor-agent is used when DOC_AGENT=cursor; CURSOR_API_KEY is recommended for Docker.
 ENV BUN_INSTALL=/usr/local/bun
 RUN mkdir -p /usr/local/bun && \
     curl -fsSL https://bun.sh/install | bash && \
     ln -sf /usr/local/bun/bin/bun /usr/local/bin/bun && \
     /usr/local/bun/bin/bun install -g opencode-ai && \
     ln -sf /usr/local/bun/bin/opencode /usr/local/bin/opencode && \
-    opencode --version
+    opencode --version && \
+    npm install -g cursor-agent && \
+    cursor-agent --version
 
 COPY --from=builder /app/.output /app/.output
 COPY --from=builder /app/templates /app/templates

@@ -23,6 +23,9 @@ services:
       # IMPORTANT: tell Nuxt to serve under /docs
       NUXT_APP_BASE_URL: ${NUXT_APP_BASE_URL:-/docs}
       OPENCODE_CONFIG_B64: ${OPENCODE_CONFIG_B64:-}
+      DOC_AGENT: ${DOC_AGENT:-opencode}
+      CURSOR_MODEL: ${CURSOR_MODEL:-auto}
+      CURSOR_API_KEY: ${CURSOR_API_KEY:-}
     deploy:
       replicas: ${COMPOSE_REPLICAS:-1}
     volumes:
