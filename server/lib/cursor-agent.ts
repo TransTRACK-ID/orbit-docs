@@ -91,6 +91,8 @@ export function createCursorAgent(opts: { model?: string } = {}) {
 
       const args = [
         "-p",
+        "--force",
+        "--approve-mcps",
         "--output-format", "stream-json",
         "--stream-partial-output",
       ];
