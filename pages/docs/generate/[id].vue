@@ -19,6 +19,46 @@ const publicConfig = useRuntimeConfig().public;
 const activeAgent = computed(() => (publicConfig.docAgent as string) || "opencode");
 const defaultCursorModel = computed(() => (publicConfig.cursorModel as string) || "auto");
 const isCursorActive = computed(() => activeAgent.value === "cursor");
+
+// ── Agent status panel ──────────────────────────────────────────
+const agentStatus = ref<{
+  ok: boolean;
+  message: string;
+  instructions?: string;
+  installed?: boolean;
+  authenticated?: boolean;
+  authMethod?: string;
+  config?: { model?: string; hasApiKey?: boolean };
+} | null>(null);
+const isLoadingAgentStatus = ref(false);
+
+async function fetchAgentStatus() {
+  if (!isCursorActive.value) return;
+  isLoadingAgentStatus.value = true;
+  try {
+    const data = await $fetch<{
+      ok: boolean;
+      message: string;
+      instructions?: string;
+      installed?: boolean;
+      authenticated?: boolean;
+      authMethod?: string;
+      config?: { model?: string; hasApiKey?: boolean };
+    }>("/api/agent/status");
+    agentStatus.value = data;
+  } catch (e: any) {
+    agentStatus.value = {
+      ok: false,
+      message: e?.data?.message || "Failed to check agent status",
+    };
+  } finally {
+    isLoadingAgentStatus.value = false;
+  }
+}
+
+onMounted(() => {
+  fetchAgentStatus();
+});
 const {
   jobs,
   currentJob,
@@ -357,6 +397,26 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
         &larr; All Apps
       </NuxtLink>
     </header>
+
+    <!-- Agent Status Alert -->
+    <div v-if="isCursorActive && agentStatus && !agentStatus.ok" class="agent-alert">
+      <div class="agent-alert-header">
+        <span class="agent-alert-icon" aria-hidden="true">!</span>
+        <span class="agent-alert-title">Cursor Agent Not Ready</span>
+      </div>
+      <p class="agent-alert-msg">{{ agentStatus.message }}</p>
+      <p v-if="agentStatus.instructions" class="agent-alert-instruction">
+        {{ agentStatus.instructions }}
+      </p>
+      <div class="agent-alert-meta">
+        <span v-if="agentStatus.installed === false" class="pill pill-danger">Not installed</span>
+        <span v-else-if="agentStatus.authenticated === false" class="pill pill-danger">Not authenticated</span>
+        <span v-if="agentStatus.config?.hasApiKey" class="pill pill-blue">API key configured</span>
+      </div>
+      <button class="btn btn-ghost btn-sm" @click="fetchAgentStatus">
+        Check again
+      </button>
+    </div>
 
     <!-- Repositories -->
     <div class="form-section">
@@ -1279,6 +1339,68 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 
 .debug-session-idle .debug-type {
   color: oklch(50% 0.14 145);
+}
+
+/* ── Agent alert ──────────────────────────────────────────────── */
+.agent-alert {
+  background: color-mix(in oklch, oklch(55% 0.16 25) 6%, var(--bg));
+  border: 1px solid color-mix(in oklch, oklch(55% 0.16 25) 25%, transparent);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-alert-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-alert-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: oklch(55% 0.16 25);
+  color: var(--surface);
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.agent-alert-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.agent-alert-msg {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.agent-alert-instruction {
+  margin: 0;
+  font-size: 12px;
+  color: var(--fg);
+  font-family: var(--font-mono, monospace);
+  background: color-mix(in oklch, var(--fg) 4%, transparent);
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  line-height: 1.5;
+}
+
+.agent-alert-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ── Agent badge ──────────────────────────────────────────────── */

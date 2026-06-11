@@ -30,11 +30,45 @@ function getCursorModel(): string {
   return (config.cursorModel as string) || "auto";
 }
 
-function isCursorInstalled(): Promise<boolean> {
+export async function isCursorInstalled(): Promise<boolean> {
   return new Promise((resolve) => {
     const proc = spawn(getCursorPath(), ["--version"], { stdio: "ignore" });
     proc.on("error", () => resolve(false));
     proc.on("exit", (code) => resolve(code === 0));
+  });
+}
+
+export async function isCursorAuthenticated(): Promise<{ ok: boolean; method: "login" | "api_key" | "none"; error?: string }> {
+  // Check for API key first (headless / production-friendly)
+  if (process.env.CURSOR_API_KEY) {
+    return { ok: true, method: "api_key" };
+  }
+
+  const installed = await isCursorInstalled();
+  if (!installed) {
+    return { ok: false, method: "none", error: "cursor-agent is not installed" };
+  }
+
+  return new Promise((resolve) => {
+    const proc = spawn(getCursorPath(), ["whoami"], { stdio: "pipe" });
+    let stdout = "";
+    let stderr = "";
+
+    proc.stdout.on("data", (d) => { stdout += d.toString(); });
+    proc.stderr.on("data", (d) => { stderr += d.toString(); });
+
+    proc.on("exit", (code) => {
+      if (code === 0 && stdout.trim()) {
+        resolve({ ok: true, method: "login" });
+      } else {
+        const err = stderr.trim() || stdout.trim() || "Not authenticated";
+        resolve({ ok: false, method: "none", error: err });
+      }
+    });
+
+    proc.on("error", () => {
+      resolve({ ok: false, method: "none", error: "Failed to run cursor-agent whoami" });
+    });
   });
 }
 
@@ -49,7 +83,9 @@ export function createCursorAgent(opts: { model?: string } = {}) {
       const installed = await isCursorInstalled();
       if (!installed) {
         throw new Error(
-          "cursor-agent is not installed. Install it with: npm install -g cursor-agent, then run: cursor-agent login"
+          "cursor-agent is not installed on this server. " +
+          "Install it with: npm install -g cursor-agent, " +
+          "then authenticate with: cursor-agent login (or set CURSOR_API_KEY env var)."
         );
       }
 
