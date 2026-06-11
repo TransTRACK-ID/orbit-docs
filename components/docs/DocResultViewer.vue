@@ -12,8 +12,25 @@ interface Props {
 
 const props = defineProps<Props>();
 
+function getContentForTab(key: string): string {
+  if (key === "srs") return props.srs || "";
+  if (key === "fsd") return props.fsd || "";
+  if (key === "sdd") return props.sdd || "";
+  if (key.startsWith("sdd:")) {
+    const id = key.slice(4);
+    const repo = props.repoResults?.find((r) => r.id === id);
+    return repo?.sdd || "";
+  }
+  return "";
+}
+
+function hasTabContent(key: string): boolean {
+  return getContentForTab(key).trim().length > 0;
+}
+
 // Tab keys: "srs" (shown as PRD), "fsd", and one per repo SDD ("sdd:<id>"),
 // or a single "sdd" tab when there are no per-repo results.
+// Only tabs with non-empty content are shown.
 const tabs = computed(() => {
   const base = [
     { key: "srs", label: "PRD" },
@@ -27,10 +44,24 @@ const tabs = computed(() => {
   } else {
     base.push({ key: "sdd", label: "SDD" });
   }
-  return base;
+  return base.filter((tab) => hasTabContent(tab.key));
 });
 
-const activeTab = ref<string>("srs");
+const activeTab = ref<string>("");
+
+watch(
+  tabs,
+  (visibleTabs) => {
+    if (visibleTabs.length === 0) {
+      activeTab.value = "";
+      return;
+    }
+    if (!visibleTabs.some((t) => t.key === activeTab.value)) {
+      activeTab.value = visibleTabs[0].key;
+    }
+  },
+  { immediate: true },
+);
 
 const activeRepoResult = computed<DocGenerationRepoResult | null>(() => {
   if (!activeTab.value.startsWith("sdd:")) return null;
@@ -38,12 +69,7 @@ const activeRepoResult = computed<DocGenerationRepoResult | null>(() => {
   return props.repoResults?.find((r) => r.id === id) || null;
 });
 
-const currentContent = computed(() => {
-  if (activeTab.value === "srs") return props.srs || "";
-  if (activeTab.value === "fsd") return props.fsd || "";
-  if (activeTab.value === "sdd") return props.sdd || "";
-  return activeRepoResult.value?.sdd || "";
-});
+const currentContent = computed(() => getContentForTab(activeTab.value));
 
 const currentDocType = computed<"srs" | "fsd" | "sdd">(() => {
   if (activeTab.value === "srs") return "srs";
@@ -52,7 +78,8 @@ const currentDocType = computed<"srs" | "fsd" | "sdd">(() => {
 });
 
 const renderedContent = computed(() => {
-  const content = currentContent.value || "No content available";
+  const content = currentContent.value.trim();
+  if (!content) return "";
   return marked.parse(content, { async: false });
 });
 
@@ -108,7 +135,7 @@ async function saveAsDocument() {
 
 <template>
   <div class="result-viewer">
-    <div class="result-tabs">
+    <div v-if="tabs.length > 0" class="result-tabs">
       <button
         v-for="tab in tabs"
         :key="tab.key"
@@ -153,7 +180,10 @@ async function saveAsDocument() {
     </div>
 
     <div class="result-body">
-      <div class="result-content">
+      <div v-if="tabs.length === 0" class="result-empty">
+        No documents with content were generated.
+      </div>
+      <div v-else class="result-content">
         <div class="markdown-body" v-html="renderedContent" />
       </div>
     </div>
@@ -257,6 +287,16 @@ async function saveAsDocument() {
   display: flex;
   gap: 0;
   min-height: 400px;
+}
+
+.result-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 48px 24px;
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .result-content {
