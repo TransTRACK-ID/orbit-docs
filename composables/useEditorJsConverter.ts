@@ -9,6 +9,17 @@ export interface EditorJsData {
   }>;
 }
 
+const MERMAID_START_RE =
+  /^(flowchart|graph)\s+/i;
+
+const MERMAID_KEYWORD_START_RE =
+  /^(sequenceDiagram|classDiagram|stateDiagram-v2?|erDiagram|gantt|pie|gitGraph|journey|mindmap|timeline|quadrantChart|requirementDiagram|C4Context|C4Container|C4Component|C4Dynamic|C4Deployment)\b/;
+
+function isMermaidStartLine(line: string): boolean {
+  const trimmed = line.trim();
+  return MERMAID_START_RE.test(trimmed) || MERMAID_KEYWORD_START_RE.test(trimmed);
+}
+
 // ── Markdown → Editor.js JSON ─────────────────────────────────
 export function markdownToEditorJs(md: string): EditorJsData {
   const blocks: EditorJsData["blocks"] = [];
@@ -56,7 +67,7 @@ export function markdownToEditorJs(md: string): EditorJsData {
       continue;
     }
 
-    // Code block
+    // Code block (including fenced mermaid diagrams)
     if (line.startsWith("```")) {
       const language = line.slice(3).trim();
       const codeLines: string[] = [];
@@ -66,10 +77,15 @@ export function markdownToEditorJs(md: string): EditorJsData {
         i++;
       }
       if (i < lines.length) i++; // skip closing ```
-      blocks.push({
-        type: "code",
-        data: { code: codeLines.join("\n"), language: language || "plaintext" },
-      });
+      const code = codeLines.join("\n");
+      if (language === "mermaid") {
+        blocks.push({ type: "mermaid", data: { code } });
+      } else {
+        blocks.push({
+          type: "code",
+          data: { code, language: language || "plaintext" },
+        });
+      }
       continue;
     }
 
@@ -206,15 +222,17 @@ export function markdownToEditorJs(md: string): EditorJsData {
       continue;
     }
 
-    // Mermaid diagram
-    if (line.trim().startsWith("```mermaid")) {
-      const codeLines: string[] = [];
+    // Unfenced Mermaid diagram (e.g. pasted flowchart syntax without ```mermaid fences)
+    if (isMermaidStartLine(line)) {
+      const codeLines: string[] = [line];
       i++;
-      while (i < lines.length && !lines[i].trim().startsWith("```")) {
-        codeLines.push(lines[i]);
+      while (i < lines.length) {
+        const next = lines[i];
+        if (!next.trim()) break;
+        if (next.match(/^(#{1,3}|>|[-*]|\d+\.|```|!\[|---|\||:::toggle)/)) break;
+        codeLines.push(next);
         i++;
       }
-      if (i < lines.length) i++; // skip closing ```
       blocks.push({
         type: "mermaid",
         data: { code: codeLines.join("\n") },
@@ -265,7 +283,12 @@ export function markdownToEditorJs(md: string): EditorJsData {
     // Paragraph (collect until next block)
     const paraLines: string[] = [line];
     i++;
-    while (i < lines.length && lines[i].trim() && !lines[i].match(/^(#{1,3}|>|[-*]|\d+\.|```|!\[|---|\||:::toggle)/)) {
+    while (
+      i < lines.length
+      && lines[i].trim()
+      && !lines[i].match(/^(#{1,3}|>|[-*]|\d+\.|```|!\[|---|\||:::toggle)/)
+      && !isMermaidStartLine(lines[i])
+    ) {
       paraLines.push(lines[i]);
       i++;
     }
