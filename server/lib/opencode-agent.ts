@@ -198,6 +198,11 @@ export interface AnalyzeOptions {
   onActivity?: (activity: string) => void;
   /** Called when the agent reports updated token usage (per step). */
   onTokens?: (tokens: { input: number; output: number }) => void;
+  /**
+   * Called with every raw Opencode event for deep debugging.
+   * Receives the event payload shape before any filtering or transformation.
+   */
+  onDebugEvent?: (event: { type: string; payload: Record<string, unknown> }) => void;
 }
 
 interface PartLike {
@@ -246,7 +251,7 @@ export function createOpencodeAgent() {
      *  - Callers can cancel mid-run via AbortSignal.
      */
     async analyze(prompt: string, options: AnalyzeOptions = {}): Promise<string> {
-      const { workdir, signal, onText, onActivity, onTokens } = options;
+      const { workdir, signal, onText, onActivity, onTokens, onDebugEvent } = options;
 
       return await withRetry(
         async () => {
@@ -281,6 +286,7 @@ export function createOpencodeAgent() {
             sessionId = (session as { id?: string })?.id ?? null;
             if (!sessionId) throw new Error("Failed to create Opencode session");
             console.log("[OpencodeAgent] Session created:", sessionId);
+            onDebugEvent?.({ type: "session.created", payload: { sessionId } });
 
             // 2. Subscribe to the global event stream BEFORE sending the prompt
             //    so we don't miss early events.
@@ -315,6 +321,15 @@ export function createOpencodeAgent() {
                   const globalEvent = raw as GlobalEventLike;
                   const payload = globalEvent?.payload;
                   if (!payload) continue;
+
+                  // Emit raw event for debugging before any filtering.
+                  onDebugEvent?.({
+                    type: payload.type || "unknown",
+                    payload: payload.properties
+                      ? (payload.properties as Record<string, unknown>)
+                      : {},
+                  });
+
                   const props = payload.properties;
 
                   // Some payload shapes carry the sessionID at the top level;
@@ -374,10 +389,12 @@ export function createOpencodeAgent() {
                     case "session.error": {
                       const err = props?.error;
                       const msg = err?.message ?? err?.name ?? "Opencode agent error";
+                      onDebugEvent?.({ type: "session.error", payload: { message: msg, error: err as Record<string, unknown> } });
                       rejectIdle?.(new Error(`Agent error: ${msg}`));
                       return;
                     }
                     case "session.idle": {
+                      onDebugEvent?.({ type: "session.idle", payload: { sessionId } });
                       resolveIdle?.();
                       return;
                     }

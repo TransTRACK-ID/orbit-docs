@@ -63,6 +63,7 @@ export default defineEventHandler(async (event) => {
     lastEventAt: j.lastEventAt,
     tokensInput: j.tokensInput,
     tokensOutput: j.tokensOutput,
+    opencodeSessionId: j.opencodeSessionId,
   });
 
   sendEvent(serializeJob(job));

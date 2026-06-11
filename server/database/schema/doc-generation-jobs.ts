@@ -51,6 +51,8 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   lastEventAt: timestamp("last_event_at", { withTimezone: true }),
   tokensInput: integer("tokens_input").notNull().default(0),
   tokensOutput: integer("tokens_output").notNull().default(0),
+  // Opencode session ID for debugging the agent run.
+  opencodeSessionId: text("opencode_session_id"),
   srsContent: text("srs_content"),
   fsdContent: text("fsd_content"),
   sddContent: text("sdd_content"),
@@ -58,6 +60,16 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   repoRef: text("repo_ref"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+});
+
+export const docGenerationDebugLogs = pgTable("doc_generation_debug_logs", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  jobId: text("job_id")
+    .notNull()
+    .references(() => docGenerationJobs.id, { onDelete: "cascade" }),
+  eventType: text("event_type").notNull(),
+  eventData: text("event_data").default("{}"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 export const docGenerationRepoResults = pgTable("doc_generation_repo_results", {
@@ -104,7 +116,18 @@ export const docGenerationJobsRelations = relations(docGenerationJobs, ({ one, m
   }),
   versions: many(docGenerationVersions),
   repoResults: many(docGenerationRepoResults),
+  debugLogs: many(docGenerationDebugLogs),
 }));
+
+export const docGenerationDebugLogsRelations = relations(
+  docGenerationDebugLogs,
+  ({ one }) => ({
+    job: one(docGenerationJobs, {
+      fields: [docGenerationDebugLogs.jobId],
+      references: [docGenerationJobs.id],
+    }),
+  })
+);
 
 export const docGenerationRepoResultsRelations = relations(
   docGenerationRepoResults,

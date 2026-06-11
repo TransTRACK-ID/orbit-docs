@@ -8,6 +8,7 @@ import { getDb } from "~/server/database";
 import {
   docGenerationJobs,
   docGenerationRepoResults,
+  docGenerationDebugLogs,
   appRepositories,
   apps,
 } from "~/server/database/schema";
@@ -198,6 +199,60 @@ async function updateJobLiveProgress(
     .where(eq(docGenerationJobs.id, jobId));
 }
 
+async function updateJobSessionId(jobId: string, sessionId: string): Promise<void> {
+  const db = getDb();
+  await db
+    .update(docGenerationJobs)
+    .set({ opencodeSessionId: sessionId })
+    .where(eq(docGenerationJobs.id, jobId));
+}
+
+interface DebugEvent {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
+/** Buffers debug events and flushes them to the DB in batches. */
+function createDebugEventBuffer(jobId: string, flushMs = 2000, maxSize = 100) {
+  const buffer: DebugEvent[] = [];
+  let flushing = false;
+
+  const flush = async () => {
+    if (buffer.length === 0 || flushing) return;
+    flushing = true;
+    const batch = buffer.splice(0, buffer.length);
+    try {
+      const db = getDb();
+      await db.insert(docGenerationDebugLogs).values(
+        batch.map((ev) => ({
+          jobId,
+          eventType: ev.type,
+          eventData: JSON.stringify(ev.payload),
+        }))
+      );
+    } catch (e) {
+      console.warn("[doc-generator] debug log flush failed:", e);
+    } finally {
+      flushing = false;
+    }
+  };
+
+  const timer = setInterval(flush, flushMs);
+
+  return {
+    push(ev: DebugEvent) {
+      buffer.push(ev);
+      if (buffer.length >= maxSize) {
+        flush().catch(() => {});
+      }
+    },
+    async dispose() {
+      clearInterval(timer);
+      await flush();
+    },
+  };
+}
+
 /**
  * Wrap `agent.analyze` so it streams live progress (activity line + partial
  * content + token counts) into the job row at most every `flushMs`, and so
@@ -217,6 +272,8 @@ async function runAgentAnalyze(
   let pendingTokens: { input: number; output: number } | null = null;
   let dirty = false;
   let flushing = false;
+
+  const debugBuffer = createDebugEventBuffer(jobId);
 
   const flush = async () => {
     if (!dirty || flushing) return;
@@ -266,6 +323,12 @@ async function runAgentAnalyze(
         pendingTokens = tokens;
         dirty = true;
       },
+      onDebugEvent: (event) => {
+        if (event.type === "session.created" && typeof event.payload.sessionId === "string") {
+          updateJobSessionId(jobId, event.payload.sessionId).catch(() => {});
+        }
+        debugBuffer.push(event);
+      },
     } satisfies AnalyzeOptions);
 
     // Final flush so the UI sees the last activity update.
@@ -278,6 +341,7 @@ async function runAgentAnalyze(
   } finally {
     clearInterval(flushTimer);
     clearInterval(cancelPoll);
+    await debugBuffer.dispose();
   }
 }
 

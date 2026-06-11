@@ -213,6 +213,7 @@ export default defineNitroPlugin(async () => {
   `);
 
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS repo_ref TEXT`);
+  await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS opencode_session_id TEXT`);
 
   // Multi-repo support: jobs can be product-scoped (PRD+FSD+per-repo SDD) or repo-scoped (single SDD)
   await pool.query(`ALTER TABLE doc_generation_jobs ALTER COLUMN repo_url DROP NOT NULL`);
@@ -265,6 +266,16 @@ export default defineNitroPlugin(async () => {
       doc_type TEXT NOT NULL,
       content TEXT DEFAULT '',
       actor TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_generation_debug_logs (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL REFERENCES doc_generation_jobs(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL,
+      event_data TEXT DEFAULT '{}',
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);

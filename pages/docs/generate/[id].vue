@@ -3,6 +3,7 @@ import { usePageStore } from "~/store/page";
 import DocGeneratorForm from "~/components/docs/DocGeneratorForm.vue";
 import DocResultViewer from "~/components/docs/DocResultViewer.vue";
 import RepositoryManager from "~/components/docs/RepositoryManager.vue";
+import type { DocGenerationJob } from "~/composables/useDocGenerator";
 
 definePageMeta({
   auth: true,
@@ -24,6 +25,7 @@ const {
   cancelJob,
   removeJob,
   fetchResult,
+  fetchDebugLogs,
   clearCurrent,
 } = useDocGenerator();
 
@@ -79,6 +81,12 @@ async function handleRemove(jobId: string) {
 
 async function handleViewResult(jobId: string) {
   await fetchResult(appId, jobId);
+}
+
+function handleDebugJob(job: DocGenerationJob) {
+  currentJob.value = job;
+  showDebug.value = true;
+  loadDebugLogs();
 }
 
 function handleCloseResult() {
@@ -240,6 +248,86 @@ watch(
     }
   }
 );
+
+// ── Debug panel state ───────────────────────────────────────────
+const showDebug = ref(false);
+const debugLogs = ref<Array<{ id: string; eventType: string; eventData: Record<string, unknown>; createdAt: string }>>([]);
+const debugMeta = ref({ total: 0, limit: 200, offset: 0 });
+const isLoadingDebug = ref(false);
+const debugPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
+
+async function loadDebugLogs() {
+  if (!currentJob.value) return;
+  isLoadingDebug.value = true;
+  try {
+    const res = await fetchDebugLogs(appId, currentJob.value.id, 200, 0);
+    debugLogs.value = res.data;
+    debugMeta.value = res.meta;
+  } catch {
+    // toast handled in composable
+  } finally {
+    isLoadingDebug.value = false;
+  }
+}
+
+function startDebugPolling() {
+  stopDebugPolling();
+  loadDebugLogs();
+  debugPollTimer.value = setInterval(loadDebugLogs, 3000);
+}
+
+function stopDebugPolling() {
+  if (debugPollTimer.value) {
+    clearInterval(debugPollTimer.value);
+    debugPollTimer.value = null;
+  }
+}
+
+watch(showDebug, (v) => {
+  if (v && hasPendingJob.value) {
+    startDebugPolling();
+  } else {
+    stopDebugPolling();
+  }
+});
+
+onBeforeUnmount(() => {
+  stopDebugPolling();
+});
+
+function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unknown> }): string {
+  switch (ev.eventType) {
+    case "session.created":
+      return `Session created: ${ev.eventData.sessionId}`;
+    case "session.idle":
+      return "Session idle (complete)";
+    case "session.error":
+      return `Session error: ${ev.eventData.message}`;
+    case "message.part.updated": {
+      const part = ev.eventData.part as Record<string, unknown> | undefined;
+      if (!part) return "Message part updated";
+      if (part.type === "text" && typeof part.text === "string") {
+        const text = part.text as string;
+        return `Text: ${text.slice(0, 120)}${text.length > 120 ? "…" : ""}`;
+      }
+      if (part.type === "tool" && part.tool) {
+        const state = part.state as Record<string, unknown> | undefined;
+        return `Tool ${part.tool}: ${state?.status ?? "unknown"}`;
+      }
+      if (part.type === "step-finish") {
+        const tokens = part.tokens as Record<string, number> | undefined;
+        return `Step finish · ${tokens?.input ?? 0} in / ${tokens?.output ?? 0} out`;
+      }
+      if (part.type === "reasoning" && typeof part.text === "string") {
+        const text = part.text as string;
+        return `Reasoning: ${text.slice(0, 120)}${text.length > 120 ? "…" : ""}`;
+      }
+      return `Part: ${part.type}`;
+    }
+    default:
+      return ev.eventType;
+  }
+}
 </script>
 
 <template>
@@ -334,6 +422,17 @@ watch(
           </p>
         </div>
 
+        <!-- Debug toggle -->
+        <div class="meta-row" style="padding-top: 8px;">
+          <button
+            class="btn btn-ghost btn-sm preview-toggle"
+            :class="{ active: showDebug }"
+            @click="showDebug = !showDebug"
+          >
+            {{ showDebug ? "Hide" : "Debug" }} session
+          </button>
+        </div>
+
         <!-- Streamed live preview of the document currently being generated -->
         <pre v-if="hasPendingJob && showPreview && previewText" class="preview-pane">{{ previewText }}</pre>
 
@@ -373,6 +472,43 @@ watch(
           >
             <span class="log-ts">{{ entry.ts }}</span>
             <span class="log-text">{{ entry.text }}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── Debug Session Panel ───────────────────────────────────── -->
+      <div v-if="showDebug && currentJob" class="debug-panel">
+        <div class="debug-header">
+          <span class="debug-title">Debug Session</span>
+          <div class="debug-meta">
+            <span v-if="currentJob.opencodeSessionId" class="meta-pill" title="Opencode Session ID">
+              {{ currentJob.opencodeSessionId }}
+            </span>
+            <span class="meta-pill">{{ debugMeta.total }} events</span>
+            <button class="btn btn-ghost btn-sm" @click="loadDebugLogs">
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        <div v-if="isLoadingDebug && debugLogs.length === 0" class="debug-empty">
+          Loading debug events…
+        </div>
+
+        <div v-else-if="debugLogs.length === 0" class="debug-empty">
+          No debug events captured yet.
+        </div>
+
+        <div v-else class="debug-body">
+          <div
+            v-for="log in debugLogs"
+            :key="log.id"
+            class="debug-line"
+            :class="`debug-${log.eventType.replace(/\./g, '-')}`"
+          >
+            <span class="debug-ts">{{ new Date(log.createdAt).toLocaleTimeString('en-US', { hour12: false }) }}</span>
+            <span class="debug-type">{{ log.eventType }}</span>
+            <span class="debug-text">{{ formatDebugEvent(log) }}</span>
           </div>
         </div>
       </div>
@@ -451,6 +587,13 @@ watch(
               @click="handleViewResult(job.id)"
             >
               View Results
+            </button>
+            <button
+              class="btn btn-ghost btn-sm"
+              title="Debug session"
+              @click="handleDebugJob(job)"
+            >
+              Debug
             </button>
             <button
               class="btn btn-ghost btn-sm"
@@ -1018,9 +1161,109 @@ watch(
   background: color-mix(in oklch, var(--fg) 4%, transparent);
 }
 
+.btn-ghost.active {
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+}
+
 .btn-sm {
   padding: 6px 12px;
   font-size: 13px;
+}
+
+/* ── Debug panel ──────────────────────────────────────────────── */
+.debug-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: color-mix(in oklch, var(--fg) 3%, var(--bg));
+}
+
+.debug-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: color-mix(in oklch, var(--fg) 4%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
+.debug-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.debug-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.debug-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.debug-body {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 12px 16px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.debug-line {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px solid color-mix(in oklch, var(--fg) 4%, transparent);
+}
+
+.debug-line:last-child {
+  border-bottom: none;
+}
+
+.debug-ts {
+  color: var(--muted);
+  flex-shrink: 0;
+  font-size: 11px;
+  min-width: 64px;
+}
+
+.debug-type {
+  color: var(--accent);
+  flex-shrink: 0;
+  font-size: 11px;
+  min-width: 140px;
+  font-weight: 500;
+}
+
+.debug-text {
+  color: var(--fg);
+  word-break: break-word;
+  flex: 1;
+}
+
+.debug-session-error .debug-type {
+  color: oklch(55% 0.16 25);
+}
+
+.debug-session-error .debug-text {
+  color: oklch(50% 0.14 25);
+}
+
+.debug-session-idle .debug-type {
+  color: oklch(50% 0.14 145);
 }
 
 /* ── Responsive ───────────────────────────────────────────────── */

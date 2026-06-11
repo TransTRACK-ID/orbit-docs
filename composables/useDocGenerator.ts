@@ -19,6 +19,15 @@ export interface DocGenerationJob {
   lastEventAt?: string | null;
   tokensInput?: number;
   tokensOutput?: number;
+  opencodeSessionId?: string | null;
+}
+
+export interface DebugLogEntry {
+  id: string;
+  jobId: string;
+  eventType: string;
+  eventData: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface DocGenerationRepoResult {
@@ -334,6 +343,27 @@ export const useDocGenerator = () => {
     }
   }
 
+  async function fetchDebugLogs(appId: string, jobId: string, limit = 200, offset = 0) {
+    try {
+      const data = await $fetch<{
+        data: DebugLogEntry[];
+        meta: { total: number; limit: number; offset: number };
+      }>(`/api/apps/${appId}/generate-docs/${jobId}/debug`, {
+        query: { limit: String(limit), offset: String(offset) },
+      });
+      return data;
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load debug logs");
+      }
+      console.error(e);
+      throw e;
+    }
+  }
+
   function disconnectStream() {
     if (eventSource.value) {
       eventSource.value.close();
@@ -361,6 +391,7 @@ export const useDocGenerator = () => {
     fetchResult,
     updateResult,
     fetchResultVersions,
+    fetchDebugLogs,
     disconnectStream,
     clearCurrent,
   };
