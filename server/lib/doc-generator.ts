@@ -13,7 +13,8 @@ import {
   apps,
 } from "~/server/database/schema";
 import { eq, and, desc } from "drizzle-orm";
-import { createOpencodeAgent, type AnalyzeOptions } from "./opencode-agent";
+import { createAgent } from "./agent-factory";
+import type { Agent, AnalyzeOptions } from "./agent-factory";
 import {
   cloneOrPull,
   diffSinceRef,
@@ -259,11 +260,11 @@ function createDebugEventBuffer(jobId: string, flushMs = 2000, maxSize = 100) {
  * the run is automatically aborted when the job is cancelled in the DB.
  */
 async function runAgentAnalyze(
-  agent: ReturnType<typeof createOpencodeAgent>,
+  agent: Agent,
   jobId: string,
   prompt: string,
   workdir: string,
-  opts: { partialField?: "srs" | "fsd" | "sdd"; flushMs?: number } = {}
+  opts: { partialField?: "srs" | "fsd" | "sdd"; flushMs?: number; cursorModel?: string } = {}
 ): Promise<string> {
   const { flushMs = 1500 } = opts;
 
@@ -527,9 +528,10 @@ async function writeSddBack(
 export async function generateProductDocs(
   jobId: string,
   appId: string,
-  onProgress: ProgressCallback
+  onProgress: ProgressCallback,
+  opts: { cursorModel?: string } = {}
 ): Promise<void> {
-  const agent = createOpencodeAgent();
+  const agent = createAgent({ model: opts.cursorModel });
   const baseDir = join(REPO_DIR, appId);
 
   try {
@@ -743,10 +745,11 @@ export async function generateRepoSdd(
   jobId: string,
   repoId: string,
   newTag: string,
-  onProgress: ProgressCallback
+  onProgress: ProgressCallback,
+  opts: { cursorModel?: string } = {}
 ): Promise<void> {
   const db = getDb();
-  const agent = createOpencodeAgent();
+  const agent = createAgent({ model: opts.cursorModel });
 
   try {
     const repoRow = await db

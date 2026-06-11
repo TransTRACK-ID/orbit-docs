@@ -8,14 +8,36 @@ interface Props {
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
-  (e: "generate"): void;
+  (e: "generate", payload?: { cursorModel?: string }): void;
 }>();
 
 const hasRepos = computed(() => (props.repoCount ?? 0) > 0);
 
+// Agent config from public runtime config
+const config = useRuntimeConfig().public;
+const isCursor = computed(() => config.docAgent === "cursor");
+
+// Known Cursor models — kept in sync with the CLI's supported list
+const cursorModels = [
+  { value: "auto", label: "Auto" },
+  { value: "composer-2.5", label: "Composer 2.5" },
+  { value: "opus-4.8", label: "Opus 4.8" },
+  { value: "gpt-5.5", label: "GPT-5.5" },
+  { value: "sonnet-4", label: "Sonnet 4" },
+  { value: "sonnet-4-thinking", label: "Sonnet 4 (Thinking)" },
+  { value: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
+  { value: "grok-4.3", label: "Grok 4.3" },
+];
+
+const selectedModel = ref<string>((config.cursorModel as string) || "auto");
+
 function submit() {
   if (!hasRepos.value) return;
-  emit("generate");
+  if (isCursor.value) {
+    emit("generate", { cursorModel: selectedModel.value });
+  } else {
+    emit("generate");
+  }
 }
 </script>
 
@@ -26,6 +48,23 @@ function submit() {
       System Design Document for each repository (written back via Pull Request
       when an access token is set).
     </p>
+
+    <div v-if="isCursor" class="form-group">
+      <label for="cursor-model">Cursor Model</label>
+      <select
+        id="cursor-model"
+        v-model="selectedModel"
+        class="form-select"
+        :disabled="disabled"
+      >
+        <option v-for="m in cursorModels" :key="m.value" :value="m.value">
+          {{ m.label }}
+        </option>
+      </select>
+      <p class="form-help">
+        Select the model Cursor Agent uses. "Auto" lets Cursor choose.
+      </p>
+    </div>
 
     <p v-if="!hasRepos" class="empty-hint">
       Add at least one repository above before generating.
@@ -97,6 +136,37 @@ function submit() {
 .form-group input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.form-group select {
+  width: 100%;
+  max-width: 280px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font: inherit;
+  font-size: 14px;
+  color: var(--fg);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: pointer;
+}
+
+.form-group select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.form-group select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.form-help {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .input-error {

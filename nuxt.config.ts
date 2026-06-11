@@ -103,6 +103,9 @@ export default defineNuxtConfig({
       mcpHost: process.env.NUXT_PUBLIC_MCP_HOST || 'localhost:41244',
       // Public app URL used to build git webhook URLs (falls back to request host)
       appUrl: process.env.NUXT_PUBLIC_APP_URL || process.env.NUXT_APP_BASE_URL || '',
+      // Active document generation agent (shown in UI)
+      docAgent: process.env.DOC_AGENT || 'opencode',
+      cursorModel: process.env.CURSOR_MODEL || 'auto',
     },
     // Server-only base URL — can be absolute (e.g. http://127.0.0.1:port/api/preview/taskId)
     // so server-side $fetch gets a valid URL instead of crashing on relative paths
@@ -119,6 +122,9 @@ export default defineNuxtConfig({
     mcpHost: process.env.MCP_HOST || process.env.NUXT_PUBLIC_MCP_HOST,
     // Opencode Agent Config (base64-encoded)
     opencodeConfigB64: process.env.OPENCODE_CONFIG_B64,
+    // Document generation agent selection
+    docAgent: process.env.DOC_AGENT || 'opencode',
+    cursorModel: process.env.CURSOR_MODEL || 'auto',
   },
 
   compatibilityDate: "2025-01-31",

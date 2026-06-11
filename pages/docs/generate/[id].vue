@@ -13,6 +13,12 @@ const route = useRoute();
 const appId = route.params.id as string;
 
 const $page = usePageStore();
+
+// Agent configuration from public runtime config
+const publicConfig = useRuntimeConfig().public;
+const activeAgent = computed(() => (publicConfig.docAgent as string) || "opencode");
+const defaultCursorModel = computed(() => (publicConfig.cursorModel as string) || "auto");
+const isCursorActive = computed(() => activeAgent.value === "cursor");
 const {
   jobs,
   currentJob,
@@ -61,10 +67,10 @@ onBeforeUnmount(() => {
 // ── Submitting state shown before API returns ──────────────────
 const isSubmitting = ref(false);
 
-async function handleGenerate() {
+async function handleGenerate(payload?: { cursorModel?: string }) {
   isSubmitting.value = true;
   try {
-    const job = await generateDocs(appId);
+    const job = await generateDocs(appId, payload || {});
     connectToProgressStream(appId, job.id);
   } finally {
     isSubmitting.value = false;
@@ -335,7 +341,16 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
     <!-- Topbar -->
     <header class="topbar">
       <div>
-        <h1>Generate Docs</h1>
+        <div class="topbar-title-row">
+          <h1>Generate Docs</h1>
+          <span
+            class="agent-badge"
+            :class="`agent-badge--${activeAgent}`"
+            :title="`Agent: ${activeAgent}${isCursorActive ? ' · Model: ' + defaultCursorModel : ''}`"
+          >
+            {{ activeAgent }}
+          </span>
+        </div>
         <p v-if="appInfo" class="app-name">{{ appInfo.name }}</p>
       </div>
       <NuxtLink to="/docs/generate" class="btn btn-ghost">
@@ -1264,6 +1279,37 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 
 .debug-session-idle .debug-type {
   color: oklch(50% 0.14 145);
+}
+
+/* ── Agent badge ──────────────────────────────────────────────── */
+.topbar-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.agent-badge--opencode {
+  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
+  color: oklch(55% 0.14 255);
+  border-color: color-mix(in oklch, oklch(60% 0.16 255) 25%, transparent);
+}
+
+.agent-badge--cursor {
+  background: color-mix(in oklch, oklch(60% 0.18 300) 12%, transparent);
+  color: oklch(55% 0.16 300);
+  border-color: color-mix(in oklch, oklch(60% 0.18 300) 25%, transparent);
 }
 
 /* ── Responsive ───────────────────────────────────────────────── */

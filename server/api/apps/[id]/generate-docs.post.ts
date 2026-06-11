@@ -1,4 +1,4 @@
-import { defineEventHandler, createError, getRouterParam } from "h3";
+import { defineEventHandler, createError, getRouterParam, readBody } from "h3";
 import { getDb } from "~/server/database";
 import { docGenerationJobs, apps, appRepositories } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
@@ -65,10 +65,14 @@ export default defineEventHandler(async (event) => {
     .returning()
     .then((rows) => rows[0]);
 
+  // Parse optional cursor model override from the request body
+  const body = await readBody(event).catch(() => ({}));
+  const cursorModel = body?.cursorModel;
+
   // Start generation in background (fire-and-forget)
   generateProductDocs(job.id, appId, async (update) => {
     await updateJobProgress(job.id, update);
-  }).catch((error) => {
+  }, { cursorModel }).catch((error) => {
     console.error(`Doc generation failed for job ${job.id}:`, error);
   });
 

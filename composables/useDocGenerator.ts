@@ -65,6 +65,7 @@ export interface DocGenerationVersion {
 
 export interface DocGenerationPayload {
   repoUrl?: string;
+  cursorModel?: string;
 }
 
 export const useDocGenerator = () => {
