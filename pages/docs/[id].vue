@@ -85,7 +85,7 @@ function generatePDF() {
   setTimeout(() => showToast("PDF ready for download"), 1500);
 }
 
-const previewRef = ref<HTMLDivElement | null>(null);
+const previewRef = ref<{ container: HTMLElement | null } | null>(null);
 
 function removeTag(index: number) {
   editorTags.value.splice(index, 1);
@@ -126,7 +126,7 @@ function scrollToHeading(text: string) {
   activeHeading.value = text;
   let scrolled = false;
   // Scroll in preview pane if visible
-  const preview = previewRef.value;
+  const preview = previewRef.value?.container;
   if (preview) {
     const headings = preview.querySelectorAll("h2, h3");
     for (const h of headings) {
@@ -422,11 +422,11 @@ const lastModified = computed(() => {
                 placeholder="Write your technical documentation..."
                 style="height:100%;"
               />
-              <div
+              <MermaidHtml
                 v-else
                 ref="previewRef"
+                :html="renderedHtml"
                 class="preview-body"
-                v-html="renderedHtml"
               />
             </ClientOnly>
           </div>

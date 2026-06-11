@@ -194,10 +194,10 @@ useSeoMeta({
               </div>
             </template>
             <!-- Article or no categories: raw markdown -->
-            <div
+            <MermaidHtml
               v-else-if="r.summary"
               class="rl-entry-body"
-              v-html="renderMarkdown(r.summary)"
+              :html="renderMarkdown(r.summary)"
             />
             <div v-if="r.type === 'article' && !isEmbed" class="rl-entry-actions">
               <NuxtLink :to="detailLink(r.id)" class="rl-entry-link">Open release page →</NuxtLink>

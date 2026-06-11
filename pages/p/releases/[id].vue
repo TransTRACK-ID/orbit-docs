@@ -155,7 +155,11 @@ async function copyEmbedCode() {
       </header>
 
       <!-- Body: article prose or fallback when no structured categories -->
-      <div v-if="release.summary && (release.type === 'article' || !release.categories)" class="rd-body" v-html="renderMarkdown(release.summary)" />
+      <MermaidHtml
+        v-if="release.summary && (release.type === 'article' || !release.categories)"
+        class="rd-body"
+        :html="renderMarkdown(release.summary)"
+      />
 
       <!-- Features -->
       <section

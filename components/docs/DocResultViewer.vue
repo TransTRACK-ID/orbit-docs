@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { marked } from "marked";
+import { renderMarkdown } from "~/composables/useMarkdown";
 import type { DocGenerationRepoResult } from "~/composables/useDocGenerator";
 
 interface Props {
@@ -13,35 +13,53 @@ interface Props {
 
 const props = defineProps<Props>();
 
+function getContentForTab(key: string): string {
+  if (key === "srs") return props.srs || "";
+  if (key === "fsd") return props.fsd || "";
+  if (key === "git_snapshot") return props.gitSnapshot || "";
+  if (key === "sdd") return props.sdd || "";
+  if (key.startsWith("sdd:")) {
+    const id = key.slice(4);
+    const repo = props.repoResults?.find((r) => r.id === id);
+    return repo?.sdd || "";
+  }
+  return "";
+}
+
+function hasTabContent(key: string): boolean {
+  return getContentForTab(key).trim().length > 0;
+}
+
 const tabs = computed(() => {
-  const base: { key: string; label: string }[] = [];
-  if (props.srs) base.push({ key: "srs", label: "SRS" });
-  if (props.fsd) base.push({ key: "fsd", label: "FSD" });
-  if (props.gitSnapshot) base.push({ key: "git_snapshot", label: "Git Snapshot" });
-  if (props.sdd) base.push({ key: "sdd", label: "SDD Index" });
+  const base: { key: string; label: string }[] = [
+    { key: "srs", label: "SRS" },
+    { key: "fsd", label: "FSD" },
+    { key: "git_snapshot", label: "Git Snapshot" },
+    { key: "sdd", label: "SDD Index" },
+  ];
   if (props.repoResults && props.repoResults.length > 0) {
     for (const r of props.repoResults) {
       const name = r.repoUrl.replace(/\.git$/, "").split("/").pop() || "repo";
       base.push({ key: `sdd:${r.id}`, label: `SDD · ${name}` });
     }
   }
-  if (base.length === 0) {
-    base.push({ key: "srs", label: "SRS" });
-  }
-  return base;
+  return base.filter((tab) => hasTabContent(tab.key));
 });
 
 const activeTab = ref<string>("");
 
 watch(
   tabs,
-  (next) => {
-    if (!next.length) return;
-    if (!next.some((t) => t.key === activeTab.value)) {
-      activeTab.value = next[0].key;
+  (visibleTabs) => {
+    if (visibleTabs.length === 0) {
+      activeTab.value = "";
+      return;
+    }
+    if (!visibleTabs.some((t) => t.key === activeTab.value)) {
+      activeTab.value = visibleTabs[0].key;
     }
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 const activeRepoResult = computed<DocGenerationRepoResult | null>(() => {
@@ -50,13 +68,7 @@ const activeRepoResult = computed<DocGenerationRepoResult | null>(() => {
   return props.repoResults?.find((r) => r.id === id) || null;
 });
 
-const currentContent = computed(() => {
-  if (activeTab.value === "srs") return props.srs || "";
-  if (activeTab.value === "fsd") return props.fsd || "";
-  if (activeTab.value === "git_snapshot") return props.gitSnapshot || "";
-  if (activeTab.value === "sdd") return props.sdd || "";
-  return activeRepoResult.value?.sdd || "";
-});
+const currentContent = computed(() => getContentForTab(activeTab.value));
 
 const currentDocType = computed<"srs" | "fsd" | "sdd" | undefined>(() => {
   if (activeTab.value === "srs") return "srs";
@@ -73,8 +85,9 @@ const downloadFilename = computed(() => {
 });
 
 const renderedContent = computed(() => {
-  const content = currentContent.value || "No content available";
-  return marked.parse(content, { async: false });
+  const content = currentContent.value.trim();
+  if (!content) return "";
+  return renderMarkdown(content);
 });
 
 const isCopied = ref(false);
@@ -129,7 +142,7 @@ async function saveAsDocument() {
 
 <template>
   <div class="result-viewer">
-    <div class="result-tabs">
+    <div v-if="tabs.length > 0" class="result-tabs">
       <button
         v-for="tab in tabs"
         :key="tab.key"
@@ -174,8 +187,11 @@ async function saveAsDocument() {
     </div>
 
     <div class="result-body">
-      <div class="result-content">
-        <div class="markdown-body" v-html="renderedContent" />
+      <div v-if="tabs.length === 0" class="result-empty">
+        No documents with content were generated.
+      </div>
+      <div v-else class="result-content">
+        <MermaidHtml class="markdown-body" :html="renderedContent" />
       </div>
     </div>
   </div>
@@ -278,6 +294,16 @@ async function saveAsDocument() {
   display: flex;
   gap: 0;
   min-height: 400px;
+}
+
+.result-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 48px 24px;
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .result-content {

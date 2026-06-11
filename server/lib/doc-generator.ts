@@ -12,7 +12,7 @@ import {
   appRepositories,
   apps,
 } from "~/server/database/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { createAgent } from "./agent-factory";
 import type { Agent, AnalyzeOptions } from "./agent-factory";
 import {
@@ -22,6 +22,17 @@ import {
   type GitProvider,
 } from "./git-provider";
 import { getDocGenerationSettings } from "./doc-generation-settings";
+import { readExistingDoc } from "./existing-doc";
+import { DEFAULT_DOC_PATHS } from "./doc-paths";
+import {
+  buildPrdCreatePrompt,
+  buildPrdUpdatePrompt,
+  buildFsdCreatePrompt,
+  buildFsdUpdatePrompt,
+  buildSddCreatePrompt,
+  buildSddUpdatePrompt,
+  buildSddDiffUpdatePrompt,
+} from "./doc-prompts";
 
 const execAsync = promisify(exec);
 
@@ -598,66 +609,36 @@ function getRepoName(repoUrl: string): string {
   return parts[parts.length - 1] || "repo";
 }
 
-function buildSddPrompt(
-  template: string,
-  cloneDir: string,
-  repoName: string,
-  repoType: SddRepoType,
-  analysisContext: string,
-  srsExcerpt: string,
-  fsdExcerpt: string,
-  gitContext: string
-): string {
-  const layerLabel =
-    repoType === "backend"
-      ? "Backend API"
-      : repoType === "frontend"
-      ? "Web Frontend"
-      : repoType === "mobile"
-      ? "Mobile App"
-      : "Repository";
-
-  return `You are an expert software architect. You have been given access to a cloned Git repository "${repoName}" (${layerLabel}) at the path: ${cloneDir}
-
-Your task is to deeply analyze this repository using your available tools (read files, run bash commands like find, cat, grep, etc.) and then generate a complete System Design Document (SDD) for THIS repository specifically.
-
-Structural overview:
-${analysisContext}
-
-Git snapshot metadata:
-${gitContext}
-
-Product-level SRS (for reference):
-${srsExcerpt}
-
-Product-level FSD (for reference):
-${fsdExcerpt}
-
-Use the following SDD template structure and fill in ALL sections with real content from this repository's codebase:
-
-${template}
-
-Instructions:
-- Explore the repository thoroughly (architecture, data models, infra files, deployment configs) before writing.
-- Fill in all {{placeholders}} with actual content derived from the codebase.
-- Be thorough, specific, and accurate. Do NOT use placeholder text.
-- Output ONLY the completed SDD markdown document.`;
+function resolveProductDocsRepo(repos: RepoRow[]): RepoRow {
+  if (repos.length === 0) {
+    throw new Error("No repositories configured for this app");
+  }
+  return repos[0];
 }
 
-/** Write SDD back to a repo via a PR/MR when credentials are available. */
-async function writeSddBack(
+function resolveSddDocPath(repo: RepoRow, repoType: SddRepoType): string {
+  const filename = sddFilenameForRepoType(repoType, getRepoName(repo.repoUrl));
+  if (repo.sddDocPath.includes("/")) {
+    return repo.sddDocPath.replace(/[^/]+$/, filename);
+  }
+  return `docs/${filename}`;
+}
+
+/** Write a document back to a repo via a PR/MR when credentials are available. */
+async function writeDocBack(
   repo: RepoRow,
   cloneDir: string,
-  sddContent: string,
+  filePath: string,
+  fileContent: string,
   ref: string | null,
-  filePath?: string
+  docLabel: string
 ): Promise<string | null> {
   if (!repo.accessToken) return null;
 
   const suffix = (ref || Date.now().toString()).replace(/[^a-zA-Z0-9._-]/g, "-");
-  const branchName = `orbit-docs/sdd-update-${suffix}`;
+  const slug = docLabel.toLowerCase().replace(/\s+/g, "-");
+  const branchName = `orbit-docs/${slug}-update-${suffix}`;
   const refLabel = ref ? ` for ${ref}` : "";
-  const targetPath = filePath || repo.sddDocPath;
 
   return await openPullRequest({
     provider: repo.provider,
@@ -666,13 +647,13 @@ async function writeSddBack(
     token: repo.accessToken,
     cloneDir,
     baseBranch: repo.defaultBranch,
-    filePath: targetPath,
-    fileContent: sddContent,
+    filePath,
+    fileContent,
     branchName,
-    commitMessage: `docs: update SDD${refLabel}`,
-    prTitle: `Update System Design Document${refLabel}`,
+    commitMessage: `docs: update ${docLabel}${refLabel}`,
+    prTitle: `Update ${docLabel}${refLabel}`,
     prBody:
-      `This PR updates the System Design Document at \`${targetPath}\`.\n\n` +
+      `This PR updates the ${docLabel} at \`${filePath}\`.\n\n` +
       `Generated automatically by Orbit Docs.`,
   });
 }
@@ -750,35 +731,28 @@ export async function generateProductDocs(
     const aggregateContext = `This product is composed of ${repos.length} repositories. Analyze ALL of them.\n\n${repoSummaries.join("\n\n")}`;
     const gitMetadata = await collectGitMetadata(repos, cloneDirs);
     const gitContext = formatGitMetadataContext(gitMetadata);
+    const productRepo = resolveProductDocsRepo(repos);
+    const productDir = cloneDirs[productRepo.repoUrl];
+    const srsDocPath = DEFAULT_DOC_PATHS.prdDocPath;
+    const fsdDocPath = DEFAULT_DOC_PATHS.fsdDocPath;
 
     let srsContent = "";
     let fsdContent = "";
 
     if (settings.srsEnabled) {
+      const existingSrs = await readExistingDoc(productDir, srsDocPath, "srs");
+      const srsTemplate = await loadTemplate("srs");
       await progressFor(
-        "Generating Software Requirements Specification (SRS)...",
+        existingSrs
+          ? `Updating existing SRS at ${srsDocPath}...`
+          : "Generating Software Requirements Specification (SRS)...",
         "generating_srs"
       );
       if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
-      const srsTemplate = await loadTemplate("srs");
-      const srsPrompt = `You are an expert software architect. You have been given access to multiple cloned Git repositories that together make up a single product. The repositories live under: ${baseDir}
-
-Analyze ALL repositories using your tools (read files, bash: find, cat, grep) and produce a single, product-wide Software Requirements Specification (SRS) that covers the whole product across its repositories.
-
-${aggregateContext}
-
-Git snapshot metadata (use in document header tables):
-${gitContext}
-
-Use the following template structure and fill in ALL sections with real content derived from the codebases:
-
-${srsTemplate}
-
-Instructions:
-- Treat the repositories as one product; describe product-level requirements, not per-repo internals.
-- Fill in all {{placeholders}} with actual content. Do NOT use placeholder text.
-- Output ONLY the completed markdown document.`;
+      const srsPrompt = existingSrs
+        ? buildPrdUpdatePrompt(existingSrs, aggregateContext, baseDir)
+        : buildPrdCreatePrompt(srsTemplate, aggregateContext, baseDir);
 
       srsContent = await runAgentAnalyze(agent, jobId, srsPrompt, baseDir, {
         partialField: "srs",
@@ -788,40 +762,67 @@ Instructions:
     }
 
     if (settings.fsdEnabled) {
+      const existingFsd = await readExistingDoc(productDir, fsdDocPath, "fsd");
+      const fsdTemplate = await loadTemplate("fsd");
       await progressFor(
-        "Generating Functional Specification Document (FSD)...",
+        existingFsd
+          ? `Updating existing FSD at ${fsdDocPath}...`
+          : "Generating Functional Specification Document (FSD)...",
         "generating_fsd"
       );
       if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
-      const fsdTemplate = await loadTemplate("fsd");
-      const fsdPrompt = `You are an expert software architect with access to multiple cloned repositories that form one product under: ${baseDir}
-
-Analyze ALL repositories and produce a single, product-wide Functional Specification Document (FSD) focused on user flows.
-
-${aggregateContext}
-
-Git snapshot metadata:
-${gitContext}
-
-Product SRS (for reference):
-${srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)"}
-
-Use the following template structure and fill in ALL sections with real content:
-
-${fsdTemplate}
-
-Instructions:
-- Focus on cross-repository user workflows, UI behavior, and functional flows at the product level.
-- Include mermaid diagrams for major flows.
-- Fill in all {{placeholders}} with actual content. Do NOT use placeholder text.
-- Output ONLY the completed markdown document.`;
+      const fsdPrompt = existingFsd
+        ? buildFsdUpdatePrompt(
+            existingFsd,
+            aggregateContext,
+            baseDir,
+            srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)"
+          )
+        : buildFsdCreatePrompt(
+            fsdTemplate,
+            aggregateContext,
+            baseDir,
+            srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)"
+          );
 
       fsdContent = await runAgentAnalyze(agent, jobId, fsdPrompt, baseDir, {
         partialField: "fsd",
       });
       await updateJobResult(jobId, "fsd", fsdContent);
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
+    }
+
+    if (productRepo.accessToken && (srsContent || fsdContent)) {
+      await onProgress({
+        status: "writing_back",
+        progressPct: 70,
+        progressMessage: `Opening PR for product docs (${productRepo.name})...`,
+      });
+
+      const productRef = await getRepoRef(productDir);
+
+      if (srsContent) {
+        await writeDocBack(
+          productRepo,
+          productDir,
+          srsDocPath,
+          srsContent,
+          productRef,
+          "Software Requirements Specification"
+        );
+      }
+
+      if (fsdContent) {
+        await writeDocBack(
+          productRepo,
+          productDir,
+          fsdDocPath,
+          fsdContent,
+          productRef,
+          "Functional Specification Document"
+        );
+      }
     }
 
     let gitSnapshotContent = "";
@@ -918,6 +919,7 @@ Instructions:
         const dir = cloneDirs[repo.repoUrl];
         const repoType = detectRepoType(dir);
         const sddTemplate = await loadTemplate(repoType === "generic" ? "backend" : repoType);
+        const sddPath = resolveSddDocPath(repo, repoType);
         const resultId = await createRepoResult(jobId, repo.id, repo.repoUrl);
         await updateRepoResult(resultId, { status: "generating" });
 
@@ -925,17 +927,31 @@ Instructions:
           const structure = await getRepoStructure(dir);
           const keyFiles = await getKeyFileNames(dir);
           const repoContext = `Repository: ${repo.name} (${repo.repoUrl})\nType: ${repoType}\nLocal path: ${dir}\nKey files: ${keyFiles.join(", ") || "none"}\nStructure:\n${structure}`;
+          const srsExcerpt = srsContent
+            ? srsContent.substring(0, 1500)
+            : "(SRS not generated)";
+          const fsdExcerpt = fsdContent
+            ? fsdContent.substring(0, 1500)
+            : "(FSD not generated)";
 
-          const sddPrompt = buildSddPrompt(
-            sddTemplate,
-            dir,
-            repo.name,
-            repoType,
-            repoContext,
-            srsContent ? srsContent.substring(0, 1500) : "(SRS not generated)",
-            fsdContent ? fsdContent.substring(0, 1500) : "(FSD not generated)",
-            gitContext
-          );
+          const existingSdd = await readExistingDoc(dir, sddPath, "sdd");
+          const sddPrompt = existingSdd
+            ? buildSddUpdatePrompt(
+                existingSdd,
+                dir,
+                repo.name,
+                repoContext,
+                srsExcerpt,
+                fsdExcerpt
+              )
+            : buildSddCreatePrompt(
+                sddTemplate,
+                dir,
+                repo.name,
+                repoContext,
+                srsExcerpt,
+                fsdExcerpt
+              );
 
           const sddContent = await runAgentAnalyze(agent, jobId, sddPrompt, dir, {
             partialField: "sdd",
@@ -955,10 +971,14 @@ Instructions:
               progressPct: 92,
               progressMessage: `Opening PR for ${repo.name}...`,
             });
-            const sddPath = repo.sddDocPath.includes("/")
-              ? repo.sddDocPath.replace(/[^/]+$/, sddFilenameForRepoType(repoType, getRepoName(repo.repoUrl)))
-              : `docs/${sddFilenameForRepoType(repoType, getRepoName(repo.repoUrl))}`;
-            prUrl = await writeSddBack(repo, dir, sddContent, ref, sddPath);
+            prUrl = await writeDocBack(
+              repo,
+              dir,
+              sddPath,
+              sddContent,
+              ref,
+              "System Design Document"
+            );
           }
 
           await updateRepoResult(resultId, {
@@ -1070,72 +1090,59 @@ export async function generateRepoSdd(
       newTag
     );
 
-    // Find the most recent prior SDD for this repo to update incrementally
-    const priorResult = await db
-      .select()
-      .from(docGenerationRepoResults)
-      .where(
-        and(
-          eq(docGenerationRepoResults.repoId, repoId),
-          eq(docGenerationRepoResults.status, "completed")
-        )
-      )
-      .orderBy(desc(docGenerationRepoResults.createdAt))
-      .limit(1)
-      .then((rows) => rows[0]);
-
-    const priorSdd = priorResult?.sddContent || null;
     const repoType = detectRepoType(dir);
+    const sddPath = resolveSddDocPath(repo, repoType);
+    const existingSdd = await readExistingDoc(dir, sddPath, "sdd");
     const sddTemplate = await loadTemplate(repoType === "generic" ? "backend" : repoType);
-    const gitContext = `(repo-scoped run — single repo at ${dir})`;
 
     // Step 3: Generate / update SDD
     await onProgress({
       status: "generating_sdd",
       progressPct: 55,
-      progressMessage: "Updating System Design Document...",
+      progressMessage: existingSdd
+        ? `Updating existing SDD at ${sddPath}...`
+        : "Generating System Design Document (first run)...",
     });
 
     let sddContent: string;
-    if (priorSdd && changedFiles.length > 0) {
-      // Token-efficient incremental update: feed only the diff + existing SDD
-      const prompt = `You are an expert software architect maintaining the System Design Document (SDD) for the repository "${repo.name}" located at ${dir}.
-
-A new release "${newTag}" was created. Below is the EXISTING SDD followed by the code changes since the last documented version. Update the SDD so it accurately reflects the changes. Keep sections that are unaffected unchanged. Only read additional files from ${dir} if strictly necessary to understand a change.
-
-Changed files (${changedFiles.length}):
-${changedFiles.slice(0, 100).join("\n")}
-
-Code diff:
-\`\`\`diff
-${patch}
-\`\`\`
-
-EXISTING SDD:
-${priorSdd}
-
-Instructions:
-- Output the COMPLETE updated SDD markdown document (not just the changed parts).
-- Preserve the existing structure and headings.
-- Do NOT use placeholder text.
-- Output ONLY the markdown document.`;
+    if (existingSdd && changedFiles.length > 0) {
+      const prompt = buildSddDiffUpdatePrompt(
+        existingSdd,
+        repo.name,
+        dir,
+        newTag,
+        changedFiles,
+        patch
+      );
+      sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
+        partialField: "sdd",
+      });
+    } else if (existingSdd) {
+      const structure = await getRepoStructure(dir);
+      const keyFiles = await getKeyFileNames(dir);
+      const repoContext = `Repository: ${repo.name} (${repo.repoUrl})\nType: ${repoType}\nLocal path: ${dir}\nKey files: ${keyFiles.join(", ") || "none"}\nStructure:\n${structure}`;
+      const prompt = buildSddUpdatePrompt(
+        existingSdd,
+        dir,
+        repo.name,
+        repoContext,
+        "(not available for repo-scoped run)",
+        "(not available for repo-scoped run)"
+      );
       sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
         partialField: "sdd",
       });
     } else {
-      // No prior SDD or no usable diff — do a full generation
       const structure = await getRepoStructure(dir);
       const keyFiles = await getKeyFileNames(dir);
-      const repoContext = `Repository: ${repo.name} (${repo.repoUrl})\nLocal path: ${dir}\nKey files: ${keyFiles.join(", ") || "none"}\nStructure:\n${structure}`;
-      const prompt = buildSddPrompt(
+      const repoContext = `Repository: ${repo.name} (${repo.repoUrl})\nType: ${repoType}\nLocal path: ${dir}\nKey files: ${keyFiles.join(", ") || "none"}\nStructure:\n${structure}`;
+      const prompt = buildSddCreatePrompt(
         sddTemplate,
         dir,
         repo.name,
-        repoType,
         repoContext,
         "(not available for repo-scoped run)",
-        "(not available for repo-scoped run)",
-        gitContext
+        "(not available for repo-scoped run)"
       );
       sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
         partialField: "sdd",
@@ -1156,7 +1163,14 @@ Instructions:
         progressPct: 85,
         progressMessage: `Opening PR for ${repo.name}...`,
       });
-      prUrl = await writeSddBack(repo, dir, sddContent, newTag);
+      prUrl = await writeDocBack(
+        repo,
+        dir,
+        sddPath,
+        sddContent,
+        newTag,
+        "System Design Document"
+      );
     }
 
     await updateRepoResult(resultId, {

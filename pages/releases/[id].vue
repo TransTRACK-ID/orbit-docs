@@ -337,7 +337,11 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             <!-- Article-only: Summary + Features + Media -->
             <template v-if="release.type === 'article'">
               <!-- Article body (rendered from markdown) -->
-              <div v-if="release.summary" class="article-body" v-html="renderMarkdown(release.summary)" />
+              <MermaidHtml
+                v-if="release.summary"
+                class="article-body"
+                :html="renderMarkdown(release.summary)"
+              />
 
               <!-- Features -->
               <section

@@ -65,6 +65,7 @@
     "jsonwebtoken": "^9.0.3",
     "leaflet": "^1.9.4",
     "marked": "^18.0.4",
+    "mermaid": "^9.4.3",
     "nuxt": "^3.15.4",
     "nuxt3-leaflet": "^1.0.12",
     "pg": "^8.12.0",

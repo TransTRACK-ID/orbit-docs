@@ -160,6 +160,25 @@ body {
   display: none;
 }
 
+/* Mermaid diagram previews in markdown content */
+pre.mermaid,
+.mermaid {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0;
+  padding: 16px;
+  overflow-x: auto;
+  background: color-mix(in oklch, var(--od-fg, var(--fg)) 4%, transparent);
+  border: 1px solid var(--od-border, var(--border));
+  border-radius: var(--od-radius, var(--radius));
+}
+
+pre.mermaid svg,
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* Scope to app root only so vue3-toastify autoClose works */
   #__nuxt *,
