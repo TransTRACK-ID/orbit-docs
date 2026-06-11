@@ -17,18 +17,6 @@ const hasRepos = computed(() => (props.repoCount ?? 0) > 0);
 const config = useRuntimeConfig().public;
 const isCursor = computed(() => config.docAgent === "cursor");
 
-// Known Cursor models — kept in sync with the CLI's supported list
-const cursorModels = [
-  { value: "auto", label: "Auto" },
-  { value: "composer-2.5", label: "Composer 2.5" },
-  { value: "opus-4.8", label: "Opus 4.8" },
-  { value: "gpt-5.5", label: "GPT-5.5" },
-  { value: "sonnet-4", label: "Sonnet 4" },
-  { value: "sonnet-4-thinking", label: "Sonnet 4 (Thinking)" },
-  { value: "gemini-3.1-pro", label: "Gemini 3.1 Pro" },
-  { value: "grok-4.3", label: "Grok 4.3" },
-];
-
 const selectedModel = ref<string>((config.cursorModel as string) || "auto");
 
 function submit() {
@@ -48,23 +36,6 @@ function submit() {
       System Design Document for each repository (written back via Pull Request
       when an access token is set).
     </p>
-
-    <div v-if="isCursor" class="form-group">
-      <label for="cursor-model">Cursor Model</label>
-      <select
-        id="cursor-model"
-        v-model="selectedModel"
-        class="form-select"
-        :disabled="disabled"
-      >
-        <option v-for="m in cursorModels" :key="m.value" :value="m.value">
-          {{ m.label }}
-        </option>
-      </select>
-      <p class="form-help">
-        Select the model Cursor Agent uses. "Auto" lets Cursor choose.
-      </p>
-    </div>
 
     <p v-if="!hasRepos" class="empty-hint">
       Add at least one repository above before generating.
