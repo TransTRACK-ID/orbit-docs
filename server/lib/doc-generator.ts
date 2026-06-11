@@ -22,6 +22,7 @@ import {
   parseRepo,
   type GitProvider,
 } from "./git-provider";
+import { stripGeneratedDocArtifacts } from "./generated-doc";
 
 const execAsync = promisify(exec);
 
@@ -338,7 +339,7 @@ async function runAgentAnalyze(
     dirty = true;
     await flush();
 
-    return result;
+    return stripGeneratedDocArtifacts(result, opts.partialField);
   } finally {
     clearInterval(flushTimer);
     clearInterval(cancelPoll);
