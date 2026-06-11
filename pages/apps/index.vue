@@ -152,7 +152,6 @@ const createForm = reactive({
   description: "",
   owner: "",
   status: "active",
-  repoUrl: "",
 });
 const createNameError = ref(false);
 
@@ -163,7 +162,6 @@ function openCreateModal() {
   createForm.description = "";
   createForm.owner = "";
   createForm.status = "active";
-  createForm.repoUrl = "";
 }
 
 function closeCreateModal() {
@@ -182,7 +180,6 @@ async function submitCreate() {
     description: createForm.description,
     owner: createForm.owner,
     status: createForm.status,
-    repoUrl: createForm.repoUrl,
   });
   closeCreateModal();
 }
@@ -651,12 +648,6 @@ const statusLabel: Record<string, string> = {
                   <option value="maintenance">Maintenance</option>
                 </select>
               </div>
-            </div>
-            <div class="form-group">
-              <label for="appRepo">
-                Repository URL <span class="opt">(optional)</span>
-              </label>
-              <input id="appRepo" v-model="createForm.repoUrl" type="url" placeholder="https://github.com/org/repo" />
             </div>
           </div>
           <div class="modal-foot">
