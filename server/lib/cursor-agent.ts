@@ -90,7 +90,6 @@ export function createCursorAgent(opts: { model?: string } = {}) {
       }
 
       const args = [
-        "-p",
         "--force",
         "--approve-mcps",
         "--output-format", "stream-json",
@@ -118,11 +117,84 @@ export function createCursorAgent(opts: { model?: string } = {}) {
 
         onDebugEvent?.({ type: "cursor.spawn", payload: { args, pid: proc.pid } });
 
-        const stdoutRL = proc.stdout;
         const stderrBuf: string[] = [];
 
         let buffer = "";
-        stdoutRL.on("data", (chunk: Buffer) => {
+        let exitCode: number | null = null;
+        let stdoutEnded = false;
+
+        function processEvent(ev: CursorEvent) {
+          onDebugEvent?.({ type: `cursor.${ev.type}`, payload: ev as Record<string, unknown> });
+
+          // Always check for content fields regardless of event type
+          if (typeof ev.result === "string" && ev.result) {
+            accumulated = ev.result;
+            onText?.("", accumulated);
+          }
+          if (typeof ev.delta === "string" && ev.delta) {
+            accumulated += ev.delta;
+            onText?.(ev.delta, accumulated);
+          }
+          if (typeof ev.message === "string" && ev.message) {
+            accumulated += ev.message;
+            onText?.(ev.message, accumulated);
+          }
+
+          switch (ev.type) {
+            case "start": {
+              chatId = ev.chatId;
+              break;
+            }
+            case "content": {
+              // delta handled above
+              break;
+            }
+            case "tool_use": {
+              const toolName = ev.tool || "tool";
+              const toolArgs = ev.args || {};
+              const argSummary = Object.entries(toolArgs)
+                .map(([k, v]) => `${k}=${String(v).slice(0, 40)}`)
+                .join(", ");
+              onActivity?.(`Tool: ${toolName}(${argSummary})`);
+              break;
+            }
+            case "end":
+            case "complete":
+            case "finished": {
+              // Final result may be in ev.result (handled above)
+              break;
+            }
+            case "error": {
+              const msg = ev.message || ev.error || "Cursor agent error";
+              onDebugEvent?.({ type: "cursor.error", payload: { message: msg } });
+              break;
+            }
+            default: {
+              // Unknown event type — content fields already handled above
+              onDebugEvent?.({ type: "cursor.unhandled", payload: { type: ev.type, keys: Object.keys(ev) } });
+            }
+          }
+        }
+
+        function flushBuffer() {
+          if (!buffer.trim()) return;
+          const lines = buffer.split("\n");
+          buffer = "";
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const ev = JSON.parse(line) as CursorEvent;
+              processEvent(ev);
+            } catch {
+              // Not JSON, treat as plain text delta
+              onDebugEvent?.({ type: "cursor.raw", payload: { line } });
+              accumulated += line + "\n";
+              onText?.(line + "\n", accumulated);
+            }
+          }
+        }
+
+        proc.stdout.on("data", (chunk: Buffer) => {
           buffer += chunk.toString("utf-8");
           const lines = buffer.split("\n");
           buffer = lines.pop() || "";
@@ -130,48 +202,20 @@ export function createCursorAgent(opts: { model?: string } = {}) {
             if (!line.trim()) continue;
             try {
               const ev = JSON.parse(line) as CursorEvent;
-              onDebugEvent?.({ type: `cursor.${ev.type}`, payload: ev as Record<string, unknown> });
-
-              switch (ev.type) {
-                case "start": {
-                  chatId = ev.chatId;
-                  break;
-                }
-                case "content": {
-                  if (typeof ev.delta === "string") {
-                    accumulated += ev.delta;
-                    onText?.(ev.delta, accumulated);
-                  }
-                  break;
-                }
-                case "tool_use": {
-                  const toolName = ev.tool || "tool";
-                  const toolArgs = ev.args || {};
-                  const argSummary = Object.entries(toolArgs)
-                    .map(([k, v]) => `${k}=${String(v).slice(0, 40)}`)
-                    .join(", ");
-                  onActivity?.(`Tool: ${toolName}(${argSummary})`);
-                  break;
-                }
-                case "end": {
-                  // Stream finished naturally
-                  break;
-                }
-                case "error": {
-                  const msg = ev.message || ev.error || "Cursor agent error";
-                  onDebugEvent?.({ type: "cursor.error", payload: { message: msg } });
-                  break;
-                }
-              }
+              processEvent(ev);
             } catch {
               // Not JSON, treat as plain text delta
               onDebugEvent?.({ type: "cursor.raw", payload: { line } });
-              if (line.trim()) {
-                accumulated += line + "\n";
-                onText?.(line + "\n", accumulated);
-              }
+              accumulated += line + "\n";
+              onText?.(line + "\n", accumulated);
             }
           }
+        });
+
+        proc.stdout.on("end", () => {
+          stdoutEnded = true;
+          flushBuffer();
+          checkDone();
         });
 
         proc.stderr.on("data", (chunk: Buffer) => {
@@ -185,20 +229,27 @@ export function createCursorAgent(opts: { model?: string } = {}) {
         });
 
         proc.on("exit", (code) => {
+          exitCode = code;
+          checkDone();
+        });
+
+        function checkDone() {
+          if (exitCode === null || !stdoutEnded) return;
+
           if (signal?.aborted) {
             reject(new Error("Generation cancelled"));
             return;
           }
-          if (code !== 0) {
+          if (exitCode !== 0) {
             const stderr = stderrBuf.join("").trim();
             const hint = stderr.includes("auth")
               ? " (Hint: run 'cursor-agent login' to authenticate)"
               : "";
-            reject(new Error(`Cursor agent exited with code ${code}${hint}. ${stderr.slice(0, 500)}`));
+            reject(new Error(`Cursor agent exited with code ${exitCode}${hint}. ${stderr.slice(0, 500)}`));
           } else {
             resolve(accumulated);
           }
-        });
+        }
 
         if (signal) {
           const onAbort = () => {
