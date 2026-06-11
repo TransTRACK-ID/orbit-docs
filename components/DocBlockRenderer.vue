@@ -29,7 +29,7 @@ const renderBlockMarkdown = (content: string): string => {
   <div class="doc-block">
     <!-- Markdown -->
     <div v-if="block.type === 'markdown'" class="markdown-block">
-      <div v-html="renderBlockMarkdown(typeof block.content === 'string' ? block.content : '')"></div>
+      <MermaidHtml :html="renderBlockMarkdown(typeof block.content === 'string' ? block.content : '')" />
     </div>
 
     <!-- Image -->

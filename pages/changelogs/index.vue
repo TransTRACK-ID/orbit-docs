@@ -901,7 +901,7 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
           <span>Preview</span>
           <span class="meta-label">Rendered from markdown</span>
         </div>
-        <div class="pane-body preview-body" v-html="renderedPreview" />
+        <MermaidHtml class="pane-body preview-body" :html="renderedPreview" />
       </div>
     </div>
 
@@ -997,7 +997,7 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
           </div>
           <div class="release-section">
             <div class="release-section-title">Preview</div>
-            <div class="release-preview-box" v-html="releasePreviewHtml" />
+            <MermaidHtml class="release-preview-box" :html="releasePreviewHtml" />
           </div>
         </div>
         <div class="release-footer">

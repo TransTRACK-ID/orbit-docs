@@ -272,7 +272,11 @@ function itemTarget(item: NavItem): string {
           </span>
         </div>
 
-        <div class="markdown-content" v-html="renderedHtml" @click="handleContentClick" />
+        <MermaidHtml
+          class="markdown-content"
+          :html="renderedHtml"
+          @click="handleContentClick"
+        />
 
         <div class="feedback-bar" id="feedbackBar">
           <span class="feedback-msg">Was this helpful?</span>

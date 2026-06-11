@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { marked } from "marked";
+import { renderMarkdown } from "~/composables/useMarkdown";
 import type { DocGenerationRepoResult } from "~/composables/useDocGenerator";
 
 interface Props {
@@ -80,7 +80,7 @@ const currentDocType = computed<"srs" | "fsd" | "sdd">(() => {
 const renderedContent = computed(() => {
   const content = currentContent.value.trim();
   if (!content) return "";
-  return marked.parse(content, { async: false });
+  return renderMarkdown(content);
 });
 
 const isCopied = ref(false);
@@ -184,7 +184,7 @@ async function saveAsDocument() {
         No documents with content were generated.
       </div>
       <div v-else class="result-content">
-        <div class="markdown-body" v-html="renderedContent" />
+        <MermaidHtml class="markdown-body" :html="renderedContent" />
       </div>
     </div>
   </div>
