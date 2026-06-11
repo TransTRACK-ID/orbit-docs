@@ -155,6 +155,13 @@ export default defineNuxtConfig({
   },
 
   vite: {
+    resolve: {
+      alias: {
+        // Mermaid's mindmap diagram imports cytoscape UMD, which only exposes a
+        // "require" export condition — Vite 7 cannot resolve it during build.
+        "cytoscape/dist/cytoscape.umd.js": "cytoscape/dist/cytoscape.esm.mjs",
+      },
+    },
     server: {
       hmr: {
         protocol: "ws",
