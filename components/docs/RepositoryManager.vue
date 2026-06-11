@@ -208,7 +208,7 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
       <div>
         <h3>Repositories</h3>
         <p class="repo-sub">
-          PRD and FSD are generated across all repositories; SDD is generated per repository.
+          SRS and FSD are generated across all repositories; SDD index, Git Snapshot, and per-repo SDD are generated per configuration in Settings.
         </p>
       </div>
       <button class="btn btn-primary btn-sm" @click="openAdd">+ Add Repository</button>

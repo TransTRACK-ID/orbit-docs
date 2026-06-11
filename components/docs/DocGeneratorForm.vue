@@ -32,9 +32,10 @@ function submit() {
 <template>
   <div class="doc-gen-form">
     <p class="form-hint">
-      Generates a product-level PRD and FSD across all repositories, plus a
-      System Design Document for each repository (written back via Pull Request
-      when an access token is set).
+      Generates product-level SRS, FSD, Git Snapshot, and SDD index across all
+      repositories, plus a layer-specific SDD for each repo (written back via
+      Pull Request when an access token is set). Enable or disable document
+      types in Settings → Document Generation.
     </p>
 
     <p v-if="!hasRepos" class="empty-hint">

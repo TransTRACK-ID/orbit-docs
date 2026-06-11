@@ -48,6 +48,17 @@ export interface NotificationSettings {
   updatedAt: string | null;
 }
 
+export interface DocGenerationSettings {
+  id: string;
+  srsEnabled: boolean;
+  fsdEnabled: boolean;
+  gitSnapshotEnabled: boolean;
+  sddIndexEnabled: boolean;
+  sddPerRepoEnabled: boolean;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface ApiKeys {
   id: string;
   productionKey: string;
@@ -89,4 +100,12 @@ export interface UpdateNotificationsPayload {
   releaseAlerts?: boolean;
   docComments?: boolean;
   slackNotifications?: boolean;
+}
+
+export interface UpdateDocGenerationPayload {
+  srsEnabled?: boolean;
+  fsdEnabled?: boolean;
+  gitSnapshotEnabled?: boolean;
+  sddIndexEnabled?: boolean;
+  sddPerRepoEnabled?: boolean;
 }

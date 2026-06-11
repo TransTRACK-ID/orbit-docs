@@ -155,6 +155,8 @@ const statusClass: Record<string, string> = {
   analyzing: "pill-blue",
   generating_srs: "pill-accent",
   generating_fsd: "pill-accent",
+  generating_git_snapshot: "pill-accent",
+  generating_sdd_index: "pill-accent",
   generating_sdd: "pill-accent",
   writing_back: "pill-accent",
   completed: "pill-green",
@@ -165,8 +167,10 @@ const statusClass: Record<string, string> = {
 const statusLabel: Record<string, string> = {
   cloning: "Cloning",
   analyzing: "Analyzing",
-  generating_srs: "Generating PRD",
+  generating_srs: "Generating SRS",
   generating_fsd: "Generating FSD",
+  generating_git_snapshot: "Git Snapshot",
+  generating_sdd_index: "SDD Index",
   generating_sdd: "Generating SDD",
   writing_back: "Writing back",
   completed: "Done",
@@ -178,8 +182,10 @@ const statusLabel: Record<string, string> = {
 const statusFull: Record<string, string> = {
   cloning: "Cloning repositories…",
   analyzing: "Analyzing codebases…",
-  generating_srs: "Writing Product Requirements Document…",
+  generating_srs: "Writing Software Requirements Specification…",
   generating_fsd: "Writing Functional Specification Document…",
+  generating_git_snapshot: "Writing Git Snapshot reference…",
+  generating_sdd_index: "Writing SDD index document…",
   generating_sdd: "Writing System Design Documents…",
   writing_back: "Opening pull requests…",
   completed: "All documents generated!",
@@ -600,6 +606,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
       <DocResultViewer
         :srs="currentResult.srs"
         :fsd="currentResult.fsd"
+        :git-snapshot="currentResult.gitSnapshot"
         :sdd="currentResult.sdd"
         :repo-results="currentResult.repoResults"
         :app-id="appId"

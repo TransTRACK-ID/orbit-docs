@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event);
-  const { srs, fsd, sdd } = body;
+  const { srs, fsd, sdd, gitSnapshot } = body;
 
   // Update the job content
   await db
@@ -42,6 +42,7 @@ export default defineEventHandler(async (event) => {
     .set({
       srsContent: srs ?? job.srsContent,
       fsdContent: fsd ?? job.fsdContent,
+      gitSnapshotContent: gitSnapshot ?? job.gitSnapshotContent,
       sddContent: sdd ?? job.sddContent,
     })
     .where(eq(docGenerationJobs.id, jobId));
@@ -65,6 +66,15 @@ export default defineEventHandler(async (event) => {
       jobId,
       docType: "fsd",
       content: fsd,
+      actor,
+      createdAt: now,
+    });
+  }
+  if (gitSnapshot !== undefined && gitSnapshot !== job.gitSnapshotContent) {
+    await db.insert(docGenerationVersions).values({
+      jobId,
+      docType: "git_snapshot",
+      content: gitSnapshot,
       actor,
       createdAt: now,
     });

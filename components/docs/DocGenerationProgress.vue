@@ -14,7 +14,10 @@ const statusLabel = computed(() => {
     analyzing: "Analyzing Codebase",
     generating_srs: "Generating SRS",
     generating_fsd: "Generating FSD",
+    generating_git_snapshot: "Generating Git Snapshot",
+    generating_sdd_index: "Generating SDD Index",
     generating_sdd: "Generating SDD",
+    writing_back: "Writing Back to Repository",
     completed: "Completed",
     failed: "Failed",
   };

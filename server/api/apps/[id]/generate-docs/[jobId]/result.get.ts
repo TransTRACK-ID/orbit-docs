@@ -76,6 +76,7 @@ export default defineEventHandler(async (event) => {
       status: job.status,
       srs: latestVersions.srs?.content ?? job.srsContent,
       fsd: latestVersions.fsd?.content ?? job.fsdContent,
+      gitSnapshot: latestVersions.git_snapshot?.content ?? job.gitSnapshotContent,
       sdd: latestVersions.sdd?.content ?? job.sddContent,
       completedAt: job.completedAt,
       repoResults: repoResults.map((r) => ({

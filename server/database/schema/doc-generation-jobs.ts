@@ -30,6 +30,8 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
       "analyzing",
       "generating_srs",
       "generating_fsd",
+      "generating_git_snapshot",
+      "generating_sdd_index",
       "generating_sdd",
       "writing_back",
       "completed",
@@ -55,6 +57,7 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   opencodeSessionId: text("opencode_session_id"),
   srsContent: text("srs_content"),
   fsdContent: text("fsd_content"),
+  gitSnapshotContent: text("git_snapshot_content"),
   sddContent: text("sdd_content"),
   errorMessage: text("error_message"),
   repoRef: text("repo_ref"),
@@ -99,7 +102,9 @@ export const docGenerationVersions = pgTable("doc_generation_versions", {
   jobId: text("job_id")
     .notNull()
     .references(() => docGenerationJobs.id, { onDelete: "cascade" }),
-  docType: text("doc_type", { enum: ["srs", "fsd", "sdd"] }).notNull(),
+  docType: text("doc_type", {
+    enum: ["srs", "fsd", "git_snapshot", "sdd", "sdd_index"],
+  }).notNull(),
   content: text("content").default(""),
   actor: text("actor"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),

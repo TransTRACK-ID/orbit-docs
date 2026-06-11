@@ -5,6 +5,7 @@ import type { DocGenerationRepoResult } from "~/composables/useDocGenerator";
 interface Props {
   srs: string | null;
   fsd: string | null;
+  gitSnapshot?: string | null;
   sdd: string | null;
   appId?: string;
   repoResults?: DocGenerationRepoResult[];
@@ -12,25 +13,36 @@ interface Props {
 
 const props = defineProps<Props>();
 
-// Tab keys: "srs" (shown as PRD), "fsd", and one per repo SDD ("sdd:<id>"),
-// or a single "sdd" tab when there are no per-repo results.
 const tabs = computed(() => {
-  const base = [
-    { key: "srs", label: "PRD" },
-    { key: "fsd", label: "FSD" },
-  ];
+  const base: { key: string; label: string }[] = [];
+  if (props.srs) base.push({ key: "srs", label: "SRS" });
+  if (props.fsd) base.push({ key: "fsd", label: "FSD" });
+  if (props.gitSnapshot) base.push({ key: "git_snapshot", label: "Git Snapshot" });
+  if (props.sdd) base.push({ key: "sdd", label: "SDD Index" });
   if (props.repoResults && props.repoResults.length > 0) {
     for (const r of props.repoResults) {
       const name = r.repoUrl.replace(/\.git$/, "").split("/").pop() || "repo";
       base.push({ key: `sdd:${r.id}`, label: `SDD · ${name}` });
     }
-  } else {
-    base.push({ key: "sdd", label: "SDD" });
+  }
+  if (base.length === 0) {
+    base.push({ key: "srs", label: "SRS" });
   }
   return base;
 });
 
-const activeTab = ref<string>("srs");
+const activeTab = ref<string>("");
+
+watch(
+  tabs,
+  (next) => {
+    if (!next.length) return;
+    if (!next.some((t) => t.key === activeTab.value)) {
+      activeTab.value = next[0].key;
+    }
+  },
+  { immediate: true }
+);
 
 const activeRepoResult = computed<DocGenerationRepoResult | null>(() => {
   if (!activeTab.value.startsWith("sdd:")) return null;
@@ -41,14 +53,23 @@ const activeRepoResult = computed<DocGenerationRepoResult | null>(() => {
 const currentContent = computed(() => {
   if (activeTab.value === "srs") return props.srs || "";
   if (activeTab.value === "fsd") return props.fsd || "";
+  if (activeTab.value === "git_snapshot") return props.gitSnapshot || "";
   if (activeTab.value === "sdd") return props.sdd || "";
   return activeRepoResult.value?.sdd || "";
 });
 
-const currentDocType = computed<"srs" | "fsd" | "sdd">(() => {
+const currentDocType = computed<"srs" | "fsd" | "sdd" | undefined>(() => {
   if (activeTab.value === "srs") return "srs";
   if (activeTab.value === "fsd") return "fsd";
-  return "sdd";
+  if (activeTab.value === "sdd" || activeTab.value.startsWith("sdd:")) return "sdd";
+  return undefined;
+});
+
+const downloadFilename = computed(() => {
+  if (activeTab.value === "git_snapshot") return "GIT-SNAPSHOT.md";
+  if (activeTab.value === "sdd") return "SDD.md";
+  if (currentDocType.value) return `${currentDocType.value.toUpperCase()}.md`;
+  return "document.md";
 });
 
 const renderedContent = computed(() => {
@@ -73,7 +94,7 @@ function downloadContent() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${currentDocType.value.toUpperCase()}.md`;
+  a.download = downloadFilename.value;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -95,7 +116,7 @@ async function saveAsDocument() {
       content: currentContent.value,
       status: "draft",
       source: "generated",
-      docType: currentDocType.value,
+      ...(currentDocType.value ? { docType: currentDocType.value } : {}),
     });
     await navigateTo(`/docs/${doc.id}`);
   } catch {

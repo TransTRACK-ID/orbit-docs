@@ -9,6 +9,8 @@ import type {
   UpdateWorkspacePayload,
   UpdateIntegrationsPayload,
   UpdateNotificationsPayload,
+  UpdateDocGenerationPayload,
+  DocGenerationSettings,
 } from "~/types/settings";
 
 export const useSettings = () => {
@@ -18,6 +20,7 @@ export const useSettings = () => {
   const pendingInvitations = ref<TeamMember[]>([]);
   const integrations = ref<IntegrationSettings | null>(null);
   const notifications = ref<NotificationSettings | null>(null);
+  const docGeneration = ref<DocGenerationSettings | null>(null);
   const apiKeys = ref<ApiKeys | null>(null);
 
   const isLoadingWorkspace = ref(false);
@@ -25,6 +28,7 @@ export const useSettings = () => {
   const isLoadingCurrentMember = ref(false);
   const isLoadingIntegrations = ref(false);
   const isLoadingNotifications = ref(false);
+  const isLoadingDocGeneration = ref(false);
   const isLoadingApiKeys = ref(false);
   const isSaving = ref(false);
   const isInviting = ref(false);
@@ -295,6 +299,45 @@ export const useSettings = () => {
     }
   }
 
+  async function fetchDocGeneration() {
+    isLoadingDocGeneration.value = true;
+    try {
+      const data = await $fetch<{ data: DocGenerationSettings }>("/api/settings/doc-generation");
+      docGeneration.value = data.data;
+    } catch (e: any) {
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error("Failed to load document generation settings");
+      }
+      console.error(e);
+    } finally {
+      isLoadingDocGeneration.value = false;
+    }
+  }
+
+  async function updateDocGeneration(payload: UpdateDocGenerationPayload) {
+    try {
+      const data = await $fetch<{ data: DocGenerationSettings }>("/api/settings/doc-generation", {
+        method: "PUT",
+        body: payload,
+      });
+      docGeneration.value = data.data;
+      toast.success("Document generation settings saved");
+      return data.data;
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to save document generation settings";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
+      throw e;
+    }
+  }
+
   async function fetchApiKeys() {
     isLoadingApiKeys.value = true;
     try {
@@ -345,12 +388,14 @@ export const useSettings = () => {
     pendingInvitations,
     integrations,
     notifications,
+    docGeneration,
     apiKeys,
     isLoadingWorkspace,
     isLoadingTeam,
     isLoadingCurrentMember,
     isLoadingIntegrations,
     isLoadingNotifications,
+    isLoadingDocGeneration,
     isLoadingApiKeys,
     isSaving,
     isInviting,
@@ -369,6 +414,8 @@ export const useSettings = () => {
     updateIntegrations,
     fetchNotifications,
     updateNotifications,
+    fetchDocGeneration,
+    updateDocGeneration,
     fetchApiKeys,
     regenerateApiKeys,
   };

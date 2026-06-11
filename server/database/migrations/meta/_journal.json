@@ -134,6 +134,13 @@
       "when": 1781097851992,
       "tag": "0018_bizarre_lightspeed",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1781175951716,
+      "tag": "0019_tough_dragon_lord",
+      "breakpoints": true
     }
   ]
 }

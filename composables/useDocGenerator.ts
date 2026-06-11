@@ -49,6 +49,7 @@ export interface DocGenerationResult {
   status: string;
   srs: string | null;
   fsd: string | null;
+  gitSnapshot: string | null;
   sdd: string | null;
   completedAt: string | null;
   repoResults?: DocGenerationRepoResult[];
@@ -57,7 +58,7 @@ export interface DocGenerationResult {
 
 export interface DocGenerationVersion {
   id: string;
-  docType: "srs" | "fsd" | "sdd";
+  docType: "srs" | "fsd" | "git_snapshot" | "sdd" | "sdd_index";
   content: string | null;
   actor: string | null;
   createdAt: string | null;
@@ -301,7 +302,7 @@ export const useDocGenerator = () => {
   async function updateResult(
     appId: string,
     jobId: string,
-    payload: { srs?: string; fsd?: string; sdd?: string }
+    payload: { srs?: string; fsd?: string; sdd?: string; gitSnapshot?: string }
   ) {
     try {
       const data = await $fetch<{ data: { success: boolean; message: string; jobId: string } }>(

@@ -19,9 +19,9 @@ import {
   cloneOrPull,
   diffSinceRef,
   openPullRequest,
-  parseRepo,
   type GitProvider,
 } from "./git-provider";
+import { getDocGenerationSettings } from "./doc-generation-settings";
 
 const execAsync = promisify(exec);
 
@@ -34,12 +34,15 @@ async function ensureDir(dir: string): Promise<void> {
   }
 }
 
-export type DocType = "srs" | "fsd" | "sdd";
+export type DocType = "srs" | "fsd" | "git_snapshot" | "sdd" | "sdd_index";
+export type SddRepoType = "backend" | "frontend" | "mobile" | "generic";
 export type GenerationStatus =
   | "cloning"
   | "analyzing"
   | "generating_srs"
   | "generating_fsd"
+  | "generating_git_snapshot"
+  | "generating_sdd_index"
   | "generating_sdd"
   | "writing_back"
   | "completed"
@@ -54,9 +57,144 @@ interface ProgressUpdate {
 
 type ProgressCallback = (update: ProgressUpdate) => void | Promise<void>;
 
-async function loadTemplate(type: DocType): Promise<string> {
-  const templatePath = join(process.cwd(), "templates", `${type}_template.md`);
+async function loadTemplate(type: DocType | SddRepoType): Promise<string> {
+  const file =
+    type === "backend"
+      ? "sdd_backend_template.md"
+      : type === "frontend"
+      ? "sdd_frontend_template.md"
+      : type === "mobile"
+      ? "sdd_mobile_template.md"
+      : type === "git_snapshot"
+      ? "git_snapshot_template.md"
+      : type === "sdd_index"
+      ? "sdd_template.md"
+      : `${type}_template.md`;
+  const templatePath = join(process.cwd(), "templates", file);
   return readFile(templatePath, "utf-8");
+}
+
+function detectRepoType(repoDir: string): SddRepoType {
+  if (existsSync(join(repoDir, "pubspec.yaml"))) return "mobile";
+  if (
+    existsSync(join(repoDir, "nuxt.config.ts")) ||
+    existsSync(join(repoDir, "vite.config.ts")) ||
+    existsSync(join(repoDir, "next.config.js")) ||
+    existsSync(join(repoDir, "next.config.mjs"))
+  ) {
+    return "frontend";
+  }
+  if (
+    existsSync(join(repoDir, "go.mod")) ||
+    existsSync(join(repoDir, "main.go")) ||
+    existsSync(join(repoDir, "Cargo.toml"))
+  ) {
+    return "backend";
+  }
+  return "generic";
+}
+
+function sddFilenameForRepoType(repoType: SddRepoType, repoName: string): string {
+  if (repoType === "backend") return "SDD-Backend.md";
+  if (repoType === "frontend") return "SDD-Frontend.md";
+  if (repoType === "mobile") return "SDD-Mobile.md";
+  return `SDD-${repoName}.md`;
+}
+
+interface GitRepoMetadata {
+  dirName: string;
+  repoUrl: string;
+  remoteUrl: string;
+  branch: string;
+  tag: string | null;
+  shortSha: string;
+  fullSha: string;
+  commitDate: string;
+  subject: string;
+}
+
+async function collectGitMetadata(
+  repos: RepoRow[],
+  cloneDirs: Record<string, string>
+): Promise<GitRepoMetadata[]> {
+  const results: GitRepoMetadata[] = [];
+  for (const repo of repos) {
+    const dir = cloneDirs[repo.repoUrl];
+    const dirName = getRepoName(repo.repoUrl);
+    let remoteUrl = repo.repoUrl;
+    let branch = repo.defaultBranch;
+    let tag: string | null = null;
+    let shortSha = "";
+    let fullSha = "";
+    let commitDate = "";
+    let subject = "";
+
+    try {
+      const { stdout: remoteOut } = await execAsync(
+        `git -C "${dir}" remote get-url origin`,
+        { timeout: 10000 }
+      );
+      remoteUrl = remoteOut.trim() || repo.repoUrl;
+    } catch {
+      // keep repoUrl
+    }
+
+    try {
+      const { stdout: branchOut } = await execAsync(
+        `git -C "${dir}" rev-parse --abbrev-ref HEAD`,
+        { timeout: 10000 }
+      );
+      branch = branchOut.trim() || repo.defaultBranch;
+    } catch {
+      // keep default
+    }
+
+    try {
+      const { stdout: tagOut } = await execAsync(
+        `git -C "${dir}" describe --tags --abbrev=0`,
+        { timeout: 10000 }
+      );
+      tag = tagOut.trim() || null;
+    } catch {
+      tag = null;
+    }
+
+    try {
+      const { stdout: logOut } = await execAsync(
+        `git -C "${dir}" log -1 --format='%h|%H|%ci|%s'`,
+        { timeout: 10000 }
+      );
+      const [short, full, date, ...rest] = logOut.trim().split("|");
+      shortSha = short || "";
+      fullSha = full || "";
+      commitDate = date || "";
+      subject = rest.join("|") || "";
+    } catch {
+      // leave empty
+    }
+
+    results.push({
+      dirName,
+      repoUrl: repo.repoUrl,
+      remoteUrl,
+      branch,
+      tag,
+      shortSha,
+      fullSha,
+      commitDate,
+      subject,
+    });
+  }
+  return results;
+}
+
+function formatGitMetadataContext(metadata: GitRepoMetadata[]): string {
+  return metadata
+    .map(
+      (m) =>
+        `- ${m.dirName}/: remote=${m.remoteUrl}, branch=${m.branch}, tag=${m.tag || "—"}, commit=${m.shortSha} (${m.fullSha}), date=${m.commitDate}, message=${m.subject}`
+    )
+    .join("\n");
 }
 
 async function getRepoStructure(repoDir: string): Promise<string> {
@@ -140,6 +278,8 @@ async function updateJobResult(
       ? { srsContent: content }
       : type === "fsd"
       ? { fsdContent: content }
+      : type === "git_snapshot"
+      ? { gitSnapshotContent: content }
       : { sddContent: content };
   await db
     .update(docGenerationJobs)
@@ -264,7 +404,7 @@ async function runAgentAnalyze(
   jobId: string,
   prompt: string,
   workdir: string,
-  opts: { partialField?: "srs" | "fsd" | "sdd"; flushMs?: number; cursorModel?: string } = {}
+  opts: { partialField?: DocType; flushMs?: number; cursorModel?: string } = {}
 ): Promise<string> {
   const { flushMs = 1500 } = opts;
 
@@ -462,19 +602,33 @@ function buildSddPrompt(
   template: string,
   cloneDir: string,
   repoName: string,
+  repoType: SddRepoType,
   analysisContext: string,
-  prdExcerpt: string,
-  fsdExcerpt: string
+  srsExcerpt: string,
+  fsdExcerpt: string,
+  gitContext: string
 ): string {
-  return `You are an expert software architect. You have been given access to a cloned Git repository "${repoName}" at the path: ${cloneDir}
+  const layerLabel =
+    repoType === "backend"
+      ? "Backend API"
+      : repoType === "frontend"
+      ? "Web Frontend"
+      : repoType === "mobile"
+      ? "Mobile App"
+      : "Repository";
+
+  return `You are an expert software architect. You have been given access to a cloned Git repository "${repoName}" (${layerLabel}) at the path: ${cloneDir}
 
 Your task is to deeply analyze this repository using your available tools (read files, run bash commands like find, cat, grep, etc.) and then generate a complete System Design Document (SDD) for THIS repository specifically.
 
 Structural overview:
 ${analysisContext}
 
-Product-level PRD (for reference):
-${prdExcerpt}
+Git snapshot metadata:
+${gitContext}
+
+Product-level SRS (for reference):
+${srsExcerpt}
 
 Product-level FSD (for reference):
 ${fsdExcerpt}
@@ -495,13 +649,15 @@ async function writeSddBack(
   repo: RepoRow,
   cloneDir: string,
   sddContent: string,
-  ref: string | null
+  ref: string | null,
+  filePath?: string
 ): Promise<string | null> {
   if (!repo.accessToken) return null;
 
   const suffix = (ref || Date.now().toString()).replace(/[^a-zA-Z0-9._-]/g, "-");
   const branchName = `orbit-docs/sdd-update-${suffix}`;
   const refLabel = ref ? ` for ${ref}` : "";
+  const targetPath = filePath || repo.sddDocPath;
 
   return await openPullRequest({
     provider: repo.provider,
@@ -510,20 +666,20 @@ async function writeSddBack(
     token: repo.accessToken,
     cloneDir,
     baseBranch: repo.defaultBranch,
-    filePath: repo.sddDocPath,
+    filePath: targetPath,
     fileContent: sddContent,
     branchName,
     commitMessage: `docs: update SDD${refLabel}`,
     prTitle: `Update System Design Document${refLabel}`,
     prBody:
-      `This PR updates the System Design Document at \`${repo.sddDocPath}\`.\n\n` +
+      `This PR updates the System Design Document at \`${targetPath}\`.\n\n` +
       `Generated automatically by Orbit Docs.`,
   });
 }
 
 /**
- * Product-scoped run: PRD + FSD aggregated across all of the app's
- * repositories, then a per-repository SDD that is written back via PR.
+ * Product-scoped run: SRS + FSD + GIT-SNAPSHOT + SDD index aggregated across
+ * all repositories, then per-repository SDD docs written back via PR.
  */
 export async function generateProductDocs(
   jobId: string,
@@ -533,6 +689,19 @@ export async function generateProductDocs(
 ): Promise<void> {
   const agent = createAgent({ model: opts.cursorModel });
   const baseDir = join(REPO_DIR, appId);
+  const settings = await getDocGenerationSettings();
+
+  const enabledSteps = [
+    settings.srsEnabled,
+    settings.fsdEnabled,
+    settings.gitSnapshotEnabled,
+    settings.sddIndexEnabled,
+    settings.sddPerRepoEnabled,
+  ].filter(Boolean).length;
+
+  if (enabledSteps === 0) {
+    throw new Error("All document types are disabled in Settings → Document Generation");
+  }
 
   try {
     const repos = await loadAppRepos(appId);
@@ -540,7 +709,13 @@ export async function generateProductDocs(
       throw new Error("No repositories configured for this app");
     }
 
-    // Step 1: Clone/pull every repo
+    let stepIndex = 0;
+    const progressFor = (message: string, status: GenerationStatus) => {
+      stepIndex += 1;
+      const pct = Math.min(95, Math.round((stepIndex / (enabledSteps + 2)) * 100));
+      return onProgress({ status, progressPct: pct, progressMessage: message });
+    };
+
     await onProgress({
       status: "cloning",
       progressPct: 5,
@@ -556,10 +731,9 @@ export async function generateProductDocs(
       cloneDirs[repo.repoUrl] = dir;
     }
 
-    // Step 2: Analyze (build aggregate context)
     await onProgress({
       status: "analyzing",
-      progressPct: 20,
+      progressPct: 15,
       progressMessage: "Analyzing repositories...",
     });
     if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
@@ -574,144 +748,241 @@ export async function generateProductDocs(
       );
     }
     const aggregateContext = `This product is composed of ${repos.length} repositories. Analyze ALL of them.\n\n${repoSummaries.join("\n\n")}`;
+    const gitMetadata = await collectGitMetadata(repos, cloneDirs);
+    const gitContext = formatGitMetadataContext(gitMetadata);
 
-    // Step 3: PRD (stored internally as srs)
-    await onProgress({
-      status: "generating_srs",
-      progressPct: 40,
-      progressMessage: "Generating Product Requirements Document...",
-    });
-    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+    let srsContent = "";
+    let fsdContent = "";
 
-    const prdTemplate = await loadTemplate("srs");
-    const prdPrompt = `You are an expert software architect. You have been given access to multiple cloned Git repositories that together make up a single product. The repositories live under: ${baseDir}
+    if (settings.srsEnabled) {
+      await progressFor(
+        "Generating Software Requirements Specification (SRS)...",
+        "generating_srs"
+      );
+      if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
-Analyze ALL repositories using your tools (read files, bash: find, cat, grep) and produce a single, product-wide Product Requirements Document (PRD) that covers the whole product across its repositories.
+      const srsTemplate = await loadTemplate("srs");
+      const srsPrompt = `You are an expert software architect. You have been given access to multiple cloned Git repositories that together make up a single product. The repositories live under: ${baseDir}
+
+Analyze ALL repositories using your tools (read files, bash: find, cat, grep) and produce a single, product-wide Software Requirements Specification (SRS) that covers the whole product across its repositories.
 
 ${aggregateContext}
 
+Git snapshot metadata (use in document header tables):
+${gitContext}
+
 Use the following template structure and fill in ALL sections with real content derived from the codebases:
 
-${prdTemplate}
+${srsTemplate}
 
 Instructions:
 - Treat the repositories as one product; describe product-level requirements, not per-repo internals.
 - Fill in all {{placeholders}} with actual content. Do NOT use placeholder text.
 - Output ONLY the completed markdown document.`;
 
-    const prdContent = await runAgentAnalyze(agent, jobId, prdPrompt, baseDir, {
-      partialField: "srs",
-    });
-    await updateJobResult(jobId, "srs", prdContent);
-    // Clear the live partial buffer now that the PRD is final.
-    await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
+      srsContent = await runAgentAnalyze(agent, jobId, srsPrompt, baseDir, {
+        partialField: "srs",
+      });
+      await updateJobResult(jobId, "srs", srsContent);
+      await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
+    }
 
-    // Step 4: FSD (product-level)
-    await onProgress({
-      status: "generating_fsd",
-      progressPct: 60,
-      progressMessage: "Generating Functional Specification Document...",
-    });
-    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+    if (settings.fsdEnabled) {
+      await progressFor(
+        "Generating Functional Specification Document (FSD)...",
+        "generating_fsd"
+      );
+      if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
-    const fsdTemplate = await loadTemplate("fsd");
-    const fsdPrompt = `You are an expert software architect with access to multiple cloned repositories that form one product under: ${baseDir}
+      const fsdTemplate = await loadTemplate("fsd");
+      const fsdPrompt = `You are an expert software architect with access to multiple cloned repositories that form one product under: ${baseDir}
 
-Analyze ALL repositories and produce a single, product-wide Functional Specification Document (FSD).
+Analyze ALL repositories and produce a single, product-wide Functional Specification Document (FSD) focused on user flows.
 
 ${aggregateContext}
 
-Product PRD (for reference):
-${prdContent.substring(0, 2000)}
+Git snapshot metadata:
+${gitContext}
+
+Product SRS (for reference):
+${srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)"}
 
 Use the following template structure and fill in ALL sections with real content:
 
 ${fsdTemplate}
 
 Instructions:
-- Focus on cross-repository user workflows, UI behavior, and functional requirements at the product level.
+- Focus on cross-repository user workflows, UI behavior, and functional flows at the product level.
+- Include mermaid diagrams for major flows.
 - Fill in all {{placeholders}} with actual content. Do NOT use placeholder text.
 - Output ONLY the completed markdown document.`;
 
-    const fsdContent = await runAgentAnalyze(agent, jobId, fsdPrompt, baseDir, {
-      partialField: "fsd",
-    });
-    await updateJobResult(jobId, "fsd", fsdContent);
-    await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
-
-    // Step 5: Per-repo SDD + write-back
-    await onProgress({
-      status: "generating_sdd",
-      progressPct: 75,
-      progressMessage: "Generating System Design Documents per repository...",
-    });
-
-    const sddTemplate = await loadTemplate("sdd");
-    let lastSdd = "";
-    for (const repo of repos) {
-      if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
-
-      const dir = cloneDirs[repo.repoUrl];
-      const resultId = await createRepoResult(jobId, repo.id, repo.repoUrl);
-      await updateRepoResult(resultId, { status: "generating" });
-
-      try {
-        const structure = await getRepoStructure(dir);
-        const keyFiles = await getKeyFileNames(dir);
-        const repoContext = `Repository: ${repo.name} (${repo.repoUrl})\nLocal path: ${dir}\nKey files: ${keyFiles.join(", ") || "none"}\nStructure:\n${structure}`;
-
-        const sddPrompt = buildSddPrompt(
-          sddTemplate,
-          dir,
-          repo.name,
-          repoContext,
-          prdContent.substring(0, 1500),
-          fsdContent.substring(0, 1500)
-        );
-
-        const sddContent = await runAgentAnalyze(agent, jobId, sddPrompt, dir, {
-          partialField: "sdd",
-        });
-        lastSdd = sddContent;
-        const ref = await getRepoRef(dir);
-        await updateRepoResult(resultId, {
-          sddContent,
-          repoRef: ref || undefined,
-          status: "writing_back",
-        });
-
-        // Write back to the repo via PR (only when a token is configured)
-        let prUrl: string | null = null;
-        if (repo.accessToken) {
-          await onProgress({
-            status: "writing_back",
-            progressPct: 90,
-            progressMessage: `Opening PR for ${repo.name}...`,
-          });
-          prUrl = await writeSddBack(repo, dir, sddContent, ref);
-        }
-
-        await updateRepoResult(resultId, {
-          status: "completed",
-          prUrl: prUrl || undefined,
-        });
-
-        if (repo.id && ref) {
-          await updateRepoLastProcessedRef(repo.id, ref);
-        }
-      } catch (repoErr) {
-        const msg =
-          repoErr instanceof Error ? repoErr.message : "SDD generation failed";
-        await updateRepoResult(resultId, {
-          status: "failed",
-          errorMessage: msg,
-        });
-        // Continue with the other repositories
-      }
+      fsdContent = await runAgentAnalyze(agent, jobId, fsdPrompt, baseDir, {
+        partialField: "fsd",
+      });
+      await updateJobResult(jobId, "fsd", fsdContent);
+      await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
     }
 
-    // Keep a copy of the last SDD on the job for backward compatibility
-    if (lastSdd) await updateJobResult(jobId, "sdd", lastSdd);
+    let gitSnapshotContent = "";
+    if (settings.gitSnapshotEnabled) {
+      await progressFor("Generating Git Snapshot reference...", "generating_git_snapshot");
+      if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+
+      const gitTemplate = await loadTemplate("git_snapshot");
+      const gitPrompt = `You are documenting a multi-repository product. Repositories are cloned under: ${baseDir}
+
+Using git metadata collected below AND your tools to verify against each repo if needed, produce a GIT-SNAPSHOT.md reference document.
+
+Collected git metadata:
+${gitContext}
+
+Per-repository details:
+${gitMetadata
+  .map(
+    (m) =>
+      `- ${m.dirName}: path=${join(baseDir, m.dirName)}, remote=${m.remoteUrl}, branch=${m.branch}, tag=${m.tag || "none"}, short=${m.shortSha}, full=${m.fullSha}, date=${m.commitDate}, subject=${m.subject}`
+  )
+  .join("\n")}
+
+Template:
+${gitTemplate}
+
+Instructions:
+- Fill the snapshot table with accurate commit data for each repository.
+- Map each SDD document filename to its codebase.
+- Output ONLY the completed markdown document.`;
+
+      gitSnapshotContent = await runAgentAnalyze(agent, jobId, gitPrompt, baseDir, {
+        partialField: "git_snapshot",
+      });
+      await updateJobResult(jobId, "git_snapshot", gitSnapshotContent);
+      await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
+    }
+
+    let sddIndexContent = "";
+    if (settings.sddIndexEnabled) {
+      await progressFor("Generating SDD index document...", "generating_sdd_index");
+      if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+
+      const sddIndexTemplate = await loadTemplate("sdd_index");
+      const repoIndexLines = repos
+        .map((repo) => {
+          const dir = cloneDirs[repo.repoUrl];
+          const repoType = detectRepoType(dir);
+          const filename = sddFilenameForRepoType(repoType, getRepoName(repo.repoUrl));
+          return `- ${repo.name} (${repoType}): ${filename}`;
+        })
+        .join("\n");
+
+      const sddIndexPrompt = `You are an expert software architect documenting a multi-repository product under: ${baseDir}
+
+Produce a product-wide SDD INDEX document (SDD.md) that links to per-repository SDD files.
+
+${aggregateContext}
+
+Git snapshot:
+${gitSnapshotContent ? gitSnapshotContent.substring(0, 1500) : gitContext}
+
+Per-repository SDD files to link:
+${repoIndexLines}
+
+SRS excerpt:
+${srsContent ? srsContent.substring(0, 1200) : "(not available)"}
+
+Template:
+${sddIndexTemplate}
+
+Instructions:
+- SDD.md is an index only — detailed design lives in per-repo SDD files.
+- Fill in all {{placeholders}} with actual content.
+- Output ONLY the completed markdown document.`;
+
+      sddIndexContent = await runAgentAnalyze(agent, jobId, sddIndexPrompt, baseDir, {
+        partialField: "sdd_index",
+      });
+      await updateJobResult(jobId, "sdd", sddIndexContent);
+      await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
+    }
+
+    if (settings.sddPerRepoEnabled) {
+      await progressFor(
+        "Generating System Design Documents per repository...",
+        "generating_sdd"
+      );
+
+      let lastSdd = sddIndexContent;
+      for (const repo of repos) {
+        if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+
+        const dir = cloneDirs[repo.repoUrl];
+        const repoType = detectRepoType(dir);
+        const sddTemplate = await loadTemplate(repoType === "generic" ? "backend" : repoType);
+        const resultId = await createRepoResult(jobId, repo.id, repo.repoUrl);
+        await updateRepoResult(resultId, { status: "generating" });
+
+        try {
+          const structure = await getRepoStructure(dir);
+          const keyFiles = await getKeyFileNames(dir);
+          const repoContext = `Repository: ${repo.name} (${repo.repoUrl})\nType: ${repoType}\nLocal path: ${dir}\nKey files: ${keyFiles.join(", ") || "none"}\nStructure:\n${structure}`;
+
+          const sddPrompt = buildSddPrompt(
+            sddTemplate,
+            dir,
+            repo.name,
+            repoType,
+            repoContext,
+            srsContent ? srsContent.substring(0, 1500) : "(SRS not generated)",
+            fsdContent ? fsdContent.substring(0, 1500) : "(FSD not generated)",
+            gitContext
+          );
+
+          const sddContent = await runAgentAnalyze(agent, jobId, sddPrompt, dir, {
+            partialField: "sdd",
+          });
+          lastSdd = sddContent;
+          const ref = await getRepoRef(dir);
+          await updateRepoResult(resultId, {
+            sddContent,
+            repoRef: ref || undefined,
+            status: "writing_back",
+          });
+
+          let prUrl: string | null = null;
+          if (repo.accessToken) {
+            await onProgress({
+              status: "writing_back",
+              progressPct: 92,
+              progressMessage: `Opening PR for ${repo.name}...`,
+            });
+            const sddPath = repo.sddDocPath.includes("/")
+              ? repo.sddDocPath.replace(/[^/]+$/, sddFilenameForRepoType(repoType, getRepoName(repo.repoUrl)))
+              : `docs/${sddFilenameForRepoType(repoType, getRepoName(repo.repoUrl))}`;
+            prUrl = await writeSddBack(repo, dir, sddContent, ref, sddPath);
+          }
+
+          await updateRepoResult(resultId, {
+            status: "completed",
+            prUrl: prUrl || undefined,
+          });
+
+          if (repo.id && ref) {
+            await updateRepoLastProcessedRef(repo.id, ref);
+          }
+        } catch (repoErr) {
+          const msg =
+            repoErr instanceof Error ? repoErr.message : "SDD generation failed";
+          await updateRepoResult(resultId, {
+            status: "failed",
+            errorMessage: msg,
+          });
+        }
+      }
+
+      if (lastSdd && !sddIndexContent) {
+        await updateJobResult(jobId, "sdd", lastSdd);
+      }
+    }
 
     if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
     await updateJobCompletion(jobId, true);
@@ -814,7 +1085,9 @@ export async function generateRepoSdd(
       .then((rows) => rows[0]);
 
     const priorSdd = priorResult?.sddContent || null;
-    const sddTemplate = await loadTemplate("sdd");
+    const repoType = detectRepoType(dir);
+    const sddTemplate = await loadTemplate(repoType === "generic" ? "backend" : repoType);
+    const gitContext = `(repo-scoped run — single repo at ${dir})`;
 
     // Step 3: Generate / update SDD
     await onProgress({
@@ -858,9 +1131,11 @@ Instructions:
         sddTemplate,
         dir,
         repo.name,
+        repoType,
         repoContext,
         "(not available for repo-scoped run)",
-        "(not available for repo-scoped run)"
+        "(not available for repo-scoped run)",
+        gitContext
       );
       sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
         partialField: "sdd",

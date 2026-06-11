@@ -6,6 +6,7 @@ import type {
   TeamRole,
   UpdateIntegrationsPayload,
   UpdateNotificationsPayload,
+  UpdateDocGenerationPayload,
 } from "~/types/settings";
 import type { SsoProvider, SsoProviderType } from "~/types/sso";
 import { SSO_PROVIDER_METADATA } from "~/types/sso";
@@ -26,12 +27,12 @@ const {
   pendingInvitations,
   integrations,
   notifications,
-  apiKeys,
+  docGeneration,
   isLoadingWorkspace,
   isLoadingTeam,
   isLoadingIntegrations,
   isLoadingNotifications,
-  isLoadingApiKeys,
+  isLoadingDocGeneration,
   isSaving,
   isInviting,
   isAccepting,
@@ -48,6 +49,8 @@ const {
   updateIntegrations,
   fetchNotifications,
   updateNotifications,
+  fetchDocGeneration,
+  updateDocGeneration,
   fetchApiKeys,
   regenerateApiKeys,
 } = useSettings();
@@ -98,6 +101,7 @@ onMounted(() => {
   fetchPendingInvitations();
   fetchIntegrations();
   fetchNotifications();
+  fetchDocGeneration();
   fetchApiKeys();
   fetchMcpConfig();
   fetchSsoConfig();
@@ -350,6 +354,13 @@ async function toggleNotification(key: keyof UpdateNotificationsPayload) {
   const payload: UpdateNotificationsPayload = {};
   payload[key] = !notifications.value[key];
   await updateNotifications(payload);
+}
+
+async function toggleDocGeneration(key: keyof UpdateDocGenerationPayload) {
+  if (!docGeneration.value) return;
+  const payload: UpdateDocGenerationPayload = {};
+  payload[key] = !docGeneration.value[key];
+  await updateDocGeneration(payload);
 }
 
 // ─── API keys ─────────────────────────────────────────────────────
@@ -728,6 +739,86 @@ function getCallbackUrl(provider: SsoProvider): string {
                   <span v-if="isSaving">Saving…</span>
                   <span v-else>Save Changes</span>
                 </button>
+              </div>
+            </template>
+          </div>
+
+          <div class="setting-section">
+            <h3>Document Generation</h3>
+            <p class="desc">
+              Choose which document types are generated when you run Generate Docs for an app.
+            </p>
+
+            <div v-if="isLoadingDocGeneration" class="skeleton-wrap">
+              <div class="skeleton-line w-full" />
+              <div class="skeleton-line w-full" />
+              <div class="skeleton-line w-full" />
+            </div>
+
+            <template v-else-if="docGeneration">
+              <div class="toggle" style="margin-bottom: 16px;">
+                <button
+                  class="toggle-switch"
+                  :class="{ on: docGeneration.srsEnabled }"
+                  aria-label="Toggle SRS generation"
+                  @click="toggleDocGeneration('srsEnabled')"
+                />
+                <div>
+                  <div class="toggle-label">SRS — Software Requirements Specification</div>
+                  <div class="toggle-desc">Product-wide requirements, scope, and NFRs</div>
+                </div>
+              </div>
+
+              <div class="toggle" style="margin-bottom: 16px;">
+                <button
+                  class="toggle-switch"
+                  :class="{ on: docGeneration.fsdEnabled }"
+                  aria-label="Toggle FSD generation"
+                  @click="toggleDocGeneration('fsdEnabled')"
+                />
+                <div>
+                  <div class="toggle-label">FSD — Functional Specification Document</div>
+                  <div class="toggle-desc">User flows and functional behavior across the product</div>
+                </div>
+              </div>
+
+              <div class="toggle" style="margin-bottom: 16px;">
+                <button
+                  class="toggle-switch"
+                  :class="{ on: docGeneration.gitSnapshotEnabled }"
+                  aria-label="Toggle Git Snapshot generation"
+                  @click="toggleDocGeneration('gitSnapshotEnabled')"
+                />
+                <div>
+                  <div class="toggle-label">Git Snapshot</div>
+                  <div class="toggle-desc">Commit references per repository for doc traceability</div>
+                </div>
+              </div>
+
+              <div class="toggle" style="margin-bottom: 16px;">
+                <button
+                  class="toggle-switch"
+                  :class="{ on: docGeneration.sddIndexEnabled }"
+                  aria-label="Toggle SDD index generation"
+                  @click="toggleDocGeneration('sddIndexEnabled')"
+                />
+                <div>
+                  <div class="toggle-label">SDD Index</div>
+                  <div class="toggle-desc">Product-level SDD.md linking to per-repo design docs</div>
+                </div>
+              </div>
+
+              <div class="toggle">
+                <button
+                  class="toggle-switch"
+                  :class="{ on: docGeneration.sddPerRepoEnabled }"
+                  aria-label="Toggle per-repository SDD generation"
+                  @click="toggleDocGeneration('sddPerRepoEnabled')"
+                />
+                <div>
+                  <div class="toggle-label">Per-Repository SDD</div>
+                  <div class="toggle-desc">Backend, frontend, or mobile SDD for each linked repo</div>
+                </div>
               </div>
             </template>
           </div>

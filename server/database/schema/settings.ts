@@ -60,6 +60,17 @@ export const notificationSettings = pgTable("notification_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
+export const docGenerationSettings = pgTable("doc_generation_settings", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  srsEnabled: boolean("srs_enabled").notNull().default(true),
+  fsdEnabled: boolean("fsd_enabled").notNull().default(true),
+  gitSnapshotEnabled: boolean("git_snapshot_enabled").notNull().default(true),
+  sddIndexEnabled: boolean("sdd_index_enabled").notNull().default(true),
+  sddPerRepoEnabled: boolean("sdd_per_repo_enabled").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export const apiKeys = pgTable("api_keys", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   productionKey: text("production_key").notNull().default("od_live_" + generatePlaceholder()),

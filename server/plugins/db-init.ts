@@ -169,6 +169,19 @@ export default defineNitroPlugin(async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_generation_settings (
+      id TEXT PRIMARY KEY,
+      srs_enabled BOOLEAN NOT NULL DEFAULT true,
+      fsd_enabled BOOLEAN NOT NULL DEFAULT true,
+      git_snapshot_enabled BOOLEAN NOT NULL DEFAULT true,
+      sdd_index_enabled BOOLEAN NOT NULL DEFAULT true,
+      sdd_per_repo_enabled BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS api_keys (
       id TEXT PRIMARY KEY,
       production_key TEXT NOT NULL DEFAULT 'od_live_••••••••••••••••••••••••',
@@ -220,6 +233,7 @@ export default defineNitroPlugin(async () => {
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'product'`);
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS trigger TEXT NOT NULL DEFAULT 'manual'`);
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS repo_id TEXT`);
+  await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS git_snapshot_content TEXT`);
 
   // app_repositories table (multiple repositories per app)
   await pool.query(`
