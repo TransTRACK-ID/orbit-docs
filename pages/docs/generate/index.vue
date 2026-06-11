@@ -90,11 +90,6 @@ const statusLabel: Record<string, string> = {
           {{ app.description }}
         </div>
 
-        <div class="app-card-repo">
-          <span v-if="app.repoUrl" class="repo-url">{{ app.repoUrl }}</span>
-          <span v-else class="no-repo">No repository configured</span>
-        </div>
-
         <div class="app-card-foot">
           <NuxtLink
             :to="`/docs/generate/${app.id}`"
@@ -201,21 +196,6 @@ const statusLabel: Record<string, string> = {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.app-card-repo {
-  font-size: 12px;
-  font-family: var(--font-mono);
-}
-
-.repo-url {
-  color: var(--muted);
-  word-break: break-all;
-}
-
-.no-repo {
-  color: var(--muted);
-  font-style: italic;
 }
 
 .app-card-foot {
