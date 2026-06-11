@@ -752,7 +752,11 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             </div>
           </div>
         </template>
-        <div v-else-if="activeReleaseDetail?.summary" class="detail-changelog-content" v-html="renderMarkdown(activeReleaseDetail.summary)" />
+        <MermaidHtml
+          v-else-if="activeReleaseDetail?.summary"
+          class="detail-changelog-content"
+          :html="renderMarkdown(activeReleaseDetail.summary)"
+        />
         <div v-else class="detail-empty">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>

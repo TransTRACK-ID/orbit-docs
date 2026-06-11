@@ -106,6 +106,15 @@ describe("renderMarkdown", () => {
     expect(html).toContain("<iframe");
     expect(html).toContain("https://player.vimeo.com/video/123456789");
   });
+
+  it("should render mermaid code blocks for client-side diagram rendering", () => {
+    const md = "```mermaid\ngraph TD\n  A --> B\n```";
+    const html = renderMarkdown(md);
+    expect(html).toContain('<pre class="mermaid">');
+    expect(html).toContain("graph TD");
+    expect(html).toContain("A --&gt; B");
+    expect(html).not.toContain("<code>");
+  });
 });
 
 describe("extractHeadings", () => {

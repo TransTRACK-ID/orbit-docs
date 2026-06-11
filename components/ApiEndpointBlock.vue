@@ -109,10 +109,10 @@ const responseStatusClass = (statusCode: string): string => {
     <!-- Name + Notes -->
     <div class="endpoint-section">
       <h3 class="endpoint-name">{{ endpoint.name }}</h3>
-      <div
+      <MermaidHtml
         v-if="endpoint.notes"
         class="endpoint-notes"
-        v-html="renderMarkdown(endpoint.notes)"
+        :html="renderMarkdown(endpoint.notes)"
       />
     </div>
 

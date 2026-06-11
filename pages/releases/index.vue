@@ -234,10 +234,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             </div>
           </template>
           <!-- Article or no categories: raw markdown -->
-          <div
+          <MermaidHtml
             v-else
             class="release-summary"
-            v-html="renderMarkdown(r.summary || r.heroTitle || '')"
+            :html="renderMarkdown(r.summary || r.heroTitle || '')"
           />
           <div class="release-meta-row">
             <span class="release-app">{{ r.appName }}</span>

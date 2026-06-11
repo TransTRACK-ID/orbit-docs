@@ -20,6 +20,17 @@ export function renderMarkdown(md: string): string {
       }
       return `<h${depth}>${text}</h${depth}>`;
     };
+    // Mermaid diagrams render client-side via useMermaid
+    renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
+      if (lang === "mermaid") {
+        return `<pre class="mermaid">${escapeHtml(text)}</pre>\n`;
+      }
+      const escaped = escapeHtml(text);
+      if (lang) {
+        return `<pre><code class="language-${escapeHtml(lang)}">${escaped}</code></pre>\n`;
+      }
+      return `<pre><code>${escaped}</code></pre>\n`;
+    };
     // Override image renderer to support YouTube and Vimeo embeds
     renderer.image = (href: string, title: string | null, text: string) => {
       // YouTube embed
@@ -41,6 +52,7 @@ export function renderMarkdown(md: string): string {
   const lines = md.split("\n");
   const out: string[] = [];
   let inCodeBlock = false;
+  let codeLang = "";
   let codeBuffer: string[] = [];
   let inTable = false;
   let tableHead: string[] = [];
@@ -53,8 +65,13 @@ export function renderMarkdown(md: string): string {
   function flushCode() {
     if (codeBuffer.length) {
       const code = escapeHtml(codeBuffer.join("\n"));
-      out.push(`<pre><code>${code}</code></pre>`);
+      if (codeLang === "mermaid") {
+        out.push(`<pre class="mermaid">${code}</pre>`);
+      } else {
+        out.push(`<pre><code>${code}</code></pre>`);
+      }
       codeBuffer = [];
+      codeLang = "";
     }
   }
 
@@ -101,8 +118,10 @@ export function renderMarkdown(md: string): string {
       if (inCodeBlock) {
         flushCode();
         inCodeBlock = false;
+        codeLang = "";
       } else {
         flushList();
+        codeLang = line.slice(3).trim();
         inCodeBlock = true;
       }
       continue;
