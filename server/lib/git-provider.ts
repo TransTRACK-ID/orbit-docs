@@ -146,6 +146,28 @@ function authenticatedUrl(
   return `https://${userInfo}@${host}/${path}`;
 }
 
+/** Check out a remote tracking branch (expects origin to exist). */
+export async function checkoutBranch(
+  cloneDir: string,
+  branch: string
+): Promise<void> {
+  const safeBranch = branch.replace(/"/g, "");
+  await execGit(
+    `git -C "${cloneDir}" fetch origin "${safeBranch}"`,
+    { timeout: 120000 }
+  );
+  try {
+    await execGit(
+      `git -C "${cloneDir}" checkout -B "${safeBranch}" "origin/${safeBranch}"`,
+      { timeout: 60000 }
+    );
+  } catch {
+    await execGit(`git -C "${cloneDir}" checkout "${safeBranch}"`, {
+      timeout: 60000,
+    });
+  }
+}
+
 /** Clone (shallow when fresh) or pull an existing repository with auth. */
 export async function cloneOrPull(
   repoUrl: string,
@@ -153,10 +175,12 @@ export async function cloneOrPull(
   provider: GitProvider,
   token?: string | null,
   fullHistory = false,
-  hostUrl?: string | null
+  hostUrl?: string | null,
+  branch?: string | null
 ): Promise<void> {
   const { existsSync } = await import("fs");
   const authUrl = authenticatedUrl(repoUrl, provider, token, hostUrl);
+  const safeBranch = branch?.trim().replace(/"/g, "") || null;
 
   if (existsSync(join(cloneDir, ".git"))) {
     // Make sure tags are fetched (needed for diffing between tags)
@@ -167,17 +191,22 @@ export async function cloneOrPull(
     await execGit(`git -C "${cloneDir}" fetch --all --tags --prune`, {
       timeout: 180000,
     });
+    if (safeBranch) {
+      await checkoutBranch(cloneDir, safeBranch);
+    }
     // Best-effort fast-forward of the current branch
     await execGit(`git -C "${cloneDir}" pull --ff-only`, {
       timeout: 180000,
     }).catch(() => {});
   } else {
     await mkdir(dirname(cloneDir), { recursive: true }).catch(() => {});
-    const depthFlag = fullHistory ? "" : "--depth 1";
-    const { stderr } = await execGit(
-      `git clone ${depthFlag} "${authUrl}" "${cloneDir}"`,
-      { timeout: 300000 }
-    );
+    const cloneArgs = ["git", "clone"];
+    if (!fullHistory) cloneArgs.push("--depth", "1");
+    if (safeBranch) cloneArgs.push("--branch", safeBranch);
+    cloneArgs.push(`"${authUrl}"`, `"${cloneDir}"`);
+    const { stderr } = await execGit(cloneArgs.join(" "), {
+      timeout: 300000,
+    });
     if (stderr && /fatal:/i.test(stderr)) {
       throw new Error(`Git clone failed: ${stderr}`);
     }

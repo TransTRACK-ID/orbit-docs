@@ -708,7 +708,15 @@ export async function generateProductDocs(
     const cloneDirs: Record<string, string> = {};
     for (const repo of repos) {
       const dir = join(baseDir, getRepoName(repo.repoUrl));
-      await cloneOrPull(repo.repoUrl, dir, repo.provider, repo.accessToken, false, repo.hostUrl);
+      await cloneOrPull(
+        repo.repoUrl,
+        dir,
+        repo.provider,
+        repo.accessToken,
+        false,
+        repo.hostUrl,
+        repo.defaultBranch
+      );
       cloneDirs[repo.repoUrl] = dir;
     }
 
@@ -1074,7 +1082,15 @@ export async function generateRepoSdd(
       progressMessage: `Updating ${repo.name}...`,
     });
     await ensureDir(join(REPO_DIR, repoRow.appId));
-    await cloneOrPull(repo.repoUrl, dir, repo.provider, repo.accessToken, true, repo.hostUrl);
+    await cloneOrPull(
+      repo.repoUrl,
+      dir,
+      repo.provider,
+      repo.accessToken,
+      true,
+      repo.hostUrl,
+      repo.defaultBranch
+    );
 
     // Step 2: Compute diff since the last processed ref
     await onProgress({
