@@ -294,6 +294,20 @@ export default defineNitroPlugin(async () => {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_feedback (
+      id TEXT PRIMARY KEY,
+      doc_id TEXT NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
+      app_id TEXT REFERENCES apps(id) ON DELETE SET NULL,
+      helpful BOOLEAN NOT NULL,
+      comment TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      visitor_id TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
   // Remove legacy columns from an older schema so the table aligns
   // with the current Drizzle schema (which only uses `password`)
   await pool.query(`ALTER TABLE users DROP COLUMN IF EXISTS password_hash`);

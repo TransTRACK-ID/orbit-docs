@@ -10,12 +10,18 @@ definePageMeta({
 
 const route = useRoute();
 const { fetchPublishedDoc } = usePublishedDocs();
+const { submitDocFeedback, checkDocFeedbackStatus, isSubmitting, getFeedbackVisitorId } =
+  useFeedback();
 
 const docId = computed(() => route.params.id as string);
 const doc = ref<PublishedDocDetail | null>(null);
 const isLoading = ref(true);
 const error = ref("");
 const feedbackGiven = ref(false);
+const feedbackHelpful = ref<boolean | null>(null);
+const showCommentForm = ref(false);
+const feedbackComment = ref("");
+const visitorId = ref("");
 
 const toastMsg = ref("");
 const toastVisible = ref(false);
@@ -76,6 +82,14 @@ onMounted(async () => {
   try {
     const data = await fetchPublishedDoc(docId.value);
     doc.value = data;
+    visitorId.value = getFeedbackVisitorId();
+    if (visitorId.value) {
+      const status = await checkDocFeedbackStatus(docId.value, visitorId.value);
+      if (status.submitted && status.feedback) {
+        feedbackGiven.value = true;
+        feedbackHelpful.value = status.feedback.helpful;
+      }
+    }
     nextTick(() => {
       setupScrollSpy();
       if (route.hash) {
@@ -162,15 +176,43 @@ function copyCode(btn: HTMLButtonElement) {
     .catch(() => showToast("Copy failed"));
 }
 
-function voteFeedback(btn: HTMLButtonElement, positive: boolean) {
-  if (feedbackGiven.value) return;
-  feedbackGiven.value = true;
-  const bar = document.getElementById("feedbackBar");
-  if (!bar) return;
-  const buttons = bar.querySelectorAll<HTMLButtonElement>(".btn");
-  buttons.forEach((b) => b.classList.remove("voted"));
-  btn.classList.add("voted");
-  showToast(positive ? "Thanks for the feedback!" : "We will improve this section");
+async function voteFeedback(positive: boolean) {
+  if (feedbackGiven.value || isSubmitting.value) return;
+
+  if (!positive) {
+    showCommentForm.value = true;
+    return;
+  }
+
+  await submitFeedback(true);
+}
+
+async function submitFeedback(positive: boolean, comment?: string) {
+  if (feedbackGiven.value || isSubmitting.value) return;
+
+  try {
+    await submitDocFeedback(docId.value, {
+      helpful: positive,
+      comment: comment || undefined,
+      visitorId: visitorId.value || getFeedbackVisitorId(),
+    });
+    feedbackGiven.value = true;
+    feedbackHelpful.value = positive;
+    showCommentForm.value = false;
+    feedbackComment.value = "";
+    showToast(positive ? "Thanks for the feedback!" : "We will improve this section");
+  } catch {
+    showToast("Failed to submit feedback");
+  }
+}
+
+async function submitNegativeFeedback() {
+  await submitFeedback(false, feedbackComment.value.trim() || undefined);
+}
+
+function cancelCommentForm() {
+  showCommentForm.value = false;
+  feedbackComment.value = "";
 }
 
 function handleContentClick(e: MouseEvent) {
@@ -278,14 +320,41 @@ function itemTarget(item: NavItem): string {
           @click="handleContentClick"
         />
 
-        <div class="feedback-bar" id="feedbackBar">
-          <span class="feedback-msg">Was this helpful?</span>
-          <button type="button" class="btn" @click="voteFeedback($event.currentTarget as HTMLButtonElement, true)">
-            Yes
-          </button>
-          <button type="button" class="btn" @click="voteFeedback($event.currentTarget as HTMLButtonElement, false)">
-            No
-          </button>
+        <div class="feedback-bar" :class="{ 'feedback-bar-expanded': showCommentForm }" id="feedbackBar">
+          <template v-if="feedbackGiven">
+            <span class="feedback-msg">
+              {{ feedbackHelpful ? "Thanks for your feedback!" : "Thanks — we'll work on improving this." }}
+            </span>
+          </template>
+          <template v-else-if="showCommentForm">
+            <div class="feedback-comment-form">
+              <span class="feedback-msg">What could we improve?</span>
+              <textarea
+                v-model="feedbackComment"
+                class="feedback-textarea"
+                rows="3"
+                placeholder="Tell us what was missing or unclear (optional)"
+                maxlength="2000"
+              />
+              <div class="feedback-comment-actions">
+                <button type="button" class="btn" :disabled="isSubmitting" @click="cancelCommentForm">
+                  Cancel
+                </button>
+                <button type="button" class="btn btn-accent" :disabled="isSubmitting" @click="submitNegativeFeedback">
+                  {{ isSubmitting ? "Sending…" : "Submit" }}
+                </button>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <span class="feedback-msg">Was this helpful?</span>
+            <button type="button" class="btn" :disabled="isSubmitting" @click="voteFeedback(true)">
+              Yes
+            </button>
+            <button type="button" class="btn" :disabled="isSubmitting" @click="voteFeedback(false)">
+              No
+            </button>
+          </template>
         </div>
       </article>
     </main>
@@ -760,6 +829,10 @@ h3 {
   border-top: 1px solid var(--border);
   align-items: center;
 }
+.feedback-bar.feedback-bar-expanded {
+  flex-direction: column;
+  align-items: stretch;
+}
 .feedback-bar .feedback-msg {
   font-size: 13px;
   color: var(--muted);
@@ -789,6 +862,49 @@ h3 {
   background: var(--accent-soft);
   color: var(--accent);
   border-color: var(--accent);
+}
+.feedback-bar .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.feedback-bar .btn.btn-accent {
+  background: var(--accent);
+  color: var(--surface);
+  border-color: var(--accent);
+}
+.feedback-bar .btn.btn-accent:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--accent) 88%, black);
+  border-color: color-mix(in oklch, var(--accent) 88%, black);
+  color: var(--surface);
+}
+.feedback-comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.feedback-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 72px;
+  background: var(--surface);
+  color: var(--fg);
+}
+.feedback-textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+  border-color: var(--accent);
+}
+.feedback-comment-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .pill {

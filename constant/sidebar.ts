@@ -5,6 +5,7 @@ import {
   IconsChangelogs,
   IconsDocEditor,
   IconsApiDocs,
+  IconsFeedback,
   IconsSettings,
 } from "#components";
 import type { ISidebar } from "@/types/sidebar";
@@ -52,6 +53,13 @@ export const sidebarMenu: ISidebar[] = [
     label: "API Docs",
     route: "/api-docs",
     icon: markRaw(IconsApiDocs),
+    active: false,
+  },
+  {
+    id: "menu__feedback",
+    label: "Feedback",
+    route: "/feedback",
+    icon: markRaw(IconsFeedback),
     active: false,
   },
   {
