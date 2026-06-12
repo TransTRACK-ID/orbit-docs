@@ -1,0 +1,38 @@
+[ nuxi ] Nuxt 3.16.2 with Nitro 2.13.4
+[nuxt:tailwindcss] ℹ Using default Tailwind CSS file
+[sidebase-auth] ℹ nuxt-auth setup starting
+[sidebase-auth] ✔ nuxt-auth setup done
+ℹ Nuxt Icon server bundle mode is set to local
+[ nuxi ] ℹ Building for Nitro preset: node-server
+ℹ Building client...
+ℹ vite v6.3.5 building for production...
+ℹ transforming...
+ℹ ✓ 379 modules transformed.
+
+ ERROR  ✗ Build failed in 8.18s
+
+
+[ nuxi ]  ERROR  Nuxt Build Error: [vite:esbuild] Transform failed with 1 error:
+/Users/zeinersyad/Playground/orbit-docs/composables/useMarkdown.ts:184:0: ERROR: Unexpected "export"
+file: /Users/zeinersyad/Playground/orbit-docs/composables/useMarkdown.ts:184:0
+
+Unexpected "export"
+182|  }
+183|  
+184|  export function extractHeadings(md: string): Array<{ level: number; text: string }> {
+   |  ^
+185|    const lines = md.split("\n");
+186|    const headings: Array<{ level: number; text: string }> = [];
+
+
+    at failureErrorWithLog (node_modules/vite/node_modules/esbuild/lib/main.js:1477:15)
+    at node_modules/vite/node_modules/esbuild/lib/main.js:756:50
+    at responseCallbacks.<computed> (node_modules/vite/node_modules/esbuild/lib/main.js:623:9)
+    at handleIncomingPacket (node_modules/vite/node_modules/esbuild/lib/main.js:678:12)
+    at Socket.readFromStdout (node_modules/vite/node_modules/esbuild/lib/main.js:601:7)
+    at Socket.emit (node:events:519:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+    at Readable.push (node:internal/streams/readable:392:5)
+    at Pipe.onStreamRead (node:internal/stream_base_commons:189:23)
+

@@ -62,7 +62,7 @@ export function renderMarkdown(md: string): string {
     const renderer = new marked.Renderer();
 
     // ─── Escape raw HTML instead of rendering it ─────────────────
-    renderer.html = (text: string) => {
+    renderer.html = ({ text }: { text: string }) => {
       return text
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
@@ -70,9 +70,12 @@ export function renderMarkdown(md: string): string {
     };
 
     // ─── Headings with slug IDs for h2 and h3 ───────────────────
-    renderer.heading = ({ text, depth }: { text: string; depth: number; raw: string }) => {
+    renderer.heading = function ({ tokens, depth }: { tokens: any[]; depth: number }) {
+      const text = this.parser.parseInline(tokens);
+      // Strip HTML tags for slug generation
+      const plain = text.replace(/<[^>]+>/g, "");
       if (depth === 2 || depth === 3) {
-        let slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+        let slug = plain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
         if (/^\d/.test(slug)) slug = "h-" + slug;
         return `<h${depth} id="${slug}">${text}</h${depth}>`;
       }
@@ -92,7 +95,7 @@ export function renderMarkdown(md: string): string {
     };
 
     // ─── Image renderer: YouTube/Vimeo embeds ───────────────────
-    renderer.image = (href: string, title: string | null, text: string) => {
+    renderer.image = ({ href, title, text }: { href: string; title: string | null; text: string }) => {
       // YouTube embed
       const youtubeMatch = href.match(/(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
       if (youtubeMatch) {
@@ -107,207 +110,41 @@ export function renderMarkdown(md: string): string {
     };
 
     // ─── Blockquote: detect GFM-style alerts ────────────────────
-    renderer.blockquote = ({ text }: { text: string }) => {
+    renderer.blockquote = function ({ tokens }: { tokens: any[] }) {
+      const body = this.parser.parse(tokens);
       // GFM alerts: > [!NOTE], > [!TIP], etc.
-      // After marked processes the blockquote the inner text is already HTML.
-      // The alert tag would be at the start as: <p>[!TYPE]<br>...content</p> or
-      // <p>[!TYPE]\n...content</p>
-      const alertMatch = text.match(/^\s*<p>\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(?:<br\s*\/?>)?\s*/i);
+      // After parsing, the body is rendered HTML. The alert tag appears as:
+      // <p>[!TYPE]<br>...content</p> or <p>[!TYPE]\n...content</p>
+      const alertMatch = body.match(/^\s*<p>\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(?:<br\s*\/?>)?\s*/i);
       if (alertMatch) {
         const type = alertMatch[1].toUpperCase();
         const alertInfo = GFM_ALERT_TYPES[type];
         if (alertInfo) {
           // Remove the [!TYPE] tag from content
-          const content = text.replace(alertMatch[0], "<p>");
+          const content = body.replace(alertMatch[0], "<p>");
           return `<div class="markdown-alert ${alertInfo.className}">
   <p class="markdown-alert-title">${alertInfo.icon} ${alertInfo.label}</p>
   ${content}
 </div>\n`;
         }
       }
-      return `<blockquote>${text}</blockquote>\n`;
+      return `<blockquote>${body}</blockquote>\n`;
     };
 
     // ─── Task list items ────────────────────────────────────────
-    renderer.listitem = ({ text, task, checked }: { text: string; task: boolean; checked: boolean }) => {
-      if (task) {
-        return `<li class="task-list-item"><input type="checkbox" ${checked ? "checked" : ""} disabled class="task-list-checkbox" />${text}</li>\n`;
+    renderer.listitem = function (item: { tokens: any[]; task: boolean; checked?: boolean; loose: boolean }) {
+      const body = this.parser.parse(item.tokens, item.loose);
+      if (item.task) {
+        return `<li class="task-list-item"><input type="checkbox" ${item.checked ? "checked" : ""} disabled class="task-list-checkbox" />${body}</li>\n`;
       }
-      return `<li>${text}</li>\n`;
+      return `<li>${body}</li>\n`;
     };
 
     return marked.parse(md, { async: false, renderer, gfm: true, breaks: false }) as string;
-  } catch {
-    // Fallback to simple rendering if marked fails
+  } catch (e: any) {
+    console.error("Marked parsing error:", e);
+    return `<div style="color:red; font-weight:bold; padding: 1rem; border: 1px solid red; background: #fff0f0;">Marked Error: ${e.message}</div><pre>${md}</pre>`;
   }
-  const lines = md.split("\n");
-  const out: string[] = [];
-  let inCodeBlock = false;
-  let codeLang = "";
-  let codeBuffer: string[] = [];
-  let inTable = false;
-  let tableHead: string[] = [];
-  let tableBody: string[][] = [];
-
-  // List tracking
-  let listBuffer: string[] = [];
-  let listType: "ul" | "ol" | null = null;
-
-  function flushCode() {
-    if (codeBuffer.length) {
-      const code = escapeHtml(codeBuffer.join("\n"));
-      if (codeLang === "mermaid") {
-        out.push(`<pre class="mermaid">${code}</pre>`);
-      } else {
-        const highlighted = highlightCode(codeBuffer.join("\n"), codeLang);
-        out.push(`<pre><code class="hljs${codeLang ? ` language-${escapeHtml(codeLang)}` : ""}">${highlighted}</code></pre>`);
-      }
-      codeBuffer = [];
-      codeLang = "";
-    }
-  }
-
-  function flushTable() {
-    if (tableHead.length && tableBody.length) {
-      let html = "<table><thead><tr>";
-      tableHead.forEach((c) => {
-        html += `<th>${inlineMd(c)}</th>`;
-      });
-      html += "</tr></thead><tbody>";
-      tableBody.forEach((row) => {
-        html += "<tr>";
-        row.forEach((c) => {
-          html += `<td>${inlineMd(c)}</td>`;
-        });
-        html += "</tr>";
-      });
-      html += "</tbody></table>";
-      out.push(html);
-    }
-    tableHead = [];
-    tableBody = [];
-    inTable = false;
-  }
-
-  function flushList() {
-    if (listBuffer.length && listType) {
-      const tag = listType;
-      out.push(`<${tag}>\n${listBuffer.join("\n")}\n</${tag}>`);
-    }
-    listBuffer = [];
-    listType = null;
-  }
-
-  function pushBlock(html: string) {
-    flushList();
-    out.push(html);
-  }
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    if (line.startsWith("```")) {
-      if (inCodeBlock) {
-        flushCode();
-        inCodeBlock = false;
-        codeLang = "";
-      } else {
-        flushList();
-        codeLang = line.slice(3).trim();
-        inCodeBlock = true;
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeBuffer.push(line);
-      continue;
-    }
-
-    if (line.trim() === "---" || line.trim() === "***" || line.trim() === "___") {
-      flushList();
-      flushTable();
-      out.push("<hr>");
-      continue;
-    }
-
-    // Table detection
-    if (line.includes("|")) {
-      const cells = line
-        .split("|")
-        .map((c) => c.trim())
-        .filter((c) => c !== "");
-      if (cells.length && cells.every((c) => /^[-\s:|]+$/.test(c))) {
-        // separator line
-        inTable = true;
-        continue;
-      }
-      if (!inTable) {
-        flushList();
-        tableHead = cells;
-        inTable = true;
-      } else {
-        tableBody.push(cells);
-      }
-      continue;
-    } else if (inTable) {
-      flushList();
-      flushTable();
-    }
-
-    // Headings
-    if (line.startsWith("# ")) {
-      pushBlock(`<h1>${inlineMd(escapeHtml(line.slice(2)))}</h1>`);
-    } else if (line.startsWith("## ")) {
-      const text = line.slice(3);
-      let slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-      if (/^\d/.test(slug)) slug = "h-" + slug;
-      pushBlock(`<h2 id="${slug}">${inlineMd(escapeHtml(text))}</h2>`);
-    } else if (line.startsWith("### ")) {
-      const text = line.slice(4);
-      let slug = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-      if (/^\d/.test(slug)) slug = "h-" + slug;
-      pushBlock(`<h3 id="${slug}">${inlineMd(escapeHtml(text))}</h3>`);
-    } else if (line.startsWith("> ")) {
-      pushBlock(
-        `<blockquote>${inlineMd(escapeHtml(line.slice(2)))}</blockquote>`
-      );
-    } else if (line.startsWith("- [ ] ")) {
-      if (listType !== "ul") flushList();
-      listType = "ul";
-      listBuffer.push(
-        `<li class="task-list-item"><input type="checkbox" disabled class="task-list-checkbox">${inlineMd(escapeHtml(line.slice(6)))}</li>`
-      );
-    } else if (line.startsWith("- [x] ") || line.startsWith("- [X] ")) {
-      if (listType !== "ul") flushList();
-      listType = "ul";
-      listBuffer.push(
-        `<li class="task-list-item"><input type="checkbox" checked disabled class="task-list-checkbox">${inlineMd(escapeHtml(line.slice(6)))}</li>`
-      );
-    } else if (line.startsWith("- ")) {
-      if (listType !== "ul") flushList();
-      listType = "ul";
-      listBuffer.push(`<li>${inlineMd(escapeHtml(line.slice(2)))}</li>`);
-    } else if (/^\d+\.\s/.test(line)) {
-      if (listType !== "ol") flushList();
-      listType = "ol";
-      listBuffer.push(
-        `<li>${inlineMd(escapeHtml(line.replace(/^\d+\.\s/, "")))}</li>`
-      );
-    } else if (line.trim() === "") {
-      flushList();
-      // empty line
-    } else {
-      flushList();
-      out.push(`<p>${inlineMd(escapeHtml(line))}</p>`);
-    }
-  }
-
-  flushList();
-  flushCode();
-  flushTable();
-
-  return out.join("\n");
 }
 
 function escapeHtml(text: string): string {
