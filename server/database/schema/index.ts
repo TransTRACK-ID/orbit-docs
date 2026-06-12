@@ -4,3 +4,5 @@ export * from "./settings";
 export * from "./releases";
 export * from "./changelogs";
 export * from "./doc-generation-jobs";
+export * from "./feedback";
+export * from "./internal-feedback";

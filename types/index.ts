@@ -124,3 +124,57 @@ export interface CreateDocPayload {
   tags?: string[];
   author?: string;
 }
+
+// Doc feedback types
+export type FeedbackStatus = "open" | "resolved" | "closed";
+
+export interface FeedbackItem {
+  id: string;
+  docId: string;
+  appId: string | null;
+  helpful: boolean;
+  comment: string | null;
+  status: FeedbackStatus;
+  visitorId: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  docTitle?: string;
+  appName?: string;
+}
+
+export interface SubmitDocFeedbackPayload {
+  helpful: boolean;
+  comment?: string;
+  visitorId?: string;
+}
+
+export interface FeedbackStats {
+  total: number;
+  helpful: number;
+  notHelpful: number;
+  open: number;
+}
+
+export type InternalFeedbackCategory = "general" | "bug" | "feature" | "docs";
+
+export interface InternalFeedbackItem {
+  id: string;
+  userId: string | null;
+  userName: string;
+  userEmail: string | null;
+  category: InternalFeedbackCategory;
+  comment: string;
+  status: FeedbackStatus;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SubmitInternalFeedbackPayload {
+  category: InternalFeedbackCategory;
+  comment: string;
+}
+
+export interface InternalFeedbackStats {
+  total: number;
+  open: number;
+}

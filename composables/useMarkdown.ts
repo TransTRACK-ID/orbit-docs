@@ -57,6 +57,13 @@ const GFM_ALERT_TYPES: Record<string, { icon: string; label: string; className: 
   },
 };
 
+export function headingSlug(text: string): string {
+  const plain = text.replace(/<[^>]+>/g, "");
+  let slug = plain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+  if (/^\d/.test(slug)) slug = "h-" + slug;
+  return slug;
+}
+
 export function renderMarkdown(md: string): string {
   try {
     const renderer = new marked.Renderer();
@@ -75,8 +82,7 @@ export function renderMarkdown(md: string): string {
       // Strip HTML tags for slug generation
       const plain = text.replace(/<[^>]+>/g, "");
       if (depth === 2 || depth === 3) {
-        let slug = plain.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-        if (/^\d/.test(slug)) slug = "h-" + slug;
+        const slug = headingSlug(plain);
         return `<h${depth} id="${slug}">${text}</h${depth}>`;
       }
       return `<h${depth}>${text}</h${depth}>`;

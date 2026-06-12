@@ -372,6 +372,7 @@ function logout() {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
+  color: currentColor;
 }
 .nav-item:focus-visible {
   outline: 2px solid var(--accent, oklch(55% 0.16 25));

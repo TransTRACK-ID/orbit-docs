@@ -10,6 +10,7 @@
         <span class="num">v2026.05</span>
       </footer>
     </div>
+    <LayoutsInternalFeedbackFab />
   </div>
 </template>
 
