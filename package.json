@@ -1,7 +1,16 @@
 {
   "version": "0.56.21",
-  "name": "nuxt-app",
-  "private": true,
+  "name": "orbit-docs",
+  "description": "Centralized documentation, changelog, and release management for software teams",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TransTRACK-ID/orbit-docs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TransTRACK-ID/orbit-docs/issues"
+  },
+  "homepage": "https://github.com/TransTRACK-ID/orbit-docs#readme",
   "type": "module",
   "scripts": {
     "build": "nuxt build && node scripts/copy-public-assets.mjs",
@@ -43,7 +52,6 @@
     "@pinia-plugin-persistedstate/nuxt": "^1.2.0",
     "@pinia/nuxt": "^0.5.1",
     "@sidebase/nuxt-auth": "^1.2.0",
-    "@transtrack/ui": "^1.0.19",
     "@vite-pwa/nuxt": "^1.1.1",
     "@vuepic/vue-datepicker": "^7.3.0",
     "ai": "^6.0.196",

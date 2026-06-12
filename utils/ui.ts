@@ -1,4 +1,4 @@
-// utils untuk component transtrack-ui
+// Shared UI utility helpers
 
 export const defaultLatLng = [-0.7893, 113.9213]
 

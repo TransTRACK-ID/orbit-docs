@@ -266,32 +266,32 @@ async function seed() {
     console.log(`Postrack already has ${existingPostrackReleases.length} releases, skipping release creation.`);
   }
 
-  // ─── 2. TELEMATICS APP ─────────────────────────────────────────
-  let telematics = await db.select().from(apps).where(eq(apps.name, "Telematics")).then(r => r[0]);
+  // ─── 2. FLEET TRACKER APP (demo) ───────────────────────────────
+  let telematics = await db.select().from(apps).where(eq(apps.name, "Fleet Tracker")).then(r => r[0]);
   
   if (!telematics) {
     const [newApp] = await db
       .insert(apps)
       .values({
-        name: "Telematics",
+        name: "Fleet Tracker",
         description: "GPS tracking and fleet management platform. Real-time vehicle monitoring, route history, geofencing, and driver behavior analytics.",
-        owner: "Hari Nugroho",
+        owner: "Demo Team",
         status: "active" as const,
-        repoUrl: "https://github.com/transtrack/telematics",
+        repoUrl: "https://github.com/example/fleet-tracker",
       })
       .returning();
     
     if (!newApp) {
-      throw new Error("Failed to create Telematics app");
+      throw new Error("Failed to create Fleet Tracker app");
     }
     
     telematics = newApp;
     console.log("Created app:", telematics.name);
   } else {
-    console.log("Telematics app already exists.", telematics.name);
+    console.log("Fleet Tracker app already exists.", telematics.name);
   }
 
-  // Telematics versions
+  // Fleet Tracker versions
   const telematicsVersionsData = [
     {
       version: "2.1.0",
@@ -311,7 +311,7 @@ async function seed() {
       branch: "main",
       tags: "webhook,camera,geocoding,geofence",
       commitHash: "a1b2c3d",
-      approver: "Hari",
+      approver: "Demo",
     },
     {
       version: "2.0.0",
@@ -325,14 +325,14 @@ async function seed() {
 
 ## Changed
 - Authentication moved to Bearer token in header
-- Base URL updated to https://telematics.transtrack.id
+- Base URL updated to https://api.example.com/fleet
 
 ## Deprecated
 - API v1 endpoints (sunset December 2026)`,
       branch: "main",
       tags: "api-v2,reports,geofence,events,auth",
       commitHash: "e4f5g6h",
-      approver: "Hari",
+      approver: "Demo",
     },
     {
       version: "1.5.0",
@@ -349,16 +349,16 @@ async function seed() {
       branch: "main",
       tags: "history,devices,login,auth",
       commitHash: "i7j8k9l",
-      approver: "Hari",
+      approver: "Demo",
     },
   ];
 
-  // Check for existing Telematics versions
+  // Check for existing Fleet Tracker versions
   const existingTelematicsVersions = await db.select().from(appVersions).where(eq(appVersions.appId, telematics.id));
   
   const telematicsVersions: NonNullable<typeof appVersions.$inferSelect>[] = [];
   if (existingTelematicsVersions.length > 0) {
-    console.log(`Telematics already has ${existingTelematicsVersions.length} versions, skipping version/release creation.`);
+    console.log(`Fleet Tracker already has ${existingTelematicsVersions.length} versions, skipping version/release creation.`);
     telematicsVersions.push(...existingTelematicsVersions);
   } else {
     for (const v of telematicsVersionsData) {
@@ -374,49 +374,49 @@ async function seed() {
           tags: v.tags,
           commitHash: v.commitHash,
           approver: v.approver,
-          createdBy: "Hari",
+          createdBy: "Demo",
         })
         .returning();
       if (!version) continue;
       telematicsVersions.push(version);
-      console.log("Created Telematics version:", version.version);
+      console.log("Created Fleet Tracker version:", version.version);
     }
 
-    // Telematics releases
+    // Fleet Tracker releases
     for (const version of telematicsVersions) {
       await db.insert(releases).values({
         appId: telematics.id,
         versionId: version.id,
-        heroTitle: `Telematics ${version.version}`,
+        heroTitle: `Fleet Tracker ${version.version}`,
         summary: version.releaseNotes,
         categories: parseCategories(version.releaseNotes ?? ""),
         type: "normal" as const,
         published: true,
       });
-      console.log("Created Telematics release for version:", version.version);
+      console.log("Created Fleet Tracker release for version:", version.version);
     }
   }
 
-  // Telematics documentation — single comprehensive API doc
+  // Fleet Tracker documentation — single comprehensive API doc
   const telematicsDocs = [
     {
       appId: telematics.id,
-      title: "Telematics",
-      content: `# Telematics
+      title: "Fleet Tracker API",
+      content: `# Fleet Tracker API
 
-Base URL: \`https://telematics.transtrack.id\`
+Base URL: \`https://api.example.com/fleet\`
 
 ---
 
 ## Authentication
 
-The Telematics API uses token-based authentication. All endpoints (except Login) require a valid Bearer token in the Authorization header.
+The Fleet Tracker API uses token-based authentication. All endpoints (except Login) require a valid Bearer token in the Authorization header.
 
 ### [POST] Login
 
 **Endpoint:**
 \`\`\`
-POST https://telematics.transtrack.id/api/login
+POST https://api.example.com/fleet/api/login
 \`\`\`
 
 **Request Body:**
@@ -462,7 +462,7 @@ Manage and query GPS tracking devices in your fleet.
 
 **Endpoint:**
 \`\`\`
-GET https://telematics.transtrack.id/api/devices
+GET https://api.example.com/fleet/api/devices
 \`\`\`
 
 **Query Parameters:**
@@ -519,7 +519,7 @@ Access historical route data for fleet analysis.
 
 **Endpoint:**
 \`\`\`
-GET https://telematics.transtrack.id/api/history
+GET https://api.example.com/fleet/api/history
 \`\`\`
 
 **Query Parameters:**
@@ -569,7 +569,7 @@ Generate fleet analytics reports.
 
 **Endpoint:**
 \`\`\`
-GET https://telematics.transtrack.id/api/reports/generate
+GET https://api.example.com/fleet/api/reports/generate
 \`\`\`
 
 **Report Types:**
@@ -590,7 +590,7 @@ Define geographic boundaries and manage zones.
 
 **Endpoint:**
 \`\`\`
-GET https://telematics.transtrack.id/api/geofences
+GET https://api.example.com/fleet/api/geofences
 \`\`\`
 
 **Response:**
@@ -626,7 +626,7 @@ Receive and query fleet alert events.
 
 **Endpoint:**
 \`\`\`
-GET https://telematics.transtrack.id/api/events
+GET https://api.example.com/fleet/api/events
 \`\`\`
 
 **Query Parameters:**
@@ -652,7 +652,7 @@ Access camera photos and media captured by vehicle-mounted devices.
 
 **Endpoint:**
 \`\`\`
-GET https://telematics.transtrack.id/api/camera/media
+GET https://api.example.com/fleet/api/camera/media
 \`\`\`
 
 **Query Parameters:**
@@ -671,8 +671,8 @@ GET https://telematics.transtrack.id/api/camera/media
       "media_id": "CAM-20260520-083000",
       "timestamp": "2026-05-20T08:30:00Z",
       "trigger": "ignition_on",
-      "url": "https://cdn.transtrack.id/media/CAM-20260520-083000.jpg",
-      "thumbnail": "https://cdn.transtrack.id/media/thumbs/CAM-20260520-083000.jpg",
+      "url": "https://cdn.example.com/media/CAM-20260520-083000.jpg",
+      "thumbnail": "https://cdn.example.com/media/thumbs/CAM-20260520-083000.jpg",
       "location": {
         "latitude": -6.2088,
         "longitude": 106.8456
@@ -692,7 +692,7 @@ Reverse geocoding from GPS coordinates.
 
 **Endpoint:**
 \`\`\`
-GET https://telematics.transtrack.id/api/address
+GET https://api.example.com/fleet/api/address
 \`\`\`
 
 **Query Parameters:**
@@ -764,14 +764,14 @@ Configure webhooks to receive instant updates for:
       status: "published" as const,
       versionId: telematicsVersions[0]!.id,
       tags: ["telematics", "api", "gps", "fleet", "documentation"],
-      author: "Hari Nugroho",
+      author: "Demo Team",
     },
   ];
 
-  // Check if docs already exist for Telematics
+  // Check if docs already exist for Fleet Tracker
   const existingDocs = await db.select().from(docs).where(eq(docs.appId, telematics.id));
   if (existingDocs.length > 0) {
-    console.log(`Telematics already has ${existingDocs.length} docs, skipping doc creation.`);
+    console.log(`Fleet Tracker already has ${existingDocs.length} docs, skipping doc creation.`);
   } else {
     for (const doc of telematicsDocs) {
       await db.insert(docs).values(doc);
