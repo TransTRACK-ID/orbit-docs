@@ -144,6 +144,23 @@ export function canInviteRole(inviterRole: TeamRole, targetRole: TeamRole): bool
 }
 
 /**
+ * Restrict access to internal feedback administration.
+ * Uses admin role today; swap to a dedicated super_admin role when added.
+ */
+export async function requireSuperAdminAccess(event: H3Event) {
+  await requireTeamAccess(event, "admin");
+  const member = await getCurrentMember(event);
+  if (!member || member.role !== "admin") {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Forbidden",
+      message: "Super admin access is required.",
+    });
+  }
+  return member;
+}
+
+/**
  * Ensure the authenticated user has an active team member record.
  * If a pending invitation exists for their email/userId, it is activated.
  * Otherwise a new admin member is created so the registering user

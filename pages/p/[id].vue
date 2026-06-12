@@ -91,12 +91,16 @@ onMounted(async () => {
       }
     }
     nextTick(() => {
-      setupScrollSpy();
       if (route.hash) {
-        const target = document.getElementById(route.hash.slice(1));
-        if (target) {
-          target.scrollIntoView({ behavior: "smooth", block: "start" });
-          activeSlug.value = route.hash.slice(1);
+        const hash = route.hash.slice(1);
+        if (hash === "docFeedback") {
+          document.getElementById("docFeedback")?.scrollIntoView({ block: "end", behavior: "smooth" });
+        } else {
+          const target = document.getElementById(hash);
+          if (target) {
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+            activeSlug.value = hash;
+          }
         }
       }
     });
@@ -105,6 +109,22 @@ onMounted(async () => {
   } finally {
     isLoading.value = false;
   }
+});
+
+watch(
+  () => [doc.value, isLoading.value] as const,
+  ([loadedDoc, loading]) => {
+    if (!loadedDoc || loading || feedbackGiven.value) return;
+    nextTick(() => {
+      setupScrollSpy();
+    });
+  },
+  { immediate: true }
+);
+
+onBeforeUnmount(() => {
+  if (scrollSpyPauseTimer) clearTimeout(scrollSpyPauseTimer);
+  if (toastTimer) clearTimeout(toastTimer);
 });
 
 function scrollToSection(targetId: string) {
@@ -305,7 +325,13 @@ function itemTarget(item: NavItem): string {
       </ul>
     </aside>
 
-    <main class="content">
+    <main
+      class="content"
+      :class="{
+        'content-dock-pad': !feedbackGiven,
+        'content-dock-pad-expanded': showCommentForm,
+      }"
+    >
       <article id="docContent" class="doc-body">
         <div class="flex-gap-sm" style="margin-bottom: 8px;">
           <span class="pill pill-green">Latest</span>
@@ -319,43 +345,6 @@ function itemTarget(item: NavItem): string {
           :html="renderedHtml"
           @click="handleContentClick"
         />
-
-        <div class="feedback-bar" :class="{ 'feedback-bar-expanded': showCommentForm }" id="feedbackBar">
-          <template v-if="feedbackGiven">
-            <span class="feedback-msg">
-              {{ feedbackHelpful ? "Thanks for your feedback!" : "Thanks — we'll work on improving this." }}
-            </span>
-          </template>
-          <template v-else-if="showCommentForm">
-            <div class="feedback-comment-form">
-              <span class="feedback-msg">What could we improve?</span>
-              <textarea
-                v-model="feedbackComment"
-                class="feedback-textarea"
-                rows="3"
-                placeholder="Tell us what was missing or unclear (optional)"
-                maxlength="2000"
-              />
-              <div class="feedback-comment-actions">
-                <button type="button" class="btn" :disabled="isSubmitting" @click="cancelCommentForm">
-                  Cancel
-                </button>
-                <button type="button" class="btn btn-accent" :disabled="isSubmitting" @click="submitNegativeFeedback">
-                  {{ isSubmitting ? "Sending…" : "Submit" }}
-                </button>
-              </div>
-            </div>
-          </template>
-          <template v-else>
-            <span class="feedback-msg">Was this helpful?</span>
-            <button type="button" class="btn" :disabled="isSubmitting" @click="voteFeedback(true)">
-              Yes
-            </button>
-            <button type="button" class="btn" :disabled="isSubmitting" @click="voteFeedback(false)">
-              No
-            </button>
-          </template>
-        </div>
       </article>
     </main>
 
@@ -382,6 +371,52 @@ function itemTarget(item: NavItem): string {
     <!-- Toast -->
     <div class="toast" :class="{ show: toastVisible }">
       {{ toastMsg }}
+    </div>
+  </div>
+
+  <div
+    v-if="doc && !isLoading && !feedbackGiven"
+    id="docFeedback"
+    class="feedback-dock-wrap"
+    :class="{ 'is-expanded': showCommentForm }"
+    aria-label="Page feedback"
+  >
+    <div class="feedback-dock">
+      <template v-if="showCommentForm">
+        <p class="feedback-dock-heading">What could we improve?</p>
+        <textarea
+          v-model="feedbackComment"
+          class="feedback-textarea"
+          rows="3"
+          placeholder="Tell us what was missing or unclear (optional)"
+          maxlength="2000"
+          aria-label="Feedback comment"
+        />
+        <div class="feedback-dock-actions feedback-dock-actions-end">
+          <button type="button" class="btn" :disabled="isSubmitting" @click="cancelCommentForm">
+            Cancel
+          </button>
+          <button type="button" class="btn btn-accent" :disabled="isSubmitting" @click="submitNegativeFeedback">
+            {{ isSubmitting ? "Sending…" : "Submit feedback" }}
+          </button>
+        </div>
+      </template>
+      <template v-else>
+        <div class="feedback-dock-row">
+          <div class="feedback-dock-copy">
+            <p class="feedback-dock-heading">Was this page helpful?</p>
+            <p class="feedback-dock-msg">Quick rating while you read</p>
+          </div>
+          <div class="feedback-dock-actions">
+            <button type="button" class="btn btn-accent" :disabled="isSubmitting" @click="voteFeedback(true)">
+              Yes
+            </button>
+            <button type="button" class="btn" :disabled="isSubmitting" @click="voteFeedback(false)">
+              Not really
+            </button>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 </div>
@@ -572,6 +607,12 @@ h3 {
   width: 100%;
   max-width: 720px;
 }
+.content.content-dock-pad {
+  padding-bottom: 112px;
+}
+.content.content-dock-pad-expanded {
+  padding-bottom: 240px;
+}
 @media (max-width: 820px) {
   .doc-sidebar {
     width: 220px;
@@ -586,6 +627,12 @@ h3 {
   }
   .content {
     padding: 20px;
+  }
+  .content.content-dock-pad {
+    padding-bottom: 128px;
+  }
+  .content.content-dock-pad-expanded {
+    padding-bottom: 260px;
   }
 }
 
@@ -820,68 +867,105 @@ h3 {
   border-color: var(--accent);
 }
 
-/* Feedback */
-.feedback-bar {
+/* Feedback dock */
+.feedback-dock-wrap {
+  position: fixed;
+  bottom: 0;
+  left: var(--sidebar);
+  right: 0;
+  z-index: 35;
   display: flex;
-  gap: 12px;
-  margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-  align-items: center;
+  justify-content: center;
+  padding: 0 48px 20px;
+  pointer-events: none;
 }
-.feedback-bar.feedback-bar-expanded {
+.feedback-dock-wrap.is-expanded .feedback-dock {
+  padding: 16px 18px;
+}
+.feedback-dock {
+  pointer-events: auto;
+  width: 100%;
+  max-width: 720px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow:
+    0 8px 32px color-mix(in oklch, var(--fg) 10%, transparent),
+    0 1px 0 color-mix(in oklch, var(--surface) 80%, var(--border));
+  display: flex;
   flex-direction: column;
-  align-items: stretch;
+  gap: 12px;
 }
-.feedback-bar .feedback-msg {
-  font-size: 13px;
+.feedback-dock-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.feedback-dock-copy {
+  min-width: 0;
+}
+.feedback-dock-heading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.3;
+}
+.feedback-dock-msg {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--muted);
 }
-.feedback-bar .btn {
-  padding: 4px 12px;
+.feedback-dock-actions {
+  display: flex;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.feedback-dock-actions-end {
+  justify-content: flex-end;
+}
+.feedback-dock .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 14px;
   font-size: 13px;
+  font-weight: 500;
   background: transparent;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  color: var(--muted);
+  color: var(--fg);
   cursor: pointer;
+  white-space: nowrap;
   transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
 }
-.feedback-bar .btn:hover {
+.feedback-dock .btn:hover:not(:disabled) {
   border-color: var(--fg);
-  color: var(--fg);
 }
-.feedback-bar .btn:focus-visible {
+.feedback-dock .btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.feedback-bar .btn:active {
-  transform: scale(0.96);
+.feedback-dock .btn:active:not(:disabled) {
+  transform: scale(0.98);
 }
-.feedback-bar .btn.voted {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.feedback-bar .btn:disabled {
+.feedback-dock .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-.feedback-bar .btn.btn-accent {
+.feedback-dock .btn.btn-accent {
   background: var(--accent);
   color: var(--surface);
   border-color: var(--accent);
 }
-.feedback-bar .btn.btn-accent:hover:not(:disabled) {
+.feedback-dock .btn.btn-accent:hover:not(:disabled) {
   background: color-mix(in oklch, var(--accent) 88%, black);
   border-color: color-mix(in oklch, var(--accent) 88%, black);
   color: var(--surface);
-}
-.feedback-comment-form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  width: 100%;
 }
 .feedback-textarea {
   width: 100%;
@@ -893,7 +977,7 @@ h3 {
   line-height: 1.5;
   resize: vertical;
   min-height: 72px;
-  background: var(--surface);
+  background: var(--bg);
   color: var(--fg);
 }
 .feedback-textarea:focus {
@@ -901,10 +985,35 @@ h3 {
   outline-offset: 0;
   border-color: var(--accent);
 }
-.feedback-comment-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+
+@media (max-width: 820px) {
+  .feedback-dock-wrap {
+    padding: 0 24px 16px;
+  }
+}
+@media (max-width: 640px) {
+  .feedback-dock-wrap {
+    left: 0;
+    padding: 0 16px 80px;
+  }
+  .feedback-dock-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .feedback-dock-actions {
+    width: 100%;
+  }
+  .feedback-dock-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feedback-dock-wrap {
+    transition: none;
+  }
 }
 
 .pill {

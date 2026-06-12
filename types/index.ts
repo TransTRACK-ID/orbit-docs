@@ -154,3 +154,27 @@ export interface FeedbackStats {
   notHelpful: number;
   open: number;
 }
+
+export type InternalFeedbackCategory = "general" | "bug" | "feature" | "docs";
+
+export interface InternalFeedbackItem {
+  id: string;
+  userId: string | null;
+  userName: string;
+  userEmail: string | null;
+  category: InternalFeedbackCategory;
+  comment: string;
+  status: FeedbackStatus;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface SubmitInternalFeedbackPayload {
+  category: InternalFeedbackCategory;
+  comment: string;
+}
+
+export interface InternalFeedbackStats {
+  total: number;
+  open: number;
+}

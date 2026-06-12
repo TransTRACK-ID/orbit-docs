@@ -141,6 +141,27 @@
       "when": 1781175951716,
       "tag": "0019_tough_dragon_lord",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1781237945045,
+      "tag": "0020_gigantic_vin_gonzales",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1781241788892,
+      "tag": "0022_redundant_sunfire",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1781243500422,
+      "tag": "0023_nasty_doomsday",
+      "breakpoints": true
     }
   ]
 }
