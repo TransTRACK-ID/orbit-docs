@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick } from "vue";
-import { renderMarkdown, extractHeadings } from "~/composables/useMarkdown";
+import { renderMarkdown, extractHeadings, headingSlug } from "~/composables/useMarkdown";
 import type { PublishedDocDetail } from "~/composables/usePublishedDocs";
 
 definePageMeta({
@@ -30,8 +30,8 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null;
 const chatOpen = ref(false);
 
 const activeSlug = ref("");
-let scrollSpyPaused = false;
-let scrollSpyPauseTimer: ReturnType<typeof setTimeout> | null = null;
+const contentRef = ref<HTMLElement | null>(null);
+let sectionObserver: IntersectionObserver | null = null;
 
 function showToast(msg: string) {
   toastMsg.value = msg;
@@ -61,10 +61,7 @@ const navItems = computed<NavItem[]>(() => {
   return headings
     .filter((h) => h.level === 2 || h.level === 3)
     .map((h) => {
-      const slug = h.text
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "");
+      const slug = headingSlug(h.text);
       return {
         type: h.level === 2 ? ("section" as const) : ("indent" as const),
         text: h.text,
@@ -94,13 +91,14 @@ onMounted(async () => {
       if (route.hash) {
         const hash = route.hash.slice(1);
         if (hash === "docFeedback") {
-          document.getElementById("docFeedback")?.scrollIntoView({ block: "end", behavior: "smooth" });
-        } else {
-          const target = document.getElementById(hash);
-          if (target) {
-            target.scrollIntoView({ behavior: "smooth", block: "start" });
-            activeSlug.value = hash;
+          const container = contentRef.value;
+          const feedbackEl = document.getElementById("docFeedback");
+          if (container && feedbackEl) {
+            const top = feedbackEl.offsetTop - container.offsetTop;
+            container.scrollTo({ top, behavior: "smooth" });
           }
+        } else {
+          scrollToSection(hash);
         }
       }
     });
@@ -112,33 +110,28 @@ onMounted(async () => {
 });
 
 watch(
-  () => [doc.value, isLoading.value] as const,
-  ([loadedDoc, loading]) => {
-    if (!loadedDoc || loading || feedbackGiven.value) return;
+  () => doc.value,
+  (loadedDoc) => {
+    if (!loadedDoc) return;
     nextTick(() => {
       setupScrollSpy();
     });
-  },
-  { immediate: true }
+  }
 );
 
 onBeforeUnmount(() => {
-  if (scrollSpyPauseTimer) clearTimeout(scrollSpyPauseTimer);
+  sectionObserver?.disconnect();
+  sectionObserver = null;
   if (toastTimer) clearTimeout(toastTimer);
 });
 
 function scrollToSection(targetId: string) {
-  const targetEl = document.getElementById(targetId);
-  if (targetEl) {
-    targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
-    activeSlug.value = targetId;
-
-    scrollSpyPaused = true;
-    if (scrollSpyPauseTimer) clearTimeout(scrollSpyPauseTimer);
-    scrollSpyPauseTimer = setTimeout(() => {
-      scrollSpyPaused = false;
-    }, 800);
-  }
+  const el = document.getElementById(targetId);
+  const container = contentRef.value;
+  if (!el || !container) return;
+  const top = el.offsetTop - container.offsetTop - 16;
+  container.scrollTo({ top, behavior: "smooth" });
+  activeSlug.value = targetId;
 }
 
 function toggleChat() {
@@ -146,36 +139,31 @@ function toggleChat() {
 }
 
 function setupScrollSpy() {
-  const contentEl = document.querySelector(".content") as HTMLElement | null;
+  const container = contentRef.value;
   const docContent = document.getElementById("docContent");
-  if (!docContent || !contentEl) return;
+  if (!docContent || !container) return;
 
-  const headings = Array.from(docContent.querySelectorAll<HTMLElement>("h2[id], h3[id]"));
-  if (headings.length === 0) return;
+  const targets = docContent.querySelectorAll<HTMLElement>("h2[id], h3[id]");
+  if (!targets.length) return;
 
-  function updateActiveNav() {
-    if (scrollSpyPaused) return;
-
-    const contentRect = contentEl!.getBoundingClientRect();
-    const threshold = contentRect.top + 160;
-
-    let currentId = "";
-    for (const h of headings) {
-      const hRect = h.getBoundingClientRect();
-      if (hRect.top < threshold) {
-        currentId = h.id;
+  sectionObserver?.disconnect();
+  sectionObserver = new IntersectionObserver(
+    (entries) => {
+      const visible = entries
+        .filter((e) => e.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (visible.length > 0 && visible[0]) {
+        activeSlug.value = visible[0].target.id;
       }
+    },
+    {
+      root: container,
+      rootMargin: "-10% 0px -60% 0px",
+      threshold: 0,
     }
+  );
 
-    if (!currentId && headings.length > 0) {
-      currentId = headings[0].id;
-    }
-
-    activeSlug.value = currentId;
-  }
-
-  contentEl.addEventListener("scroll", updateActiveNav, { passive: true });
-  updateActiveNav();
+  targets.forEach((t) => sectionObserver!.observe(t));
 }
 
 function copyCode(btn: HTMLButtonElement) {
@@ -245,8 +233,10 @@ function handleContentClick(e: MouseEvent) {
 }
 
 function scrollToTop() {
-  const el = document.getElementById("docContent");
-  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  const container = contentRef.value;
+  if (!container) return;
+  container.scrollTo({ top: 0, behavior: "smooth" });
+  activeSlug.value = "";
 }
 
 function itemHref(item: NavItem): string {
@@ -326,6 +316,7 @@ function itemTarget(item: NavItem): string {
     </aside>
 
     <main
+      ref="contentRef"
       class="content"
       :class="{
         'content-dock-pad': !feedbackGiven,
@@ -703,11 +694,13 @@ h3 {
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
   line-height: 1.3;
+  scroll-margin-top: 16px;
 }
 .doc-body :deep(h3) {
   font-size: 17px;
   margin: 24px 0 12px;
   line-height: 1.4;
+  scroll-margin-top: 16px;
 }
 .doc-body :deep(p) {
   margin: 0 0 16px;
