@@ -23,19 +23,34 @@ async function getMermaid(): Promise<MermaidModule> {
   return initPromise;
 }
 
+// Monotonic counter for unique mermaid element IDs
+let _mermaidIdCounter = 0;
+
 export async function renderMermaidInContainer(
   container: HTMLElement | null | undefined,
 ): Promise<void> {
   if (!container || !import.meta.client) return;
 
-  const nodes = container.querySelectorAll("pre.mermaid");
+  const nodes = container.querySelectorAll<HTMLPreElement>("pre.mermaid");
   if (nodes.length === 0) return;
 
   const mermaid = await getMermaid();
-  try {
-    await mermaid.run({ nodes });
-  } catch {
-    // Invalid diagram syntax — leave source visible
+
+  for (const node of nodes) {
+    // Skip already-rendered nodes
+    if (node.getAttribute("data-mermaid-rendered") === "true") continue;
+
+    const source = node.textContent || "";
+    if (!source.trim()) continue;
+
+    const id = `mermaid-${++_mermaidIdCounter}`;
+    try {
+      const { svg } = await mermaid.render(id, source);
+      node.innerHTML = svg;
+      node.setAttribute("data-mermaid-rendered", "true");
+    } catch {
+      // Invalid diagram syntax — leave source visible so user can debug
+    }
   }
 }
 

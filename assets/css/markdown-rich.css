@@ -1,0 +1,319 @@
+/*
+ * Rich Markdown Preview Styles
+ * GitHub-style alerts, syntax highlighting theme, task lists, and mermaid diagrams.
+ * Imported globally so any page rendering markdown benefits.
+ */
+
+/* ═══════════════════════════════════════════════════════════════════
+   1. Syntax Highlighting (GitHub-inspired theme)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.hljs {
+  color: var(--od-fg, var(--fg));
+  background: transparent;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: oklch(55% 0.01 250);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-addition {
+  color: oklch(55% 0.22 340);
+}
+
+.hljs-number,
+.hljs-string,
+.hljs-meta .hljs-meta-string,
+.hljs-literal,
+.hljs-doctag,
+.hljs-regexp {
+  color: oklch(50% 0.16 255);
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: oklch(50% 0.18 290);
+}
+
+.hljs-attribute,
+.hljs-attr,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-class .hljs-title,
+.hljs-type {
+  color: oklch(55% 0.14 80);
+}
+
+.hljs-symbol,
+.hljs-bullet,
+.hljs-subst,
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-link {
+  color: oklch(55% 0.18 25);
+}
+
+.hljs-built_in,
+.hljs-deletion {
+  color: oklch(55% 0.18 25);
+}
+
+.hljs-formula {
+  background: color-mix(in oklch, var(--od-fg, var(--fg)) 5%, transparent);
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}
+
+/* ── Dark mode overrides ───────────────────────────────────────── */
+.dark .hljs-comment,
+.dark .hljs-quote {
+  color: oklch(60% 0.01 250);
+}
+
+.dark .hljs-keyword,
+.dark .hljs-selector-tag,
+.dark .hljs-addition {
+  color: oklch(70% 0.18 340);
+}
+
+.dark .hljs-number,
+.dark .hljs-string,
+.dark .hljs-meta .hljs-meta-string,
+.dark .hljs-literal,
+.dark .hljs-doctag,
+.dark .hljs-regexp {
+  color: oklch(70% 0.14 200);
+}
+
+.dark .hljs-title,
+.dark .hljs-section,
+.dark .hljs-name,
+.dark .hljs-selector-id,
+.dark .hljs-selector-class {
+  color: oklch(75% 0.16 290);
+}
+
+.dark .hljs-attribute,
+.dark .hljs-attr,
+.dark .hljs-variable,
+.dark .hljs-template-variable,
+.dark .hljs-class .hljs-title,
+.dark .hljs-type {
+  color: oklch(75% 0.12 80);
+}
+
+.dark .hljs-symbol,
+.dark .hljs-bullet,
+.dark .hljs-subst,
+.dark .hljs-meta,
+.dark .hljs-meta .hljs-keyword,
+.dark .hljs-selector-attr,
+.dark .hljs-selector-pseudo,
+.dark .hljs-link {
+  color: oklch(70% 0.16 25);
+}
+
+.dark .hljs-built_in,
+.dark .hljs-deletion {
+  color: oklch(70% 0.16 25);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   2. GitHub-style Alerts (> [!NOTE], > [!WARNING], etc.)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.markdown-alert {
+  padding: 12px 16px;
+  margin: 16px 0;
+  border-radius: var(--od-radius, 8px);
+  border-left: 4px solid;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.markdown-alert > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  margin: 0 0 6px;
+  line-height: 1;
+}
+
+.markdown-alert-title svg {
+  flex-shrink: 0;
+}
+
+/* ── NOTE ────────────────────────────────────────────────────── */
+.markdown-alert-note {
+  border-color: oklch(60% 0.16 255);
+  background: color-mix(in oklch, oklch(60% 0.16 255) 8%, transparent);
+}
+.markdown-alert-note .markdown-alert-title {
+  color: oklch(55% 0.16 255);
+}
+.dark .markdown-alert-note {
+  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
+}
+.dark .markdown-alert-note .markdown-alert-title {
+  color: oklch(70% 0.14 255);
+}
+
+/* ── TIP ─────────────────────────────────────────────────────── */
+.markdown-alert-tip {
+  border-color: oklch(60% 0.18 145);
+  background: color-mix(in oklch, oklch(60% 0.18 145) 8%, transparent);
+}
+.markdown-alert-tip .markdown-alert-title {
+  color: oklch(50% 0.14 145);
+}
+.dark .markdown-alert-tip {
+  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
+}
+.dark .markdown-alert-tip .markdown-alert-title {
+  color: oklch(70% 0.14 145);
+}
+
+/* ── IMPORTANT ───────────────────────────────────────────────── */
+.markdown-alert-important {
+  border-color: oklch(55% 0.18 290);
+  background: color-mix(in oklch, oklch(55% 0.18 290) 8%, transparent);
+}
+.markdown-alert-important .markdown-alert-title {
+  color: oklch(50% 0.16 290);
+}
+.dark .markdown-alert-important {
+  background: color-mix(in oklch, oklch(55% 0.18 290) 12%, transparent);
+}
+.dark .markdown-alert-important .markdown-alert-title {
+  color: oklch(70% 0.16 290);
+}
+
+/* ── WARNING ─────────────────────────────────────────────────── */
+.markdown-alert-warning {
+  border-color: oklch(70% 0.16 85);
+  background: color-mix(in oklch, oklch(70% 0.16 85) 8%, transparent);
+}
+.markdown-alert-warning .markdown-alert-title {
+  color: oklch(60% 0.14 85);
+}
+.dark .markdown-alert-warning {
+  background: color-mix(in oklch, oklch(70% 0.16 85) 12%, transparent);
+}
+.dark .markdown-alert-warning .markdown-alert-title {
+  color: oklch(75% 0.14 85);
+}
+
+/* ── CAUTION ─────────────────────────────────────────────────── */
+.markdown-alert-caution {
+  border-color: oklch(55% 0.18 25);
+  background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent);
+}
+.markdown-alert-caution .markdown-alert-title {
+  color: oklch(50% 0.16 25);
+}
+.dark .markdown-alert-caution {
+  background: color-mix(in oklch, oklch(55% 0.18 25) 12%, transparent);
+}
+.dark .markdown-alert-caution .markdown-alert-title {
+  color: oklch(70% 0.14 25);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   3. Task Lists (checkboxes in lists)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.task-list-item {
+  list-style-type: none;
+  position: relative;
+  margin-left: -20px;
+}
+
+.task-list-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--od-border, var(--border));
+  border-radius: 3px;
+  background: var(--od-surface, var(--surface));
+  vertical-align: middle;
+  margin-right: 8px;
+  position: relative;
+  top: -1px;
+  cursor: default;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.task-list-checkbox:checked {
+  background: oklch(55% 0.16 255);
+  border-color: oklch(55% 0.16 255);
+}
+
+.task-list-checkbox:checked::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.dark .task-list-checkbox {
+  background: var(--od-surface, var(--surface));
+  border-color: var(--od-border, var(--border));
+}
+
+.dark .task-list-checkbox:checked {
+  background: oklch(60% 0.16 255);
+  border-color: oklch(60% 0.16 255);
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   4. Mermaid diagrams (rendered state)
+   ═══════════════════════════════════════════════════════════════════ */
+
+pre.mermaid[data-mermaid-rendered="true"],
+.mermaid[data-mermaid-rendered="true"] {
+  /* Once mermaid has rendered, remove the code-block styling */
+  font-family: inherit;
+  white-space: normal;
+  background: color-mix(in oklch, var(--od-fg, var(--fg)) 3%, transparent);
+  border: 1px solid var(--od-border, var(--border));
+  border-radius: var(--od-radius, 8px);
+}
+
+/* Pre-render state: show the source code nicely */
+pre.mermaid:not([data-mermaid-rendered="true"]) {
+  font-family: var(--od-font-mono, monospace);
+  font-size: 13px;
+  color: var(--od-muted, var(--muted));
+  white-space: pre-wrap;
+  word-break: break-word;
+}

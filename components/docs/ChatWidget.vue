@@ -217,7 +217,7 @@ function closeChat() {
           </div>
 
           <!-- Completed assistant messages: render markdown -->
-          <div v-else class="chat-content" v-html="renderMarkdown(message.content)" />
+          <MermaidHtml v-else class="chat-content" :html="renderMarkdown(message.content)" />
 
           <!-- Typing dots: only while waiting for the first token -->
           <div v-if="isCurrentlyStreaming(message) && !message.content" class="chat-typing">
