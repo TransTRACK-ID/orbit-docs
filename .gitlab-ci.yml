@@ -19,7 +19,7 @@ build:
   stage: build
   script:
     - echo "$ENV_RELEASE" > "$(pwd)/.env"
-    - docker build -t $CONTAINER_REGISTRY:${CI_COMMIT_TAG} -t $CONTAINER_REGISTRY:latest -f ./ops/Dockerfile .
+    - docker build -t $CONTAINER_REGISTRY:${CI_COMMIT_TAG} -t $CONTAINER_REGISTRY:latest -f Dockerfile .
   except:
     - branches
   artifacts:
@@ -60,10 +60,10 @@ report-sonar-to-merge-id:
   script:
     - PROJECT_ID=$CI_PROJECT_ID
     - MERGE_IID=$CI_MERGE_REQUEST_IID
-    - KEY=$KEY SONAR_TOKEN=$sonar_access_token repopo_token=$repopo_token PROJECT_ID=$PROJECT_ID MERGE_IID=$MERGE_IID bash -c 'sed -i "1s/^/project_id=$PROJECT_ID merge_iid=$MERGE_IID key=$KEY sonar_token=$sonar_access_token repopo_token=$repopo_token /" ./ops/report.sh'
+    - KEY=$KEY SONAR_TOKEN=$sonar_access_token repopo_token=$repopo_token PROJECT_ID=$PROJECT_ID MERGE_IID=$MERGE_IID bash -c 'sed -i "1s/^/project_id=$PROJECT_ID merge_iid=$MERGE_IID key=$KEY sonar_token=$sonar_access_token repopo_token=$repopo_token /" ./report.sh'
     - apt-get update -qy  # Install curl
     - apt-get install -y curl
-    - bash ./ops/report.sh
+    - bash ./report.sh
   except:
     - branches
   only:
@@ -130,7 +130,7 @@ publish:
 #     - echo "$ENV_PREPROD" > "$(pwd)/.env"
 #     - echo "$NOTIFIER" > "$(pwd)/notifier.sh"
 #     - echo "$DOCKER_COMPOSE_NGINX" | base64 --decode > "$(pwd)/docker-compose.yml"
-#     - docker build -t $CONTAINER_REGISTRY:${CI_COMMIT_TAG} -t $CONTAINER_REGISTRY:latest -f ./ops/Dockerfile .
+#     - docker build -t $CONTAINER_REGISTRY:${CI_COMMIT_TAG} -t $CONTAINER_REGISTRY:latest -f Dockerfile .
 #     - docker compose up -d --force-recreate 
 #     - docker image prune -f
 #     - bash notifier.sh
@@ -158,7 +158,7 @@ production:
     - echo "$ENV_RELEASE" > "$(pwd)/.env"
     - echo "$NOTIFIER" > "$(pwd)/notifier.sh"
     - echo "$DOCKER_COMPOSE_NGINX" | base64 --decode > "$(pwd)/docker-compose.yml"
-    # - docker build -t $CONTAINER_REGISTRY:${CI_COMMIT_TAG} -t $CONTAINER_REGISTRY:latest -f ./ops/Dockerfile .
+    # - docker build -t $CONTAINER_REGISTRY:${CI_COMMIT_TAG} -t $CONTAINER_REGISTRY:latest -f Dockerfile .
     - docker compose pull application && docker compose up -d --force-recreate 
     - docker image prune -f
     - bash notifier.sh
