@@ -1,12 +1,11 @@
 version: '3.8'
 
 services:
-  orbit-docs-app:
+  application:
     build:
       context: .
       dockerfile: Dockerfile
-    image: $CI_REGISTRY_IMAGE/application:$CI_COMMIT_TAG
-    container_name: orbit-docs-app
+    image: ${IMAGE_NAME:-orbit-docs}
     restart: unless-stopped
     tty: true
     environment:
@@ -19,29 +18,19 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_API_BASE_URL: ${OPENAI_API_BASE_URL:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
-      NUXT_PUBLIC_APP_URL: ${NUXT_PUBLIC_APP_URL}
-      # IMPORTANT: tell Nuxt to serve under /docs
-      NUXT_APP_BASE_URL: ${NUXT_APP_BASE_URL:-/docs}
+      NUXT_PUBLIC_APP_URL: ${NUXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NUXT_APP_BASE_URL: ${NUXT_APP_BASE_URL:-}
       OPENCODE_CONFIG_B64: ${OPENCODE_CONFIG_B64:-}
       DOC_AGENT: ${DOC_AGENT:-opencode}
       CURSOR_MODEL: ${CURSOR_MODEL:-auto}
       CURSOR_API_KEY: ${CURSOR_API_KEY:-}
-    deploy:
-      replicas: ${COMPOSE_REPLICAS:-1}
     ports:
-      - "${COMPOSE_PUBLIC_PORT}:3000"
+      - "${COMPOSE_PUBLIC_PORT:-3000}:3000"
     volumes:
       - /tmp/orbit-docs-repositories:/tmp/orbit-docs-repositories
-      - /etc/localtime:/etc/localtime:ro
     networks:
-      - proxy
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "100m"
-        max-file: "5"
+      - orbit-network
 
-# Use external shared network so orbit app (in a different compose) can be reached
 networks:
-  proxy:
-    external: true
+  orbit-network:
+    driver: bridge
