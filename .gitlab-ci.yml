@@ -1,4 +1,5 @@
 stages:
+  - autotag
   - build
   - test
   - publish
@@ -10,19 +11,15 @@ default:
 
 variables:
   CONTAINER_REGISTRY: ${CI_REGISTRY_IMAGE}/application
-
-before_script:
-  - echo "$TRIGGER_AWX_JOB" > "$(pwd)/trigger_awx_job_$CI_PROJECT_NAME.sh"
-
-after_script:
-  - rm -f trigger_awx_job_$CI_PROJECT_NAME.sh
+  KEY: $key
+  SONAR_TOKEN: $sonar_access_token
+  REPOPO_TOKEN: $repopo_token
 
 build:
   stage: build
-  variables:
-    TARGET_HOST: "gitlab-runner"
   script:
-    - bash trigger_awx_job_$CI_PROJECT_NAME.sh "build"
+    - echo "$ENV_RELEASE" > "$(pwd)/.env"
+    - docker build -t $CONTAINER_REGISTRY:${CI_COMMIT_TAG} -t $CONTAINER_REGISTRY:latest -f ./ops/Dockerfile .
   except:
     - branches
   artifacts:
@@ -33,11 +30,9 @@ build:
 
 sonarqube-check:
   stage: test
-  dependencies:
-    - build
   tags:
     - tools-gcp
-  image: 
+  image:
     name: sonarsource/sonar-scanner-cli:5.0
     entrypoint: [""]
   variables:
@@ -47,14 +42,14 @@ sonarqube-check:
     key: "${CI_JOB_NAME}"
     paths:
       - .sonar/cache
-  script: 
+  script:
     - sonar-scanner
-  only:
-    - /^([A-Za-z0-9.]+)$/
-    - merge_requests
-  # allow_failure: false
+  #allow_failure: true
   except:
     - branches
+  only:
+    - merge_requests
+    - /^([A-Za-z0-9.]+)$/
 
 report-sonar-to-merge-id:
   stage: test
@@ -65,33 +60,34 @@ report-sonar-to-merge-id:
   script:
     - PROJECT_ID=$CI_PROJECT_ID
     - MERGE_IID=$CI_MERGE_REQUEST_IID
-    - KEY=$KEY SONAR_TOKEN=$sonar_access_token repopo_token=$repopo_token PROJECT_ID=$PROJECT_ID MERGE_IID=$MERGE_IID bash -c 'sed -i "1s/^/project_id=$PROJECT_ID merge_iid=$MERGE_IID key=$KEY sonar_token=$sonar_access_token repopo_token=$repopo_token /" report.sh'
+    - KEY=$KEY SONAR_TOKEN=$sonar_access_token repopo_token=$repopo_token PROJECT_ID=$PROJECT_ID MERGE_IID=$MERGE_IID bash -c 'sed -i "1s/^/project_id=$PROJECT_ID merge_iid=$MERGE_IID key=$KEY sonar_token=$sonar_access_token repopo_token=$repopo_token /" ./ops/report.sh'
     - apt-get update -qy  # Install curl
     - apt-get install -y curl
-    - bash report.sh
-    # - cat report.sh
+    - bash ./ops/report.sh
   except:
     - branches
   only:
     - merge_requests
   needs:
     - job: sonarqube-check
-  # when: manual
 
 publish:
   stage: publish
   dependencies:
     - sonarqube-check
-  variables:
-    TARGET_HOST: "gitlab-runner"
   script:
-    - bash trigger_awx_job_$CI_PROJECT_NAME.sh "publish"
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CONTAINER_REGISTRY:${CI_COMMIT_TAG}
+    - docker push $CONTAINER_REGISTRY:latest
+  after_script:
+    - docker image rm $CONTAINER_REGISTRY:${CI_COMMIT_TAG}
+    - docker image rm $CONTAINER_REGISTRY:latest
+    - docker builder prune -af || true
   except:
     - branches
   artifacts:
     paths:
       - .env
-      #- storage/firebase-admin-sdk.json
     expire_in: 1 days
     when: always
 
@@ -100,9 +96,16 @@ publish:
 #   dependencies:
 #     - publish
 #   variables:
-#     TARGET_HOST: "staging-app"
+#     GIT_STRATEGY: none
+#     ENVI: staging
 #   script:
-#     - bash trigger_awx_job_$CI_PROJECT_NAME.sh "staging" "env_staging"
+#     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+#     - echo "$ENV_STAGING" > "$(pwd)/.env"
+#     - echo "$NOTIFIER" > "$(pwd)/notifier.sh"
+#     - echo "$DOCKER_COMPOSE_NGINX" | base64 --decode > "$(pwd)/docker-compose.yml"
+#     - docker compose pull application && docker compose up -d --force-recreate
+#     - docker image prune -f
+#     - bash notifier.sh
 #   tags:
 #     - staging-gcp
 #   only:
@@ -113,18 +116,52 @@ publish:
 #     paths:
 #       - .env
 #       - docker-compose.yml
-#       #- storage/firebase-admin-sdk.json
 #     expire_in: 1 days
 #     when: always
+#   when: manual
+
+# pre-production:
+#   stage: release
+#   variables:
+#     # GIT_STRATEGY: none
+#     ENVI: pre-production
+#   script:
+#     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+#     - echo "$ENV_PREPROD" > "$(pwd)/.env"
+#     - echo "$NOTIFIER" > "$(pwd)/notifier.sh"
+#     - echo "$DOCKER_COMPOSE_NGINX" | base64 --decode > "$(pwd)/docker-compose.yml"
+#     - docker build -t $CONTAINER_REGISTRY:${CI_COMMIT_TAG} -t $CONTAINER_REGISTRY:latest -f ./ops/Dockerfile .
+#     - docker compose up -d --force-recreate 
+#     - docker image prune -f
+#     - bash notifier.sh
+#   tags:
+#     - preprod-gcp
+#   only:
+#     - /^([A-Za-z0-9.]+)$/
+#   except:
+#     - branches
+#   artifacts:
+#     paths:
+#       - .env
+#       - docker-compose.yml
+#     expire_in: 1 days
+#     when: always
+#   when: always
 
 production:
   stage: release
-  dependencies:
-    - publish
   variables:
-    TARGET_HOST: "prod-app-cluster-2"
+    # GIT_STRATEGY: none
+    ENVI: production
   script:
-    - bash trigger_awx_job_$CI_PROJECT_NAME.sh "production" "env_prod"
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - echo "$ENV_RELEASE" > "$(pwd)/.env"
+    - echo "$NOTIFIER" > "$(pwd)/notifier.sh"
+    - echo "$DOCKER_COMPOSE_NGINX" | base64 --decode > "$(pwd)/docker-compose.yml"
+    # - docker build -t $CONTAINER_REGISTRY:${CI_COMMIT_TAG} -t $CONTAINER_REGISTRY:latest -f ./ops/Dockerfile .
+    - docker compose pull application && docker compose up -d --force-recreate 
+    - docker image prune -f
+    - bash notifier.sh
   tags:
     - production-gcp
   only:
@@ -135,7 +172,6 @@ production:
     paths:
       - .env
       - docker-compose.yml
-      #- storage/firebase-admin-sdk.json
     expire_in: 1 days
     when: always
   # when : manual
