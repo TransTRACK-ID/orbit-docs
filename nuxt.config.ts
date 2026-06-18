@@ -77,6 +77,11 @@ export default defineNuxtConfig({
         signInResponseTokenPointer: "/data/access_token",
         maxAgeInSeconds: 60 * 60 * 24,
         httpOnlyCookieAttribute: false,
+        secureCookieAttribute: true,
+        sameSiteAttribute: "lax",
+        type: "Bearer",
+        cookieName: "auth.token",
+        headerName: "Authorization",
       },
       session: {
         dataType: {
@@ -131,6 +136,7 @@ export default defineNuxtConfig({
 
   nitro: {
     preset: process.env.NITRO_PRESET || "node-server",
+    errorHandler: "~/server/error-handler",
     routeRules: {
       "/p/**": {
         headers: {

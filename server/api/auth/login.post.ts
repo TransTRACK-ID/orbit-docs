@@ -99,14 +99,14 @@ export default defineEventHandler(async (event) => {
         httpOnly: true,
         path: "/",
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        sameSite: 'strict',
         maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
       });
       setCookie(event, "auth.token", token, {
         httpOnly: false,
         path: "/",
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        sameSite: 'strict',
         maxAge: AUTH_SESSION_MAX_AGE_SECONDS,
       });
 
@@ -160,10 +160,14 @@ export default defineEventHandler(async (event) => {
         setCookie(event, "session_token", response.data.access_token, {
           httpOnly: true,
           path: "/",
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
         });
         setCookie(event, "auth.token", response.data.access_token, {
           httpOnly: false,
           path: "/",
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'strict',
           maxAge: 60 * 60 * 24,
         });
       }
@@ -211,23 +215,29 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    // Use a stable token in preview mode so @sidebase/nuxt-auth can recover auth state
-    const token = isPreviewMode(config) ? "preview-mock-token" : user.id;
     const isProd = process.env.NODE_ENV === 'production';
     const COOKIE_MAX_AGE = 60 * 60 * 24 * 5; // 5 days
+
+    // Preview mode: use a stable mock token so @sidebase/nuxt-auth can recover auth state
+    // Otherwise: use JWT for local auth tokens so they expire and can't be forged
+    const token = isPreviewMode(config)
+      ? "preview-mock-token"
+      : jwtSecret
+        ? signJwtToken({ sub: user.id, email: user.email, name: user.name }, jwtSecret, COOKIE_MAX_AGE)
+        : user.id;
 
     setCookie(event, "session_token", token, {
       httpOnly: true,
       path: "/",
       secure: isProd,
-      sameSite: 'lax',
+      sameSite: 'strict',
       maxAge: COOKIE_MAX_AGE,
     });
     setCookie(event, "auth.token", token, {
       httpOnly: false,
       path: "/",
       secure: isProd,
-      sameSite: 'lax',
+      sameSite: 'strict',
       maxAge: COOKIE_MAX_AGE,
     });
 

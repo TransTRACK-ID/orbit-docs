@@ -1209,7 +1209,11 @@ export const mcpServer = createMcpServer();
 export const MCP_API_KEY = process.env.MCP_API_KEY;
 
 export function checkMcpApiKey(authHeader: string | undefined, apiKeyHeader: string | undefined): boolean {
-  if (!MCP_API_KEY) return true;
+  // If no MCP_API_KEY is configured, require a key to be set before allowing connections.
+  // This prevents accidental open MCP endpoints in production.
+  if (!MCP_API_KEY) {
+    return false;
+  }
   const providedKey = (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : apiKeyHeader) || "";
   return providedKey === MCP_API_KEY;
 }

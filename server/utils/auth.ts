@@ -128,6 +128,16 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
   }
 
   const config = useRuntimeConfig();
+
+  // Preview mode: bypass auth checks for convenience
+  if (process.env.ORBIT_PREVIEW === 'true') {
+    return {
+      id: "preview-user",
+      email: "preview@orbit.local",
+      name: "Preview User",
+    };
+  }
+
   const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
   const requestHost = getRequestHeader(event, 'host') || '';
 

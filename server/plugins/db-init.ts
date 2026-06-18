@@ -492,11 +492,14 @@ export default defineNitroPlugin(async () => {
   const usersCount = await db.select({ count: count() }).from(users);
   if (usersCount[0]?.count === 0) {
     const { hashPassword } = await import("~/server/utils/auth");
+    // Generate a random preview password so the default is not predictable
+    const randomPreviewPassword = `preview-${crypto.randomUUID().slice(0, 8)}`;
+    console.log(`[db-init] Created preview user with random password: ${randomPreviewPassword}`);
     await db.insert(users).values({
       id: "preview-user",
       name: "Preview User",
       email: "preview@example.com",
-      password: hashPassword("password123"),
+      password: hashPassword(randomPreviewPassword),
     });
   }
 });
