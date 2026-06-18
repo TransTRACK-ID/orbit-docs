@@ -1,0 +1,141 @@
+stages:
+  - build
+  - test
+  - publish
+  - release
+
+default:
+  tags:
+    - build-gcp
+
+variables:
+  CONTAINER_REGISTRY: ${CI_REGISTRY_IMAGE}/application
+
+before_script:
+  - echo "$TRIGGER_AWX_JOB" > "$(pwd)/trigger_awx_job_$CI_PROJECT_NAME.sh"
+
+after_script:
+  - rm -f trigger_awx_job_$CI_PROJECT_NAME.sh
+
+build:
+  stage: build
+  variables:
+    TARGET_HOST: "gitlab-runner"
+  script:
+    - bash trigger_awx_job_$CI_PROJECT_NAME.sh "build"
+  except:
+    - branches
+  artifacts:
+    paths:
+      - .env
+    expire_in: 1 days
+    when: always
+
+sonarqube-check:
+  stage: test
+  dependencies:
+    - build
+  tags:
+    - tools-gcp
+  image: 
+    name: sonarsource/sonar-scanner-cli:5.0
+    entrypoint: [""]
+  variables:
+    SONAR_USER_HOME: "${CI_PROJECT_DIR}/.sonar"  # Defines the location of the analysis task cache
+    GIT_DEPTH: "0"  # Tells git to fetch all the branches of the project, required by the analysis task
+  cache:
+    key: "${CI_JOB_NAME}"
+    paths:
+      - .sonar/cache
+  script: 
+    - sonar-scanner
+  only:
+    - /^([A-Za-z0-9.]+)$/
+    - merge_requests
+  # allow_failure: false
+  except:
+    - branches
+
+report-sonar-to-merge-id:
+  stage: test
+  dependencies:
+    - sonarqube-check
+  tags:
+    - tools-gcp
+  script:
+    - PROJECT_ID=$CI_PROJECT_ID
+    - MERGE_IID=$CI_MERGE_REQUEST_IID
+    - KEY=$KEY SONAR_TOKEN=$sonar_access_token repopo_token=$repopo_token PROJECT_ID=$PROJECT_ID MERGE_IID=$MERGE_IID bash -c 'sed -i "1s/^/project_id=$PROJECT_ID merge_iid=$MERGE_IID key=$KEY sonar_token=$sonar_access_token repopo_token=$repopo_token /" report.sh'
+    - apt-get update -qy  # Install curl
+    - apt-get install -y curl
+    - bash report.sh
+    # - cat report.sh
+  except:
+    - branches
+  only:
+    - merge_requests
+  needs:
+    - job: sonarqube-check
+  # when: manual
+
+publish:
+  stage: publish
+  dependencies:
+    - sonarqube-check
+  variables:
+    TARGET_HOST: "gitlab-runner"
+  script:
+    - bash trigger_awx_job_$CI_PROJECT_NAME.sh "publish"
+  except:
+    - branches
+  artifacts:
+    paths:
+      - .env
+      #- storage/firebase-admin-sdk.json
+    expire_in: 1 days
+    when: always
+
+# staging:
+#   stage: release
+#   dependencies:
+#     - publish
+#   variables:
+#     TARGET_HOST: "staging-app"
+#   script:
+#     - bash trigger_awx_job_$CI_PROJECT_NAME.sh "staging" "env_staging"
+#   tags:
+#     - staging-gcp
+#   only:
+#     - /^([A-Za-z0-9.-]+)$/
+#   except:
+#     - branches
+#   artifacts:
+#     paths:
+#       - .env
+#       - docker-compose.yml
+#       #- storage/firebase-admin-sdk.json
+#     expire_in: 1 days
+#     when: always
+
+production:
+  stage: release
+  dependencies:
+    - publish
+  variables:
+    TARGET_HOST: "prod-app-cluster-2"
+  script:
+    - bash trigger_awx_job_$CI_PROJECT_NAME.sh "production" "env_prod"
+  tags:
+    - production-gcp
+  only:
+    - /^([A-Za-z0-9.]+)$/
+  except:
+    - branches
+  artifacts:
+    paths:
+      - .env
+      - docker-compose.yml
+      #- storage/firebase-admin-sdk.json
+    expire_in: 1 days
+    when: always
+  # when : manual
