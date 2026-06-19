@@ -49,8 +49,16 @@ export default defineEventHandler(async (event) => {
       allowMultipleProviders: ssoConfig.allowMultipleProviders ?? true,
       defaultProvider: ssoConfig.defaultProvider
     };
-  } catch (error) {
-    console.error('Error fetching SSO providers:', error);
+  } catch (error: any) {
+    // Missing table (42P01) or missing permissions (42501) simply mean SSO
+    // hasn't been set up yet. The UI already falls back to hiding SSO buttons,
+    // so don't spam production logs for an expected state.
+    const pgError = error?.cause || error;
+    const pgCode = pgError?.code;
+    if (pgCode !== '42P01' && pgCode !== '42501') {
+      console.error('Error fetching SSO providers:', error);
+    }
+
     // Return empty config on error
     return {
       providers: [],

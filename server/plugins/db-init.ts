@@ -192,6 +192,17 @@ export default defineNitroPlugin(async () => {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS settings (
+      id TEXT PRIMARY KEY,
+      key TEXT NOT NULL,
+      value JSONB,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      CONSTRAINT settings_key_unique UNIQUE(key)
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
