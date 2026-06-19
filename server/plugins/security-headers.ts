@@ -5,6 +5,12 @@
  */
 export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('beforeResponse', (event) => {
+    // Skip if response headers have already been sent to the client
+    // (e.g., streaming endpoints or early error responses)
+    if (event.node.res.headersSent) {
+      return;
+    }
+
     // Remove X-Powered-By to prevent framework fingerprinting (M2)
     event.node.res.removeHeader('X-Powered-By');
 
