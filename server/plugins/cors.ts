@@ -28,6 +28,11 @@ function isWildcardAllowed(origin: string): boolean {
 
 export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('beforeResponse', (event) => {
+    // Skip if response headers have already been sent to the client
+    if (event.node.res.headersSent) {
+      return;
+    }
+
     const path = event.path || '';
 
     // Only apply CORS to API routes
