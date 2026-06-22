@@ -116,9 +116,10 @@ export default defineNuxtConfig({
     // so server-side $fetch gets a valid URL instead of crashing on relative paths
     apiBaseUrl: process.env.API_BASE_URL,
     isPreview: process.env.ORBIT_PREVIEW === 'true',
-    // Postrack API Docs integration (server-side only)
-    postrackApiUrl: process.env.NITRO_POSTRACK_API_URL,
-    postrackApiKey: process.env.NITRO_POSTRACK_API_KEY,
+    // Postrack API Docs integration (server-side only).
+    // Overridden at runtime via NUXT_POSTRACK_API_URL / NUXT_POSTRACK_API_KEY.
+    postrackApiUrl: "",
+    postrackApiKey: "",
     // OpenAI integration (server-side only)
     openaiApiKey: process.env.OPENAI_API_KEY,
     openaiApiBaseUrl: process.env.OPENAI_API_BASE_URL,

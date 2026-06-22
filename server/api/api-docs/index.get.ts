@@ -1,12 +1,11 @@
 import { defineEventHandler, getQuery, createError } from "h3";
+import { getPostrackConfig } from "~/server/utils/postrack-config";
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig();
   const query = getQuery(event);
   const search = typeof query.search === "string" ? query.search.trim() : "";
 
-  const postrackApiUrl = config.postrackApiUrl;
-  const postrackApiKey = config.postrackApiKey;
+  const { apiUrl: postrackApiUrl, apiKey: postrackApiKey } = getPostrackConfig();
 
   if (!postrackApiUrl) {
     throw createError({

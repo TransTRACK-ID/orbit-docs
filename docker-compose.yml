@@ -24,6 +24,8 @@ services:
       DOC_AGENT: ${DOC_AGENT:-opencode}
       CURSOR_MODEL: ${CURSOR_MODEL:-auto}
       CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+      NITRO_POSTRACK_API_URL: ${NITRO_POSTRACK_API_URL:-}
+      NITRO_POSTRACK_API_KEY: ${NITRO_POSTRACK_API_KEY:-}
     ports:
       - "${COMPOSE_PUBLIC_PORT:-3000}:3000"
     volumes:

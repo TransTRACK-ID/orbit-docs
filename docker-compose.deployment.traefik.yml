@@ -21,6 +21,8 @@ services:
       DOC_AGENT: ${DOC_AGENT:-opencode}
       CURSOR_MODEL: ${CURSOR_MODEL:-auto}
       CURSOR_API_KEY: ${CURSOR_API_KEY:-}
+      NITRO_POSTRACK_API_URL: ${NITRO_POSTRACK_API_URL:-}
+      NITRO_POSTRACK_API_KEY: ${NITRO_POSTRACK_API_KEY:-}
     deploy:
       replicas: ${COMPOSE_REPLICAS:-1}
     volumes:

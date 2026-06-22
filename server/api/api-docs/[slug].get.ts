@@ -1,7 +1,7 @@
 import { defineEventHandler, getRouterParam, createError } from "h3";
+import { getPostrackConfig } from "~/server/utils/postrack-config";
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig();
   const slug = getRouterParam(event, "slug");
 
   if (!slug) {
@@ -12,8 +12,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const postrackApiUrl = config.postrackApiUrl;
-  const postrackApiKey = config.postrackApiKey;
+  const { apiUrl: postrackApiUrl, apiKey: postrackApiKey } = getPostrackConfig();
 
   if (!postrackApiUrl) {
     throw createError({
