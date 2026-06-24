@@ -27,7 +27,7 @@ services:
     deploy:
       replicas: ${COMPOSE_REPLICAS:-1}
     volumes:
-      - /tmp/orbit-docs-repositories:/tmp/orbit-docs-repositories
+      - orbit-docs-repositories:/tmp/orbit-docs-repositories
       - /etc/localtime:/etc/localtime:ro
     networks:
       - proxy
@@ -53,3 +53,6 @@ services:
 networks:
   proxy:
     external: true
+
+volumes:
+  orbit-docs-repositories:

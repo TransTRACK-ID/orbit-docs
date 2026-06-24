@@ -30,9 +30,12 @@ services:
     ports:
       - "${COMPOSE_PUBLIC_PORT:-3000}:3000"
     volumes:
-      - /tmp/orbit-docs-repositories:/tmp/orbit-docs-repositories
+      - orbit-docs-repositories:/tmp/orbit-docs-repositories
     networks:
       - orbit-network
+
+volumes:
+  orbit-docs-repositories:
 
 networks:
   orbit-network:

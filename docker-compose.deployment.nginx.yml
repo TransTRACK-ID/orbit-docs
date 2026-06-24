@@ -32,7 +32,7 @@ services:
     deploy:
       replicas: ${COMPOSE_REPLICAS:-1}
     volumes:
-      - /tmp/orbit-docs-repositories:/tmp/orbit-docs-repositories
+      - orbit-docs-repositories:/tmp/orbit-docs-repositories
       - /etc/localtime:/etc/localtime:ro
     networks:
       - orbit-shared
@@ -65,3 +65,6 @@ services:
 networks:
   orbit-shared:
     external: true
+
+volumes:
+  orbit-docs-repositories:
