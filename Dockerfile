@@ -37,7 +37,7 @@ ENV NODE_ENV=production
 # - bash: opencode agent tool execution
 # - curl: used to install cursor-agent below
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends bash curl git openssh-client ca-certificates unzip && \
+    apt-get install -y --no-install-recommends bash curl git openssh-client ca-certificates unzip gosu && \
     rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r nodejs --gid=1001 && \
@@ -71,17 +71,22 @@ COPY --from=builder /app/.output /app/.output
 COPY --from=builder /app/templates /app/templates
 
 # Writable dirs: git clones, opencode provider cache, agent config, cursor data
-RUN mkdir -p /tmp/orbit-docs-repositories /home/nodejs/.config/opencode /home/nodejs/.cursor /home/nodejs/.local/share && \
-    chown -R nodejs:nodejs /app/.output /app/templates /tmp/orbit-docs-repositories /usr/local/bun /home/nodejs && \
+RUN mkdir -p /home/nodejs/.local/share/orbit-docs-repositories /home/nodejs/.config/opencode /home/nodejs/.cursor /home/nodejs/.local/share && \
+    chown -R nodejs:nodejs /app/.output /app/templates /usr/local/bun /home/nodejs && \
     chmod -R u+rwx /home/nodejs/.local
 
-USER nodejs
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+USER root
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 EXPOSE 3000
 
 ENV NUXT_HOST=0.0.0.0
 ENV NUXT_PORT=3000
 ENV HOME=/home/nodejs
+ENV ORBIT_REPO_DIR=/home/nodejs/.local/share/orbit-docs-repositories
 ENV PATH="/home/nodejs/.local/bin:/usr/local/bin:${PATH}"
 # OPENCODE_CONFIG_B64 is injected at runtime via docker-compose / .env
 # CURSOR_API_KEY is injected at runtime via docker-compose / .env when DOC_AGENT=cursor

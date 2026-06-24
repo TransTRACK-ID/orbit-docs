@@ -2,8 +2,8 @@ import { exec } from "child_process";
 import { promisify } from "util";
 import { readFile, mkdir } from "fs/promises";
 import { join } from "path";
-import { tmpdir } from "os";
 import { existsSync } from "fs";
+import { getRepoDir } from "~/server/utils/repo-dir";
 import { getDb } from "~/server/database";
 import {
   docGenerationJobs,
@@ -35,9 +35,6 @@ import {
 } from "./doc-prompts";
 
 const execAsync = promisify(exec);
-
-// Clone into a writable temp dir so it works on serverless (ephemeral) FS too.
-const REPO_DIR = join(tmpdir(), "orbit-docs-repositories");
 
 async function ensureDir(dir: string): Promise<void> {
   if (!existsSync(dir)) {
@@ -669,7 +666,7 @@ export async function generateProductDocs(
   opts: { cursorModel?: string } = {}
 ): Promise<void> {
   const agent = createAgent({ model: opts.cursorModel });
-  const baseDir = join(REPO_DIR, appId);
+  const baseDir = join(getRepoDir(), appId);
   const settings = await getDocGenerationSettings();
 
   const enabledSteps = [
@@ -1072,7 +1069,7 @@ export async function generateRepoSdd(
       lastProcessedRef: repoRow.lastProcessedRef,
     };
 
-    const dir = join(REPO_DIR, repoRow.appId, getRepoName(repo.repoUrl));
+    const dir = join(getRepoDir(), repoRow.appId, getRepoName(repo.repoUrl));
     const resultId = await createRepoResult(jobId, repo.id, repo.repoUrl);
 
     // Step 1: Clone/pull with full history (needed to diff between tags)
@@ -1081,7 +1078,7 @@ export async function generateRepoSdd(
       progressPct: 10,
       progressMessage: `Updating ${repo.name}...`,
     });
-    await ensureDir(join(REPO_DIR, repoRow.appId));
+    await ensureDir(join(getRepoDir(), repoRow.appId));
     await cloneOrPull(
       repo.repoUrl,
       dir,

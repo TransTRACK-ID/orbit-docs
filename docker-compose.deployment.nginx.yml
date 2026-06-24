@@ -29,10 +29,11 @@ services:
       CURSOR_API_KEY: ${CURSOR_API_KEY:-}
       NITRO_POSTRACK_API_URL: ${NITRO_POSTRACK_API_URL:-}
       NITRO_POSTRACK_API_KEY: ${NITRO_POSTRACK_API_KEY:-}
+      ORBIT_REPO_DIR: /home/nodejs/.local/share/orbit-docs-repositories
     deploy:
       replicas: ${COMPOSE_REPLICAS:-1}
     volumes:
-      - orbit-docs-repositories:/tmp/orbit-docs-repositories
+      - orbit-docs-repositories:/home/nodejs/.local/share/orbit-docs-repositories
       - /etc/localtime:/etc/localtime:ro
     networks:
       - orbit-shared
