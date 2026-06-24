@@ -1,6 +1,7 @@
 import { defineEventHandler } from "h3";
 import { useRuntimeConfig } from "#imports";
 import { isCursorInstalled, isCursorAuthenticated } from "~/server/lib/cursor-agent";
+import { getOpencodeConfigB64 } from "~/server/utils/opencode-config";
 
 export default defineEventHandler(async () => {
   const config = useRuntimeConfig();
@@ -12,7 +13,7 @@ export default defineEventHandler(async () => {
       ok: true,
       message: "Using OpenCode agent",
       config: {
-        opencodeConfigB64: !!(config.opencodeConfigB64 as string),
+        opencodeConfigB64: !!getOpencodeConfigB64(),
       },
     };
   }

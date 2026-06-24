@@ -1,8 +1,8 @@
 import { createOpencodeServer } from "@opencode-ai/sdk/server";
 import { createOpencodeClient } from "@opencode-ai/sdk";
-import { useRuntimeConfig } from "#imports";
 import type { Config } from "@opencode-ai/sdk";
 import * as net from "net";
+import { getOpencodeConfigB64 } from "~/server/utils/opencode-config";
 
 // We use the async + SSE event pattern so:
 //  - The HTTP request that submits the prompt returns quickly (no 5/10 min
@@ -28,11 +28,12 @@ let _decodedConfig: OpencodeConfig | null = null;
 function getConfig(): OpencodeConfig {
   if (_decodedConfig) return _decodedConfig;
 
-  const config = useRuntimeConfig();
-  const b64 = config.opencodeConfigB64 as string | undefined;
+  const b64 = getOpencodeConfigB64();
 
   if (!b64) {
-    throw new Error("OPENCODE_CONFIG_B64 is not set in runtime config");
+    throw new Error(
+      "OPENCODE_CONFIG_B64 is not set. Add a base64-encoded opencode config.json to your environment (see .env.example)."
+    );
   }
 
   try {
