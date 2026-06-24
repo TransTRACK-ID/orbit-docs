@@ -1,11 +1,10 @@
 import { defineEventHandler } from "h3";
-import { useRuntimeConfig } from "#imports";
 import { isCursorInstalled, isCursorAuthenticated } from "~/server/lib/cursor-agent";
+import { getDocAgent, getCursorModel } from "~/server/utils/agent-config";
 import { getOpencodeConfigB64 } from "~/server/utils/opencode-config";
 
 export default defineEventHandler(async () => {
-  const config = useRuntimeConfig();
-  const agent = (config.docAgent as string) || "opencode";
+  const agent = getDocAgent();
 
   if (agent === "opencode") {
     return {
@@ -36,7 +35,7 @@ export default defineEventHandler(async () => {
         : "Authenticate with: cursor-agent login (or set CURSOR_API_KEY env var)"
       : "Install cursor-agent: npm install -g cursor-agent",
     config: {
-      model: (config.cursorModel as string) || "auto",
+      model: getCursorModel(),
       hasApiKey: !!process.env.CURSOR_API_KEY,
     },
   };

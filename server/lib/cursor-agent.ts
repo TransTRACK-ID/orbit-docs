@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { useRuntimeConfig } from "#imports";
+import { getCursorModel as getCursorModelFromEnv } from "~/server/utils/agent-config";
 
 export interface AnalyzeOptions {
   workdir?: string;
@@ -26,8 +26,7 @@ function getCursorPath(): string {
 }
 
 function getCursorModel(): string {
-  const config = useRuntimeConfig();
-  return (config.cursorModel as string) || "auto";
+  return getCursorModelFromEnv();
 }
 
 export async function isCursorInstalled(): Promise<boolean> {

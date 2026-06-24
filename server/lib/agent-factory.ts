@@ -1,9 +1,10 @@
-import { useRuntimeConfig } from "#imports";
 import { createOpencodeAgent } from "./opencode-agent";
 import { createCursorAgent } from "./cursor-agent";
 import type { AnalyzeOptions } from "./opencode-agent";
+import { getCursorModel, getDocAgent } from "~/server/utils/agent-config";
+import type { AgentType } from "~/server/utils/agent-config";
 
-export type AgentType = "opencode" | "cursor";
+export type { AgentType };
 
 export interface Agent {
   analyze(prompt: string, options: AnalyzeOptions): Promise<string>;
@@ -15,15 +16,10 @@ export interface AgentConfig {
 }
 
 export function getAgentConfig(): AgentConfig {
-  const config = useRuntimeConfig();
-  const type = (config.docAgent as string) || "opencode";
-  if (type !== "opencode" && type !== "cursor") {
-    console.warn(`[AgentFactory] Unknown DOC_AGENT "${type}", falling back to opencode`);
-    return { type: "opencode" };
-  }
+  const type = getDocAgent();
   return {
     type,
-    model: type === "cursor" ? (config.cursorModel as string | undefined) : undefined,
+    model: type === "cursor" ? getCursorModel() : undefined,
   };
 }
 
