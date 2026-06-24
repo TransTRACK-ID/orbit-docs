@@ -16,9 +16,7 @@ export function resolveApiBaseUrl(baseAPI: string | undefined): string {
   return `http://127.0.0.1:${port}${baseAPI}`
 }
 
-export function isPreviewMode(config: any): boolean {
-  return config.isPreview === true || config.isPreview === 'true'
-}
+export { isRuntimePreviewMode as isPreviewMode } from "./runtime-env";
 
 /**
  * Checks whether the given API base URL points back to the current app.

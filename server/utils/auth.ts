@@ -1,7 +1,11 @@
 import { type H3Event, getCookie, getHeader, createError, getRequestHeader } from "h3";
 import { $fetch } from "ofetch";
-import { useRuntimeConfig } from "#imports";
 import { resolveApiBaseUrl, isPreviewMode, isSelfReferencingUrl } from "./api-url";
+import {
+  getJwtSecret,
+  isRuntimePreviewMode,
+  resolveConfiguredApiBaseUrl,
+} from "./runtime-env";
 import { getDb } from "~/server/database";
 import { users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
@@ -127,10 +131,8 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
     });
   }
 
-  const config = useRuntimeConfig();
-
   // Preview mode: bypass auth checks for convenience
-  if (process.env.ORBIT_PREVIEW === 'true') {
+  if (isRuntimePreviewMode()) {
     return {
       id: "preview-user",
       email: "preview@orbit.local",
@@ -138,12 +140,12 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
     };
   }
 
-  const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+  const apiBaseUrl = resolveApiBaseUrl(resolveConfiguredApiBaseUrl());
   const requestHost = getRequestHeader(event, 'host') || '';
 
   // Check if token is a JWT (contains two dots)
   if (token.split(".").length === 3) {
-    const jwtSecret = config.jwtSecret as string;
+    const jwtSecret = getJwtSecret();
     if (jwtSecret) {
       const decoded = verifyJwtToken(token, jwtSecret);
       if (decoded && decoded.email) {
@@ -176,7 +178,7 @@ export async function getAuthUser(event: H3Event): Promise<SessionUser> {
 
   // In preview mode, when no external API is configured, or when the URL points to ourselves,
   // validate against local DB
-  if (isPreviewMode(config) || !apiBaseUrl || isSelfReferencingUrl(apiBaseUrl, requestHost)) {
+  if (isPreviewMode() || !apiBaseUrl || isSelfReferencingUrl(apiBaseUrl, requestHost)) {
     const db = getDb();
     const rows = await db.select().from(users).where(eq(users.id, token)).limit(1);
     const user = rows[0];

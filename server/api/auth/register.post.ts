@@ -2,11 +2,14 @@
 // When an external API is configured and the app is NOT in preview mode,
 // it also forwards encrypted credentials to the third-party API.
 
-import { useRuntimeConfig } from "#imports";
 import crypto from "crypto";
 import { createError, defineEventHandler, readBody, setCookie, getRequestHeader } from "h3";
 import { $fetch } from "ofetch";
 import { resolveApiBaseUrl, isPreviewMode, isSelfReferencingUrl } from "../../utils/api-url";
+import {
+  getAppKey,
+  resolveConfiguredApiBaseUrl,
+} from "~/server/utils/runtime-env";
 import { ensureTeamMember } from "~/server/utils/team-access";
 import { hashPassword, type SessionUser } from "~/server/utils/auth";
 import { getDb } from "~/server/database";
@@ -88,8 +91,7 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    const config = useRuntimeConfig();
-    const appKey = config.appKey;
+    const appKey = getAppKey();
 
     if (!appKey) {
       throw createError({
@@ -99,11 +101,11 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+    const apiBaseUrl = resolveApiBaseUrl(resolveConfiguredApiBaseUrl());
     const requestHost = getRequestHeader(event, 'host') || '';
 
     // External API path (only when not in preview mode, URL is configured, and not pointing to ourselves)
-    if (!isPreviewMode(config) && apiBaseUrl && !isSelfReferencingUrl(apiBaseUrl, requestHost)) {
+    if (!isPreviewMode() && apiBaseUrl && !isSelfReferencingUrl(apiBaseUrl, requestHost)) {
       const plainText = JSON.stringify({ name, email, password, passwordConfirmation });
       const encryptedPayload = await encryptAES(plainText, appKey);
 

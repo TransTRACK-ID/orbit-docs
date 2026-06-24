@@ -3,6 +3,7 @@ import { DEFAULT_OAUTH_ENDPOINTS, getAzureEndpoints, getKeycloakEndpoints } from
 import { getDb } from '~/server/database';
 import { settings } from '~/server/database/schema';
 import { eq } from 'drizzle-orm';
+import { resolveConfiguredApiBaseUrl } from '~/server/utils/runtime-env';
 
 export default defineEventHandler(async (event) => {
   const providerType = getRouterParam(event, 'provider');
@@ -57,12 +58,12 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const runtimeConfig = useRuntimeConfig();
   const protocol = getRequestProtocol(event);
   const host = getRequestHost(event);
-  const baseURL = process.env.NUXT_APP_BASE_URL || runtimeConfig.app.baseURL || '/';
+  const baseURL = process.env.NUXT_APP_BASE_URL || useRuntimeConfig().app.baseURL || '/';
   const base = baseURL.replace(/\/$/, '');
-  const baseCallbackUrl = provider.callbackUrl || `${runtimeConfig.public?.baseAPI || `${protocol}://${host}${base}`}/api/auth/sso/${providerType}/callback`;
+  const configuredApiBase = resolveConfiguredApiBaseUrl();
+  const baseCallbackUrl = provider.callbackUrl || `${configuredApiBase || `${protocol}://${host}${base}`}/api/auth/sso/${providerType}/callback`;
   const callbackUrl = baseCallbackUrl;
   
   // Generate PKCE parameters

@@ -3,8 +3,12 @@
 
 import { defineEventHandler, getCookie, getHeader, createError, getRequestHeader } from "h3";
 import { $fetch } from "ofetch";
-import { useRuntimeConfig } from "#imports";
 import { resolveApiBaseUrl, isPreviewMode, isSelfReferencingUrl } from "../../utils/api-url";
+import {
+  getJwtSecret,
+  isRuntimePreviewMode,
+  resolveConfiguredApiBaseUrl,
+} from "~/server/utils/runtime-env";
 import { getDb } from "~/server/database";
 import { users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
@@ -45,7 +49,7 @@ interface ErrorResponse {
 export default defineEventHandler(async (event) => {
     try {
         // Preview mode: return mock session immediately without checking cookies/headers
-        if (process.env.ORBIT_PREVIEW === 'true') {
+        if (isRuntimePreviewMode()) {
             return {
                 status: "success",
                 data: {
@@ -79,13 +83,12 @@ export default defineEventHandler(async (event) => {
             });
         }
 
-        const config = useRuntimeConfig();
-        const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+        const apiBaseUrl = resolveApiBaseUrl(resolveConfiguredApiBaseUrl());
         const requestHost = getRequestHeader(event, 'host') || '';
 
         // Check if token is a JWT (contains two dots)
         if (sessionToken.split('.').length === 3) {
-            const jwtSecret = config.jwtSecret as string;
+            const jwtSecret = getJwtSecret();
             if (jwtSecret) {
                 const decoded = verifyJwtToken(sessionToken, jwtSecret);
                 if (decoded && decoded.email) {
@@ -117,7 +120,7 @@ export default defineEventHandler(async (event) => {
 
         // In preview mode, when no external API is configured, or when URL points to ourselves,
         // validate against local DB
-        if (isPreviewMode(config) || !apiBaseUrl || isSelfReferencingUrl(apiBaseUrl, requestHost)) {
+        if (isPreviewMode() || !apiBaseUrl || isSelfReferencingUrl(apiBaseUrl, requestHost)) {
             const db = getDb();
             const rows = await db.select().from(users).where(eq(users.id, sessionToken)).limit(1);
             const user = rows[0];

@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { getAdminEmail, getJwtSecret } from "~/server/utils/runtime-env";
 
 export default defineEventHandler((event) => {
     const path = event.path;
@@ -13,7 +14,7 @@ export default defineEventHandler((event) => {
         if (!token) {
             token = getCookie(event, 'auth.token');
         }
-        const config = useRuntimeConfig();
+        const jwtSecret = getJwtSecret();
 
         if (!token) {
             if (isProtectedPage) return sendRedirect(event, '/login');
@@ -26,8 +27,8 @@ export default defineEventHandler((event) => {
         let decoded;
         try {
             // Try JWT verification first
-            if (token.split('.').length === 3 && config.jwtSecret) {
-                decoded = jwt.verify(token, config.jwtSecret as string);
+            if (token.split('.').length === 3 && jwtSecret) {
+                decoded = jwt.verify(token, jwtSecret);
             } else if (!token.includes('.')) {
                 // Handle fallback SSO tokens (base64-encoded, no dots) when JWT_SECRET is not configured
                 try {
@@ -64,8 +65,7 @@ export default defineEventHandler((event) => {
         };
 
         if (path.startsWith('/admin/sso') || path.startsWith('/api/admin/sso')) {
-            const config = useRuntimeConfig();
-            const adminEmail = config.adminEmail as string;
+            const adminEmail = getAdminEmail();
             if (adminEmail && decoded.email?.toLowerCase() !== adminEmail.toLowerCase()) {
                 if (isProtectedPage) return sendRedirect(event, '/');
                 throw createError({

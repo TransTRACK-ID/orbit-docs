@@ -1,13 +1,13 @@
 import { createError, defineEventHandler, readBody, setCookie } from "h3";
 import { resolveApiBaseUrl, isPreviewMode } from "../../utils/api-url";
+import { resolveConfiguredApiBaseUrl } from "~/server/utils/runtime-env";
 
 export default defineEventHandler(async (event) => {
   try {
-    const config = useRuntimeConfig();
-    const baseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+    const baseUrl = resolveApiBaseUrl(resolveConfiguredApiBaseUrl());
 
     // Preview mode: no external API available, return mock response
-    if (isPreviewMode(config)) {
+    if (isPreviewMode()) {
       setCookie(event, "session_token", "", { path: "/", maxAge: 0 });
       setCookie(event, "auth.token", "", { path: "/", maxAge: 0 });
       setCookie(event, "user_info", "", { path: "/", maxAge: 0 });

@@ -5,6 +5,7 @@ import { getDb } from '~/server/database';
 import { settings, users } from '~/server/database/schema';
 import { eq } from 'drizzle-orm';
 import { ensureTeamMember } from '~/server/utils/team-access';
+import { getJwtSecret } from '~/server/utils/runtime-env';
 
 interface TokenResponse {
   access_token: string;
@@ -263,8 +264,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Create JWT or fallback token
-  const runtimeConfig = useRuntimeConfig();
-  const jwtSecret = runtimeConfig.jwtSecret as string;
+  const jwtSecret = getJwtSecret();
   const AUTH_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 5; // 5 days
 
   let token: string;

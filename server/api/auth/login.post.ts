@@ -2,11 +2,17 @@
 // When an external API is configured and the app is NOT in preview mode,
 // it also forwards encrypted credentials to the third-party API.
 
-import { useRuntimeConfig } from "#imports";
 import crypto from "crypto";
 import { createError, defineEventHandler, readBody, setCookie, getRequestHeader } from "h3";
 import { $fetch } from "ofetch";
 import { resolveApiBaseUrl, isPreviewMode, isSelfReferencingUrl } from "../../utils/api-url";
+import {
+  getAdminEmail,
+  getAdminPassword,
+  getAppKey,
+  getJwtSecret,
+  resolveConfiguredApiBaseUrl,
+} from "~/server/utils/runtime-env";
 import { ensureTeamMember } from "~/server/utils/team-access";
 import { verifyPassword, signJwtToken, type SessionUser } from "~/server/utils/auth";
 import { getDb } from "~/server/database";
@@ -72,8 +78,7 @@ export default defineEventHandler(async (event) => {
       });
     }
 
-    const config = useRuntimeConfig();
-    const appKey = config.appKey;
+    const appKey = getAppKey();
 
     if (!appKey) {
       throw createError({
@@ -84,9 +89,9 @@ export default defineEventHandler(async (event) => {
     }
 
     // Check for admin login (similar to mock-service)
-    const adminEmail = config.adminEmail as string;
-    const adminPassword = config.adminPassword as string;
-    const jwtSecret = config.jwtSecret as string;
+    const adminEmail = getAdminEmail();
+    const adminPassword = getAdminPassword();
+    const jwtSecret = getJwtSecret();
     const AUTH_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 5; // 5 days
 
     if (adminEmail && adminPassword && email === adminEmail && password === adminPassword) {
@@ -126,11 +131,11 @@ export default defineEventHandler(async (event) => {
       };
     }
 
-    const apiBaseUrl = resolveApiBaseUrl(config.apiBaseUrl || config.public.baseAPI);
+    const apiBaseUrl = resolveApiBaseUrl(resolveConfiguredApiBaseUrl());
     const requestHost = getRequestHeader(event, 'host') || '';
 
     // External API path (only when not in preview mode, URL is configured, and not pointing to ourselves)
-    if (!isPreviewMode(config) && apiBaseUrl && !isSelfReferencingUrl(apiBaseUrl, requestHost)) {
+    if (!isPreviewMode() && apiBaseUrl && !isSelfReferencingUrl(apiBaseUrl, requestHost)) {
       const plainText = JSON.stringify({ email, password });
       const encryptedPayload = await encryptAES(plainText, appKey);
 
@@ -220,7 +225,7 @@ export default defineEventHandler(async (event) => {
 
     // Preview mode: use a stable mock token so @sidebase/nuxt-auth can recover auth state
     // Otherwise: use JWT for local auth tokens so they expire and can't be forged
-    const token = isPreviewMode(config)
+    const token = isPreviewMode()
       ? "preview-mock-token"
       : jwtSecret
         ? signJwtToken({ sub: user.id, email: user.email, name: user.name }, jwtSecret, COOKIE_MAX_AGE)

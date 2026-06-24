@@ -4,6 +4,8 @@
  * In production, restrict to the configured public app URL.
  */
 
+import { getPublicAppUrl } from "~/server/utils/runtime-env";
+
 const ALLOWED_ORIGINS = new Set([
   "http://localhost:3000",
   "http://localhost:3001",
@@ -41,7 +43,7 @@ export default defineNitroPlugin((nitroApp) => {
     }
 
     const origin = getRequestHeader(event, 'origin') || '';
-    const publicUrl = useRuntimeConfig().public.appUrl || '';
+    const publicUrl = getPublicAppUrl();
 
     // Add configured public URL to allowed origins
     if (publicUrl) {
