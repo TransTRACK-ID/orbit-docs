@@ -29,6 +29,60 @@ const editorInstance = ref<any>(null);
 const isReady = ref(false);
 const dragDropInstance = ref<any>(null);
 const undoInstance = ref<any>(null);
+let pasteCleanup: (() => void) | null = null;
+
+async function insertPastedBlocks(blocks: Array<{ type: string; data: Record<string, any> }>) {
+  const editor = editorInstance.value;
+  if (!editor || blocks.length === 0) return;
+
+  const index = editor.blocks.getCurrentBlockIndex();
+  const currentBlock = editor.blocks.getBlockByIndex(index);
+  const replaceCurrent = Boolean(currentBlock?.isEmpty);
+
+  editor.blocks.insert(
+    blocks[0].type,
+    blocks[0].data,
+    {},
+    index,
+    true,
+    replaceCurrent
+  );
+
+  if (blocks.length > 1) {
+    editor.blocks.insertMany(blocks.slice(1), index + 1);
+  }
+}
+
+function isBlockLevelHtmlPaste(html: string): boolean {
+  return /<(p|h[1-6]|ul|ol|blockquote|pre|table|hr|div|article|section)\b/i.test(html);
+}
+
+function setupNotionPasteHandler(editor: any) {
+  const redactor = editorContainer.value?.querySelector(".codex-editor__redactor");
+  if (!redactor) return;
+
+  const onPaste = async (event: Event) => {
+    const e = event as ClipboardEvent;
+    const clipboard = e.clipboardData;
+    if (!clipboard) return;
+
+    if (clipboard.getData("application/x-editor-js")) return;
+
+    const html = clipboard.getData("text/html");
+    if (!html?.trim() || !isBlockLevelHtmlPaste(html)) return;
+
+    const { htmlToEditorJsBlocks } = await import("~/composables/useEditorJsConverter");
+    const blocks = htmlToEditorJsBlocks(html);
+    if (blocks.length === 0) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    await insertPastedBlocks(blocks);
+  };
+
+  redactor.addEventListener("paste", onPaste, true);
+  pasteCleanup = () => redactor.removeEventListener("paste", onPaste, true);
+}
 
 // ── Import Editor.js dynamically (client-only) ─────────────────
 async function initEditor() {
@@ -164,14 +218,20 @@ async function initEditor() {
       dragDropInstance.value = new DragDrop(editor, 'none');
       // Undo / redo (Ctrl+Z / Ctrl+Shift+Z)
       undoInstance.value = new Undo({ editor });
+      setupNotionPasteHandler(editor);
       emit("ready");
     },
     onChange: async () => {
       const output = await editor.save();
-      const { editorJsToMarkdown } = await import("~/composables/useEditorJsConverter");
-      const markdown = editorJsToMarkdown(output);
+      const { editorJsToMarkdown, sanitizeEditorJsData } = await import("~/composables/useEditorJsConverter");
+      const sanitized = sanitizeEditorJsData(output);
+      const needsRender = JSON.stringify(sanitized.blocks) !== JSON.stringify(output.blocks);
+      if (needsRender) {
+        await editor.render(sanitized);
+      }
+      const markdown = editorJsToMarkdown(sanitized);
       emit("update:modelValue", markdown);
-      emit("change", output, markdown);
+      emit("change", sanitized, markdown);
     },
   });
 
@@ -197,6 +257,8 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  pasteCleanup?.();
+  pasteCleanup = null;
   if (dragDropInstance.value) {
     dragDropInstance.value = null;
   }

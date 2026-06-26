@@ -61,7 +61,7 @@ export function markdownToEditorJs(md: string): EditorJsData {
       const text = headingMatch[2].trim();
       blocks.push({
         type: "header",
-        data: { text: escapeHtml(text), level },
+        data: { text: escapeHtml(decodeHtmlEntities(text)), level },
       });
       i++;
       continue;
@@ -308,7 +308,7 @@ export function editorJsToMarkdown(data: EditorJsData): string {
       case "header": {
         const level = block.data.level || 2;
         const hashes = "#".repeat(level);
-        out.push(`${hashes} ${block.data.text || ""}`);
+        out.push(`${hashes} ${decodeHtmlEntities(stripHtml(block.data.text || ""))}`);
         break;
       }
       case "paragraph": {
@@ -436,8 +436,237 @@ export function editorJsToMarkdown(data: EditorJsData): string {
 }
 
 // ── Inline helpers ─────────────────────────────────────────────
+
+const HTML_ENTITY_RE = /&(?:[a-zA-Z]+|#\d+|#x[0-9a-fA-F]+);/;
+
+/** Iteratively decode HTML entities (handles double-encoded Notion paste like &amp;amp;). */
+export function decodeHtmlEntities(text: string): string {
+  if (!text || !HTML_ENTITY_RE.test(text)) return text;
+
+  let prev = "";
+  let current = text;
+  while (current !== prev) {
+    prev = current;
+    current = current
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+  }
+  return current;
+}
+
+/** Normalize inline HTML stored in Editor.js blocks (decode stray entity text). */
+export function normalizeEditorHtml(html: string): string {
+  if (!html) return html;
+  if (typeof document === "undefined") {
+    return decodeHtmlEntities(html);
+  }
+
+  const el = document.createElement("div");
+  el.innerHTML = html;
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const text = node.textContent || "";
+    const decoded = decodeHtmlEntities(text);
+    if (decoded !== text) {
+      node.textContent = decoded;
+    }
+  }
+  return el.innerHTML;
+}
+
+/** Clean clipboard HTML from Notion and similar sources before Editor.js ingests it. */
+export function normalizePastedHtml(html: string): string {
+  if (!html) return html;
+  if (typeof document === "undefined") {
+    return decodeHtmlEntities(html);
+  }
+
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll("meta, style, script").forEach((el) => el.remove());
+
+  const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT);
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const text = node.textContent || "";
+    const decoded = decodeHtmlEntities(text);
+    if (decoded !== text) {
+      node.textContent = decoded;
+    }
+  }
+
+  return doc.body.innerHTML;
+}
+
+const BLOCK_TAGS = new Set([
+  "P", "H1", "H2", "H3", "H4", "H5", "H6",
+  "UL", "OL", "BLOCKQUOTE", "PRE", "TABLE", "HR", "LI",
+]);
+
+function hasBlockChildren(el: Element): boolean {
+  return Array.from(el.children).some((child) => BLOCK_TAGS.has(child.tagName));
+}
+
+function getInlineHtml(el: Element): string {
+  return normalizeEditorHtml(el.innerHTML);
+}
+
+function elementToBlocks(el: Element): EditorJsData["blocks"] {
+  const tag = el.tagName.toLowerCase();
+
+  if (/^h[1-3]$/.test(tag)) {
+    const html = getInlineHtml(el);
+    if (!html.trim()) return [];
+    return [{ type: "header", data: { text: html, level: Number(tag[1]) } }];
+  }
+
+  if (tag === "p" || (tag === "div" && !hasBlockChildren(el))) {
+    const html = getInlineHtml(el);
+    if (!html.trim()) return [];
+    return [{ type: "paragraph", data: { text: html } }];
+  }
+
+  if (tag === "ul" || tag === "ol") {
+    const items = Array.from(el.children)
+      .filter((child) => child.tagName === "LI")
+      .map((li) => ({
+        content: getInlineHtml(li),
+        meta: {},
+        items: [] as any[],
+      }))
+      .filter((item) => item.content.trim());
+    if (items.length === 0) return [];
+    return [{
+      type: "list",
+      data: { style: tag === "ol" ? "ordered" : "unordered", items },
+    }];
+  }
+
+  if (tag === "blockquote") {
+    const html = getInlineHtml(el);
+    if (!html.trim()) return [];
+    return [{ type: "quote", data: { text: html, alignment: "left" } }];
+  }
+
+  if (tag === "pre") {
+    const codeEl = el.querySelector("code");
+    const code = decodeHtmlEntities(codeEl?.textContent || el.textContent || "");
+    if (!code.trim()) return [];
+    const language = codeEl?.className.match(/language-(\S+)/)?.[1] || "";
+    return [{ type: "code", data: { code, language } }];
+  }
+
+  if (tag === "hr") {
+    return [{ type: "delimiter", data: {} }];
+  }
+
+  if (tag === "table") {
+    const rows = Array.from(el.querySelectorAll("tr")).map((row) =>
+      Array.from(row.querySelectorAll("th, td")).map((cell) =>
+        decodeHtmlEntities(cell.textContent || "").trim()
+      )
+    ).filter((row) => row.some((cell) => cell));
+    if (rows.length === 0) return [];
+    return [{ type: "table", data: { withHeadings: true, content: rows } }];
+  }
+
+  if (tag === "div" || tag === "article" || tag === "section" || tag === "body") {
+    const blocks: EditorJsData["blocks"] = [];
+    for (const child of el.children) {
+      blocks.push(...elementToBlocks(child));
+    }
+    return blocks;
+  }
+
+  return [];
+}
+
+/** Convert pasted HTML into Editor.js blocks with decoded entities. */
+export function htmlToEditorJsBlocks(html: string): EditorJsData["blocks"] {
+  if (!html.trim()) return [];
+  if (typeof document === "undefined") return [];
+
+  const normalized = normalizePastedHtml(html);
+  const doc = new DOMParser().parseFromString(normalized, "text/html");
+  const blocks = elementToBlocks(doc.body);
+
+  if (blocks.length === 0) {
+    const text = decodeHtmlEntities(doc.body.textContent || "").trim();
+    if (text) {
+      blocks.push({
+        type: "paragraph",
+        data: { text: escapeHtml(text).replace(/\n/g, "<br>") },
+      });
+    }
+  }
+
+  return blocks;
+}
+
+/** Decode entity artifacts across all text-bearing Editor.js block fields. */
+export function sanitizeEditorJsData(data: EditorJsData): EditorJsData {
+  const blocks = (data.blocks || []).map((block) => {
+    const next = { ...block, data: { ...block.data } };
+
+    if (typeof next.data.text === "string") {
+      next.data.text = normalizeEditorHtml(next.data.text);
+    }
+    if (typeof next.data.title === "string") {
+      next.data.title = decodeHtmlEntities(next.data.title);
+    }
+    if (Array.isArray(next.data.items)) {
+      next.data.items = next.data.items.map((item: any) => {
+        if (typeof item === "string") {
+          return normalizeEditorHtml(item);
+        }
+        const copy = { ...item };
+        if (typeof copy.content === "string") {
+          copy.content = normalizeEditorHtml(copy.content);
+        }
+        if (typeof copy.text === "string") {
+          copy.text = normalizeEditorHtml(copy.text);
+        }
+        if (Array.isArray(copy.items)) {
+          copy.items = copy.items.map((nested: any) =>
+            typeof nested === "string"
+              ? normalizeEditorHtml(nested)
+              : {
+                  ...nested,
+                  content: typeof nested.content === "string"
+                    ? normalizeEditorHtml(nested.content)
+                    : nested.content,
+                }
+          );
+        }
+        return copy;
+      });
+    }
+    if (Array.isArray(next.data.content)) {
+      next.data.content = next.data.content.map((row: string[]) =>
+        row.map((cell) => decodeHtmlEntities(cell))
+      );
+    }
+    if (typeof next.data.code === "string") {
+      next.data.code = decodeHtmlEntities(next.data.code);
+    }
+    if (Array.isArray(next.data.items) && next.type === "toggle") {
+      next.data.items = sanitizeEditorJsData({ blocks: next.data.items }).blocks;
+    }
+
+    return next;
+  });
+
+  return { ...data, blocks };
+}
+
 function inlineMarkdownToHtml(text: string): string {
-  return text
+  const decoded = decodeHtmlEntities(text);
+  return decoded
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>")
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
@@ -446,7 +675,8 @@ function inlineMarkdownToHtml(text: string): string {
 }
 
 function htmlToInlineMarkdown(html: string): string {
-  return html
+  return decodeHtmlEntities(
+    html
     .replace(/<strong><em>(.*?)<\/em><\/strong>/g, "***$1***")
     .replace(/<strong>(.*?)<\/strong>/g, "**$1**")
     .replace(/<em>(.*?)<\/em>/g, "*$1*")
@@ -454,7 +684,8 @@ function htmlToInlineMarkdown(html: string): string {
     .replace(/<a href="([^"]+)">(.*?)<\/a>/g, "[$2]($1)")
     .replace(/<br\s*\/?>/g, "\n")
     .replace(/<\/p>/g, "\n")
-    .replace(/<[^>]+>/g, "");
+    .replace(/<[^>]+>/g, "")
+  );
 }
 
 function escapeHtml(text: string): string {
@@ -479,7 +710,7 @@ export function extractEditorJsHeadings(data: EditorJsData): Array<{ level: numb
 }
 
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, "");
+  return decodeHtmlEntities(html.replace(/<[^>]+>/g, ""));
 }
 
 // ── Export / Import helpers ───────────────────────────────────
