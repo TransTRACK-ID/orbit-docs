@@ -40,7 +40,15 @@ export default class SimpleImageTool extends BaseSimpleImage {
     const showBrokenState = (message: string) => {
       finishLayout();
       image.alt = message;
-      image.removeAttribute("src");
+      // Prevent any stale load/error callbacks from firing when we reset src.
+      image.onload = null;
+      image.onerror = null;
+      // Keep the original URL on the <img> so the base save() reads it back.
+      // The broken image is hidden via CSS, so this doesn't affect rendering.
+      const originalUrl = (this.data.url || "").trim();
+      if (originalUrl) {
+        image.src = originalUrl;
+      }
       imageHolder.classList.add("cdx-simple-image__picture--broken");
       const hint = this._make("div", "cdx-simple-image__error");
       hint.textContent = message;
@@ -62,5 +70,13 @@ export default class SimpleImageTool extends BaseSimpleImage {
     }
 
     return wrapper;
+  }
+
+  save(blockContent: HTMLElement): { url: string; caption: string;[key: string]: any } {
+    const saved = super.save(blockContent) as { url: string; caption: string;[key: string]: any };
+    // Always persist the original data URL. The base class reads the resolved
+    // <img> src, which can drop filenames/spaces or be empty in broken state.
+    saved.url = (this.data.url || "").trim();
+    return saved;
   }
 }

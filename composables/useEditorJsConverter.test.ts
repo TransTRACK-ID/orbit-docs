@@ -92,6 +92,27 @@ describe("htmlToEditorJsBlocks", () => {
     expect(blocks[0].type).toBe("image");
     expect(blocks[0].data.url).toBe("bismillah ya Allaahhh.gif");
   });
+
+  it("round-trips image blocks with spaced filenames through markdown", () => {
+    const data = {
+      time: Date.now(),
+      version: "2.29.0",
+      blocks: [
+        {
+          type: "image",
+          data: createImageBlockData("bismillah ya Allaahhh.gif", "bismillah ya Allaahhh"),
+        },
+      ],
+    };
+
+    const markdown = editorJsToMarkdown(data);
+    expect(markdown).toContain("bismillah ya Allaahhh.gif");
+
+    const parsed = markdownToEditorJs(markdown);
+    expect(parsed.blocks).toHaveLength(1);
+    expect(parsed.blocks[0].type).toBe("image");
+    expect(parsed.blocks[0].data.url).toBe("bismillah ya Allaahhh.gif");
+  });
 });
 
 describe("reconcileNotionImageBlocks", () => {
@@ -237,6 +258,57 @@ describe("alignBlocksWithPlainImages", () => {
     expect(blocks[1].type).toBe("image");
     expect(blocks[1].data.url).toBe("https://example.com/demo.gif");
     expect(blocks[2].type).toBe("list");
+  });
+
+  it("does not duplicate images when HTML already contains the image and plain text has the placeholder", () => {
+    const htmlBlocks = [
+      { type: "paragraph", data: { text: "intro" } },
+      {
+        type: "list",
+        data: {
+          style: "unordered",
+          items: [
+            { content: "item 1", meta: {}, items: [] },
+            { content: "item 2", meta: {}, items: [] },
+          ],
+        },
+      },
+      {
+        type: "image",
+        data: createImageBlockData("https://example.com/figure.gif", "bismillah ya Allaahhh.gif"),
+      },
+    ];
+    const plainBlocks = [
+      { type: "paragraph", data: { text: "intro" } },
+      {
+        type: "list",
+        data: {
+          style: "unordered",
+          items: [{ content: "item 1", meta: {}, items: [] }],
+        },
+      },
+      {
+        type: "image",
+        data: createImageBlockData("bismillah ya Allaahhh.gif", "bismillah ya Allaahhh"),
+      },
+      {
+        type: "list",
+        data: {
+          style: "unordered",
+          items: [{ content: "item 2", meta: {}, items: [] }],
+        },
+      },
+    ];
+
+    const merged = alignBlocksWithPlainImages(htmlBlocks, plainBlocks);
+
+    const imageBlocks = merged.filter((block) => block.type === "image");
+    expect(imageBlocks).toHaveLength(1);
+    expect(merged).toHaveLength(4);
+    expect(merged[0].type).toBe("paragraph");
+    expect(merged[1].type).toBe("list");
+    expect(merged[2].type).toBe("image");
+    expect(merged[3].type).toBe("list");
   });
 });
 

@@ -192,18 +192,42 @@ export async function reconcileNotionImageBlocks(
   return output;
 }
 
-function imageBlockIdentity(block: EditorJsData["blocks"][number]): string {
-  if (block.type !== "image") return "";
-  return normalizeFilename(String(block.data.caption || block.data.url || ""));
+function imageBlockIdentities(block: EditorJsData["blocks"][number]): string[] {
+  if (block.type !== "image") return [];
+  const caption = String(block.data.caption || "");
+  const url = String(block.data.url || "");
+  const ids = new Set<string>();
+
+  const add = (value: string) => {
+    const normalized = normalizeFilename(value);
+    if (!normalized) return;
+    ids.add(normalized);
+    const withoutExt = normalized.replace(/\.[^.]+$/, "");
+    if (withoutExt) ids.add(withoutExt);
+  };
+
+  add(caption);
+  add(url.split("/").pop() || url);
+
+  return Array.from(ids);
+}
+
+function imageBlocksMatch(
+  a: EditorJsData["blocks"][number],
+  b: EditorJsData["blocks"][number]
+): boolean {
+  if (a.type !== "image" || b.type !== "image") return false;
+  const aIds = imageBlockIdentities(a);
+  const bIds = imageBlockIdentities(b);
+  return aIds.some((id) => bIds.includes(id));
 }
 
 function containsImageBlock(
   blocks: EditorJsData["blocks"],
   imageBlock: EditorJsData["blocks"][number]
 ): boolean {
-  const identity = imageBlockIdentity(imageBlock);
-  if (!identity) return false;
-  return blocks.some((block) => block.type === "image" && imageBlockIdentity(block) === identity);
+  if (imageBlock.type !== "image") return false;
+  return blocks.some((block) => imageBlocksMatch(block, imageBlock));
 }
 
 /** Align HTML-derived blocks with plain-text structure so Notion image placeholders are kept. */
@@ -213,6 +237,31 @@ export function alignBlocksWithPlainImages(
 ): EditorJsData["blocks"] {
   const result: EditorJsData["blocks"] = [];
   let htmlIndex = 0;
+  const usedHtmlIndices = new Set<number>();
+
+  const findMatchingHtmlImage = (
+    fromIndex: number,
+    plainImage: EditorJsData["blocks"][number]
+  ): number => {
+    for (let i = fromIndex; i < htmlBlocks.length; i++) {
+      if (
+        htmlBlocks[i].type === "image"
+        && imageBlocksMatch(htmlBlocks[i], plainImage)
+        && !usedHtmlIndices.has(i)
+      ) {
+        return i;
+      }
+    }
+    return -1;
+  };
+
+  const pushHtmlImageFor = (plainImage: EditorJsData["blocks"][number]): boolean => {
+    const idx = findMatchingHtmlImage(htmlIndex, plainImage);
+    if (idx === -1) return false;
+    result.push(htmlBlocks[idx]);
+    usedHtmlIndices.add(idx);
+    return true;
+  };
 
   for (let plainIndex = 0; plainIndex < plainBlocks.length; plainIndex++) {
     const plainBlock = plainBlocks[plainIndex];
@@ -222,23 +271,12 @@ export function alignBlocksWithPlainImages(
         continue;
       }
 
-      while (
-        htmlIndex < htmlBlocks.length
-        && htmlBlocks[htmlIndex].type !== "image"
-      ) {
-        htmlIndex++;
+      // Prefer the HTML-derived image (better URL/formatting) if it matches.
+      if (pushHtmlImageFor(plainBlock)) {
+        continue;
       }
 
-      if (
-        htmlIndex < htmlBlocks.length
-        && htmlBlocks[htmlIndex].type === "image"
-        && imageBlockIdentity(htmlBlocks[htmlIndex]) === imageBlockIdentity(plainBlock)
-      ) {
-        result.push(htmlBlocks[htmlIndex]);
-        htmlIndex++;
-      } else {
-        result.push(plainBlock);
-      }
+      result.push(plainBlock);
       continue;
     }
 
@@ -263,7 +301,7 @@ export function alignBlocksWithPlainImages(
         }
 
         const imageBlock = plainBlocks[plainIndex + 1];
-        if (!containsImageBlock(result, imageBlock)) {
+        if (!containsImageBlock(result, imageBlock) && !pushHtmlImageFor(imageBlock)) {
           result.push(imageBlock);
         }
 
@@ -290,7 +328,9 @@ export function alignBlocksWithPlainImages(
   }
 
   while (htmlIndex < htmlBlocks.length) {
-    result.push(htmlBlocks[htmlIndex]);
+    if (!usedHtmlIndices.has(htmlIndex)) {
+      result.push(htmlBlocks[htmlIndex]);
+    }
     htmlIndex++;
   }
 
