@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  alignBlocksWithPlainImages,
+  createImageBlockData,
   decodeHtmlEntities,
   editorJsToMarkdown,
   htmlToEditorJsBlocks,
+  isNotionImageReference,
   markdownToEditorJs,
+  mergeNotionPasteBlocks,
   normalizeEditorHtml,
+  reconcileNotionImageBlocks,
+  readFileAsDataUrl,
   sanitizeEditorJsData,
 } from "./useEditorJsConverter";
 
@@ -49,6 +55,188 @@ describe("htmlToEditorJsBlocks", () => {
     const heading = document.createElement("div");
     heading.innerHTML = blocks[1].data.text;
     expect(heading.textContent).toBe("API & Auth");
+  });
+
+  it("converts pasted GIF image HTML into image blocks", () => {
+    const html = '<figure><img src="https://media.tenor.com/demo.gif" alt="Reaction GIF"><figcaption>Nice</figcaption></figure>';
+    const blocks = htmlToEditorJsBlocks(html);
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe("image");
+    expect(blocks[0].data.url).toBe("https://media.tenor.com/demo.gif");
+    expect(blocks[0].data.caption).toBe("Nice");
+  });
+
+  it("converts a paragraph with only an image into an image block", () => {
+    const html = '<p><img src="https://example.com/animation.gif" alt="Loop"></p>';
+    const blocks = htmlToEditorJsBlocks(html);
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe("image");
+    expect(blocks[0].data.url).toBe("https://example.com/animation.gif");
+    expect(blocks[0].data.caption).toBe("Loop");
+  });
+
+  it("converts Notion attachment references into image blocks", () => {
+    const data = markdownToEditorJs("!bismillah ya Allaahhh.gif");
+    expect(data.blocks).toHaveLength(1);
+    expect(data.blocks[0].type).toBe("image");
+    expect(data.blocks[0].data.url).toBe("bismillah ya Allaahhh.gif");
+  });
+
+  it("converts a paragraph containing only a Notion GIF reference into an image block", () => {
+    const html = "<p>!bismillah ya Allaahhh.gif</p>";
+    const blocks = htmlToEditorJsBlocks(html);
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe("image");
+    expect(blocks[0].data.url).toBe("bismillah ya Allaahhh.gif");
+  });
+});
+
+describe("reconcileNotionImageBlocks", () => {
+  it("matches Notion placeholder text to clipboard GIF files", async () => {
+    const file = new File([new Uint8Array([0x47, 0x49, 0x46])], "bismillah ya Allaahhh.gif", {
+      type: "image/gif",
+    });
+    const blocks = await reconcileNotionImageBlocks(
+      [{ type: "paragraph", data: { text: "!bismillah ya Allaahhh.gif" } }],
+      [file]
+    );
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe("image");
+    expect(blocks[0].data.url).toMatch(/^data:image\/gif;base64,/);
+  });
+
+  it("detects Notion image references in plain text", () => {
+    expect(isNotionImageReference("!bismillah ya Allaahhh.gif")).toEqual({
+      filename: "bismillah ya Allaahhh.gif",
+    });
+  });
+});
+
+describe("mergeNotionPasteBlocks", () => {
+  const gifFile = new File([new Uint8Array([0x47, 0x49, 0x46])], "bismillah ya Allaahhh.gif", {
+    type: "image/gif",
+  });
+
+  const plainText = `VESMON kini terhubung dengan penyedia data AIS terkemuka dunia, memberikan perspektif luar kapal yang presisi untuk manajemen logistik yang lebih baik:
+
+- **Vessel Tracking & Portcall Activity:** Pelacakan posisi kapal dan aktivitas sandar secara akurat.
+
+!bismillah ya Allaahhh.gif
+
+- **Port Area Monitoring:** Pengawasan zona pelabuhan untuk optimasi manajemen antrian dan logistik.`;
+
+  it("merges Notion HTML with omitted GIF and replaces the placeholder with the clipboard file", async () => {
+    const html = `
+      <p>VESMON kini terhubung dengan penyedia data AIS terkemuka dunia, memberikan perspektif luar kapal yang presisi untuk manajemen logistik yang lebih baik:</p>
+      <ul>
+        <li><strong>Vessel Tracking &amp; Portcall Activity:</strong> Pelacakan posisi kapal dan aktivitas sandar secara akurat.</li>
+        <li><strong>Port Area Monitoring:</strong> Pengawasan zona pelabuhan untuk optimasi manajemen antrian dan logistik.</li>
+      </ul>
+    `;
+
+    const blocks = await mergeNotionPasteBlocks(html, plainText, [gifFile]);
+
+    expect(blocks).toHaveLength(4);
+    expect(blocks[0].type).toBe("paragraph");
+    expect(blocks[1].type).toBe("list");
+    expect(blocks[1].data.items).toHaveLength(1);
+    expect(blocks[2].type).toBe("image");
+    expect(blocks[2].data.url).toMatch(/^data:image\/gif;base64,/);
+    expect(blocks[3].type).toBe("list");
+    expect(blocks[3].data.items).toHaveLength(1);
+  });
+
+  it("handles Notion HTML that already splits the list around the GIF placeholder", async () => {
+    const html = `
+      <p>VESMON kini terhubung dengan penyedia data AIS terkemuka dunia, memberikan perspektif luar kapal yang presisi untuk manajemen logistik yang lebih baik:</p>
+      <ul>
+        <li><strong>Vessel Tracking &amp; Portcall Activity:</strong> Pelacakan posisi kapal dan aktivitas sandar secara akurat.</li>
+      </ul>
+      <p>!bismillah ya Allaahhh.gif</p>
+      <ul>
+        <li><strong>Port Area Monitoring:</strong> Pengawasan zona pelabuhan untuk optimasi manajemen antrian dan logistik.</li>
+      </ul>
+    `;
+
+    const blocks = await mergeNotionPasteBlocks(html, plainText, [gifFile]);
+
+    expect(blocks).toHaveLength(4);
+    expect(blocks[0].type).toBe("paragraph");
+    expect(blocks[1].type).toBe("list");
+    expect(blocks[2].type).toBe("image");
+    expect(blocks[2].data.url).toMatch(/^data:image\/gif;base64,/);
+    expect(blocks[3].type).toBe("list");
+  });
+});
+
+describe("alignBlocksWithPlainImages", () => {
+  it("splits merged HTML lists and inserts missing Notion GIF placeholders", () => {
+    const htmlBlocks = [
+      { type: "paragraph", data: { text: "intro" } },
+      {
+        type: "list",
+        data: {
+          style: "unordered",
+          items: [
+            { content: "item 1", meta: {}, items: [] },
+            { content: "item 2", meta: {}, items: [] },
+          ],
+        },
+      },
+    ];
+    const plainBlocks = [
+      { type: "paragraph", data: { text: "intro" } },
+      {
+        type: "list",
+        data: {
+          style: "unordered",
+          items: [{ content: "item 1", meta: {}, items: [] }],
+        },
+      },
+      {
+        type: "image",
+        data: createImageBlockData("bismillah ya Allaahhh.gif", "bismillah ya Allaahhh"),
+      },
+      {
+        type: "list",
+        data: {
+          style: "unordered",
+          items: [{ content: "item 2", meta: {}, items: [] }],
+        },
+      },
+    ];
+
+    const merged = alignBlocksWithPlainImages(htmlBlocks, plainBlocks);
+
+    expect(merged).toHaveLength(4);
+    expect(merged[0].type).toBe("paragraph");
+    expect(merged[1].type).toBe("list");
+    expect(merged[1].data.items).toHaveLength(1);
+    expect(merged[2].type).toBe("image");
+    expect(merged[2].data.caption).toBe("bismillah ya Allaahhh");
+    expect(merged[3].type).toBe("list");
+    expect(merged[3].data.items).toHaveLength(1);
+  });
+
+  it("extracts image-only list items from pasted HTML", () => {
+    const html = `
+      <ul>
+        <li>First item</li>
+        <li><img src="https://example.com/demo.gif" alt="demo"></li>
+        <li>Second item</li>
+      </ul>
+    `;
+    const blocks = htmlToEditorJsBlocks(html);
+
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0].type).toBe("list");
+    expect(blocks[1].type).toBe("image");
+    expect(blocks[1].data.url).toBe("https://example.com/demo.gif");
+    expect(blocks[2].type).toBe("list");
   });
 });
 

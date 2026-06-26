@@ -115,6 +115,12 @@ describe("renderMarkdown", () => {
     expect(html).toContain("A --&gt; B");
     expect(html).not.toContain("<code>");
   });
+
+  it("should show a helpful message for Notion attachment references", () => {
+    const html = renderMarkdown("!bismillah ya Allaahhh.gif");
+    expect(html).toContain("Image unavailable");
+    expect(html).toContain("bismillah ya Allaahhh.gif");
+  });
 });
 
 describe("extractHeadings", () => {

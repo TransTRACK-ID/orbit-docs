@@ -53,8 +53,35 @@ async function insertPastedBlocks(blocks: Array<{ type: string; data: Record<str
   }
 }
 
+function createImageBlock(url: string, caption = "") {
+  return {
+    type: "image",
+    data: {
+      url,
+      caption,
+      withBorder: false,
+      withBackground: false,
+      stretched: false,
+    },
+  };
+}
+
 function isBlockLevelHtmlPaste(html: string): boolean {
-  return /<(p|h[1-6]|ul|ol|blockquote|pre|table|hr|div|article|section)\b/i.test(html);
+  return /<(p|h[1-6]|ul|ol|blockquote|pre|table|hr|div|article|section|img|figure)\b/i.test(html);
+}
+
+function getAllClipboardImageFiles(clipboard: DataTransfer): File[] {
+  const fromFiles = Array.from(clipboard.files || []).filter((file) => file.type.startsWith("image/"));
+  if (fromFiles.length) return fromFiles;
+
+  const fromItems: File[] = [];
+  for (const item of Array.from(clipboard.items || [])) {
+    if (item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      if (file) fromItems.push(file);
+    }
+  }
+  return fromItems;
 }
 
 function setupNotionPasteHandler(editor: any) {
@@ -68,15 +95,32 @@ function setupNotionPasteHandler(editor: any) {
 
     if (clipboard.getData("application/x-editor-js")) return;
 
+    const imageFiles = getAllClipboardImageFiles(clipboard);
     const html = clipboard.getData("text/html");
+    const plainText = clipboard.getData("text/plain");
+
+    if (imageFiles.length === 1 && (!html?.trim() || !isBlockLevelHtmlPaste(html))) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const { readFileAsDataUrl } = await import("~/composables/useEditorJsConverter");
+      const url = await readFileAsDataUrl(imageFiles[0]);
+      const caption = imageFiles[0].name.replace(/\.[^.]+$/, "");
+      await insertPastedBlocks([createImageBlock(url, caption)]);
+      return;
+    }
+
     if (!html?.trim() || !isBlockLevelHtmlPaste(html)) return;
 
-    const { htmlToEditorJsBlocks } = await import("~/composables/useEditorJsConverter");
-    const blocks = htmlToEditorJsBlocks(html);
-    if (blocks.length === 0) return;
-
+    // Prevent Editor.js default paste synchronously before any async work.
+    // Clipboard events are synchronous; waiting for the merge would let the
+    // default handler insert the raw HTML/plain text first.
     e.preventDefault();
     e.stopImmediatePropagation();
+
+    const { mergeNotionPasteBlocks } = await import("~/composables/useEditorJsConverter");
+    const blocks = await mergeNotionPasteBlocks(html, plainText, imageFiles);
+    if (blocks.length === 0) return;
+
     await insertPastedBlocks(blocks);
   };
 
@@ -98,7 +142,7 @@ async function initEditor() {
     { default: Code },
     { default: Quote },
     { default: Table },
-    { default: SimpleImage },
+    { default: SimpleImageTool },
     { default: LinkTool },
     { default: Marker },
     { default: Checklist },
@@ -123,7 +167,7 @@ async function initEditor() {
     import("@editorjs/code"),
     import("@editorjs/quote"),
     import("@editorjs/table"),
-    import("@editorjs/simple-image"),
+    import("~/components/editorjs/SimpleImageTool"),
     import("@editorjs/link"),
     import("@editorjs/marker"),
     import("@editorjs/checklist"),
@@ -163,7 +207,7 @@ async function initEditor() {
       quote: { class: Quote, config: { placeholder: "Enter a quote", captionPlaceholder: "Author" } },
       table: { class: Table },
       image: {
-        class: SimpleImage,
+        class: SimpleImageTool,
       },
       link: { class: LinkTool },
       marker: { class: Marker },
@@ -578,6 +622,21 @@ defineExpose({
   max-width: 100%;
   border-radius: var(--radius);
   vertical-align: bottom;
+}
+
+.editor-js-container .cdx-simple-image__error {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in oklch, oklch(75% 0.14 85) 10%, transparent);
+  border: 1px solid color-mix(in oklch, oklch(75% 0.14 85) 24%, transparent);
+  color: oklch(50% 0.12 85);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.editor-js-container .cdx-simple-image__picture--broken {
+  display: none;
 }
 
 .editor-js-container .cdx-simple-image__caption {

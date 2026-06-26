@@ -64,8 +64,22 @@ export function headingSlug(text: string): string {
   return slug;
 }
 
+function preprocessNotionImageMarkdown(md: string): string {
+  return md.replace(
+    /^!([^!\[\n]+\.(?:gif|jpe?g|png|webp|tiff|svg|bmp))$/gim,
+    (_match, filename: string) => {
+      const name = filename.trim();
+      if (/^(https?:|data:image\/|blob:)/i.test(name)) {
+        return `![${name.replace(/\.[^.]+$/, "")}](${name})`;
+      }
+      return `*[Image unavailable: ${name}. Re-copy the GIF from Notion and paste it here.]*`;
+    }
+  );
+}
+
 export function renderMarkdown(md: string): string {
   try {
+    const prepared = preprocessNotionImageMarkdown(md);
     const renderer = new marked.Renderer();
 
     // ─── Escape raw HTML instead of rendering it ─────────────────
@@ -146,7 +160,7 @@ export function renderMarkdown(md: string): string {
       return `<li>${body}</li>\n`;
     };
 
-    return marked.parse(md, { async: false, renderer, gfm: true, breaks: false }) as string;
+    return marked.parse(prepared, { async: false, renderer, gfm: true, breaks: false }) as string;
   } catch (e: any) {
     console.error("Marked parsing error:", e);
     return `<div style="color:red; font-weight:bold; padding: 1rem; border: 1px solid red; background: #fff0f0;">Marked Error: ${e.message}</div><pre>${md}</pre>`;

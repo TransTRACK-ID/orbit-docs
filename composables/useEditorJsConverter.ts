@@ -15,6 +15,309 @@ const MERMAID_START_RE =
 const MERMAID_KEYWORD_START_RE =
   /^(sequenceDiagram|classDiagram|stateDiagram-v2?|erDiagram|gantt|pie|gitGraph|journey|mindmap|timeline|quadrantChart|requirementDiagram|C4Context|C4Container|C4Component|C4Dynamic|C4Deployment)\b/;
 
+const NOTION_IMAGE_EXT_RE = /\.(?:gif|jpe?g|png|webp|tiff|svg|bmp)$/i;
+
+export function isLoadableImageUrl(url: string): boolean {
+  const value = url.trim();
+  return /^(https?:|data:image\/|blob:)/i.test(value);
+}
+
+export function isNotionImageReference(text: string): { filename: string } | null {
+  const plain = decodeHtmlEntities(stripHtml(text || "")).trim();
+  const match = plain.match(/^!([^!\[\n]+)$/);
+  if (!match) return null;
+  const filename = match[1].trim();
+  if (!NOTION_IMAGE_EXT_RE.test(filename)) return null;
+  return { filename };
+}
+
+export function createImageBlockData(url: string, caption = "") {
+  return {
+    url,
+    caption,
+    withBorder: false,
+    withBackground: false,
+    stretched: false,
+  };
+}
+
+export function normalizeFilename(name: string): string {
+  return decodeURIComponent(name).toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+export function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function resolveFileForReference(
+  reference: string,
+  filesByName: Map<string, File>
+): File | undefined {
+  const candidates = [
+    normalizeFilename(reference),
+    normalizeFilename(reference.replace(/^!/, "")),
+    normalizeFilename(reference.split("/").pop() || reference),
+  ];
+  for (const candidate of candidates) {
+    const file = filesByName.get(candidate);
+    if (file) return file;
+  }
+  return undefined;
+}
+
+async function flattenListImageItems(
+  block: EditorJsData["blocks"][number],
+  filesByName: Map<string, File>
+): Promise<EditorJsData["blocks"]> {
+  const items = block.data.items || [];
+  const chunks: EditorJsData["blocks"] = [];
+  let pendingItems: any[] = [];
+
+  const flushList = () => {
+    if (!pendingItems.length) return;
+    chunks.push({
+      type: "list",
+      data: {
+        ...block.data,
+        items: pendingItems,
+      },
+    });
+    pendingItems = [];
+  };
+
+  for (const item of items) {
+    const content = typeof item === "string" ? item : item.content || "";
+    if (typeof document !== "undefined") {
+      const shell = document.createElement("div");
+      shell.innerHTML = content;
+      const soleImg = getSoleImage(shell);
+      if (soleImg) {
+        flushList();
+        const caption = decodeHtmlEntities(soleImg.getAttribute("alt") || "");
+        const url = soleImg.getAttribute("src") || "";
+        const file = !isLoadableImageUrl(url)
+          ? resolveFileForReference(url, filesByName)
+          : undefined;
+        chunks.push({
+          type: "image",
+          data: createImageBlockData(
+            file ? await readFileAsDataUrl(file) : url,
+            caption
+          ),
+        });
+        continue;
+      }
+
+      const ref = isNotionImageReference(content);
+      if (ref) {
+        flushList();
+        const file = resolveFileForReference(ref.filename, filesByName);
+        chunks.push({
+          type: "image",
+          data: createImageBlockData(
+            file ? await readFileAsDataUrl(file) : ref.filename,
+            ref.filename.replace(/\.[^.]+$/, "")
+          ),
+        });
+        continue;
+      }
+    }
+
+    pendingItems.push(item);
+  }
+
+  flushList();
+  return chunks;
+}
+
+/** Match Notion attachment placeholders to clipboard image files and normalize image blocks. */
+export async function reconcileNotionImageBlocks(
+  blocks: EditorJsData["blocks"],
+  files: File[] = []
+): Promise<EditorJsData["blocks"]> {
+  const filesByName = new Map<string, File>();
+  for (const file of files) {
+    filesByName.set(normalizeFilename(file.name), file);
+  }
+
+  const output: EditorJsData["blocks"] = [];
+
+  for (const block of blocks) {
+    if (block.type === "list") {
+      output.push(...await flattenListImageItems(block, filesByName));
+      continue;
+    }
+
+    if (block.type === "paragraph") {
+      const ref = isNotionImageReference(block.data.text || "");
+      if (ref) {
+        const file = resolveFileForReference(ref.filename, filesByName);
+        output.push({
+          type: "image",
+          data: createImageBlockData(
+            file ? await readFileAsDataUrl(file) : ref.filename,
+            ref.filename.replace(/\.[^.]+$/, "")
+          ),
+        });
+        continue;
+      }
+    }
+
+    if (block.type === "image") {
+      const url = String(block.data.url || "");
+      if (!isLoadableImageUrl(url)) {
+        const file = resolveFileForReference(url, filesByName)
+          || resolveFileForReference(String(block.data.caption || ""), filesByName);
+        if (file) {
+          output.push({
+            type: "image",
+            data: {
+              ...block.data,
+              url: await readFileAsDataUrl(file),
+            },
+          });
+          continue;
+        }
+      }
+    }
+
+    output.push(block);
+  }
+
+  return output;
+}
+
+function imageBlockIdentity(block: EditorJsData["blocks"][number]): string {
+  if (block.type !== "image") return "";
+  return normalizeFilename(String(block.data.caption || block.data.url || ""));
+}
+
+function containsImageBlock(
+  blocks: EditorJsData["blocks"],
+  imageBlock: EditorJsData["blocks"][number]
+): boolean {
+  const identity = imageBlockIdentity(imageBlock);
+  if (!identity) return false;
+  return blocks.some((block) => block.type === "image" && imageBlockIdentity(block) === identity);
+}
+
+/** Align HTML-derived blocks with plain-text structure so Notion image placeholders are kept. */
+export function alignBlocksWithPlainImages(
+  htmlBlocks: EditorJsData["blocks"],
+  plainBlocks: EditorJsData["blocks"]
+): EditorJsData["blocks"] {
+  const result: EditorJsData["blocks"] = [];
+  let htmlIndex = 0;
+
+  for (let plainIndex = 0; plainIndex < plainBlocks.length; plainIndex++) {
+    const plainBlock = plainBlocks[plainIndex];
+
+    if (plainBlock.type === "image") {
+      if (containsImageBlock(result, plainBlock)) {
+        continue;
+      }
+
+      while (
+        htmlIndex < htmlBlocks.length
+        && htmlBlocks[htmlIndex].type !== "image"
+      ) {
+        htmlIndex++;
+      }
+
+      if (
+        htmlIndex < htmlBlocks.length
+        && htmlBlocks[htmlIndex].type === "image"
+        && imageBlockIdentity(htmlBlocks[htmlIndex]) === imageBlockIdentity(plainBlock)
+      ) {
+        result.push(htmlBlocks[htmlIndex]);
+        htmlIndex++;
+      } else {
+        result.push(plainBlock);
+      }
+      continue;
+    }
+
+    if (
+      plainBlock.type === "list"
+      && plainBlocks[plainIndex + 1]?.type === "image"
+      && plainBlocks[plainIndex + 2]?.type === "list"
+      && htmlIndex < htmlBlocks.length
+      && htmlBlocks[htmlIndex].type === "list"
+    ) {
+      const htmlList = htmlBlocks[htmlIndex];
+      const firstCount = (plainBlock.data.items || []).length;
+      const secondCount = (plainBlocks[plainIndex + 2].data.items || []).length;
+      const allItems = htmlList.data.items || [];
+
+      if (allItems.length >= firstCount + secondCount) {
+        if (firstCount > 0) {
+          result.push({
+            type: "list",
+            data: { ...htmlList.data, items: allItems.slice(0, firstCount) },
+          });
+        }
+
+        const imageBlock = plainBlocks[plainIndex + 1];
+        if (!containsImageBlock(result, imageBlock)) {
+          result.push(imageBlock);
+        }
+
+        if (secondCount > 0) {
+          result.push({
+            type: "list",
+            data: {
+              ...htmlList.data,
+              items: allItems.slice(firstCount, firstCount + secondCount),
+            },
+          });
+        }
+
+        htmlIndex++;
+        plainIndex += 2;
+        continue;
+      }
+    }
+
+    if (htmlIndex < htmlBlocks.length && htmlBlocks[htmlIndex].type === plainBlock.type) {
+      result.push(htmlBlocks[htmlIndex]);
+      htmlIndex++;
+    }
+  }
+
+  while (htmlIndex < htmlBlocks.length) {
+    result.push(htmlBlocks[htmlIndex]);
+    htmlIndex++;
+  }
+
+  return result;
+}
+
+/** Build final pasted blocks from Notion HTML + plain text + clipboard image files. */
+export async function mergeNotionPasteBlocks(
+  html: string,
+  plainText: string,
+  files: File[] = []
+): Promise<EditorJsData["blocks"]> {
+  let htmlBlocks = htmlToEditorJsBlocks(html);
+  htmlBlocks = await reconcileNotionImageBlocks(htmlBlocks, files);
+
+  if (!plainText.trim()) {
+    return htmlBlocks;
+  }
+
+  const plainBlocks = await reconcileNotionImageBlocks(
+    markdownToEditorJs(plainText).blocks,
+    files
+  );
+
+  return alignBlocksWithPlainImages(htmlBlocks, plainBlocks);
+}
+
 function isMermaidStartLine(line: string): boolean {
   const trimmed = line.trim();
   return MERMAID_START_RE.test(trimmed) || MERMAID_KEYWORD_START_RE.test(trimmed);
@@ -260,6 +563,18 @@ export function markdownToEditorJs(md: string): EditorJsData {
       continue;
     }
 
+    // Notion attachment reference: !filename.gif
+    const notionImageRef = line.match(/^!([^!\[\n]+\.(?:gif|jpe?g|png|webp|tiff|svg|bmp))$/i);
+    if (notionImageRef) {
+      const filename = notionImageRef[1].trim();
+      blocks.push({
+        type: "image",
+        data: createImageBlockData(filename, filename.replace(/\.[^.]+$/, "")),
+      });
+      i++;
+      continue;
+    }
+
     // Image
     const imageMatch = line.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
     if (imageMatch) {
@@ -287,6 +602,7 @@ export function markdownToEditorJs(md: string): EditorJsData {
       i < lines.length
       && lines[i].trim()
       && !lines[i].match(/^(#{1,3}|>|[-*]|\d+\.|```|!\[|---|\||:::toggle)/)
+      && !lines[i].match(/^!([^!\[\n]+\.(?:gif|jpe?g|png|webp|tiff|svg|bmp))$/i)
       && !isMermaidStartLine(lines[i])
     ) {
       paraLines.push(lines[i]);
@@ -516,8 +832,52 @@ function getInlineHtml(el: Element): string {
   return normalizeEditorHtml(el.innerHTML);
 }
 
+function imageBlockFromElement(img: Element, caption = ""): EditorJsData["blocks"] {
+  const src = img.getAttribute("src")?.trim();
+  if (!src) return [];
+  return [{
+    type: "image",
+    data: {
+      url: src,
+      caption: caption || decodeHtmlEntities(img.getAttribute("alt") || ""),
+      withBorder: false,
+      withBackground: false,
+      stretched: false,
+    },
+  }];
+}
+
+function getSoleImage(el: Element): HTMLImageElement | null {
+  if (el.tagName === "IMG") {
+    return el as HTMLImageElement;
+  }
+
+  const imgs = Array.from(el.querySelectorAll("img"));
+  if (imgs.length !== 1) return null;
+
+  const img = imgs[0];
+  const text = (el.textContent || "").trim();
+  const alt = (img.getAttribute("alt") || "").trim();
+  if (!text || text === alt) {
+    return img;
+  }
+
+  return null;
+}
+
 function elementToBlocks(el: Element): EditorJsData["blocks"] {
   const tag = el.tagName.toLowerCase();
+
+  if (tag === "img") {
+    return imageBlockFromElement(el);
+  }
+
+  if (tag === "figure") {
+    const img = el.querySelector("img");
+    if (!img) return [];
+    const caption = decodeHtmlEntities(el.querySelector("figcaption")?.textContent || "");
+    return imageBlockFromElement(img, caption);
+  }
 
   if (/^h[1-3]$/.test(tag)) {
     const html = getInlineHtml(el);
@@ -526,25 +886,65 @@ function elementToBlocks(el: Element): EditorJsData["blocks"] {
   }
 
   if (tag === "p" || (tag === "div" && !hasBlockChildren(el))) {
+    const soleImg = getSoleImage(el);
+    if (soleImg) {
+      return imageBlockFromElement(soleImg);
+    }
+
+    const ref = isNotionImageReference(el.textContent || "");
+    if (ref) {
+      return [{
+        type: "image",
+        data: createImageBlockData(ref.filename, ref.filename.replace(/\.[^.]+$/, "")),
+      }];
+    }
+
     const html = getInlineHtml(el);
     if (!html.trim()) return [];
     return [{ type: "paragraph", data: { text: html } }];
   }
 
   if (tag === "ul" || tag === "ol") {
-    const items = Array.from(el.children)
-      .filter((child) => child.tagName === "LI")
-      .map((li) => ({
-        content: getInlineHtml(li),
-        meta: {},
-        items: [] as any[],
-      }))
-      .filter((item) => item.content.trim());
-    if (items.length === 0) return [];
-    return [{
-      type: "list",
-      data: { style: tag === "ol" ? "ordered" : "unordered", items },
-    }];
+    const blocks: EditorJsData["blocks"] = [];
+    let pendingItems: Array<{ content: string; meta: Record<string, any>; items: any[] }> = [];
+
+    const flushList = () => {
+      if (!pendingItems.length) return;
+      blocks.push({
+        type: "list",
+        data: { style: tag === "ol" ? "ordered" : "unordered", items: pendingItems },
+      });
+      pendingItems = [];
+    };
+
+    for (const child of Array.from(el.children).filter((node) => node.tagName === "LI")) {
+      const soleImg = getSoleImage(child);
+      if (soleImg) {
+        flushList();
+        blocks.push(...imageBlockFromElement(soleImg));
+        continue;
+      }
+
+      const ref = isNotionImageReference(child.textContent || "");
+      if (ref) {
+        flushList();
+        blocks.push({
+          type: "image",
+          data: createImageBlockData(
+            ref.filename,
+            ref.filename.replace(/\.[^.]+$/, "")
+          ),
+        });
+        continue;
+      }
+
+      const content = getInlineHtml(child);
+      if (!content.trim()) continue;
+      pendingItems.push({ content, meta: {}, items: [] });
+    }
+
+    flushList();
+    return blocks;
   }
 
   if (tag === "blockquote") {
