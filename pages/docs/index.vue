@@ -18,6 +18,13 @@ const { apps, fetchApps } = useApps();
 
 const appFilter = ref((route.query.app as string) || "");
 
+watch(
+  () => route.query.app,
+  (app) => {
+    appFilter.value = (app as string) || "";
+  }
+);
+
 const appFilterOptions = computed(() => [
   { id: "", label: "All apps" },
   ...apps.value.map((a) => ({ id: a.id, label: a.name })),
@@ -51,10 +58,14 @@ watch([search, appFilter], async () => {
   await fetchDocs({ appId: appFilter.value });
 });
 
+watch(appFilter, (appId) => {
+  createForm.appId = appId;
+});
+
 const showCreateModal = ref(false);
 const createForm = reactive({
   title: "",
-  appId: "",
+  appId: appFilter.value,
   content: "",
   status: "draft",
   tags: [] as string[],
@@ -66,7 +77,7 @@ function openCreateModal() {
   showCreateModal.value = true;
   createTitleError.value = false;
   createForm.title = "";
-  createForm.appId = "";
+  createForm.appId = appFilter.value;
   createForm.content = "";
   createForm.status = "draft";
   createForm.tags = [];

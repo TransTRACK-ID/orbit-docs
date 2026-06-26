@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
-import { renderMarkdown, extractHeadings } from "~/composables/useMarkdown";
+import { renderMarkdown, extractHeadings, headingSlug } from "~/composables/useMarkdown";
 
 definePageMeta({
   auth: true,
@@ -86,6 +86,7 @@ function generatePDF() {
 }
 
 const previewRef = ref<{ container: HTMLElement | null } | null>(null);
+const paneBodyRef = ref<HTMLElement | null>(null);
 
 function removeTag(index: number) {
   editorTags.value.splice(index, 1);
@@ -122,36 +123,44 @@ function onTagKeydown(e: KeyboardEvent) {
 const headings = computed(() => extractHeadings(editorContent.value));
 const renderedHtml = computed(() => renderMarkdown(editorContent.value));
 
+function scrollElementIntoContainer(container: HTMLElement, el: HTMLElement) {
+  const top =
+    el.getBoundingClientRect().top -
+    container.getBoundingClientRect().top +
+    container.scrollTop -
+    16;
+  container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+}
+
 function scrollToHeading(text: string) {
   activeHeading.value = text;
-  let scrolled = false;
-  // Scroll in preview pane if visible
-  const preview = previewRef.value?.container;
-  if (preview) {
-    const headings = preview.querySelectorAll("h2, h3");
-    for (const h of headings) {
-      if (h.textContent?.trim() === text) {
-        h.scrollIntoView({ behavior: "smooth", block: "start" });
-        scrolled = true;
-        break;
-      }
-    }
-  }
-  // Fallback: scroll inside the editor pane body
-  if (!scrolled) {
-    const paneBody = document.querySelector(".editor-pane .pane-body");
-    if (paneBody) {
-      const headings = paneBody.querySelectorAll(".ce-header");
-      for (const h of headings) {
-        if (h.textContent?.trim() === text) {
-          h.scrollIntoView({ behavior: "smooth", block: "start" });
-          scrolled = true;
+  const container = paneBodyRef.value;
+  if (!container) return;
+
+  if (previewOnly.value) {
+    const slug = headingSlug(text);
+    let el = container.querySelector<HTMLElement>(`#${CSS.escape(slug)}`);
+    if (!el) {
+      for (const heading of container.querySelectorAll<HTMLElement>("h1, h2, h3")) {
+        if (heading.textContent?.trim() === text) {
+          el = heading;
           break;
         }
       }
     }
+    if (el) {
+      scrollElementIntoContainer(container, el);
+      return;
+    }
   }
-  showToast("Jumped to: " + text);
+
+  const headers = container.querySelectorAll<HTMLElement>(".ce-header");
+  for (const header of headers) {
+    if (header.textContent?.trim() === text) {
+      scrollElementIntoContainer(container, header);
+      return;
+    }
+  }
 }
 
 function toggleShortcuts() {
@@ -374,7 +383,7 @@ const lastModified = computed(() => {
 
       <div v-else class="doc-shell" :class="{ 'preview-only': previewOnly }">
         <!-- Outline -->
-        <div v-if="!previewOnly" class="outline-pane">
+        <div class="outline-pane">
           <div class="outline-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6;">
               <line x1="8" y1="6" x2="21" y2="6"/>
@@ -414,7 +423,7 @@ const lastModified = computed(() => {
 
         <!-- Editor -->
         <div class="editor-pane">
-          <div class="pane-body" style="overflow:visible;">
+          <div ref="paneBodyRef" class="pane-body">
             <ClientOnly>
               <EditorJs
                 v-if="!previewOnly"
@@ -658,7 +667,10 @@ const lastModified = computed(() => {
 
 <style scoped>
 .editor-page {
-  /* Inherits global semantic tokens from :root — no local overrides so dark mode works */
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 93px);
+  max-height: calc(100vh - 93px);
 }
 
 .topbar {
@@ -757,6 +769,7 @@ const lastModified = computed(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .doc-shell {
@@ -765,21 +778,16 @@ const lastModified = computed(() => {
   gap: 24px;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 .doc-shell.preview-only {
-  grid-template-columns: 0fr 1fr 0fr;
-}
-.doc-shell.preview-only .outline-pane {
-  display: none;
+  grid-template-columns: 220px 1fr;
 }
 .doc-shell.preview-only .right-sidebar {
   display: none;
 }
 .doc-shell.preview-only .chat-pane {
   display: none;
-}
-.doc-shell.preview-only .editor-pane {
-  grid-column: 1 / -1;
 }
 .doc-shell .chat-pane {
   grid-column: 1 / -1;
@@ -809,10 +817,13 @@ const lastModified = computed(() => {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
-  overflow: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
 }
 
 .outline-header {
@@ -822,6 +833,7 @@ const lastModified = computed(() => {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border);
   color: var(--muted);
+  flex-shrink: 0;
 }
 
 .outline-title {
@@ -839,6 +851,9 @@ const lastModified = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .outline-item {
@@ -927,10 +942,11 @@ const lastModified = computed(() => {
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  height: 100%;
 }
 
 .editor-pane:has(.editor-js-wrapper) {
-  overflow: visible;
+  overflow: hidden;
 }
 .pane-header {
   padding: 12px 16px;
@@ -1094,6 +1110,9 @@ const lastModified = computed(() => {
   display: flex;
   flex-direction: column;
   min-width: 280px;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
 }
 
 .sidebar-tabs {
