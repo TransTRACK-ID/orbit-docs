@@ -33,6 +33,7 @@ const isReady = ref(false);
 const dragDropInstance = ref<any>(null);
 const undoInstance = ref<any>(null);
 let pasteCleanup: (() => void) | null = null;
+let linkHoverCleanup: (() => void) | null = null;
 
 async function insertPastedBlocks(blocks: Array<{ type: string; data: Record<string, any> }>) {
   const editor = editorInstance.value;
@@ -182,6 +183,83 @@ function setupNotionPasteHandler(editor: any) {
   pasteCleanup = () => redactor.removeEventListener("paste", onPaste, true);
 }
 
+function getSelectionFingerprint(): string {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return "empty";
+  const range = selection.getRangeAt(0);
+  return [
+    selection.isCollapsed ? "1" : "0",
+    selection.toString(),
+    range.startContainer,
+    range.startOffset,
+    range.endContainer,
+    range.endOffset,
+  ].join("|");
+}
+
+function hasOpenInlineNestedTool(container: HTMLElement): boolean {
+  return Boolean(
+    container.querySelector(".ce-inline-link-actions .ce-inline-tool-input--showed")
+      || container.querySelector(".ce-inline-text-color-actions--showed")
+      || container.querySelector(".ce-inline-toolbar .ce-popover--opened")
+  );
+}
+
+function isInlineToolbarVisible(container: HTMLElement): boolean {
+  const toolbar = container.querySelector(".ce-inline-toolbar");
+  return Boolean(toolbar?.querySelector(".ce-popover--opened"));
+}
+
+// ── Fix link-hover interaction glitches ─────────────────────────────
+//
+// Inline tool panels closing immediately:
+//   Editor.js calls `inlineToolbar.tryToShow(true)` on every
+//   `selectionchange`, which closes and reopens the toolbar. Link :hover
+//   triggers spurious selectionchange events in Chromium/WebKit.
+//   Fix: swallow duplicate selectionchange events while the inline toolbar
+//   or a nested tool panel is open.
+//
+function setupEditorInteractionGuards(): () => void {
+  const container = editorContainer.value;
+  if (!container) return () => {};
+
+  let lastSelectionFingerprint = getSelectionFingerprint();
+
+  const onSelectionChange = (event: Event) => {
+    const fingerprint = getSelectionFingerprint();
+    const unchanged = fingerprint === lastSelectionFingerprint;
+    const nestedToolOpen = hasOpenInlineNestedTool(container);
+    const inlineToolbarOpen = isInlineToolbarVisible(container);
+
+    if (nestedToolOpen || inlineToolbarOpen) {
+      const selection = window.getSelection();
+      const anchorInEditor = Boolean(
+        selection?.anchorNode && container.contains(selection.anchorNode)
+      );
+      const selectedText = selection?.toString() ?? "";
+      const previousText = lastSelectionFingerprint.split("|")[1] ?? "";
+      const sameSelectedText = Boolean(
+        selectedText && previousText && selectedText === previousText
+      );
+
+      if (unchanged || (nestedToolOpen && anchorInEditor && sameSelectedText)) {
+        event.stopImmediatePropagation();
+        if (!unchanged) {
+          lastSelectionFingerprint = fingerprint;
+        }
+        return;
+      }
+    }
+
+    lastSelectionFingerprint = fingerprint;
+  };
+  document.addEventListener("selectionchange", onSelectionChange, { capture: true });
+
+  return () => {
+    document.removeEventListener("selectionchange", onSelectionChange, { capture: true } as EventListenerOptions);
+  };
+}
+
 // ── Import Editor.js dynamically (client-only) ─────────────────
 async function initEditor() {
   if (!editorContainer.value) return;
@@ -313,6 +391,7 @@ async function initEditor() {
       // Undo / redo (Ctrl+Z / Ctrl+Shift+Z)
       undoInstance.value = new Undo({ editor });
       setupNotionPasteHandler(editor);
+      linkHoverCleanup = setupEditorInteractionGuards();
       emit("ready");
     },
     onChange: async () => {
@@ -353,6 +432,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   pasteCleanup?.();
   pasteCleanup = null;
+  linkHoverCleanup?.();
+  linkHoverCleanup = null;
   if (dragDropInstance.value) {
     dragDropInstance.value = null;
   }
@@ -452,19 +533,27 @@ defineExpose({
   gap: 2px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s ease;
+  /* Delay the hide by 80ms so transient mousemove noise (link hover, etc.)
+     doesn't produce a visible blink before JS guard can suppress it.        */
+  transition: opacity 0.15s ease 80ms;
   z-index: 20;
+  /* Generous hit-area so the mouse doesn't "fall off" between the block
+     and the tiny buttons.                                                   */
+  padding: 4px 8px 4px 4px;
+  margin: -4px -8px -4px -4px;
 }
 
+/* Show on: block hover, toolbar hover, or when a popover is open */
 .editor-js-container .ce-block:hover ~ .ce-toolbar .ce-toolbar__actions,
 .editor-js-container .ce-toolbar:hover .ce-toolbar__actions,
-.editor-js-container .ce-toolbar--opened .ce-toolbar__actions {
+.editor-js-container .ce-toolbar--opened .ce-toolbar__actions,
+.editor-js-container .ce-toolbar__actions--opened,
+.editor-js-container .codex-editor--toolbox-opened .ce-toolbar__actions,
+.editor-js-container:has(.ce-popover--opened) .ce-toolbar__actions {
   opacity: 1;
-}
-
-.editor-js-container .ce-toolbar__plus,
-.editor-js-container .ce-toolbar__settings-btn {
   pointer-events: auto;
+  /* No delay when showing — instant feel */
+  transition: opacity 0.1s ease 0ms;
 }
 
 .editor-js-container .ce-header {
