@@ -84,6 +84,7 @@ export default defineNitroPlugin(async () => {
   // Migrate existing docs table with new columns
   await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual'`);
   await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS doc_type TEXT`);
+  await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS notion_page_id TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS doc_versions (
@@ -113,6 +114,7 @@ export default defineNitroPlugin(async () => {
     )
   `);
   await pool.query(`ALTER TABLE releases ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'normal'`);
+  await pool.query(`ALTER TABLE releases ADD COLUMN IF NOT EXISTS notion_page_id TEXT`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS changelogs (
@@ -198,6 +200,29 @@ export default defineNitroPlugin(async () => {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notion_sync_settings (
+      id TEXT PRIMARY KEY,
+      api_key_encrypted TEXT,
+      docs_database_id TEXT,
+      releases_database_id TEXT,
+      app_property_name TEXT NOT NULL DEFAULT 'App',
+      version_property_name TEXT NOT NULL DEFAULT 'Version',
+      status_property_name TEXT NOT NULL DEFAULT 'Status',
+      schedule_enabled BOOLEAN NOT NULL DEFAULT false,
+      schedule_interval TEXT NOT NULL DEFAULT 'daily',
+      connected BOOLEAN NOT NULL DEFAULT false,
+      last_sync_at TIMESTAMP WITH TIME ZONE,
+      last_sync_status TEXT NOT NULL DEFAULT 'idle',
+      last_sync_result JSONB,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS docs_notion_page_id_unique ON docs (notion_page_id) WHERE notion_page_id IS NOT NULL`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS releases_notion_page_id_unique ON releases (notion_page_id) WHERE notion_page_id IS NOT NULL`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS notification_settings (

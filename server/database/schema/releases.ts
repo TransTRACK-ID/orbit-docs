@@ -29,6 +29,7 @@ export const releases = pgTable("releases", {
   }>(),
   type: text("type").notNull().default("normal"),
   published: boolean("published").notNull().default(false),
+  notionPageId: text("notion_page_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

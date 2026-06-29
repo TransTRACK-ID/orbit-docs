@@ -92,12 +92,12 @@ async function acceptMyInvitation() {
   await acceptInvitation(myPendingInvitation.value.id);
 }
 
-const activeTab = ref<"general" | "team" | "mcp" | "sso">("general");
+const activeTab = ref<"general" | "team" | "integrations" | "mcp" | "sso">("general");
 
-onMounted(() => {
+onMounted(async () => {
   fetchWorkspace();
   fetchTeam();
-  fetchCurrentMember();
+  await fetchCurrentMember();
   fetchPendingInvitations();
   fetchIntegrations();
   fetchNotifications();
@@ -105,7 +105,141 @@ onMounted(() => {
   fetchApiKeys();
   fetchMcpConfig();
   fetchSsoConfig();
+  if (currentMember.value?.role === "admin") {
+    fetchNotionSettings();
+  }
 });
+
+// ─── Notion integration ─────────────────────────────────────────
+const {
+  settings: notionSettings,
+  isLoading: isLoadingNotion,
+  isSaving: isSavingNotion,
+  isTesting: isTestingNotion,
+  isSyncing: isSyncingNotion,
+  appPropertyOptions,
+  allPropertyOptions,
+  fetchSettings: fetchNotionSettings,
+  saveSettings: saveNotionSettings,
+  testConnection: testNotionConnection,
+  runSync: runNotionSync,
+} = useNotionSync();
+
+const notionForm = reactive({
+  apiKey: "",
+  docsDatabaseId: "",
+  releasesDatabaseId: "",
+  appPropertyName: "App",
+  versionPropertyName: "Version",
+  statusPropertyName: "Status",
+  scheduleEnabled: false,
+  scheduleInterval: "daily" as "hourly" | "daily",
+});
+const notionFormDirty = ref(false);
+const hasPopulatedNotion = ref(false);
+
+watch(
+  () => notionSettings.value,
+  (ns) => {
+    if (!ns || hasPopulatedNotion.value) return;
+    notionForm.docsDatabaseId = ns.docsDatabaseId || "";
+    notionForm.releasesDatabaseId = ns.releasesDatabaseId || "";
+    notionForm.appPropertyName = ns.appPropertyName || "App";
+    notionForm.versionPropertyName = ns.versionPropertyName || "Version";
+    notionForm.statusPropertyName = ns.statusPropertyName || "Status";
+    notionForm.scheduleEnabled = ns.scheduleEnabled;
+    notionForm.scheduleInterval = ns.scheduleInterval;
+    notionForm.apiKey = ns.hasApiKey ? "••••••••" : "";
+    hasPopulatedNotion.value = true;
+    notionFormDirty.value = false;
+  },
+  { immediate: true }
+);
+
+function markNotionDirty() {
+  notionFormDirty.value = true;
+}
+
+function notionPayload() {
+  return {
+    apiKey: notionForm.apiKey,
+    docsDatabaseId: notionForm.docsDatabaseId,
+    releasesDatabaseId: notionForm.releasesDatabaseId,
+    appPropertyName: notionForm.appPropertyName,
+    versionPropertyName: notionForm.versionPropertyName,
+    statusPropertyName: notionForm.statusPropertyName,
+    scheduleEnabled: notionForm.scheduleEnabled,
+    scheduleInterval: notionForm.scheduleInterval,
+  };
+}
+
+async function saveNotionForm() {
+  await saveNotionSettings(notionPayload());
+  notionFormDirty.value = false;
+  if (notionSettings.value?.hasApiKey) {
+    notionForm.apiKey = "••••••••";
+  }
+}
+
+async function testNotion() {
+  const result = await testNotionConnection(notionPayload());
+  if (result.appPropertyOptions?.length && !result.appPropertyOptions.includes(notionForm.appPropertyName)) {
+    notionForm.appPropertyName = result.appPropertyOptions[0];
+  }
+  await fetchNotionSettings();
+  notionFormDirty.value = false;
+}
+
+async function syncNotionNow() {
+  if (notionFormDirty.value) {
+    await saveNotionForm();
+  }
+  await runNotionSync();
+}
+
+async function toggleNotionSchedule() {
+  notionForm.scheduleEnabled = !notionForm.scheduleEnabled;
+  markNotionDirty();
+  await saveNotionForm();
+}
+
+function formatSyncTime(iso: string | null | undefined) {
+  if (!iso) return "Never";
+  return new Date(iso).toLocaleString();
+}
+
+const notionCanSync = computed(() => {
+  const hasKey =
+    notionSettings.value?.hasApiKey ||
+    (notionForm.apiKey.length > 0 && notionForm.apiKey !== "••••••••");
+  const hasDb =
+    Boolean(notionForm.docsDatabaseId.trim()) ||
+    Boolean(notionForm.releasesDatabaseId.trim()) ||
+    Boolean(notionSettings.value?.docsDatabaseId) ||
+    Boolean(notionSettings.value?.releasesDatabaseId);
+  return hasKey && hasDb;
+});
+
+const notionSyncHint = computed(() => {
+  if (!notionCanSync.value) {
+    return "Add an integration token and at least one database ID.";
+  }
+  if (!notionSettings.value?.connected) {
+    return "Run Test connection before your first sync.";
+  }
+  return "";
+});
+
+const isAdmin = computed(() => currentMember.value?.role === "admin");
+
+watch(
+  () => currentMember.value,
+  (member) => {
+    if (member?.role === "admin" && !notionSettings.value && !isLoadingNotion.value) {
+      fetchNotionSettings();
+    }
+  }
+);
 
 // ─── General tab form ───────────────────────────────────────────
 const generalForm = reactive({
@@ -606,6 +740,7 @@ function getCallbackUrl(provider: SsoProvider): string {
           v-for="tab in [
             { id: 'general', label: 'General' },
             { id: 'team', label: 'Team Members' },
+            { id: 'integrations', label: 'Integrations' },
             { id: 'sso', label: 'SSO' },
             { id: 'mcp', label: 'MCP Connection' },
           ] as const"
@@ -909,6 +1044,233 @@ function getCallbackUrl(provider: SsoProvider): string {
               </tbody>
             </table>
           </div>
+        </div>
+
+        <!-- Integrations -->
+        <div v-show="activeTab === 'integrations'" class="settings-panel">
+          <div v-if="!isAdmin" class="setting-section">
+            <h3>Integrations</h3>
+            <p class="desc">Admin access is required to configure integrations.</p>
+          </div>
+
+          <template v-else>
+            <div class="setting-section">
+              <div class="row-between" style="margin-bottom: 8px;">
+                <div>
+                  <h3>Notion</h3>
+                  <p class="desc">
+                    Pull docs and releases from Notion into Orbit Docs. Notion is the source of truth;
+                    existing Orbit content matched by page ID will be overwritten.
+                  </p>
+                </div>
+                <span
+                  v-if="notionSettings?.connected"
+                  class="pill pill-green"
+                >Connected</span>
+                <span
+                  v-else-if="notionSettings?.hasApiKey"
+                  class="pill pill-amber"
+                >Not verified</span>
+              </div>
+
+              <div v-if="isLoadingNotion" class="skeleton-wrap">
+                <div class="skeleton-line w-full" />
+                <div class="skeleton-line w-2/3" />
+                <div class="skeleton-line w-full" />
+              </div>
+
+              <template v-else>
+                <div class="form-group">
+                  <label for="notionApiKey">Integration token</label>
+                  <input
+                    id="notionApiKey"
+                    v-model="notionForm.apiKey"
+                    type="password"
+                    placeholder="secret_..."
+                    autocomplete="off"
+                    @input="markNotionDirty"
+                  />
+                  <span class="slug-hint">Create an internal integration at notion.so/my-integrations</span>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="notionDocsDb">Docs database ID</label>
+                    <input
+                      id="notionDocsDb"
+                      v-model="notionForm.docsDatabaseId"
+                      type="text"
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      @input="markNotionDirty"
+                    />
+                  </div>
+                  <div class="form-group">
+                    <label for="notionReleasesDb">Releases database ID</label>
+                    <input
+                      id="notionReleasesDb"
+                      v-model="notionForm.releasesDatabaseId"
+                      type="text"
+                      placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                      @input="markNotionDirty"
+                    />
+                  </div>
+                </div>
+
+                <div class="form-row">
+                  <div class="form-group">
+                    <label for="notionAppProp">App property</label>
+                    <input
+                      v-if="appPropertyOptions.length === 0"
+                      id="notionAppProp"
+                      v-model="notionForm.appPropertyName"
+                      type="text"
+                      @input="markNotionDirty"
+                    />
+                    <select
+                      v-else
+                      id="notionAppProp"
+                      v-model="notionForm.appPropertyName"
+                      @change="markNotionDirty"
+                    >
+                      <option v-for="opt in appPropertyOptions" :key="opt" :value="opt">
+                        {{ opt }}
+                      </option>
+                    </select>
+                    <span class="slug-hint">Select property in Notion that maps to Orbit app names</span>
+                  </div>
+                  <div class="form-group">
+                    <label for="notionVersionProp">Version property</label>
+                    <input
+                      v-if="allPropertyOptions.length === 0"
+                      id="notionVersionProp"
+                      v-model="notionForm.versionPropertyName"
+                      type="text"
+                      @input="markNotionDirty"
+                    />
+                    <select
+                      v-else
+                      id="notionVersionProp"
+                      v-model="notionForm.versionPropertyName"
+                      @change="markNotionDirty"
+                    >
+                      <option v-for="opt in allPropertyOptions" :key="'v-' + opt" :value="opt">
+                        {{ opt }}
+                      </option>
+                    </select>
+                    <span class="slug-hint">Releases only: property holding the semver (e.g. 1.2.0), not the app name</span>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="notionStatusProp">Status property</label>
+                  <input
+                    id="notionStatusProp"
+                    v-model="notionForm.statusPropertyName"
+                    type="text"
+                    @input="markNotionDirty"
+                  />
+                </div>
+
+                <div class="form-actions" style="justify-content: flex-start;">
+                  <button
+                    type="button"
+                    class="btn btn-secondary"
+                    :disabled="isTestingNotion || isSavingNotion"
+                    @click="testNotion"
+                  >
+                    <span v-if="isTestingNotion">Testing…</span>
+                    <span v-else>Test connection</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    :disabled="isSavingNotion || !notionFormDirty"
+                    @click="saveNotionForm"
+                  >
+                    <span v-if="isSavingNotion">Saving…</span>
+                    <span v-else>Save</span>
+                  </button>
+                </div>
+              </template>
+            </div>
+
+            <div class="setting-section">
+              <h3>Sync</h3>
+              <p class="desc">Run a manual import or enable automatic sync on a schedule.</p>
+
+              <div class="toggle" style="margin-bottom: 20px;">
+                <button
+                  class="toggle-switch"
+                  :class="{ on: notionForm.scheduleEnabled }"
+                  aria-label="Toggle scheduled Notion sync"
+                  :disabled="!notionCanSync || isSavingNotion"
+                  @click="toggleNotionSchedule"
+                />
+                <div>
+                  <div class="toggle-label">Scheduled sync</div>
+                  <div class="toggle-desc">
+                    {{
+                      notionForm.scheduleEnabled
+                        ? `Runs ${notionForm.scheduleInterval === 'hourly' ? 'every hour' : 'once per day'}`
+                        : 'Off — sync only when you run it manually'
+                    }}
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="notionForm.scheduleEnabled" class="form-group">
+                <label for="notionInterval">Interval</label>
+                <select
+                  id="notionInterval"
+                  v-model="notionForm.scheduleInterval"
+                  @change="markNotionDirty(); saveNotionForm()"
+                >
+                  <option value="hourly">Hourly</option>
+                  <option value="daily">Daily</option>
+                </select>
+              </div>
+
+              <div class="notion-sync-actions">
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  :disabled="!notionCanSync || isSyncingNotion || notionSettings?.lastSyncStatus === 'running'"
+                  @click="syncNotionNow"
+                >
+                  <span v-if="isSyncingNotion || notionSettings?.lastSyncStatus === 'running'">Syncing…</span>
+                  <span v-else>Sync now</span>
+                </button>
+                <span class="notion-sync-meta">
+                  Last sync: {{ formatSyncTime(notionSettings?.lastSyncAt) }}
+                  <template v-if="notionSettings?.lastSyncStatus">
+                    · {{ notionSettings.lastSyncStatus }}
+                  </template>
+                </span>
+              </div>
+              <p v-if="notionSyncHint" class="notion-sync-hint">{{ notionSyncHint }}</p>
+
+              <div
+                v-if="notionSettings?.lastSyncResult"
+                class="notion-sync-result"
+                :class="{ error: notionSettings.lastSyncResult.errors?.length }"
+              >
+                <div class="notion-sync-stats">
+                  <span>{{ notionSettings.lastSyncResult.docsCreated }} docs created</span>
+                  <span>{{ notionSettings.lastSyncResult.docsUpdated }} docs updated</span>
+                  <span>{{ notionSettings.lastSyncResult.releasesCreated }} releases created</span>
+                  <span>{{ notionSettings.lastSyncResult.releasesUpdated }} releases updated</span>
+                </div>
+                <ul v-if="notionSettings.lastSyncResult.errors?.length" class="notion-sync-errors">
+                  <li v-for="(err, i) in notionSettings.lastSyncResult.errors.slice(0, 8)" :key="i">
+                    {{ err }}
+                  </li>
+                  <li v-if="notionSettings.lastSyncResult.errors.length > 8">
+                    …and {{ notionSettings.lastSyncResult.errors.length - 8 }} more
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </template>
         </div>
 
         <!-- SSO Configuration -->
@@ -1957,5 +2319,46 @@ function getCallbackUrl(provider: SsoProvider): string {
 .sso-modal .modal-body {
   overflow-y: auto;
   max-height: 60vh;
+}
+
+/* Notion integration */
+.notion-sync-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.notion-sync-meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+.notion-sync-hint {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.notion-sync-result {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.notion-sync-result.error {
+  border-color: color-mix(in oklch, oklch(55% 0.18 25) 35%, var(--border));
+}
+.notion-sync-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  font-size: 13px;
+  color: var(--fg);
+}
+.notion-sync-errors {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: oklch(50% 0.14 25);
+  line-height: 1.5;
 }
 </style>

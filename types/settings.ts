@@ -109,3 +109,55 @@ export interface UpdateDocGenerationPayload {
   sddIndexEnabled?: boolean;
   sddPerRepoEnabled?: boolean;
 }
+
+export type NotionSyncInterval = "hourly" | "daily";
+
+export type NotionSyncStatus = "idle" | "running" | "success" | "error";
+
+export interface NotionSyncResult {
+  docsCreated: number;
+  docsUpdated: number;
+  releasesCreated: number;
+  releasesUpdated: number;
+  errors: string[];
+  startedAt: string;
+  finishedAt: string;
+}
+
+export interface NotionSyncSettings {
+  id: string;
+  hasApiKey: boolean;
+  docsDatabaseId: string;
+  releasesDatabaseId: string;
+  appPropertyName: string;
+  versionPropertyName: string;
+  statusPropertyName: string;
+  scheduleEnabled: boolean;
+  scheduleInterval: NotionSyncInterval;
+  connected: boolean;
+  lastSyncAt: string | null;
+  lastSyncStatus: NotionSyncStatus;
+  lastSyncResult: NotionSyncResult | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface UpdateNotionSyncPayload {
+  apiKey?: string;
+  docsDatabaseId?: string;
+  releasesDatabaseId?: string;
+  appPropertyName?: string;
+  versionPropertyName?: string;
+  statusPropertyName?: string;
+  scheduleEnabled?: boolean;
+  scheduleInterval?: NotionSyncInterval;
+  connected?: boolean;
+}
+
+export interface NotionTestConnectionResult {
+  ok: boolean;
+  docsDatabaseTitle?: string;
+  releasesDatabaseTitle?: string;
+  appPropertyOptions: string[];
+  allPropertyOptions?: string[];
+}

@@ -1,6 +1,6 @@
 {
-  "id": "648b2b11-5476-494c-a46d-0eeb3ba18395",
-  "prevId": "ac96577b-ddc1-4221-ab06-7abfef5d8dc8",
+  "id": "f254bc55-5133-4eba-a48e-ba45d309d978",
+  "prevId": "648b2b11-5476-494c-a46d-0eeb3ba18395",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -492,6 +492,12 @@
         },
         "doc_type": {
           "name": "doc_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notion_page_id": {
+          "name": "notion_page_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -1236,6 +1242,12 @@
           "notNull": true,
           "default": false
         },
+        "notion_page_id": {
+          "name": "notion_page_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1966,6 +1978,118 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'open'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.notion_sync_settings": {
+      "name": "notion_sync_settings",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "api_key_encrypted": {
+          "name": "api_key_encrypted",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "docs_database_id": {
+          "name": "docs_database_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "releases_database_id": {
+          "name": "releases_database_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "app_property_name": {
+          "name": "app_property_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'App'"
+        },
+        "version_property_name": {
+          "name": "version_property_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Version'"
+        },
+        "status_property_name": {
+          "name": "status_property_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'Status'"
+        },
+        "schedule_enabled": {
+          "name": "schedule_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "schedule_interval": {
+          "name": "schedule_interval",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'daily'"
+        },
+        "connected": {
+          "name": "connected",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "last_sync_at": {
+          "name": "last_sync_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_sync_status": {
+          "name": "last_sync_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'idle'"
+        },
+        "last_sync_result": {
+          "name": "last_sync_result",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
