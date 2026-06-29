@@ -946,7 +946,11 @@ const lastModified = computed(() => {
 }
 
 .editor-pane:has(.editor-js-wrapper) {
-  overflow: hidden;
+  overflow: visible;
+}
+
+.editor-pane:has(.editor-js-wrapper) .pane-body {
+  overflow: visible;
 }
 .pane-header {
   padding: 12px 16px;

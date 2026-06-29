@@ -340,6 +340,10 @@ defineExpose({
 .editor-js-wrapper {
   width: 100%;
   height: 100%;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .editor-js-container {
@@ -347,17 +351,33 @@ defineExpose({
   height: 100%;
   padding: 16px 16px 16px 0;
   overflow: visible;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-js-container .codex-editor {
   background: transparent;
+  height: 100%;
+  overflow: visible;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-js-container .codex-editor__redactor {
   padding-bottom: 100px !important;
-  padding-left: 0 !important;
   padding-right: 24px !important;
   padding-top: 16px !important;
+  /* Extend box left so -24px toolbar actions stay inside, without shifting content */
+  margin-left: -24px;
+  padding-left: 24px !important;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: visible;
 }
 
 .editor-js-container .ce-block__content {
@@ -383,7 +403,7 @@ defineExpose({
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s ease;
-  z-index: 1;
+  z-index: 20;
 }
 
 .editor-js-container .ce-block:hover ~ .ce-toolbar .ce-toolbar__actions,
@@ -475,6 +495,13 @@ defineExpose({
   padding: 2px 0;
   border-radius: 4px;
   transition: background-color 0.1s ease;
+  position: relative;
+  z-index: 0;
+}
+
+.editor-js-container .ce-block:hover,
+.editor-js-container .ce-block--focused {
+  z-index: 2;
 }
 
 .editor-js-container .ce-block:hover {
@@ -651,6 +678,12 @@ defineExpose({
   border: none;
   border-radius: 0;
   box-shadow: none;
+  overflow: visible;
+  z-index: 10;
+}
+
+.editor-js-container .ce-toolbar--opened {
+  z-index: 11;
 }
 
 .editor-js-container .ce-toolbar__plus,
