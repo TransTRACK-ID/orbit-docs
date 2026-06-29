@@ -329,6 +329,52 @@ describe("sanitizeEditorJsData", () => {
   });
 });
 
+describe("inline link markdown round-trip", () => {
+  it("preserves links with extra anchor attributes when toggling editor and preview", () => {
+    const data = {
+      blocks: [
+        {
+          type: "paragraph",
+          data: {
+            text: '<a href="https://example.com/docs" target="_blank" rel="nofollow noopener noreferrer">example.com</a>',
+          },
+        },
+      ],
+    };
+
+    const markdown = editorJsToMarkdown(data);
+    expect(markdown).toBe("[example.com](https://example.com/docs)");
+
+    const roundTrip = markdownToEditorJs(markdown);
+    expect(roundTrip.blocks).toHaveLength(1);
+    expect(roundTrip.blocks[0].type).toBe("paragraph");
+    expect(roundTrip.blocks[0].data.text).toContain('href="https://example.com/docs"');
+    expect(roundTrip.blocks[0].data.text).toContain("example.com");
+  });
+
+  it("preserves formatted link text in lists", () => {
+    const data = {
+      blocks: [
+        {
+          type: "list",
+          data: {
+            style: "unordered",
+            items: [
+              'See <a href="https://example.com" target="_blank" rel="nofollow">docs</a> for details',
+            ],
+          },
+        },
+      ],
+    };
+
+    const markdown = editorJsToMarkdown(data);
+    expect(markdown).toContain("[docs](https://example.com)");
+
+    const roundTrip = markdownToEditorJs(markdown);
+    expect(roundTrip.blocks[0].data.items[0].content).toContain('href="https://example.com"');
+  });
+});
+
 describe("markdownToEditorJs mermaid", () => {
   it("should convert fenced mermaid blocks to mermaid editor blocks", () => {
     const md = "```mermaid\ngraph TD\n  A --> B\n```";

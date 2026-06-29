@@ -64,7 +64,6 @@
     "editorjs-inline-image": "^2.2.2",
     "editorjs-mermaid": "^1.0.0",
     "editorjs-text-alignment-blocktune": "^1.0.3",
-    "editorjs-text-color-plugin": "^2.0.4",
     "editorjs-toggle-block": "^0.3.16",
     "editorjs-undo": "^2.0.28",
     "express": "^4.22.2",

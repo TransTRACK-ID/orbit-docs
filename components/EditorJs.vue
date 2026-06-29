@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, nextTick } from "vue";
 import type { EditorJsData } from "~/composables/useEditorJsConverter";
+import { isBareUrl, prepareLinkUrl } from "~/components/editorjs/linkUtils";
+import { armPasteLink } from "~/components/editorjs/InlineLinkTool";
+import TextColorTool from "~/components/editorjs/TextColorTool";
 
 interface Props {
   modelValue?: string; // markdown string
@@ -84,6 +87,53 @@ function getAllClipboardImageFiles(clipboard: DataTransfer): File[] {
   return fromItems;
 }
 
+function selectTextAtRange(range: Range) {
+  const selection = window.getSelection();
+  if (!selection) return;
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function openLinkEditorForSelection(editor: any) {
+  requestAnimationFrame(() => {
+    editor.inlineToolbar.open();
+    requestAnimationFrame(() => {
+      const linkButton = editorContainer.value?.querySelector(".ce-inline-tool--link");
+      if (linkButton instanceof HTMLButtonElement) {
+        linkButton.click();
+      }
+    });
+  });
+}
+
+function handleBareUrlPaste(
+  event: ClipboardEvent,
+  editor: any,
+  plainText: string
+): boolean {
+  if (!isBareUrl(plainText)) return false;
+
+  // Must run synchronously: async work before preventDefault lets Editor.js paste first.
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
+  const url = prepareLinkUrl(plainText.trim());
+  armPasteLink(url);
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return true;
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+  const textNode = document.createTextNode(url);
+  range.insertNode(textNode);
+  range.selectNodeContents(textNode);
+  selectTextAtRange(range);
+
+  openLinkEditorForSelection(editor);
+  return true;
+}
+
 function setupNotionPasteHandler(editor: any) {
   const redactor = editorContainer.value?.querySelector(".codex-editor__redactor");
   if (!redactor) return;
@@ -98,6 +148,10 @@ function setupNotionPasteHandler(editor: any) {
     const imageFiles = getAllClipboardImageFiles(clipboard);
     const html = clipboard.getData("text/html");
     const plainText = clipboard.getData("text/plain");
+
+    if (plainText?.trim() && (!html?.trim() || !isBlockLevelHtmlPaste(html))) {
+      if (handleBareUrlPaste(e, editor, plainText)) return;
+    }
 
     if (imageFiles.length === 1 && (!html?.trim() || !isBlockLevelHtmlPaste(html))) {
       e.preventDefault();
@@ -144,6 +198,7 @@ async function initEditor() {
     { default: Table },
     { default: SimpleImageTool },
     { default: LinkTool },
+    { default: InlineLinkTool },
     { default: Marker },
     { default: Checklist },
     { default: InlineCode },
@@ -151,7 +206,6 @@ async function initEditor() {
     { default: Delimiter },
     { default: Warning },
     { default: ToggleBlock },
-    { default: ColorPlugin },
     { default: TextVariantTune },
     { default: MermaidTool },
     { default: AlignmentTune },
@@ -169,6 +223,7 @@ async function initEditor() {
     import("@editorjs/table"),
     import("~/components/editorjs/SimpleImageTool"),
     import("@editorjs/link"),
+    import("~/components/editorjs/InlineLinkTool"),
     import("@editorjs/marker"),
     import("@editorjs/checklist"),
     import("@editorjs/inline-code"),
@@ -176,7 +231,6 @@ async function initEditor() {
     import("@editorjs/delimiter"),
     import("@editorjs/warning"),
     import("editorjs-toggle-block"),
-    import("editorjs-text-color-plugin"),
     import("@editorjs/text-variant-tune"),
     import("editorjs-mermaid"),
     import("editorjs-text-alignment-blocktune"),
@@ -209,7 +263,8 @@ async function initEditor() {
       image: {
         class: SimpleImageTool,
       },
-      link: { class: LinkTool },
+      link: { class: InlineLinkTool },
+      linkTool: { class: LinkTool },
       marker: { class: Marker },
       inlineCode: { class: InlineCode },
       embed: { class: Embed },
@@ -220,12 +275,7 @@ async function initEditor() {
         config: { placeholder: "Toggle title" },
       },
       color: {
-        class: ColorPlugin,
-        config: {
-          colorCollections: ["#FF1300", "#FFAF00", "#ECECD7", "#00D08A", "#2C9EEC", "#8C00FF", "#FF4D4D", "#FFB84D", "#4D94FF", "#B84DFF", "#FF4DB8", "#4DFFB8", "#000000", "#333333", "#666666", "#999999", "#CCCCCC", "#FFFFFF"],
-          defaultColor: "#FF1300",
-          type: "text",
-        },
+        class: TextColorTool,
       },
       mermaid: {
         class: MermaidTool,
@@ -734,6 +784,132 @@ defineExpose({
   border-radius: 8px;
   box-shadow: 0 4px 20px color-mix(in oklch, var(--fg) 12%, transparent);
   animation: editorFadeInUp 0.15s ease;
+  overflow: visible;
+}
+
+.editor-js-container .ce-inline-toolbar .ce-popover__container {
+  overflow: visible;
+}
+
+.editor-js-container .ce-inline-toolbar .ce-popover__items {
+  overflow: visible;
+  max-height: none;
+}
+
+.editor-js-container .ce-inline-toolbar .ce-popover--nested .ce-popover__container {
+  width: 272px;
+  min-width: 272px;
+  max-width: min(320px, calc(100vw - 48px));
+  overflow: hidden;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+.editor-js-container .ce-inline-toolbar .ce-popover--nested .ce-popover__items {
+  overflow: visible;
+  max-height: none;
+}
+
+.editor-js-container .ce-inline-link-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.editor-js-container .ce-inline-link-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.editor-js-container .ce-inline-link-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.editor-js-container .ce-inline-link-actions .ce-inline-tool-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.editor-js-container .ce-inline-link-actions .ce-inline-tool-input--showed {
+  display: block;
+}
+
+.editor-js-container .ce-inline-link-actions .ce-inline-tool-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  outline: none;
+  overflow: auto;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.editor-js-container .ce-inline-text-color-actions {
+  display: none;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  padding: 8px;
+  width: 204px;
+  box-sizing: border-box;
+}
+
+.editor-js-container .ce-inline-text-color-actions--showed {
+  display: grid;
+}
+
+.editor-js-container .ce-inline-text-color-swatch {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  padding: 0;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.editor-js-container .ce-inline-text-color-swatch:hover {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.editor-js-container .ce-inline-text-color-swatch--clear {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: auto;
+  padding: 4px 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.editor-js-container .ce-inline-tool--text-color svg path:last-child {
+  stroke: var(--text-color-accent, var(--accent));
 }
 
 .editor-js-container .ce-inline-toolbar__toggler-and-button-wrapper {
@@ -751,6 +927,16 @@ defineExpose({
 
 .editor-js-container .ce-inline-tool--active {
   color: var(--accent);
+}
+
+.editor-js-container .ce-block a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.editor-js-container .ce-block a:hover {
+  color: color-mix(in oklch, var(--accent) 80%, var(--fg));
 }
 
 .editor-js-container .ce-conversion-toolbar {
@@ -867,9 +1053,9 @@ defineExpose({
   display: block;
 }
 
-/* Color plugin styles */
-.editor-js-container .cdx-color {
-  display: inline;
+/* Legacy colored text from older content */
+.editor-js-container font[color] {
+  color: inherit;
 }
 
 /* Text variant tune styles */

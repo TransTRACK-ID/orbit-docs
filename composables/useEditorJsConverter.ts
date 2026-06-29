@@ -1115,17 +1115,55 @@ function inlineMarkdownToHtml(text: string): string {
 }
 
 function htmlToInlineMarkdown(html: string): string {
-  return decodeHtmlEntities(
-    html
-    .replace(/<strong><em>(.*?)<\/em><\/strong>/g, "***$1***")
-    .replace(/<strong>(.*?)<\/strong>/g, "**$1**")
-    .replace(/<em>(.*?)<\/em>/g, "*$1*")
-    .replace(/<code>(.*?)<\/code>/g, "`$1`")
-    .replace(/<a href="([^"]+)">(.*?)<\/a>/g, "[$2]($1)")
-    .replace(/<br\s*\/?>/g, "\n")
-    .replace(/<\/p>/g, "\n")
-    .replace(/<[^>]+>/g, "")
-  );
+  if (!html?.trim()) return "";
+
+  const decoded = decodeHtmlEntities(html);
+  if (typeof document === "undefined") {
+    return decoded
+      .replace(/<a\s+[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, "[$2]($1)")
+      .replace(/<strong><em>(.*?)<\/em><\/strong>/g, "***$1***")
+      .replace(/<strong>(.*?)<\/strong>/g, "**$1**")
+      .replace(/<em>(.*?)<\/em>/g, "*$1*")
+      .replace(/<code>(.*?)<\/code>/g, "`$1`")
+      .replace(/<br\s*\/?>/g, "\n")
+      .replace(/<\/p>/g, "\n")
+      .replace(/<[^>]+>/g, "");
+  }
+
+  const root = document.createElement("div");
+  root.innerHTML = decoded;
+
+  const serialize = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return node.textContent || "";
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+
+    const el = node as HTMLElement;
+    const tag = el.tagName.toLowerCase();
+    const inner = Array.from(el.childNodes).map(serialize).join("");
+
+    switch (tag) {
+      case "strong":
+      case "b":
+        return `**${inner}**`;
+      case "em":
+      case "i":
+        return `*${inner}*`;
+      case "code":
+        return `\`${inner}\``;
+      case "a": {
+        const href = el.getAttribute("href") || "";
+        return href ? `[${inner}](${href})` : inner;
+      }
+      case "br":
+        return "\n";
+      default:
+        return inner;
+    }
+  };
+
+  return Array.from(root.childNodes).map(serialize).join("");
 }
 
 function escapeHtml(text: string): string {
