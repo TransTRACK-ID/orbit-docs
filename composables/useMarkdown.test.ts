@@ -51,6 +51,15 @@ describe("renderMarkdown", () => {
     expect(html).toContain('<a href="https://example.com">link</a>');
   });
 
+  it("should render colored links saved from the editor", () => {
+    const md =
+      '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer"><font color="#FF1300">link</font></a>';
+    const html = renderMarkdown(md);
+    expect(html).toContain('href="https://example.com"');
+    expect(html).toContain('<font color="#FF1300">link</font>');
+    expect(html).not.toContain("&lt;font");
+  });
+
   it("should render horizontal rules", () => {
     expect(renderMarkdown("---")).toContain("<hr>");
     expect(renderMarkdown("***")).toContain("<hr>");

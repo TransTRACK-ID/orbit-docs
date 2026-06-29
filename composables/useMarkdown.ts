@@ -1,4 +1,5 @@
 import { marked } from "marked";
+import { allowColorHtmlInMarkdown } from "~/composables/inlineColorHtml";
 
 // Lazy-load highlight.js for code syntax highlighting
 let _hljs: typeof import("highlight.js").default | null = null;
@@ -82,13 +83,8 @@ export function renderMarkdown(md: string): string {
     const prepared = preprocessNotionImageMarkdown(md);
     const renderer = new marked.Renderer();
 
-    // ─── Escape raw HTML instead of rendering it ─────────────────
-    renderer.html = ({ text }: { text: string }) => {
-      return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    };
+    // ─── Escape raw HTML except safe inline color markup ─────────
+    renderer.html = ({ text }: { text: string }) => allowColorHtmlInMarkdown(text);
 
     // ─── Headings with slug IDs for h2 and h3 ───────────────────
     renderer.heading = function ({ tokens, depth }: { tokens: any[]; depth: number }) {

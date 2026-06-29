@@ -1018,14 +1018,22 @@ defineExpose({
   color: var(--accent);
 }
 
-.editor-js-container .ce-block a {
+.editor-js-container .ce-block a:where(:not(:has(font[color]), :not(:has(span[style*="color"])))) {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
 
-.editor-js-container .ce-block a:hover {
+.editor-js-container .ce-block a:where(:not(:has(font[color]), :not(:has(span[style*="color"])))):hover {
   color: color-mix(in oklch, var(--accent) 80%, var(--fg));
+}
+
+.editor-js-container .ce-block a font[color] {
+  text-decoration: inherit;
+}
+
+.editor-js-container .ce-block a span[style*="color"] {
+  text-decoration: inherit;
 }
 
 .editor-js-container .ce-conversion-toolbar {
@@ -1140,11 +1148,6 @@ defineExpose({
 
 .editor-js-container .cdx-toggle--open .cdx-toggle__content {
   display: block;
-}
-
-/* Legacy colored text from older content */
-.editor-js-container font[color] {
-  color: inherit;
 }
 
 /* Text variant tune styles */

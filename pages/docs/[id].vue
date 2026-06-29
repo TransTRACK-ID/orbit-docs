@@ -1097,10 +1097,18 @@ const lastModified = computed(() => {
   max-width: 100%;
   border-radius: var(--radius);
 }
-.preview-body :deep(a) {
+.preview-body :deep(a:where(:not(:has(font[color]), :not(:has(span[style*="color"]))))) {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.preview-body :deep(a font[color]) {
+  text-decoration: inherit;
+}
+
+.preview-body :deep(a span[style*="color"]) {
+  text-decoration: inherit;
 }
 .preview-body :deep(input[type="checkbox"]) {
   margin-right: 6px;

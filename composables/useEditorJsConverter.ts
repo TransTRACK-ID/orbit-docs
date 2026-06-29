@@ -1,4 +1,10 @@
 import type EditorJS from "@editorjs/editorjs";
+import {
+  hasColorMarkup,
+  serializeAnchorOpenTag,
+  serializeColoredFont,
+  serializeColoredSpan,
+} from "~/composables/inlineColorHtml";
 
 export interface EditorJsData {
   time?: number;
@@ -1120,14 +1126,25 @@ function htmlToInlineMarkdown(html: string): string {
   const decoded = decodeHtmlEntities(html);
   if (typeof document === "undefined") {
     return decoded
-      .replace(/<a\s+[^>]*href="([^"]*)"[^>]*>(.*?)<\/a>/gi, "[$2]($1)")
+      .replace(
+        /<a\s+([^>]*?)href="([^"]*)"([^>]*)>([\s\S]*?)<\/a>/gi,
+        (_match, before, href, after, inner) => {
+          if (hasColorMarkup(inner)) {
+            const attrs = [`href="${href}"`, before.trim(), after.trim()].filter(Boolean).join(" ");
+            return `<a ${attrs}>${inner}</a>`;
+          }
+          return `[${inner}](${href})`;
+        }
+      )
+      .replace(/<font\s+color="(#[0-9a-fA-F]{3,6})">([\s\S]*?)<\/font>/gi, '<font color="$1">$2</font>')
+      .replace(/<span\s+style="color:\s*(#[0-9a-fA-F]{3,6})">([\s\S]*?)<\/span>/gi, '<span style="color:$1">$2</span>')
       .replace(/<strong><em>(.*?)<\/em><\/strong>/g, "***$1***")
       .replace(/<strong>(.*?)<\/strong>/g, "**$1**")
       .replace(/<em>(.*?)<\/em>/g, "*$1*")
       .replace(/<code>(.*?)<\/code>/g, "`$1`")
       .replace(/<br\s*\/?>/g, "\n")
       .replace(/<\/p>/g, "\n")
-      .replace(/<[^>]+>/g, "");
+      .replace(/<(?!\/?(?:font|span)\b)[^>]+>/gi, "");
   }
 
   const root = document.createElement("div");
@@ -1154,8 +1171,16 @@ function htmlToInlineMarkdown(html: string): string {
         return `\`${inner}\``;
       case "a": {
         const href = el.getAttribute("href") || "";
-        return href ? `[${inner}](${href})` : inner;
+        if (!href) return inner;
+        if (hasColorMarkup(inner)) {
+          return `${serializeAnchorOpenTag(el)}${inner}</a>`;
+        }
+        return `[${inner}](${href})`;
       }
+      case "font":
+        return serializeColoredFont(el, inner);
+      case "span":
+        return serializeColoredSpan(el, inner);
       case "br":
         return "\n";
       default:

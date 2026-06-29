@@ -373,6 +373,22 @@ describe("inline link markdown round-trip", () => {
     const roundTrip = markdownToEditorJs(markdown);
     expect(roundTrip.blocks[0].data.items[0].content).toContain('href="https://example.com"');
   });
+
+  it("preserves colored link text through editor markdown round-trip", () => {
+    const html =
+      '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer"><font color="#FF1300">link</font></a>';
+    const data = {
+      blocks: [{ type: "paragraph", data: { text: html } }],
+    };
+
+    const markdown = editorJsToMarkdown(data);
+    expect(markdown).toContain('<font color="#FF1300">link</font>');
+    expect(markdown).toContain('href="https://example.com"');
+
+    const roundTrip = markdownToEditorJs(markdown);
+    expect(roundTrip.blocks[0].data.text).toContain('<font color="#FF1300">');
+    expect(roundTrip.blocks[0].data.text).toContain('href="https://example.com"');
+  });
 });
 
 describe("markdownToEditorJs mermaid", () => {
