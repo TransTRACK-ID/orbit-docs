@@ -44,8 +44,51 @@ const rightSidebarTab = ref<'properties' | 'versions'>('properties');
 const restoreConfirmVisible = ref(false);
 const versionToRestore = ref<any>(null);
 const isRestoring = ref(false);
+const autosaveReady = ref(false);
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+function getEditorPayload() {
+  return {
+    title: editorTitle.value,
+    content: editorContent.value,
+    status: editorStatus.value,
+    versionId: editorVersionId.value ?? null,
+    tags: editorTags.value,
+  };
+}
+
+const autosaveEnabled = computed(
+  () =>
+    autosaveReady.value
+    && !docLoading.value
+    && !docNotFound.value
+    && editorStatus.value !== "published"
+);
+
+const {
+  saveState,
+  isDirty,
+  markClean,
+  scheduleSave,
+  flushSave,
+  hasPendingChanges,
+} = useDocAutosave({
+  docId,
+  enabled: autosaveEnabled,
+  getPayload: getEditorPayload,
+  save: (id, payload, options) => updateDoc(id, payload, options),
+});
+
+const saveStatusLabel = computed(() => {
+  if (!autosaveEnabled.value) return "";
+  if (saveState.value === "saving" || isSaving.value) return "Saving…";
+  if (saveState.value === "error" || isDirty.value || saveState.value === "pending") {
+    return "Unsaved changes";
+  }
+  if (saveState.value === "saved") return "All changes saved";
+  return "";
+});
 
 function showToast(msg: string) {
   toastMsg.value = msg;
@@ -63,13 +106,7 @@ function togglePreview() {
 
 async function saveDraft() {
   if (!docId.value) return;
-  await updateDoc(docId.value, {
-    title: editorTitle.value,
-    content: editorContent.value,
-    status: editorStatus.value,
-    versionId: editorVersionId.value ?? null,
-    tags: editorTags.value,
-  });
+  await flushSave({ silent: false });
   await fetchDocVersions(docId.value);
 }
 
@@ -243,8 +280,16 @@ function resetEditorFields() {
   activeHeading.value = "";
 }
 
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  if (autosaveEnabled.value && hasPendingChanges()) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
+}
+
 async function loadDoc() {
   if (!docId.value) return;
+  autosaveReady.value = false;
   docLoading.value = true;
   docNotFound.value = false;
   resetEditorFields();
@@ -264,6 +309,9 @@ async function loadDoc() {
     docNotFound.value = true;
   } finally {
     docLoading.value = false;
+    await nextTick();
+    markClean();
+    autosaveReady.value = true;
   }
 }
 
@@ -272,13 +320,36 @@ onMounted(() => {
   loadDoc();
   document.addEventListener("keydown", onKeydown);
   document.addEventListener("keydown", onTagRemoveKeydown);
+  window.addEventListener("beforeunload", onBeforeUnload);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKeydown);
   document.removeEventListener("keydown", onTagRemoveKeydown);
+  window.removeEventListener("beforeunload", onBeforeUnload);
   if (toastTimer) clearTimeout(toastTimer);
 });
+
+onBeforeRouteLeave(async (_to, _from, next) => {
+  if (autosaveEnabled.value && hasPendingChanges()) {
+    try {
+      await flushSave({ silent: true });
+      next();
+    } catch {
+      next(false);
+    }
+    return;
+  }
+  next();
+});
+
+watch(
+  [editorContent, editorTitle, editorStatus, editorVersionId, editorTags],
+  () => {
+    scheduleSave();
+  },
+  { deep: true }
+);
 
 watch(() => docId.value, () => {
   loadDoc();
@@ -310,7 +381,19 @@ const lastModified = computed(() => {
         <h1>Technical Editor</h1>
         <span class="pill pill-blue">{{ appName }}</span>
       </div>
-      <div class="flex-gap-sm">
+      <div class="flex-gap-sm topbar-actions">
+        <p
+          v-if="saveStatusLabel"
+          class="save-status"
+          :class="{
+            'save-status--saving': saveStatusLabel === 'Saving…',
+            'save-status--dirty': saveStatusLabel === 'Unsaved changes',
+            'save-status--saved': saveStatusLabel === 'All changes saved',
+          }"
+          aria-live="polite"
+        >
+          {{ saveStatusLabel }}
+        </p>
         <button
           type="button"
           class="btn btn-ghost"
@@ -703,6 +786,31 @@ const lastModified = computed(() => {
 .flex-gap-sm {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+.topbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.save-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.save-status--saving {
+  color: var(--fg);
+}
+
+.save-status--dirty {
+  color: oklch(55% 0.12 55);
+}
+
+.save-status--saved {
+  color: var(--muted);
 }
 
 .pill {

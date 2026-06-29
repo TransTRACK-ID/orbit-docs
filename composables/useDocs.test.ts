@@ -60,6 +60,16 @@ describe("useDocs composable", () => {
     expect(mockToastSuccess).toHaveBeenCalledWith('Doc "New Doc" created');
   });
 
+  it("should update a doc silently without toast", async () => {
+    const updated = { id: "d1", appId: "a1", title: "Updated Doc", content: "updated", status: "draft", versionId: null, tags: null, author: null, createdAt: null, updatedAt: null, app: null, version: null, appVersions: [] };
+    mockFetch.mockResolvedValueOnce({ data: updated });
+
+    const { updateDoc } = useDocs();
+    await updateDoc("d1", { title: "Updated Doc" }, { silent: true });
+
+    expect(mockToastSuccess).not.toHaveBeenCalled();
+  });
+
   it("should update a doc", async () => {
     const updated = { id: "d1", appId: "a1", title: "Updated Doc", content: "updated", status: "draft", versionId: null, tags: null, author: null, createdAt: null, updatedAt: null, app: null, version: null, appVersions: [] };
     mockFetch.mockResolvedValueOnce({ data: updated });

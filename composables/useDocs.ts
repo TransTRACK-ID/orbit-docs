@@ -121,7 +121,7 @@ export const useDocs = () => {
     }
   }
 
-  async function updateDoc(id: string, payload: CreateDocPayload) {
+  async function updateDoc(id: string, payload: CreateDocPayload, options?: { silent?: boolean }) {
     isSaving.value = true;
     try {
       const data = await $fetch<{ data: DocDetail }>(`/api/docs/${id}`, {
@@ -135,7 +135,9 @@ export const useDocs = () => {
       if (currentDoc.value && currentDoc.value.id === id) {
         currentDoc.value = { ...currentDoc.value, ...data.data };
       }
-      toast.success("Draft saved");
+      if (!options?.silent) {
+        toast.success("Draft saved");
+      }
       return data.data;
     } catch (e: any) {
       const msg = e?.data?.message || e?.message || "Failed to update doc";
