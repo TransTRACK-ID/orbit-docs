@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { renderMarkdown } from "~/composables/useMarkdown";
 import type { DocGenerationRepoResult } from "~/composables/useDocGenerator";
+import {
+  buildGeneratedDocLinkMap,
+  buildGeneratedDocLinkSources,
+  resolveGeneratedDocTab,
+} from "~/utils/generated-doc-links";
 
 interface Props {
   srs: string | null;
@@ -109,10 +114,36 @@ const downloadFilename = computed(() => {
   return "document.md";
 });
 
+function repoNameFromUrl(url: string): string {
+  const trimmed = url.replace(/\.git$/, "");
+  const parts = trimmed.split("/").filter(Boolean);
+  return parts[parts.length - 1] || "repo";
+}
+
+const docLinkMap = computed(() => {
+  const repos = (props.repoResults || [])
+    .filter((r) => hasTabContent(`sdd:${r.id}`))
+    .map((r) => ({ id: r.id, repoName: repoNameFromUrl(r.repoUrl) }));
+
+  const sources = buildGeneratedDocLinkSources({
+    availableTabs: tabs.value.map((t) => t.key),
+    repos,
+  });
+  return buildGeneratedDocLinkMap(sources);
+});
+
+function patchInternalDocLinks(html: string): string {
+  return html.replace(/<a\s+href="([^"]+)"([^>]*)>/gi, (match, href, rest) => {
+    const tabKey = resolveGeneratedDocTab(href, docLinkMap.value);
+    if (!tabKey) return match;
+    return `<a href="#" data-gen-tab="${tabKey}" class="gen-doc-link"${rest}>`;
+  });
+}
+
 const renderedContent = computed(() => {
   const content = currentContent.value.trim();
   if (!content) return "";
-  return renderMarkdown(content);
+  return patchInternalDocLinks(renderMarkdown(content));
 });
 
 const wordCount = computed(() => {
@@ -172,6 +203,32 @@ async function saveAsDocument() {
 function selectTab(key: string) {
   activeTab.value = key;
 }
+
+const proseRef = ref<HTMLElement | null>(null);
+
+function handleProseClick(event: MouseEvent) {
+  const anchor = (event.target as HTMLElement).closest("a");
+  if (!anchor) return;
+
+  const tabFromData = anchor.getAttribute("data-gen-tab");
+  if (tabFromData && tabs.value.some((t) => t.key === tabFromData)) {
+    event.preventDefault();
+    selectTab(tabFromData);
+    return;
+  }
+
+  const href = anchor.getAttribute("href");
+  if (!href) return;
+  const tabKey = resolveGeneratedDocTab(href, docLinkMap.value);
+  if (!tabKey) return;
+
+  event.preventDefault();
+  selectTab(tabKey);
+}
+
+watch(activeTab, () => {
+  proseRef.value?.scrollTo({ top: 0, behavior: "smooth" });
+});
 </script>
 
 <template>
@@ -247,7 +304,7 @@ function selectTab(key: string) {
         <p class="viewer-empty-title">No documents generated</p>
         <p class="viewer-empty-desc">The job finished without markdown output. Check agent logs for errors.</p>
       </div>
-      <div v-else class="viewer-prose-wrap">
+      <div v-else ref="proseRef" class="viewer-prose-wrap" @click="handleProseClick">
         <MermaidHtml class="markdown-body" :html="renderedContent" />
       </div>
     </div>
@@ -658,6 +715,17 @@ function selectTab(key: string) {
 
 :deep(.markdown-body a:hover) {
   text-decoration: underline;
+}
+
+:deep(.markdown-body a.gen-doc-link) {
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+:deep(.markdown-body a.gen-doc-link:hover) {
+  color: color-mix(in oklch, var(--accent) 85%, var(--fg));
 }
 
 @media (max-width: 720px) {
