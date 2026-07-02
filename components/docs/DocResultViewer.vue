@@ -30,17 +30,34 @@ function hasTabContent(key: string): boolean {
   return getContentForTab(key).trim().length > 0;
 }
 
+function shortRepoLabel(url: string): string {
+  const trimmed = url.replace(/\.git$/, "");
+  try {
+    const parsed = new URL(trimmed);
+    const parts = parsed.pathname.split("/").filter(Boolean);
+    if (parts.length >= 2) return parts.slice(-2).join("/");
+    if (parts.length === 1) return parts[0];
+    return parsed.hostname;
+  } catch {
+    const parts = trimmed.split("/").filter(Boolean);
+    return parts.slice(-2).join("/") || trimmed;
+  }
+}
+
 const tabs = computed(() => {
-  const base: { key: string; label: string }[] = [
-    { key: "srs", label: "SRS" },
-    { key: "fsd", label: "FSD" },
-    { key: "git_snapshot", label: "Git Snapshot" },
-    { key: "sdd", label: "SDD Index" },
+  const base: { key: string; label: string; group: "product" | "snapshot" | "sdd" }[] = [
+    { key: "srs", label: "SRS", group: "product" },
+    { key: "fsd", label: "FSD", group: "product" },
+    { key: "git_snapshot", label: "Git snapshot", group: "snapshot" },
+    { key: "sdd", label: "SDD index", group: "sdd" },
   ];
   if (props.repoResults && props.repoResults.length > 0) {
     for (const r of props.repoResults) {
-      const name = r.repoUrl.replace(/\.git$/, "").split("/").pop() || "repo";
-      base.push({ key: `sdd:${r.id}`, label: `SDD · ${name}` });
+      base.push({
+        key: `sdd:${r.id}`,
+        label: shortRepoLabel(r.repoUrl),
+        group: "sdd",
+      });
     }
   }
   return base.filter((tab) => hasTabContent(tab.key));
@@ -62,6 +79,8 @@ watch(
   { immediate: true },
 );
 
+const activeTabMeta = computed(() => tabs.value.find((t) => t.key === activeTab.value) || null);
+
 const activeRepoResult = computed<DocGenerationRepoResult | null>(() => {
   if (!activeTab.value.startsWith("sdd:")) return null;
   const id = activeTab.value.slice(4);
@@ -80,6 +99,12 @@ const currentDocType = computed<"srs" | "fsd" | "sdd" | undefined>(() => {
 const downloadFilename = computed(() => {
   if (activeTab.value === "git_snapshot") return "GIT-SNAPSHOT.md";
   if (activeTab.value === "sdd") return "SDD.md";
+  if (activeTab.value.startsWith("sdd:")) {
+    const name = activeRepoResult.value
+      ? shortRepoLabel(activeRepoResult.value.repoUrl).replace(/\//g, "-")
+      : "repo";
+    return `SDD-${name}.md`;
+  }
   if (currentDocType.value) return `${currentDocType.value.toUpperCase()}.md`;
   return "document.md";
 });
@@ -88,6 +113,12 @@ const renderedContent = computed(() => {
   const content = currentContent.value.trim();
   if (!content) return "";
   return renderMarkdown(content);
+});
+
+const wordCount = computed(() => {
+  const text = currentContent.value.trim();
+  if (!text) return 0;
+  return text.split(/\s+/).filter(Boolean).length;
 });
 
 const isCopied = ref(false);
@@ -114,7 +145,6 @@ function downloadContent() {
   URL.revokeObjectURL(url);
 }
 
-// ── Save as Document and open in Technical Editor ─────────────
 const { createDoc } = useDocs();
 const isSaving = ref(false);
 
@@ -122,7 +152,7 @@ async function saveAsDocument() {
   if (!props.appId) return;
   isSaving.value = true;
   try {
-    const tabLabel = tabs.value.find((t) => t.key === activeTab.value)?.label || "Document";
+    const tabLabel = activeTabMeta.value?.label || "Document";
     const doc = await createDoc({
       title: `${tabLabel} — Generated`,
       appId: props.appId,
@@ -138,65 +168,91 @@ async function saveAsDocument() {
     isSaving.value = false;
   }
 }
+
+function selectTab(key: string) {
+  activeTab.value = key;
+}
 </script>
 
 <template>
   <div class="result-viewer">
-    <div v-if="tabs.length > 0" class="result-tabs">
-      <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="tab-btn"
-        :class="{ active: activeTab === tab.key }"
-        @click="activeTab = tab.key"
-      >
-        {{ tab.label }}
-      </button>
+    <template v-if="tabs.length > 0">
+      <div class="viewer-toolbar">
+        <nav class="doc-tabs" aria-label="Generated document types">
+          <button
+            v-for="tab in tabs"
+            :key="tab.key"
+            type="button"
+            role="tab"
+            class="doc-tab"
+            :class="{ active: activeTab === tab.key, 'doc-tab--repo': tab.key.startsWith('sdd:') }"
+            :aria-selected="activeTab === tab.key"
+            @click="selectTab(tab.key)"
+          >
+            <span v-if="tab.key.startsWith('sdd:')" class="doc-tab-prefix">SDD</span>
+            {{ tab.label }}
+          </button>
+        </nav>
 
-      <div class="tab-actions">
-        <button class="btn btn-primary btn-sm" @click="saveAsDocument">
-          <span v-if="isSaving">Saving…</span>
-          <span v-else>Open in Technical Editor</span>
-        </button>
-        <button class="btn btn-ghost btn-sm" @click="copyContent">
-          <span v-if="isCopied">Copied!</span>
-          <span v-else>Copy</span>
-        </button>
-        <button class="btn btn-ghost btn-sm" @click="downloadContent">
-          Download
-        </button>
+        <div class="viewer-toolbar-foot">
+          <div class="viewer-meta">
+            <span class="viewer-meta-label">{{ activeTabMeta?.label }}</span>
+            <span v-if="wordCount > 0" class="viewer-meta-stat">{{ wordCount.toLocaleString() }} words</span>
+          </div>
+          <div class="viewer-actions">
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="isSaving"
+              @click="saveAsDocument"
+            >
+              <span v-if="isSaving">Saving…</span>
+              <span v-else>Open in editor</span>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" @click="copyContent">
+              {{ isCopied ? "Copied" : "Copy" }}
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" @click="downloadContent">
+              Download
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <div v-if="activeRepoResult" class="repo-banner">
-      <span class="repo-banner-label">{{ activeRepoResult.repoUrl }}</span>
-      <span v-if="activeRepoResult.repoRef" class="repo-banner-ref">{{ activeRepoResult.repoRef }}</span>
-      <a
-        v-if="activeRepoResult.prUrl"
-        :href="activeRepoResult.prUrl"
-        target="_blank"
-        rel="noopener"
-        class="repo-banner-pr"
-      >
-        View Pull Request ↗
-      </a>
-      <span v-else-if="activeRepoResult.status === 'failed'" class="repo-banner-error">
-        {{ activeRepoResult.errorMessage || 'SDD generation failed' }}
-      </span>
-      <span v-else class="repo-banner-muted">No PR (no access token configured)</span>
-    </div>
-
-    <div class="result-body">
-      <div v-if="tabs.length === 0" class="result-empty">
-        No documents with content were generated.
+      <div v-if="activeRepoResult" class="repo-meta">
+        <div class="repo-meta-main">
+          <span class="repo-meta-name">{{ shortRepoLabel(activeRepoResult.repoUrl) }}</span>
+          <code v-if="activeRepoResult.repoRef" class="repo-meta-ref">{{ activeRepoResult.repoRef }}</code>
+        </div>
+        <div class="repo-meta-status">
+          <a
+            v-if="activeRepoResult.prUrl"
+            :href="activeRepoResult.prUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="repo-meta-link"
+          >
+            View pull request
+          </a>
+          <span v-else-if="activeRepoResult.status === 'failed'" class="repo-meta-error">
+            {{ activeRepoResult.errorMessage || "SDD generation failed" }}
+          </span>
+          <span v-else class="repo-meta-muted">No PR opened (token not configured)</span>
+        </div>
       </div>
-      <div v-else class="result-content">
+    </template>
+
+    <div class="viewer-body">
+      <div v-if="tabs.length === 0" class="viewer-empty">
+        <p class="viewer-empty-title">No documents generated</p>
+        <p class="viewer-empty-desc">The job finished without markdown output. Check agent logs for errors.</p>
+      </div>
+      <div v-else class="viewer-prose-wrap">
         <MermaidHtml class="markdown-body" :html="renderedContent" />
       </div>
     </div>
   </div>
 </template>
-
 
 <style scoped>
 .result-viewer {
@@ -204,138 +260,254 @@ async function saveAsDocument() {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-.result-tabs {
+.viewer-toolbar {
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in oklch, var(--fg) 2.5%, var(--surface));
+}
+
+.doc-tabs {
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  padding: 10px 12px;
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
-.tab-btn {
+.doc-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.doc-tab {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
-  border-radius: var(--radius);
+  border-radius: 999px;
   border: 1px solid transparent;
   background: transparent;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--muted);
   cursor: pointer;
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    color 0.15s cubic-bezier(0.25, 1, 0.5, 1),
+    background 0.15s cubic-bezier(0.25, 1, 0.5, 1),
+    border-color 0.15s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-.tab-btn:hover {
+.doc-tab:hover {
   color: var(--fg);
-  background: var(--fg-soft);
+  background: color-mix(in oklch, var(--fg) 6%, transparent);
 }
 
-.tab-btn.active {
+.doc-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.doc-tab.active {
+  color: var(--fg);
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--fg) 8%, transparent);
+}
+
+.doc-tab-prefix {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.doc-tab.active .doc-tab-prefix {
   color: var(--accent);
-  background: var(--accent-soft);
-  border-color: var(--accent-soft);
 }
 
-.tab-actions {
-  margin-left: auto;
-  display: flex;
-  gap: 8px;
-}
-
-.repo-banner {
+.viewer-toolbar-foot {
   display: flex;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  border-top: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+}
+
+.viewer-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.viewer-meta-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.viewer-meta-stat {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.repo-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: color-mix(in oklch, var(--fg) 3%, var(--bg));
   font-size: 12px;
 }
 
-.repo-banner-label {
-  font-family: var(--font-mono);
-  color: var(--fg);
-  word-break: break-all;
+.repo-meta-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
-.repo-banner-ref {
+.repo-meta-name {
   font-family: var(--font-mono);
-  background: color-mix(in oklch, var(--fg) 8%, transparent);
+  font-size: 12px;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.repo-meta-ref {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
   color: var(--muted);
-  padding: 1px 6px;
+  background: color-mix(in oklch, var(--fg) 7%, transparent);
+  padding: 2px 7px;
   border-radius: 4px;
 }
 
-.repo-banner-pr {
-  margin-left: auto;
+.repo-meta-status {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.repo-meta-link {
   color: var(--accent);
-  font-weight: 600;
+  font-weight: 500;
   text-decoration: none;
 }
 
-.repo-banner-pr:hover {
+.repo-meta-link:hover {
   text-decoration: underline;
 }
 
-.repo-banner-muted {
-  margin-left: auto;
+.repo-meta-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.repo-meta-muted {
   color: var(--muted);
 }
 
-.repo-banner-error {
-  margin-left: auto;
-  color: oklch(50% 0.16 25);
+.repo-meta-error {
+  color: oklch(50% 0.14 25);
+  max-width: 280px;
+  text-align: right;
+  line-height: 1.4;
 }
 
-.result-body {
-  display: flex;
-  gap: 0;
-  min-height: 400px;
+.viewer-body {
+  flex: 1;
+  min-height: 360px;
+  background: var(--surface);
 }
 
-.result-empty {
+.viewer-empty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex: 1;
+  gap: 6px;
+  min-height: 280px;
   padding: 48px 24px;
-  color: var(--muted);
-  font-size: 14px;
+  text-align: center;
 }
 
-.result-content {
-  padding: 24px;
-  max-height: 70vh;
+.viewer-empty-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.viewer-empty-desc {
+  margin: 0;
+  max-width: 36ch;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.viewer-prose-wrap {
+  padding: 28px 32px 36px;
+  max-height: min(70vh, 720px);
   overflow-y: auto;
-  flex: 1;
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 6px 12px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   background: transparent;
   color: var(--muted);
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    color 0.15s cubic-bezier(0.25, 1, 0.5, 1),
+    background 0.15s cubic-bezier(0.25, 1, 0.5, 1),
+    border-color 0.15s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-.btn:hover {
+.btn:hover:not(:disabled) {
   color: var(--fg);
-  border-color: var(--fg);
+  background: color-mix(in oklch, var(--fg) 5%, transparent);
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .btn-sm {
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 5px 10px;
 }
 
 .btn-primary {
@@ -344,101 +516,139 @@ async function saveAsDocument() {
   border-color: var(--accent);
 }
 
-.btn-primary:hover {
+.btn-primary:hover:not(:disabled) {
   background: color-mix(in oklch, var(--accent) 88%, black);
 }
 
-/* Markdown styling */
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
 :deep(.markdown-body) {
+  max-width: 72ch;
+  margin: 0 auto;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--fg);
 }
 
 :deep(.markdown-body h1) {
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 600;
-  margin: 0 0 16px;
-  padding-bottom: 8px;
+  margin: 0 0 1rem;
+  padding-bottom: 0.5rem;
   border-bottom: 1px solid var(--border);
+  letter-spacing: -0.01em;
 }
 
 :deep(.markdown-body h2) {
-  font-size: 20px;
+  font-size: 1.2rem;
   font-weight: 600;
-  margin: 24px 0 12px;
+  margin: 1.75rem 0 0.75rem;
+  letter-spacing: -0.01em;
 }
 
 :deep(.markdown-body h3) {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 600;
-  margin: 20px 0 10px;
+  margin: 1.5rem 0 0.5rem;
 }
 
 :deep(.markdown-body p) {
-  margin: 0 0 12px;
+  margin: 0 0 0.85rem;
 }
 
-:deep(.markdown-body ul, .markdown-body ol) {
-  margin: 0 0 12px;
-  padding-left: 24px;
+:deep(.markdown-body ul) {
+  margin: 0 0 0.85rem;
+  padding-left: 1.35rem;
+  list-style-type: disc;
+  list-style-position: outside;
+}
+
+:deep(.markdown-body ol) {
+  margin: 0 0 0.85rem;
+  padding-left: 1.35rem;
+  list-style-type: decimal;
+  list-style-position: outside;
 }
 
 :deep(.markdown-body li) {
-  margin-bottom: 4px;
+  display: list-item;
+  margin-bottom: 0.35rem;
+}
+
+:deep(.markdown-body li > p) {
+  margin-bottom: 0.35rem;
+}
+
+:deep(.markdown-body ul ul) {
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+  list-style-type: circle;
+}
+
+:deep(.markdown-body ol ol) {
+  list-style-type: lower-alpha;
 }
 
 :deep(.markdown-body code) {
-  background: var(--fg-soft);
-  padding: 2px 6px;
+  background: color-mix(in oklch, var(--fg) 7%, transparent);
+  padding: 0.1em 0.35em;
   border-radius: 4px;
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: 0.92em;
 }
 
 :deep(.markdown-body pre) {
-  background: var(--bg);
-  padding: 16px;
+  background: color-mix(in oklch, var(--fg) 4%, var(--bg));
+  padding: 14px 16px;
   border-radius: var(--radius);
   overflow-x: auto;
-  margin: 12px 0;
+  margin: 0.85rem 0 1rem;
   border: 1px solid var(--border);
 }
 
 :deep(.markdown-body pre code) {
   background: none;
   padding: 0;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 :deep(.markdown-body table) {
   width: 100%;
   border-collapse: collapse;
-  margin: 12px 0;
+  margin: 0.85rem 0 1rem;
+  font-size: 13px;
 }
 
-:deep(.markdown-body th, .markdown-body td) {
+:deep(.markdown-body th),
+:deep(.markdown-body td) {
   padding: 8px 12px;
   text-align: left;
   border: 1px solid var(--border);
+  vertical-align: top;
 }
 
 :deep(.markdown-body th) {
-  background: var(--bg);
+  background: color-mix(in oklch, var(--fg) 4%, var(--surface));
   font-weight: 600;
 }
 
 :deep(.markdown-body blockquote) {
-  margin: 12px 0;
-  padding: 8px 16px;
-  border-left: 3px solid var(--accent);
-  background: var(--fg-soft);
+  margin: 0.85rem 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--fg) 4%, var(--surface));
   color: var(--muted);
 }
 
 :deep(.markdown-body hr) {
   border: none;
   border-top: 1px solid var(--border);
-  margin: 20px 0;
+  margin: 1.5rem 0;
 }
 
 :deep(.markdown-body a) {
@@ -448,5 +658,41 @@ async function saveAsDocument() {
 
 :deep(.markdown-body a:hover) {
   text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+  .viewer-toolbar-foot {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .viewer-actions {
+    justify-content: flex-end;
+  }
+
+  .repo-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .repo-meta-status {
+    text-align: left;
+  }
+
+  .repo-meta-error {
+    max-width: none;
+    text-align: left;
+  }
+
+  .viewer-prose-wrap {
+    padding: 20px 16px 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-tab,
+  .btn {
+    transition: none;
+  }
 }
 </style>

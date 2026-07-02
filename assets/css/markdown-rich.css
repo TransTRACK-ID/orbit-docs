@@ -296,7 +296,45 @@
 
 
 /* ═══════════════════════════════════════════════════════════════════
-   4. Mermaid diagrams (rendered state)
+   5. Lists (Tailwind preflight resets list-style on ul/ol)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.markdown-body ul {
+  margin: 0 0 0.85rem;
+  padding-left: 1.35rem;
+  list-style-type: disc;
+  list-style-position: outside;
+}
+
+.markdown-body ol {
+  margin: 0 0 0.85rem;
+  padding-left: 1.35rem;
+  list-style-type: decimal;
+  list-style-position: outside;
+}
+
+.markdown-body li {
+  display: list-item;
+  margin-bottom: 0.35rem;
+}
+
+.markdown-body li > p {
+  margin-bottom: 0.35rem;
+}
+
+.markdown-body ul ul {
+  margin-top: 0.35rem;
+  margin-bottom: 0;
+  list-style-type: circle;
+}
+
+.markdown-body ol ol {
+  list-style-type: lower-alpha;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   6. Mermaid diagrams (rendered state)
    ═══════════════════════════════════════════════════════════════════ */
 
 pre.mermaid[data-mermaid-rendered="true"],

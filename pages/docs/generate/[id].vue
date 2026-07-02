@@ -598,8 +598,11 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
     <!-- Result Viewer -->
     <div v-if="currentResult" class="result-section">
       <div class="result-header">
-        <h2>Generated Documents</h2>
-        <button class="btn btn-ghost btn-sm" @click="handleCloseResult">
+        <div class="result-heading">
+          <h2>Generated documents</h2>
+          <p class="result-subtitle">Review output, then open in the editor or download markdown.</p>
+        </div>
+        <button type="button" class="btn btn-ghost btn-sm" @click="handleCloseResult">
           Close
         </button>
       </div>
@@ -1054,8 +1057,24 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 .result-header,
 .history-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
+  gap: 16px;
+}
+
+.result-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.result-subtitle {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--muted);
+  max-width: 52ch;
 }
 
 .empty-state {
