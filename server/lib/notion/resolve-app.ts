@@ -50,6 +50,13 @@ export function inferFromTitle(title: string): InferredTitleMeta {
   return { appName: null, version: null };
 }
 
+/** Subtitle after the first colon, e.g. "VESMON: Elevating Maritime Intelligence". */
+export function extractTitleSubtitle(title: string): string | null {
+  const cleaned = stripLeadingDecorators(title);
+  const match = cleaned.match(/^[^:]+:\s*(.+)$/);
+  return match?.[1]?.trim() || null;
+}
+
 export async function resolveAppName(
   client: NotionClient,
   page: NotionPage,
@@ -78,7 +85,7 @@ export async function resolveVersionLabel(
   page: NotionPage,
   versionPropertyName: string,
   title: string
-): Promise<string | null> {
+): Promise<string> {
   const fromProperty = await getPropertyText(
     client,
     findPropertyByName(page.properties, versionPropertyName)
@@ -89,7 +96,10 @@ export async function resolveVersionLabel(
   const inferred = inferFromTitle(title);
   if (inferred.version) return inferred.version;
 
-  return null;
+  const subtitle = extractTitleSubtitle(title);
+  if (subtitle) return subtitle;
+
+  return `notion-${page.id.replace(/-/g, "").slice(0, 8)}`;
 }
 
 export function normalizeAppMatchKey(name: string): string {

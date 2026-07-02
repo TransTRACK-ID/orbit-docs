@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { inferFromTitle, extractParentheticalAlias, normalizeAppMatchKey } from "~/server/lib/notion/resolve-app";
+import {
+  inferFromTitle,
+  extractTitleSubtitle,
+  extractParentheticalAlias,
+  normalizeAppMatchKey,
+  resolveVersionLabel,
+} from "~/server/lib/notion/resolve-app";
 import { getPropertyText, type NotionClient, type NotionPage } from "~/server/lib/notion/client";
 
 describe("inferFromTitle", () => {
@@ -37,6 +43,48 @@ describe("inferFromTitle", () => {
       appName: null,
       version: null,
     });
+  });
+});
+
+describe("extractTitleSubtitle", () => {
+  it("reads subtitle from colon titles", () => {
+    expect(extractTitleSubtitle("🚢 VESMON: Elevating Maritime Intelligence")).toBe(
+      "Elevating Maritime Intelligence"
+    );
+  });
+});
+
+describe("resolveVersionLabel", () => {
+  it("uses title subtitle when Version property is empty", async () => {
+    const page = {
+      id: "38bccba5-c5ad-8054-a6f2-ef8ac2ab704f",
+      properties: {},
+    } as NotionPage;
+
+    const label = await resolveVersionLabel(
+      {} as NotionClient,
+      page,
+      "Version",
+      "🚢 VESMON: Elevating Maritime Intelligence"
+    );
+
+    expect(label).toBe("Elevating Maritime Intelligence");
+  });
+
+  it("falls back to notion page id when title has no version hints", async () => {
+    const page = {
+      id: "38bccba5-c5ad-8054-a6f2-ef8ac2ab704f",
+      properties: {},
+    } as NotionPage;
+
+    const label = await resolveVersionLabel(
+      {} as NotionClient,
+      page,
+      "Version",
+      "General release notes"
+    );
+
+    expect(label).toBe("notion-38bccba5");
   });
 });
 

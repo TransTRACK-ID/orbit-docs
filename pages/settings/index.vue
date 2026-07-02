@@ -1157,7 +1157,7 @@ function getCallbackUrl(provider: SsoProvider): string {
                         {{ opt }}
                       </option>
                     </select>
-                    <span class="slug-hint">Releases only: property holding the semver (e.g. 1.2.0), not the app name</span>
+                    <span class="slug-hint">Releases only: optional semver (e.g. 1.2.0). If empty, version is inferred from the title (e.g. subtitle after “App:”) or a Notion page id.</span>
                   </div>
                 </div>
 
