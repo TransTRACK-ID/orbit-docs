@@ -86,7 +86,7 @@ describe("resolveVersionLabel", () => {
     expect(label).toBe("2.4.0");
   });
 
-  it("uses title subtitle when Version property is empty", async () => {
+  it("returns null when Version property is empty and title has no semver", async () => {
     const page = {
       id: "38bccba5-c5ad-8054-a6f2-ef8ac2ab704f",
       properties: {},
@@ -99,10 +99,10 @@ describe("resolveVersionLabel", () => {
       "🚢 VESMON: Elevating Maritime Intelligence"
     );
 
-    expect(label).toBe("Elevating Maritime Intelligence");
+    expect(label).toBeNull();
   });
 
-  it("falls back to notion page id when title has no version hints", async () => {
+  it("returns null when title has no version hints", async () => {
     const page = {
       id: "38bccba5-c5ad-8054-a6f2-ef8ac2ab704f",
       properties: {},
@@ -115,7 +115,7 @@ describe("resolveVersionLabel", () => {
       "General release notes"
     );
 
-    expect(label).toBe("notion-38bccba5");
+    expect(label).toBeNull();
   });
 });
 

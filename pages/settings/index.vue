@@ -1157,7 +1157,7 @@ function getCallbackUrl(provider: SsoProvider): string {
                         {{ opt }}
                       </option>
                     </select>
-                    <span class="slug-hint">Releases only: optional semver (e.g. 1.2.0). If empty, version is inferred from the title (e.g. subtitle after “App:”) or a Notion page id.</span>
+                    <span class="slug-hint">Releases only: optional semver (e.g. 1.2.0). Leave empty for title-only releases; Orbit will not create a version entry.</span>
                   </div>
                 </div>
 

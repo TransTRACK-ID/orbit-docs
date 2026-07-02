@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
 import { renderMarkdown } from "~/composables/useMarkdown";
+import { formatDisplayVersion, formatReleaseHeading } from "~/utils/functions";
 import type { ReleaseItem } from "~/composables/useReleases";
 
 definePageMeta({
@@ -198,17 +199,17 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         :data-app="r.appName"
         :data-version="r.version"
       >
-        <div class="release-date">{{ formatDate(r.releaseDate) }}</div>
+        <div class="release-date">{{ formatDate(r.releaseDate || r.createdAt) }}</div>
         <div class="release-body">
           <div class="release-header-row">
             <NuxtLink :to="`/releases/${r.id}`" class="release-title">
-              {{ r.appName }} {{ r.version }}
+              {{ formatReleaseHeading(r.appName, r.version, r.heroTitle) }}
             </NuxtLink>
             <span class="pill" :class="r.type === 'article' ? 'pill-purple' : 'pill-muted'">
               {{ r.type === 'article' ? 'Article' : 'Normal' }}
             </span>
             <span v-if="mediaCount(r) > 0" class="pill pill-muted">{{ mediaCount(r) }} media</span>
-            <span class="release-status">
+            <span v-if="r.versionStatus" class="release-status">
               <span class="status-dot" :class="{
                 'status-published': r.versionStatus === 'published',
                 'status-draft': r.versionStatus === 'draft',
@@ -272,7 +273,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               {{ countCategories(r.categories).security.length }} security
             </span>
             <NuxtLink
-              v-if="r.type === 'normal'"
+              v-if="r.type === 'normal' && r.versionId"
               :to="`/changelogs?versionId=${r.versionId}`"
               class="btn btn-ghost btn-sm"
               style="margin-left: auto;"

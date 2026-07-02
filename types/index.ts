@@ -29,7 +29,7 @@ export type ReleaseType = "normal" | "article";
 export interface ReleaseItem {
   id: string;
   appId: string;
-  versionId: string;
+  versionId: string | null;
   heroTitle: string | null;
   summary: string | null;
   features: ReleaseFeature[] | null;
@@ -39,10 +39,10 @@ export interface ReleaseItem {
   createdAt: string | null;
   updatedAt: string | null;
   appName: string;
-  version: string;
+  version: string | null;
   releaseDate: string | null;
   createdBy: string | null;
-  versionStatus: string;
+  versionStatus: string | null;
 }
 
 export interface CreateReleasePayload {

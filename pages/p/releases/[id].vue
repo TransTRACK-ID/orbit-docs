@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { renderMarkdown } from "~/composables/useMarkdown";
+import { formatDisplayVersion, formatReleaseHeading } from "~/utils/functions";
 import type { ReleaseItem } from "~/types";
 
 definePageMeta({
@@ -82,8 +83,8 @@ watch(release, (r) => {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: r.appName,
-    softwareVersion: r.version,
-    datePublished: r.releaseDate,
+    softwareVersion: r.version || undefined,
+    datePublished: r.releaseDate || r.createdAt || undefined,
     description: r.heroTitle || r.summary || undefined,
     author: r.createdBy ? { "@type": "Person", name: r.createdBy } : undefined,
     url: `${useRequestURL().origin}/p/releases/${r.id}`,
@@ -147,10 +148,10 @@ async function copyEmbedCode() {
             <span v-if="release.type === 'article'" class="rd-hero-type">Article</span>
           </div>
         </div>
-        <h1 class="rd-title">{{ release.heroTitle || `${release.appName} ${release.version}` }}</h1>
+        <h1 class="rd-title">{{ formatReleaseHeading(release.appName, release.version, release.heroTitle) }}</h1>
         <div class="rd-subtitle">
           <span class="rd-app">{{ release.appName }}</span>
-          <span class="rd-version">{{ release.version }}</span>
+          <span v-if="release.version" class="rd-version">{{ formatDisplayVersion(release.version) }}</span>
         </div>
       </header>
 

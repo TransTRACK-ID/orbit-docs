@@ -7,9 +7,7 @@ export const releases = pgTable("releases", {
   appId: text("app_id")
     .notNull()
     .references(() => apps.id, { onDelete: "cascade" }),
-  versionId: text("version_id")
-    .notNull()
-    .references(() => appVersions.id, { onDelete: "cascade" }),
+  versionId: text("version_id").references(() => appVersions.id, { onDelete: "set null" }),
   heroTitle: text("hero_title"),
   summary: text("summary"),
   features: jsonb("features").$type<

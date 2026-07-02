@@ -115,6 +115,13 @@ export default defineNitroPlugin(async () => {
   `);
   await pool.query(`ALTER TABLE releases ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'normal'`);
   await pool.query(`ALTER TABLE releases ADD COLUMN IF NOT EXISTS notion_page_id TEXT`);
+  await pool.query(`ALTER TABLE releases ALTER COLUMN version_id DROP NOT NULL`);
+  await pool.query(`ALTER TABLE releases DROP CONSTRAINT IF EXISTS releases_version_id_app_versions_id_fk`);
+  await pool.query(`
+    ALTER TABLE releases
+    ADD CONSTRAINT releases_version_id_app_versions_id_fk
+    FOREIGN KEY (version_id) REFERENCES app_versions(id) ON DELETE SET NULL
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS changelogs (

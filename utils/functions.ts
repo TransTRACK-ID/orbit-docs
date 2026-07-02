@@ -1,5 +1,19 @@
 import { format, parseISO } from "date-fns";
 
+export function formatDisplayVersion(version: string | null | undefined): string {
+  return version ? `v${version}` : "—";
+}
+
+export function formatReleaseHeading(
+  appName: string,
+  version: string | null | undefined,
+  heroTitle?: string | null
+): string {
+  if (heroTitle?.trim()) return heroTitle.trim();
+  if (version) return `${appName} v${version}`;
+  return appName;
+}
+
 export function roundToDecimal(value: any) {
   if (!value) {
     return "-";

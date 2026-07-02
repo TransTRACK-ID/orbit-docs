@@ -47,9 +47,9 @@ export default defineEventHandler(async (event) => {
     })
     .from(releases)
     .innerJoin(apps, eq(releases.appId, apps.id))
-    .innerJoin(appVersions, eq(releases.versionId, appVersions.id))
+    .leftJoin(appVersions, eq(releases.versionId, appVersions.id))
     .where(and(...conditions))
-    .orderBy(desc(appVersions.releaseDate))
+    .orderBy(desc(releases.updatedAt))
     .limit(limit);
 
   let result = rows;

@@ -91,7 +91,7 @@ export async function resolveVersionLabel(
   page: NotionPage,
   versionPropertyName: string,
   title: string
-): Promise<string> {
+): Promise<string | null> {
   const fromProperty = await getPropertyText(
     client,
     findPropertyByName(page.properties, versionPropertyName)
@@ -102,10 +102,7 @@ export async function resolveVersionLabel(
   const inferred = inferFromTitle(title);
   if (inferred.version) return normalizeVersionLabel(inferred.version);
 
-  const subtitle = extractTitleSubtitle(title);
-  if (subtitle) return subtitle;
-
-  return `notion-${page.id.replace(/-/g, "").slice(0, 8)}`;
+  return null;
 }
 
 export function normalizeAppMatchKey(name: string): string {

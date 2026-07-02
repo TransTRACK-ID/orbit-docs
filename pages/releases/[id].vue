@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
 import { copyChangelogToClipboard } from "~/composables/useClipboard";
+import { formatDisplayVersion, formatReleaseHeading } from "~/utils/functions";
 import type { ReleaseItem, ReleaseFeature, ReleaseMedia, ReleaseCategories } from "~/types";
 
 definePageMeta({
@@ -42,7 +43,7 @@ onMounted(async () => {
 
 watch(release, (r) => {
   if (r?.appName) {
-    $page.setTitle(`${r.appName} ${r.version}`);
+    $page.setTitle(formatReleaseHeading(r.appName, r.version, r.heroTitle));
   }
   playingMedia.value = {};
   videoEls.value = {};
@@ -294,14 +295,14 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
       <header class="topbar">
         <div class="flex-gap-md">
           <h1>Release Notes</h1>
-          <span class="pill pill-accent">{{ release.appName }} {{ release.version }}</span>
+          <span class="pill pill-accent">{{ formatReleaseHeading(release.appName, release.version, release.heroTitle) }}</span>
           <span class="pill" :class="release.type === 'article' ? 'pill-purple' : 'pill-muted'">
             {{ release.type === 'article' ? 'Article' : 'Normal' }}
           </span>
         </div>
         <div class="flex-gap-sm">
           <NuxtLink to="/releases" class="btn btn-ghost btn-sm">All releases</NuxtLink>
-          <NuxtLink v-if="release.type === 'normal'" :to="`/changelogs?versionId=${release.versionId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
+          <NuxtLink v-if="release.type === 'normal' && release.versionId" :to="`/changelogs?versionId=${release.versionId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
           <template v-if="release.type === 'article'">
             <button v-if="!isEditing" type="button" class="btn btn-secondary btn-sm" @click="enterEditMode">Edit Release Article</button>
             <template v-else>
@@ -324,10 +325,10 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             <!-- Hero -->
             <header class="release-hero">
               <div class="release-hero-date">{{ formatDate(release.releaseDate) }}</div>
-              <h1 class="release-hero-title">{{ release.heroTitle || `${release.appName} ${release.version}` }}</h1>
+              <h1 class="release-hero-title">{{ formatReleaseHeading(release.appName, release.version, release.heroTitle) }}</h1>
               <div class="release-hero-meta">
                 <span class="release-hero-app">{{ release.appName }}</span>
-                <span class="pill pill-accent">{{ release.version }}</span>
+                <span v-if="release.version" class="pill pill-accent">{{ formatDisplayVersion(release.version) }}</span>
                 <NuxtLink :to="`/versions?app=${release.appId}`" class="text-muted-sm" style="text-decoration:underline;text-underline-offset:2px;">
                   View version timeline
                 </NuxtLink>

@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
     })
     .from(releases)
     .innerJoin(apps, eq(releases.appId, apps.id))
-    .innerJoin(appVersions, eq(releases.versionId, appVersions.id))
+    .leftJoin(appVersions, eq(releases.versionId, appVersions.id))
     .where(eq(releases.id, id))
     .limit(1);
 

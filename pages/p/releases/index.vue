@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { renderMarkdown } from "~/composables/useMarkdown";
+import { formatDisplayVersion, formatReleaseHeading } from "~/utils/functions";
 import type { ReleaseItem } from "~/types";
 
 definePageMeta({
@@ -170,13 +171,13 @@ useSeoMeta({
                 <span class="rl-entry-weekday">{{ new Date(r.releaseDate || '').toLocaleDateString('en-US', { weekday: 'short' }) }}</span>
               </div>
               <div class="rl-entry-meta">
-                <span class="rl-entry-version">{{ r.version }}</span>
+                <span v-if="r.version" class="rl-entry-version">{{ formatDisplayVersion(r.version) }}</span>
                 <span v-if="r.type === 'article'" class="rl-entry-type">Article</span>
               </div>
             </div>
             <h2 class="rl-entry-title">
-              <NuxtLink v-if="r.type !== 'article'" :to="detailLink(r.id)">{{ r.heroTitle || `${r.appName} ${r.version}` }}</NuxtLink>
-              <template v-else>{{ r.heroTitle || `${r.appName} ${r.version}` }}</template>
+              <NuxtLink v-if="r.type !== 'article'" :to="detailLink(r.id)">{{ formatReleaseHeading(r.appName, r.version, r.heroTitle) }}</NuxtLink>
+              <template v-else>{{ formatReleaseHeading(r.appName, r.version, r.heroTitle) }}</template>
             </h2>
             <!-- Normal release: colored category badges -->
             <template v-if="r.type !== 'article' && r.categories">

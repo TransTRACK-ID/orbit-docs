@@ -192,10 +192,14 @@ async function syncReleasePage(
     return;
   }
 
-  const version = await findOrCreateVersion(app.id, versionLabel);
-  if (!version) {
-    result.errors.push(`Release "${title}": could not create version`);
-    return;
+  let versionId: string | null = null;
+  if (versionLabel) {
+    const version = await findOrCreateVersion(app.id, versionLabel);
+    if (!version) {
+      result.errors.push(`Release "${title}": could not create version`);
+      return;
+    }
+    versionId = version.id;
   }
 
   const body = await client.getPageMarkdown(page.id);
@@ -221,7 +225,7 @@ async function syncReleasePage(
       .update(releases)
       .set({
         appId: app.id,
-        versionId: version.id,
+        versionId,
         heroTitle: title,
         summary,
         categories: hasCategories ? categories : null,
@@ -234,35 +238,37 @@ async function syncReleasePage(
     return;
   }
 
-  const conflicting = await db
-    .select({ id: releases.id })
-    .from(releases)
-    .where(and(eq(releases.versionId, version.id), eq(releases.type, releaseType)))
-    .limit(1)
-    .then((rows) => rows[0]);
+  if (versionId) {
+    const conflicting = await db
+      .select({ id: releases.id })
+      .from(releases)
+      .where(and(eq(releases.versionId, versionId), eq(releases.type, releaseType)))
+      .limit(1)
+      .then((rows) => rows[0]);
 
-  if (conflicting) {
-    await db
-      .update(releases)
-      .set({
-        appId: app.id,
-        versionId: version.id,
-        heroTitle: title,
-        summary,
-        categories: hasCategories ? categories : null,
-        type: releaseType,
-        published,
-        notionPageId: page.id,
-        updatedAt: new Date(),
-      })
-      .where(eq(releases.id, conflicting.id));
-    result.releasesUpdated += 1;
-    return;
+    if (conflicting) {
+      await db
+        .update(releases)
+        .set({
+          appId: app.id,
+          versionId,
+          heroTitle: title,
+          summary,
+          categories: hasCategories ? categories : null,
+          type: releaseType,
+          published,
+          notionPageId: page.id,
+          updatedAt: new Date(),
+        })
+        .where(eq(releases.id, conflicting.id));
+      result.releasesUpdated += 1;
+      return;
+    }
   }
 
   await db.insert(releases).values({
     appId: app.id,
-    versionId: version.id,
+    versionId,
     heroTitle: title,
     summary,
     categories: hasCategories ? categories : null,
