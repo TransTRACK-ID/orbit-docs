@@ -4,6 +4,7 @@ export * from "./settings";
 export * from "./releases";
 export * from "./changelogs";
 export * from "./doc-generation-jobs";
+export * from "./doc-generation-collaboration";
 export * from "./feedback";
 export * from "./internal-feedback";
 export * from "./notion-sync";

@@ -321,6 +321,38 @@ export default defineNitroPlugin(async () => {
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS repo_id TEXT`);
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS git_snapshot_content TEXT`);
 
+  await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS share_token TEXT`);
+  await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS share_enabled BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS shared_at TIMESTAMP WITH TIME ZONE`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS doc_generation_jobs_share_token_unique ON doc_generation_jobs (share_token) WHERE share_token IS NOT NULL`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_generation_comments (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL REFERENCES doc_generation_jobs(id) ON DELETE CASCADE,
+      doc_key TEXT NOT NULL,
+      author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      author_name TEXT NOT NULL,
+      body TEXT NOT NULL,
+      quote TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_generation_reviews (
+      id TEXT PRIMARY KEY,
+      job_id TEXT NOT NULL REFERENCES doc_generation_jobs(id) ON DELETE CASCADE,
+      doc_key TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'in_review',
+      updated_by TEXT,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS doc_generation_reviews_job_doc_unique ON doc_generation_reviews (job_id, doc_key)`);
+
   // app_repositories table (multiple repositories per app)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_repositories (

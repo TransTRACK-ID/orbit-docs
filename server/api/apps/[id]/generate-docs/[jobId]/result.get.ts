@@ -1,12 +1,9 @@
 import { defineEventHandler, createError, getRouterParam } from "h3";
+import { eq } from "drizzle-orm";
 import { getDb } from "~/server/database";
-import {
-  docGenerationJobs,
-  docGenerationVersions,
-  docGenerationRepoResults,
-} from "~/server/database/schema";
-import { eq, desc } from "drizzle-orm";
+import { apps } from "~/server/database/schema";
 import { requireAuth } from "~/server/utils/auth";
+import { loadGenerationResult } from "~/server/lib/generation-result";
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
@@ -22,80 +19,28 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const job = await db
-    .select()
-    .from(docGenerationJobs)
-    .where(eq(docGenerationJobs.id, jobId))
+  const app = await db
+    .select({ name: apps.name })
+    .from(apps)
+    .where(eq(apps.id, appId))
     .limit(1)
     .then((rows) => rows[0]);
 
-  if (!job || job.appId !== appId) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: "Not Found",
-      message: "Job not found",
-    });
+  if (!app) {
+    throw createError({ statusCode: 404, message: "App not found" });
   }
 
-  if (job.status !== "completed") {
+  const result = await loadGenerationResult(jobId, app.name);
+  if (!result || result.appId !== appId) {
+    throw createError({ statusCode: 404, message: "Job not found" });
+  }
+
+  if (result.status !== "completed") {
     throw createError({
       statusCode: 409,
-      statusMessage: "Conflict",
-      message: `Job is not completed. Current status: ${job.status}`,
+      message: `Job is not completed. Current status: ${result.status}`,
     });
   }
 
-  // Fetch latest versions for each doc type
-  const versions = await db
-    .select()
-    .from(docGenerationVersions)
-    .where(eq(docGenerationVersions.jobId, jobId))
-    .orderBy(desc(docGenerationVersions.createdAt));
-
-  // Group by docType and get latest
-  const latestVersions: Record<string, typeof versions[0] | undefined> = {};
-  for (const v of versions) {
-    if (!latestVersions[v.docType]) {
-      latestVersions[v.docType] = v;
-    }
-  }
-
-  // Per-repository SDD results
-  const repoResults = await db
-    .select()
-    .from(docGenerationRepoResults)
-    .where(eq(docGenerationRepoResults.jobId, jobId))
-    .orderBy(desc(docGenerationRepoResults.createdAt));
-
-  return {
-    data: {
-      jobId: job.id,
-      repoUrl: job.repoUrl,
-      repoRef: job.repoRef,
-      scope: job.scope,
-      status: job.status,
-      srs: latestVersions.srs?.content ?? job.srsContent,
-      fsd: latestVersions.fsd?.content ?? job.fsdContent,
-      gitSnapshot: latestVersions.git_snapshot?.content ?? job.gitSnapshotContent,
-      sdd: latestVersions.sdd?.content ?? job.sddContent,
-      completedAt: job.completedAt,
-      repoResults: repoResults.map((r) => ({
-        id: r.id,
-        repoId: r.repoId,
-        repoUrl: r.repoUrl,
-        repoRef: r.repoRef,
-        sdd: r.sddContent,
-        status: r.status,
-        prUrl: r.prUrl,
-        errorMessage: r.errorMessage,
-      })),
-      versions: versions.map((v) => ({
-        id: v.id,
-        docType: v.docType,
-        content: v.content,
-        actor: v.actor,
-        createdAt: v.createdAt,
-      })),
-    },
-  };
+  return { data: result };
 });

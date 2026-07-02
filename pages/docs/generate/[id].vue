@@ -2,6 +2,7 @@
 import { usePageStore } from "~/store/page";
 import DocGeneratorForm from "~/components/docs/DocGeneratorForm.vue";
 import DocResultViewer from "~/components/docs/DocResultViewer.vue";
+import DocGenerationShareDrawer from "~/components/docs/DocGenerationShareDrawer.vue";
 import RepositoryManager from "~/components/docs/RepositoryManager.vue";
 import type { DocGenerationJob } from "~/composables/useDocGenerator";
 
@@ -137,6 +138,48 @@ function handleDebugJob(job: DocGenerationJob) {
 
 function handleCloseResult() {
   currentResult.value = null;
+}
+
+const resultJobId = computed(() => currentResult.value?.jobId || null);
+const showShareDrawer = ref(false);
+const isShareSaving = ref(false);
+
+const {
+  share: shareState,
+  enableShare,
+  disableShare,
+  buildShareUrl,
+  fetchCollaboration,
+} = useDocGenerationCollaboration(toRef(() => appId), resultJobId);
+
+const shareUrl = computed(() => {
+  const token = shareState.value?.shareToken;
+  if (!token) return "";
+  return buildShareUrl(token);
+});
+
+async function handleOpenShare() {
+  if (!resultJobId.value) return;
+  await fetchCollaboration();
+  showShareDrawer.value = true;
+}
+
+async function handleEnableShare() {
+  isShareSaving.value = true;
+  try {
+    await enableShare();
+  } finally {
+    isShareSaving.value = false;
+  }
+}
+
+async function handleDisableShare() {
+  isShareSaving.value = true;
+  try {
+    await disableShare();
+  } finally {
+    isShareSaving.value = false;
+  }
 }
 
 function formatDate(dateStr: string | null) {
@@ -600,11 +643,21 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
       <div class="result-header">
         <div class="result-heading">
           <h2>Generated documents</h2>
-          <p class="result-subtitle">Review output, then open in the editor or download markdown.</p>
+          <p class="result-subtitle">Review output, comment per document, or share a read-only link with stakeholders.</p>
         </div>
-        <button type="button" class="btn btn-ghost btn-sm" @click="handleCloseResult">
-          Close
-        </button>
+        <div class="result-header-actions">
+          <button
+            v-if="currentResult?.status === 'completed'"
+            type="button"
+            class="btn btn-ghost btn-sm"
+            @click="handleOpenShare"
+          >
+            Share
+          </button>
+          <button type="button" class="btn btn-ghost btn-sm" @click="handleCloseResult">
+            Close
+          </button>
+        </div>
       </div>
       <DocResultViewer
         :srs="currentResult.srs"
@@ -613,6 +666,16 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
         :sdd="currentResult.sdd"
         :repo-results="currentResult.repoResults"
         :app-id="appId"
+        :job-id="currentResult.jobId"
+      />
+      <DocGenerationShareDrawer
+        v-model:open="showShareDrawer"
+        :share-enabled="shareState?.shareEnabled ?? false"
+        :share-token="shareState?.shareToken ?? null"
+        :share-url="shareUrl"
+        :is-saving="isShareSaving"
+        @enable="handleEnableShare"
+        @disable="handleDisableShare"
       />
     </div>
 
@@ -1060,6 +1123,13 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.result-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .result-heading {

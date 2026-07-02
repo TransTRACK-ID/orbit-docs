@@ -1,7 +1,8 @@
-import { pgTable, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { apps, appRepositories } from "./apps";
 import { users } from "./settings";
+import { docGenerationComments, docGenerationReviews } from "./doc-generation-collaboration";
 
 export const docGenerationJobs = pgTable("doc_generation_jobs", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -63,6 +64,9 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   repoRef: text("repo_ref"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  shareToken: text("share_token"),
+  shareEnabled: boolean("share_enabled").notNull().default(false),
+  sharedAt: timestamp("shared_at", { withTimezone: true }),
 });
 
 export const docGenerationDebugLogs = pgTable("doc_generation_debug_logs", {
@@ -122,6 +126,8 @@ export const docGenerationJobsRelations = relations(docGenerationJobs, ({ one, m
   versions: many(docGenerationVersions),
   repoResults: many(docGenerationRepoResults),
   debugLogs: many(docGenerationDebugLogs),
+  comments: many(docGenerationComments),
+  reviews: many(docGenerationReviews),
 }));
 
 export const docGenerationDebugLogsRelations = relations(

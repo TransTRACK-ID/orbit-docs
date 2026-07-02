@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { renderMarkdown } from "~/composables/useMarkdown";
 import type { DocGenerationRepoResult } from "~/composables/useDocGenerator";
+import type { GenerationReviewStatus } from "~/composables/useDocGenerationCollaboration";
 import {
   buildGeneratedDocLinkMap,
   buildGeneratedDocLinkSources,
@@ -13,10 +14,30 @@ interface Props {
   gitSnapshot?: string | null;
   sdd: string | null;
   appId?: string;
+  jobId?: string;
   repoResults?: DocGenerationRepoResult[];
+  readonly?: boolean;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  readonly: false,
+});
+
+const appIdRef = computed(() => props.appId || "");
+const jobIdRef = computed(() => props.jobId || null);
+
+const collaborationEnabled = computed(() => Boolean(props.jobId && props.appId && !props.readonly));
+
+const {
+  isLoading: collabLoading,
+  isSaving: collabSaving,
+  reviewForDoc,
+  commentsForDoc,
+  openCommentCount,
+  addComment,
+  setCommentStatus,
+  setReviewStatus,
+} = useDocGenerationCollaboration(appIdRef, jobIdRef);
 
 function getContentForTab(key: string): string {
   if (key === "srs") return props.srs || "";
@@ -180,7 +201,7 @@ const { createDoc } = useDocs();
 const isSaving = ref(false);
 
 async function saveAsDocument() {
-  if (!props.appId) return;
+  if (!props.appId || props.readonly) return;
   isSaving.value = true;
   try {
     const tabLabel = activeTabMeta.value?.label || "Document";
@@ -229,6 +250,25 @@ function handleProseClick(event: MouseEvent) {
 watch(activeTab, () => {
   proseRef.value?.scrollTo({ top: 0, behavior: "smooth" });
 });
+
+const activeReviewStatus = computed(() => reviewForDoc(activeTab.value));
+const activeComments = computed(() => commentsForDoc(activeTab.value));
+
+async function handleAddComment(payload: { text: string; quote: string | null }) {
+  await addComment(activeTab.value, payload.text, payload.quote);
+}
+
+async function handleReviewStatus(status: GenerationReviewStatus) {
+  await setReviewStatus(activeTab.value, status);
+}
+
+async function handleResolveComment(commentId: string) {
+  await setCommentStatus(commentId, "resolved");
+}
+
+async function handleReopenComment(commentId: string) {
+  await setCommentStatus(commentId, "open");
+}
 </script>
 
 <template>
@@ -248,6 +288,13 @@ watch(activeTab, () => {
           >
             <span v-if="tab.key.startsWith('sdd:')" class="doc-tab-prefix">SDD</span>
             {{ tab.label }}
+            <span
+              v-if="collaborationEnabled && openCommentCount(tab.key) > 0"
+              class="doc-tab-badge"
+              :title="`${openCommentCount(tab.key)} open comment(s)`"
+            >
+              {{ openCommentCount(tab.key) }}
+            </span>
           </button>
         </nav>
 
@@ -258,6 +305,7 @@ watch(activeTab, () => {
           </div>
           <div class="viewer-actions">
             <button
+              v-if="!readonly && appId"
               type="button"
               class="btn btn-primary btn-sm"
               :disabled="isSaving"
@@ -299,14 +347,29 @@ watch(activeTab, () => {
       </div>
     </template>
 
-    <div class="viewer-body">
+    <div class="viewer-body" :class="{ 'viewer-body--split': collaborationEnabled && tabs.length > 0 }">
       <div v-if="tabs.length === 0" class="viewer-empty">
         <p class="viewer-empty-title">No documents generated</p>
         <p class="viewer-empty-desc">The job finished without markdown output. Check agent logs for errors.</p>
       </div>
-      <div v-else ref="proseRef" class="viewer-prose-wrap" @click="handleProseClick">
-        <MermaidHtml class="markdown-body" :html="renderedContent" />
-      </div>
+      <template v-else>
+        <div ref="proseRef" class="viewer-prose-wrap" @click="handleProseClick">
+          <MermaidHtml class="markdown-body" :html="renderedContent" />
+        </div>
+        <DocGenerationReviewPanel
+          v-if="collaborationEnabled && activeTabMeta"
+          :doc-key="activeTab"
+          :doc-label="activeTabMeta.label"
+          :review-status="activeReviewStatus"
+          :comments="activeComments"
+          :is-loading="collabLoading"
+          :is-saving="collabSaving"
+          @update:review-status="handleReviewStatus"
+          @add-comment="handleAddComment"
+          @resolve-comment="handleResolveComment"
+          @reopen-comment="handleReopenComment"
+        />
+      </template>
     </div>
   </div>
 </template>
@@ -495,6 +558,33 @@ watch(activeTab, () => {
   flex: 1;
   min-height: 360px;
   background: var(--surface);
+}
+
+.viewer-body--split {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.viewer-body--split .viewer-prose-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.doc-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in oklch, oklch(55% 0.16 25) 14%, var(--surface));
+  color: oklch(50% 0.14 25);
 }
 
 .viewer-empty {
@@ -726,6 +816,12 @@ watch(activeTab, () => {
 
 :deep(.markdown-body a.gen-doc-link:hover) {
   color: color-mix(in oklch, var(--accent) 85%, var(--fg));
+}
+
+@media (max-width: 960px) {
+  .viewer-body--split {
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 720px) {
