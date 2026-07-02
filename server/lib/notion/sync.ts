@@ -175,6 +175,13 @@ async function syncReleasePage(
     return;
   }
 
+  if (!versionLabel) {
+    result.errors.push(
+      `Release "${title}": could not determine version. Set the Version property in Notion or use a title like "App Name: v.1.0".`
+    );
+    return;
+  }
+
   const version = await findOrCreateVersion(app.id, versionLabel);
   if (!version) {
     result.errors.push(`Release "${title}": missing version`);

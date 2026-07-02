@@ -12,19 +12,37 @@ function stripLeadingDecorators(text: string): string {
 }
 
 /**
- * Infer app + version from release-style titles, e.g.
- * "🚢VESMON v2.4.0: Elevating Maritime Intelligence" → VESMON, 2.4.0
+ * Infer app + version from common Notion release title formats:
+ * - "RegisT Request Visits: v.78.1"
+ * - "Bunkering Production: v.1.0"
+ * - "🚢VESMON v2.4.0: Elevating Maritime Intelligence"
+ * - "🚢 VESMON: Elevating Maritime Intelligence" (app only)
  */
 export function inferFromTitle(title: string): InferredTitleMeta {
   const cleaned = stripLeadingDecorators(title);
-  const match = cleaned.match(/^([A-Za-z][A-Za-z0-9_-]*)\s+v(\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?)/i);
-  if (!match) {
-    return { appName: null, version: null };
+
+  // "App Name: v.78.1" or "App Name: v1.0"
+  const colonVersion = cleaned.match(/^(.+?):\s*v\.?(\d+(?:\.\d+)*)\s*$/i);
+  if (colonVersion) {
+    return { appName: colonVersion[1].trim(), version: colonVersion[2] };
   }
-  return {
-    appName: match[1],
-    version: match[2],
-  };
+
+  // "VESMON v2.4.0: subtitle"
+  const spaceVersion = cleaned.match(/^([A-Za-z][A-Za-z0-9_-]*)\s+v(\d+\.\d+(?:\.\d+)?(?:[-+][\w.]+)?)/i);
+  if (spaceVersion) {
+    return { appName: spaceVersion[1], version: spaceVersion[2] };
+  }
+
+  // "VESMON: Elevating Maritime Intelligence" (no version in title)
+  const colonOnly = cleaned.match(/^([^:]+):\s*.+$/);
+  if (colonOnly) {
+    const appName = colonOnly[1].trim();
+    if (appName.length > 0) {
+      return { appName, version: null };
+    }
+  }
+
+  return { appName: null, version: null };
 }
 
 export function resolveAppName(
@@ -52,7 +70,7 @@ export function resolveVersionLabel(
   page: NotionPage,
   versionPropertyName: string,
   title: string
-): string {
+): string | null {
   const fromProperty = getPlainTextFromProperty(
     findPropertyByName(page.properties, versionPropertyName)
   ).trim();
@@ -62,5 +80,5 @@ export function resolveVersionLabel(
   const inferred = inferFromTitle(title);
   if (inferred.version) return inferred.version;
 
-  return title;
+  return null;
 }
