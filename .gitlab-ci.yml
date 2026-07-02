@@ -14,8 +14,8 @@ variables:
 before_script:
   - echo "$TRIGGER_AWX_JOB" > "$(pwd)/trigger_awx_job_$CI_PROJECT_NAME.sh"
 
-#after_script:
-#  - rm -f trigger_awx_job_$CI_PROJECT_NAME.sh
+after_script:
+  - rm -f trigger_awx_job_$CI_PROJECT_NAME.sh
 
 build:
   stage: build
