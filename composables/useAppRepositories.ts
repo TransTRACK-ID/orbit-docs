@@ -30,11 +30,11 @@ export interface RepositoryPayload {
   sddDocPath?: string;
 }
 
-export const useAppRepositories = () => {
-  const repositories = ref<AppRepository[]>([]);
-  const isLoading = ref(false);
-  const isSaving = ref(false);
+const repositories = ref<AppRepository[]>([]);
+const isLoading = ref(false);
+const isSaving = ref(false);
 
+export const useAppRepositories = () => {
   async function fetchRepositories(appId: string) {
     isLoading.value = true;
     try {

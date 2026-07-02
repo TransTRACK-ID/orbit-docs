@@ -335,8 +335,11 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
             :placeholder="form.provider === 'gitlab' ? 'glpat-…' : 'ghp_…'"
             autocomplete="off"
           />
-          <p v-if="form.providerChoice === 'gitlab-self-hosted'" class="field-hint">
-            Use a Personal Access Token with <strong>api</strong> scope (GitLab → Profile → Access Tokens).
+          <p v-if="form.provider === 'gitlab'" class="field-hint">
+            Use a Personal Access Token with
+            <strong>api</strong>, <strong>read_repository</strong>, and
+            <strong>write_repository</strong> scopes
+            (GitLab → Profile → Access Tokens).
           </p>
           <p v-else-if="form.providerChoice === 'github-enterprise'" class="field-hint">
             Use a Personal Access Token (classic) with <strong>repo</strong> scope.
