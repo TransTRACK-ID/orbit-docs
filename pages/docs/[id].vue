@@ -39,7 +39,6 @@ const shortcutsVisible = ref(false);
 const activeHeading = ref("");
 const docLoading = ref(false);
 const docNotFound = ref(false);
-const chatOpen = ref(false);
 const rightSidebarTab = ref<'properties' | 'versions'>('properties');
 const restoreConfirmVisible = ref(false);
 const versionToRestore = ref<any>(null);
@@ -207,10 +206,6 @@ function toggleShortcuts() {
       shortcutsVisible.value = false;
     }, 5000);
   }
-}
-
-function toggleChat() {
-  chatOpen.value = !chatOpen.value;
 }
 
 function switchSidebarTab(tab: 'properties' | 'versions') {
@@ -394,14 +389,6 @@ const lastModified = computed(() => {
         >
           {{ saveStatusLabel }}
         </p>
-        <button
-          type="button"
-          class="btn btn-ghost"
-          :class="{ active: chatOpen }"
-          @click="toggleChat"
-        >
-          AI Chat
-        </button>
         <NuxtLink
           v-if="editorStatus === 'published'"
           :to="`/p/${docId}`"
@@ -697,13 +684,6 @@ const lastModified = computed(() => {
           </div>
         </div>
 
-        <!-- AI Chat -->
-        <div v-if="chatOpen && !previewOnly" class="chat-pane">
-          <DocsChatWidget
-            :doc-id="docId"
-            @close="chatOpen = false"
-          />
-        </div>
       </div>
     </main>
 
@@ -894,13 +874,6 @@ const lastModified = computed(() => {
 .doc-shell.preview-only .right-sidebar {
   display: none;
 }
-.doc-shell.preview-only .chat-pane {
-  display: none;
-}
-.doc-shell .chat-pane {
-  grid-column: 1 / -1;
-  min-height: 400px;
-}
 @media (max-width: 1400px) {
   .doc-shell {
     grid-template-columns: 220px 1fr 280px;
@@ -913,10 +886,6 @@ const lastModified = computed(() => {
   .doc-shell .outline-pane,
   .doc-shell .right-sidebar {
     display: none;
-  }
-  .doc-shell .chat-pane {
-    grid-column: auto;
-    min-height: 400px;
   }
 }
 
@@ -1499,16 +1468,6 @@ const lastModified = computed(() => {
   margin-top: 4px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
-}
-
-.chat-pane {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  min-width: 320px;
-  display: flex;
-  flex-direction: column;
 }
 
 .num {
