@@ -57,6 +57,12 @@ export function extractTitleSubtitle(title: string): string | null {
   return match?.[1]?.trim() || null;
 }
 
+/** Strip leading v / v. so Orbit UI (which prefixes "v") does not show "vv1.0". */
+export function normalizeVersionLabel(label: string): string {
+  const trimmed = label.trim();
+  return trimmed.replace(/^v\.(?=\d)/i, "").replace(/^v(?=\d)/i, "");
+}
+
 export async function resolveAppName(
   client: NotionClient,
   page: NotionPage,
@@ -91,10 +97,10 @@ export async function resolveVersionLabel(
     findPropertyByName(page.properties, versionPropertyName)
   );
 
-  if (fromProperty) return fromProperty;
+  if (fromProperty) return normalizeVersionLabel(fromProperty);
 
   const inferred = inferFromTitle(title);
-  if (inferred.version) return inferred.version;
+  if (inferred.version) return normalizeVersionLabel(inferred.version);
 
   const subtitle = extractTitleSubtitle(title);
   if (subtitle) return subtitle;

@@ -17,7 +17,7 @@ import {
   type NotionPage,
 } from "./client";
 import { parseReleaseCategories } from "./blocks-to-markdown";
-import { resolveAppName, resolveVersionLabel, normalizeAppMatchKey, extractParentheticalAlias } from "./resolve-app";
+import { resolveAppName, resolveVersionLabel, normalizeAppMatchKey, extractParentheticalAlias, normalizeVersionLabel } from "./resolve-app";
 
 export interface NotionSyncConfig {
   apiKey: string;
@@ -89,7 +89,7 @@ async function resolveAppByName(appName: string) {
 
 async function findOrCreateVersion(appId: string, versionLabel: string) {
   const db = getDb();
-  const version = versionLabel.trim();
+  const version = normalizeVersionLabel(versionLabel);
   if (!version) return null;
 
   const existing = await db

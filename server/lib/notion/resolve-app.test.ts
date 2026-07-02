@@ -4,6 +4,7 @@ import {
   extractTitleSubtitle,
   extractParentheticalAlias,
   normalizeAppMatchKey,
+  normalizeVersionLabel,
   resolveVersionLabel,
 } from "~/server/lib/notion/resolve-app";
 import { getPropertyText, type NotionClient, type NotionPage } from "~/server/lib/notion/client";
@@ -54,7 +55,37 @@ describe("extractTitleSubtitle", () => {
   });
 });
 
+describe("normalizeVersionLabel", () => {
+  it("strips leading v from Notion version values", () => {
+    expect(normalizeVersionLabel("v1.2.0")).toBe("1.2.0");
+    expect(normalizeVersionLabel("V2.4.0")).toBe("2.4.0");
+    expect(normalizeVersionLabel("v.78.1")).toBe("78.1");
+    expect(normalizeVersionLabel("v.1.0")).toBe("1.0");
+  });
+
+  it("leaves versions without a v prefix unchanged", () => {
+    expect(normalizeVersionLabel("1.2.0")).toBe("1.2.0");
+    expect(normalizeVersionLabel("Elevating Maritime Intelligence")).toBe(
+      "Elevating Maritime Intelligence"
+    );
+    expect(normalizeVersionLabel("notion-38bccba5")).toBe("notion-38bccba5");
+  });
+});
+
 describe("resolveVersionLabel", () => {
+  it("strips v prefix from Version property values", async () => {
+    const page = {
+      id: "38bccba5-c5ad-8054-a6f2-ef8ac2ab704f",
+      properties: {
+        Version: { type: "rich_text", rich_text: [{ plain_text: "v2.4.0" }] },
+      },
+    } as NotionPage;
+
+    const label = await resolveVersionLabel({} as NotionClient, page, "Version", "Release title");
+
+    expect(label).toBe("2.4.0");
+  });
+
   it("uses title subtitle when Version property is empty", async () => {
     const page = {
       id: "38bccba5-c5ad-8054-a6f2-ef8ac2ab704f",
