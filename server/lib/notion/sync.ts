@@ -13,11 +13,11 @@ import {
   NotionClient,
   getTitleFromPage,
   findPropertyByName,
-  getPlainTextFromProperty,
+  getPropertyText,
   type NotionPage,
 } from "./client";
 import { parseReleaseCategories } from "./blocks-to-markdown";
-import { resolveAppName, resolveVersionLabel } from "./resolve-app";
+import { resolveAppName, resolveVersionLabel, normalizeAppMatchKey, extractParentheticalAlias } from "./resolve-app";
 
 export interface NotionSyncConfig {
   apiKey: string;
@@ -67,8 +67,24 @@ async function resolveAppByName(appName: string) {
   const trimmed = appName.trim();
   if (!trimmed) return null;
   const allApps = await db.select().from(apps);
-  const match = allApps.find((a) => a.name.trim().toLowerCase() === trimmed.toLowerCase());
-  return match || null;
+  const target = normalizeAppMatchKey(trimmed);
+
+  const exact = allApps.find((a) => normalizeAppMatchKey(a.name) === target);
+  if (exact) return exact;
+
+  const alias = extractParentheticalAlias(trimmed);
+  if (alias) {
+    const aliasMatch = allApps.find((a) => normalizeAppMatchKey(a.name) === normalizeAppMatchKey(alias));
+    if (aliasMatch) return aliasMatch;
+  }
+
+  const partial = allApps.find((a) => {
+    const appKey = normalizeAppMatchKey(a.name);
+    return target.includes(appKey) || appKey.includes(target);
+  });
+  if (partial) return partial;
+
+  return null;
 }
 
 async function findOrCreateVersion(appId: string, versionLabel: string) {
@@ -105,17 +121,18 @@ async function syncDocPage(
 ) {
   const db = getDb();
   const title = getTitleFromPage(page);
-  const resolvedApp = resolveAppName(page, config.appPropertyName);
+  const resolvedApp = await resolveAppName(client, page, config.appPropertyName);
   const app = resolvedApp ? await resolveAppByName(resolvedApp.appName) : null;
   if (!app) {
     const hint = resolvedApp
-      ? `no Orbit app named "${resolvedApp.appName}"`
+      ? `no Orbit app matches "${resolvedApp.appName}" (from ${resolvedApp.source === "property" ? "Product Domain" : "title"})`
       : `App property "${config.appPropertyName}" is empty and title could not be parsed`;
-    result.errors.push(`Doc "${title}": ${hint}. Create the app in Orbit or fill "${config.appPropertyName}" in Notion.`);
+    result.errors.push(`Doc "${title}": ${hint}. Create a matching app in Orbit Apps.`);
     return;
   }
 
-  const statusRaw = getPlainTextFromProperty(
+  const statusRaw = await getPropertyText(
+    client,
     findPropertyByName(page.properties, config.statusPropertyName)
   );
   const content = await client.getPageMarkdown(page.id);
@@ -163,15 +180,15 @@ async function syncReleasePage(
 ) {
   const db = getDb();
   const title = getTitleFromPage(page);
-  const resolvedApp = resolveAppName(page, config.appPropertyName);
-  const versionLabel = resolveVersionLabel(page, config.versionPropertyName, title);
+  const resolvedApp = await resolveAppName(client, page, config.appPropertyName);
+  const versionLabel = await resolveVersionLabel(client, page, config.versionPropertyName, title);
 
   const app = resolvedApp ? await resolveAppByName(resolvedApp.appName) : null;
   if (!app) {
     const hint = resolvedApp
-      ? `no Orbit app named "${resolvedApp.appName}"`
+      ? `no Orbit app matches "${resolvedApp.appName}" (from ${resolvedApp.source === "property" ? "Product Domain" : "title"})`
       : `App property "${config.appPropertyName}" is empty and title could not be parsed`;
-    result.errors.push(`Release "${title}": ${hint}. Create the app in Orbit or fill "${config.appPropertyName}" in Notion.`);
+    result.errors.push(`Release "${title}": ${hint}. Create a matching app in Orbit Apps.`);
     return;
   }
 
@@ -193,7 +210,8 @@ async function syncReleasePage(
   const hasCategories = Object.values(categories).some((items) => items.length > 0);
   const releaseType = hasCategories ? "normal" : "article";
   const summary = hasCategories ? null : body;
-  const statusRaw = getPlainTextFromProperty(
+  const statusRaw = await getPropertyText(
+    client,
     findPropertyByName(page.properties, config.statusPropertyName)
   );
   const published = ["published", "done", "live"].includes(statusRaw.trim().toLowerCase());

@@ -17,6 +17,8 @@ export type NotionPropertyValue =
   | { type: "date"; date: { start: string } | null }
   | { type: "number"; number: number | null }
   | { type: "checkbox"; checkbox: boolean }
+  | { type: "relation"; relation: Array<{ id: string }> }
+  | { type: "rollup"; rollup: { type: string; array?: Array<NotionPropertyValue>; number?: number; date?: { start: string } | null; function?: string } }
   | { type: string; [key: string]: unknown };
 
 export interface NotionPage {
@@ -52,6 +54,8 @@ export class NotionApiError extends Error {
 export class NotionClient {
   constructor(private readonly apiKey: string) {}
 
+  private pageCache = new Map<string, NotionPage>();
+
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const res = await fetch(`${NOTION_API}${path}`, {
       ...init,
@@ -71,6 +75,15 @@ export class NotionClient {
       throw new NotionApiError(message, res.status, body);
     }
     return body as T;
+  }
+
+  async getPage(pageId: string): Promise<NotionPage> {
+    const id = normalizeNotionId(pageId);
+    const cached = this.pageCache.get(id);
+    if (cached) return cached;
+    const page = await this.request<NotionPage>(`/pages/${id}`);
+    this.pageCache.set(id, page);
+    return page;
   }
 
   async getDatabase(databaseId: string): Promise<NotionDatabase> {
@@ -122,6 +135,49 @@ export class NotionClient {
     const blocks = await this.getBlockChildren(pageId);
     return blocksToMarkdown(blocks, (id) => this.getBlockChildren(id));
   }
+}
+
+export function normalizeDisplayName(text: string): string {
+  return text
+    .replace(/^[\s\p{Extended_Pictographic}\p{Emoji_Presentation}\uFE0F]+/u, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export async function getPropertyText(
+  client: NotionClient,
+  prop: NotionPropertyValue | undefined
+): Promise<string> {
+  if (!prop) return "";
+
+  if (prop.type === "relation") {
+    const relations = prop.relation || [];
+    if (relations.length === 0) return "";
+    const related = await client.getPage(relations[0].id);
+    return normalizeDisplayName(getTitleFromPage(related));
+  }
+
+  if (prop.type === "rollup") {
+    const rollup = prop.rollup;
+    if (rollup?.type === "array" && rollup.array?.length) {
+      const first = rollup.array[0];
+      if (first.type === "title") {
+        return normalizeDisplayName(getPlainTextFromProperty(first));
+      }
+      if (first.type === "rich_text") {
+        return normalizeDisplayName(getPlainTextFromProperty(first));
+      }
+    }
+    if (rollup?.type === "number" && rollup.number != null) {
+      return String(rollup.number);
+    }
+    if (rollup?.type === "date" && rollup.date?.start) {
+      return rollup.date.start;
+    }
+    return "";
+  }
+
+  return normalizeDisplayName(getPlainTextFromProperty(prop));
 }
 
 export function getPlainTextFromProperty(prop: NotionPropertyValue | undefined): string {

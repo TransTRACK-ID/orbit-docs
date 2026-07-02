@@ -1,5 +1,10 @@
-import type { NotionPage } from "./client";
-import { findPropertyByName, getPlainTextFromProperty, getTitleFromPage } from "./client";
+import type { NotionClient, NotionPage } from "./client";
+import {
+  findPropertyByName,
+  getPropertyText,
+  getTitleFromPage,
+  normalizeDisplayName,
+} from "./client";
 
 export interface InferredTitleMeta {
   appName: string | null;
@@ -45,13 +50,15 @@ export function inferFromTitle(title: string): InferredTitleMeta {
   return { appName: null, version: null };
 }
 
-export function resolveAppName(
+export async function resolveAppName(
+  client: NotionClient,
   page: NotionPage,
   appPropertyName: string
-): { appName: string; source: "property" | "title" } | null {
-  const fromProperty = getPlainTextFromProperty(
+): Promise<{ appName: string; source: "property" | "title" } | null> {
+  const fromProperty = await getPropertyText(
+    client,
     findPropertyByName(page.properties, appPropertyName)
-  ).trim();
+  );
 
   if (fromProperty) {
     return { appName: fromProperty, source: "property" };
@@ -66,14 +73,16 @@ export function resolveAppName(
   return null;
 }
 
-export function resolveVersionLabel(
+export async function resolveVersionLabel(
+  client: NotionClient,
   page: NotionPage,
   versionPropertyName: string,
   title: string
-): string | null {
-  const fromProperty = getPlainTextFromProperty(
+): Promise<string | null> {
+  const fromProperty = await getPropertyText(
+    client,
     findPropertyByName(page.properties, versionPropertyName)
-  ).trim();
+  );
 
   if (fromProperty) return fromProperty;
 
@@ -81,4 +90,14 @@ export function resolveVersionLabel(
   if (inferred.version) return inferred.version;
 
   return null;
+}
+
+export function normalizeAppMatchKey(name: string): string {
+  return normalizeDisplayName(name).toLowerCase();
+}
+
+/** Extract alias from trailing parentheses, e.g. "Vessel Monitoring (VESMON)". */
+export function extractParentheticalAlias(name: string): string | null {
+  const match = name.match(/\(([^)]+)\)\s*$/);
+  return match?.[1]?.trim() || null;
 }
