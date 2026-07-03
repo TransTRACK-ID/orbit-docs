@@ -9,8 +9,10 @@ import {
   docGenerationJobs,
   docGenerationRepoResults,
   docGenerationDebugLogs,
+  docGenerationVersions,
   appRepositories,
   apps,
+  users,
 } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { createAgent } from "./agent-factory";
@@ -23,6 +25,12 @@ import {
 } from "./git-provider";
 import { getDocGenerationSettings } from "./doc-generation-settings";
 import { readExistingDoc } from "./existing-doc";
+import {
+  readProductDocForGeneration,
+  saveAppProductDoc,
+  generationDocTypeToAppDocType,
+  type GenerationProductDocType,
+} from "./app-product-docs";
 import { DEFAULT_DOC_PATHS } from "./doc-paths";
 import {
   buildPrdCreatePrompt,
@@ -293,6 +301,58 @@ async function updateJobResult(
     .update(docGenerationJobs)
     .set(updateField)
     .where(eq(docGenerationJobs.id, jobId));
+}
+
+async function resolveJobActor(jobId: string): Promise<string> {
+  const db = getDb();
+  const job = await db
+    .select({ userId: docGenerationJobs.userId })
+    .from(docGenerationJobs)
+    .where(eq(docGenerationJobs.id, jobId))
+    .limit(1)
+    .then((rows) => rows[0]);
+
+  if (!job?.userId) return "Orbit Docs";
+
+  const user = await db
+    .select({ name: users.name, email: users.email })
+    .from(users)
+    .where(eq(users.id, job.userId))
+    .limit(1)
+    .then((rows) => rows[0]);
+
+  return user?.name || user?.email || "Orbit Docs";
+}
+
+async function persistProductDoc(
+  jobId: string,
+  appId: string,
+  type: GenerationProductDocType,
+  content: string,
+  actor: string
+): Promise<void> {
+  const trimmed = content.trim();
+  if (!trimmed) return;
+
+  await updateJobResult(jobId, type, content);
+
+  const previous = await readProductDocForGeneration(appId, type, {
+    excludeJobId: jobId,
+  });
+  if (previous?.trim() === trimmed) {
+    return;
+  }
+
+  const db = getDb();
+  await db.insert(docGenerationVersions).values({
+    jobId,
+    docType: type,
+    content: trimmed,
+    actor,
+  });
+
+  const appDocType = generationDocTypeToAppDocType(type);
+  await saveAppProductDoc(appId, appDocType, trimmed, actor);
 }
 
 async function updateJobCompletion(
@@ -656,8 +716,9 @@ async function writeDocBack(
 }
 
 /**
- * Product-scoped run: SRS + FSD + GIT-SNAPSHOT + SDD index aggregated across
- * all repositories, then per-repository SDD docs written back via PR.
+ * Product-scoped run: SRS + FSD + GIT-SNAPSHOT + SDD index are stored in the
+ * app library (with version history). Only per-repository SDD files are written
+ * back to git via PR/MR.
  */
 export async function generateProductDocs(
   jobId: string,
@@ -686,6 +747,8 @@ export async function generateProductDocs(
     if (repos.length === 0) {
       throw new Error("No repositories configured for this app");
     }
+
+    const actor = await resolveJobActor(jobId);
 
     let stepIndex = 0;
     const progressFor = (message: string, status: GenerationStatus) => {
@@ -745,11 +808,14 @@ export async function generateProductDocs(
     let fsdContent = "";
 
     if (settings.srsEnabled) {
-      const existingSrs = await readExistingDoc(productDir, srsDocPath, "srs");
+      const existingSrs = await readProductDocForGeneration(appId, "srs", {
+        excludeJobId: jobId,
+        repoFallback: () => readExistingDoc(productDir, srsDocPath, "srs"),
+      });
       const srsTemplate = await loadTemplate("srs");
       await progressFor(
         existingSrs
-          ? `Updating existing SRS at ${srsDocPath}...`
+          ? "Updating SRS from app library..."
           : "Generating Software Requirements Specification (SRS)...",
         "generating_srs"
       );
@@ -762,16 +828,19 @@ export async function generateProductDocs(
       srsContent = await runAgentAnalyze(agent, jobId, srsPrompt, baseDir, {
         partialField: "srs",
       });
-      await updateJobResult(jobId, "srs", srsContent);
+      await persistProductDoc(jobId, appId, "srs", srsContent, actor);
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
     }
 
     if (settings.fsdEnabled) {
-      const existingFsd = await readExistingDoc(productDir, fsdDocPath, "fsd");
+      const existingFsd = await readProductDocForGeneration(appId, "fsd", {
+        excludeJobId: jobId,
+        repoFallback: () => readExistingDoc(productDir, fsdDocPath, "fsd"),
+      });
       const fsdTemplate = await loadTemplate("fsd");
       await progressFor(
         existingFsd
-          ? `Updating existing FSD at ${fsdDocPath}...`
+          ? "Updating FSD from app library..."
           : "Generating Functional Specification Document (FSD)...",
         "generating_fsd"
       );
@@ -794,40 +863,8 @@ export async function generateProductDocs(
       fsdContent = await runAgentAnalyze(agent, jobId, fsdPrompt, baseDir, {
         partialField: "fsd",
       });
-      await updateJobResult(jobId, "fsd", fsdContent);
+      await persistProductDoc(jobId, appId, "fsd", fsdContent, actor);
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
-    }
-
-    if (productRepo.accessToken && (srsContent || fsdContent)) {
-      await onProgress({
-        status: "writing_back",
-        progressPct: 70,
-        progressMessage: `Opening PR for product docs (${productRepo.name})...`,
-      });
-
-      const productRef = await getRepoRef(productDir);
-
-      if (srsContent) {
-        await writeDocBack(
-          productRepo,
-          productDir,
-          srsDocPath,
-          srsContent,
-          productRef,
-          "Software Requirements Specification"
-        );
-      }
-
-      if (fsdContent) {
-        await writeDocBack(
-          productRepo,
-          productDir,
-          fsdDocPath,
-          fsdContent,
-          productRef,
-          "Functional Specification Document"
-        );
-      }
     }
 
     let gitSnapshotContent = "";
@@ -862,7 +899,7 @@ Instructions:
       gitSnapshotContent = await runAgentAnalyze(agent, jobId, gitPrompt, baseDir, {
         partialField: "git_snapshot",
       });
-      await updateJobResult(jobId, "git_snapshot", gitSnapshotContent);
+      await persistProductDoc(jobId, appId, "git_snapshot", gitSnapshotContent, actor);
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
     }
 
@@ -907,7 +944,7 @@ Instructions:
       sddIndexContent = await runAgentAnalyze(agent, jobId, sddIndexPrompt, baseDir, {
         partialField: "sdd_index",
       });
-      await updateJobResult(jobId, "sdd", sddIndexContent);
+      await persistProductDoc(jobId, appId, "sdd_index", sddIndexContent, actor);
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
     }
 

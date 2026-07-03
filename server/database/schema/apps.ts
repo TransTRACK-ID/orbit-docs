@@ -102,7 +102,7 @@ export const docs = pgTable("docs", {
   source: text("source", { enum: ["manual", "generated"] })
     .notNull()
     .default("manual"),
-  docType: text("doc_type", { enum: ["srs", "fsd", "sdd"] }),
+  docType: text("doc_type", { enum: ["srs", "fsd", "sdd", "git_snapshot"] }),
   notionPageId: text("notion_page_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
