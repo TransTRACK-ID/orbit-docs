@@ -5,6 +5,8 @@ import type { DocGenerationResult } from "~/composables/useDocGenerator";
 definePageMeta({
   layout: "public",
   auth: false,
+  layoutTransition: false,
+  pageTransition: false,
 });
 
 const route = useRoute();
@@ -15,18 +17,14 @@ const result = ref<DocGenerationResult | null>(null);
 const sessionAppName = ref<string | null>(null);
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);
+const sessionResolved = ref(false);
 
 const isSignedIn = computed(() => authStatus.value === "authenticated");
 const canCollaborate = computed(
-  () => isSignedIn.value && Boolean(result.value?.jobId && result.value?.appId)
-);
-
-watch(
-  isSignedIn,
-  (signedIn) => {
-    setPageLayout(signedIn ? "default" : "public");
-  },
-  { immediate: true }
+  () =>
+    sessionResolved.value &&
+    isSignedIn.value &&
+    Boolean(result.value?.jobId && result.value?.appId)
 );
 
 const loginUrl = computed(() => {
@@ -54,6 +52,7 @@ async function loadSharedSession() {
 
 onMounted(async () => {
   await getSession().catch(() => {});
+  sessionResolved.value = true;
   await loadSharedSession();
 });
 
@@ -73,7 +72,8 @@ useSeoMeta({
           {{ sessionAppName ? `${sessionAppName} · ` : "" }}Shared generation session
         </span>
       </div>
-      <p v-if="canCollaborate" class="share-page-note share-page-note--team">
+      <p v-if="!sessionResolved" class="share-page-note">Loading session…</p>
+      <p v-else-if="canCollaborate" class="share-page-note share-page-note--team">
         Signed in. Use the <strong>Review</strong> button above the document to comment and set status per tab.
       </p>
       <p v-else class="share-page-note">
@@ -92,8 +92,12 @@ useSeoMeta({
       <p>{{ loadError }}</p>
     </div>
 
+    <div v-else-if="result && !sessionResolved" class="share-page-state">
+      <p>Preparing viewer…</p>
+    </div>
+
     <DocResultViewer
-      v-else-if="result"
+      v-else-if="result && sessionResolved"
       :srs="result.srs"
       :fsd="result.fsd"
       :git-snapshot="result.gitSnapshot"
@@ -182,6 +186,7 @@ useSeoMeta({
 
 <style>
 .public-shell .public-main:has(.share-page) {
-  max-width: min(1200px, 100%);
+  max-width: min(1280px, 100%);
+  padding: 24px 28px 40px;
 }
 </style>
