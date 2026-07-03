@@ -1059,8 +1059,9 @@ function getCallbackUrl(provider: SsoProvider): string {
                 <div>
                   <h3>Notion</h3>
                   <p class="desc">
-                    Pull docs and releases from Notion into Orbit Docs. Notion is the source of truth;
-                    existing Orbit content matched by page ID will be overwritten.
+                    Pull unpublished articles and release drafts from Notion into Orbit Releases.
+                    Published Notion pages are skipped. Notion is the source of truth for synced items;
+                    existing Orbit releases matched by page ID will be overwritten.
                   </p>
                 </div>
                 <span
@@ -1095,7 +1096,7 @@ function getCallbackUrl(provider: SsoProvider): string {
 
                 <div class="form-row">
                   <div class="form-group">
-                    <label for="notionDocsDb">Docs database ID</label>
+                    <label for="notionDocsDb">Articles database ID</label>
                     <input
                       id="notionDocsDb"
                       v-model="notionForm.docsDatabaseId"
@@ -1103,6 +1104,7 @@ function getCallbackUrl(provider: SsoProvider): string {
                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                       @input="markNotionDirty"
                     />
+                    <span class="slug-hint">Syncs as unpublished article releases on /releases</span>
                   </div>
                   <div class="form-group">
                     <label for="notionReleasesDb">Releases database ID</label>
@@ -1113,6 +1115,7 @@ function getCallbackUrl(provider: SsoProvider): string {
                       placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
                       @input="markNotionDirty"
                     />
+                    <span class="slug-hint">Syncs unpublished changelog releases to /releases</span>
                   </div>
                 </div>
 
@@ -1255,8 +1258,6 @@ function getCallbackUrl(provider: SsoProvider): string {
                 :class="{ error: notionSettings.lastSyncResult.errors?.length }"
               >
                 <div class="notion-sync-stats">
-                  <span>{{ notionSettings.lastSyncResult.docsCreated }} docs created</span>
-                  <span>{{ notionSettings.lastSyncResult.docsUpdated }} docs updated</span>
                   <span>{{ notionSettings.lastSyncResult.releasesCreated }} releases created</span>
                   <span>{{ notionSettings.lastSyncResult.releasesUpdated }} releases updated</span>
                 </div>

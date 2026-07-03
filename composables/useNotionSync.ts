@@ -88,8 +88,7 @@ export function useNotionSync() {
         settings.value.lastSyncResult = data;
         settings.value.lastSyncAt = data.finishedAt;
       }
-      const total =
-        data.docsCreated + data.docsUpdated + data.releasesCreated + data.releasesUpdated;
+      const total = data.releasesCreated + data.releasesUpdated;
       if (data.errors.length) {
         toast.warning(`Sync finished with ${data.errors.length} issue(s). ${total} item(s) processed.`);
       } else {

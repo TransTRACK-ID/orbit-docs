@@ -12,10 +12,15 @@ export default defineEventHandler(async (event) => {
   const search = typeof query.search === "string" ? query.search.trim().toLowerCase() : "";
   const appFilter = typeof query.app === "string" ? query.app : "";
   const versionFilter = typeof query.version === "string" ? query.version : "";
-  const limit = Math.min(parseInt(String(query.limit || "50"), 10), 100);
+  const publishedFilter = typeof query.published === "string" ? query.published : "";
+  const limit = Math.min(parseInt(String(query.limit || "100"), 10), 200);
 
-  // Build conditions
-  const conditions = [eq(releases.published, true)];
+  const conditions = [];
+  if (publishedFilter === "true") {
+    conditions.push(eq(releases.published, true));
+  } else if (publishedFilter === "false") {
+    conditions.push(eq(releases.published, false));
+  }
   if (appFilter) {
     conditions.push(eq(apps.name, appFilter));
   }
@@ -45,7 +50,7 @@ export default defineEventHandler(async (event) => {
     .from(releases)
     .innerJoin(apps, eq(releases.appId, apps.id))
     .leftJoin(appVersions, eq(releases.versionId, appVersions.id))
-    .where(and(...conditions))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(releases.updatedAt))
     .limit(limit);
 

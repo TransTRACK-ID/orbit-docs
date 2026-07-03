@@ -37,7 +37,12 @@ watch([searchQuery, appFilter], async () => {
 });
 
 const filteredReleases = computed(() => {
-  return releases.value;
+  return [...releases.value].sort((a, b) => {
+    if (a.published !== b.published) return a.published ? 1 : -1;
+    const dA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+    const dB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    return dB - dA;
+  });
 });
 
 const appFilterOptions = computed(() => [
@@ -159,7 +164,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
     <header class="topbar">
       <div class="flex-gap-md">
         <h1>Releases</h1>
-        <span class="text-muted-sm">Published release notes across all apps</span>
+        <span class="text-muted-sm">Release notes, articles, and drafts across all apps</span>
       </div>
       <div class="flex-gap-md">
         <input
@@ -207,6 +212,9 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             </NuxtLink>
             <span class="pill" :class="r.type === 'article' ? 'pill-purple' : 'pill-muted'">
               {{ r.type === 'article' ? 'Article' : 'Normal' }}
+            </span>
+            <span class="pill" :class="r.published ? 'pill-green' : 'pill-amber'">
+              {{ r.published ? 'Published' : 'Draft' }}
             </span>
             <span v-if="mediaCount(r) > 0" class="pill pill-muted">{{ mediaCount(r) }} media</span>
             <span v-if="r.versionStatus" class="release-status">

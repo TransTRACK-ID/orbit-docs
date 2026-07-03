@@ -54,12 +54,20 @@ export async function loadNotionSyncConfig(): Promise<NotionSyncConfig | null> {
   };
 }
 
-function mapDocStatus(notionStatus: string): "draft" | "in_review" | "published" | "archived" {
-  const s = notionStatus.trim().toLowerCase();
-  if (s === "published" || s === "done" || s === "live") return "published";
-  if (s === "in review" || s === "review") return "in_review";
-  if (s === "archived") return "archived";
-  return "draft";
+function isNotionPublished(statusRaw: string): boolean {
+  return ["published", "done", "live"].includes(statusRaw.trim().toLowerCase());
+}
+
+async function removeLegacyNotionDoc(db: ReturnType<typeof getDb>, notionPageId: string) {
+  const legacy = await db
+    .select({ id: docs.id })
+    .from(docs)
+    .where(eq(docs.notionPageId, notionPageId))
+    .limit(1)
+    .then((rows) => rows[0]);
+  if (legacy) {
+    await db.delete(docs).where(eq(docs.id, legacy.id));
+  }
 }
 
 async function resolveAppByName(appName: string) {
@@ -113,7 +121,7 @@ async function findOrCreateVersion(appId: string, versionLabel: string) {
   return created;
 }
 
-async function syncDocPage(
+async function syncArticlePage(
   client: NotionClient,
   page: NotionPage,
   config: NotionSyncConfig,
@@ -121,55 +129,60 @@ async function syncDocPage(
 ) {
   const db = getDb();
   const title = getTitleFromPage(page);
+  const statusRaw = await getPropertyText(
+    client,
+    findPropertyByName(page.properties, config.statusPropertyName)
+  );
+  if (isNotionPublished(statusRaw)) return;
+
   const resolvedApp = await resolveAppName(client, page, config.appPropertyName);
   const app = resolvedApp ? await resolveAppByName(resolvedApp.appName) : null;
   if (!app) {
     const hint = resolvedApp
       ? `no Orbit app matches "${resolvedApp.appName}" (from ${resolvedApp.source === "property" ? "Product Domain" : "title"})`
       : `App property "${config.appPropertyName}" is empty and title could not be parsed`;
-    result.errors.push(`Doc "${title}": ${hint}. Create a matching app in Orbit Apps.`);
+    result.errors.push(`Article "${title}": ${hint}. Create a matching app in Orbit Apps.`);
     return;
   }
 
-  const statusRaw = await getPropertyText(
-    client,
-    findPropertyByName(page.properties, config.statusPropertyName)
-  );
-  const content = await client.getPageMarkdown(page.id);
-  const status = mapDocStatus(statusRaw);
+  const body = await client.getPageMarkdown(page.id);
 
   const existing = await db
     .select()
-    .from(docs)
-    .where(eq(docs.notionPageId, page.id))
+    .from(releases)
+    .where(eq(releases.notionPageId, page.id))
     .limit(1)
     .then((rows) => rows[0]);
 
   if (existing) {
     await db
-      .update(docs)
+      .update(releases)
       .set({
-        title,
-        content,
-        status,
         appId: app.id,
+        heroTitle: title,
+        summary: body,
+        categories: null,
+        type: "article",
+        published: false,
         updatedAt: new Date(),
       })
-      .where(eq(docs.id, existing.id));
-    result.docsUpdated += 1;
+      .where(eq(releases.id, existing.id));
+    await removeLegacyNotionDoc(db, page.id);
+    result.releasesUpdated += 1;
     return;
   }
 
-  await db.insert(docs).values({
-    title,
-    content,
-    status,
+  await db.insert(releases).values({
     appId: app.id,
+    heroTitle: title,
+    summary: body,
+    categories: null,
+    type: "article",
+    published: false,
     notionPageId: page.id,
-    source: "manual",
-    author: "Notion Sync",
   });
-  result.docsCreated += 1;
+  await removeLegacyNotionDoc(db, page.id);
+  result.releasesCreated += 1;
 }
 
 async function syncReleasePage(
@@ -180,6 +193,12 @@ async function syncReleasePage(
 ) {
   const db = getDb();
   const title = getTitleFromPage(page);
+  const statusRaw = await getPropertyText(
+    client,
+    findPropertyByName(page.properties, config.statusPropertyName)
+  );
+  if (isNotionPublished(statusRaw)) return;
+
   const resolvedApp = await resolveAppName(client, page, config.appPropertyName);
   const versionLabel = await resolveVersionLabel(client, page, config.versionPropertyName, title);
 
@@ -207,11 +226,6 @@ async function syncReleasePage(
   const hasCategories = Object.values(categories).some((items) => items.length > 0);
   const releaseType = hasCategories ? "normal" : "article";
   const summary = hasCategories ? null : body;
-  const statusRaw = await getPropertyText(
-    client,
-    findPropertyByName(page.properties, config.statusPropertyName)
-  );
-  const published = ["published", "done", "live"].includes(statusRaw.trim().toLowerCase());
 
   const existing = await db
     .select()
@@ -230,7 +244,7 @@ async function syncReleasePage(
         summary,
         categories: hasCategories ? categories : null,
         type: releaseType,
-        published,
+        published: false,
         updatedAt: new Date(),
       })
       .where(eq(releases.id, existing.id));
@@ -256,7 +270,7 @@ async function syncReleasePage(
           summary,
           categories: hasCategories ? categories : null,
           type: releaseType,
-          published,
+          published: false,
           notionPageId: page.id,
           updatedAt: new Date(),
         })
@@ -273,7 +287,7 @@ async function syncReleasePage(
     summary,
     categories: hasCategories ? categories : null,
     type: releaseType,
-    published,
+    published: false,
     notionPageId: page.id,
   });
   result.releasesCreated += 1;
@@ -318,10 +332,10 @@ export async function runNotionSync(): Promise<NotionSyncResult> {
       const pages = await client.queryDatabase(config.docsDatabaseId);
       for (const page of pages) {
         try {
-          await syncDocPage(client, page, config, result);
+          await syncArticlePage(client, page, config, result);
         } catch (err: any) {
           const pageTitle = getTitleFromPage(page);
-          result.errors.push(`Doc "${pageTitle}": ${err?.message || "sync failed"}`);
+          result.errors.push(`Article "${pageTitle}": ${err?.message || "sync failed"}`);
         }
       }
     }
@@ -390,7 +404,7 @@ export async function testNotionConnection(config: NotionSyncConfig): Promise<{
 
   if (config.docsDatabaseId) {
     const dbInfo = await client.getDatabase(config.docsDatabaseId);
-    docsDatabaseTitle = dbInfo.title.map((t) => t.plain_text).join("") || "Docs database";
+    docsDatabaseTitle = dbInfo.title.map((t) => t.plain_text).join("") || "Articles database";
     for (const prop of Object.values(dbInfo.properties)) {
       allPropertyOptions.add(prop.name);
       if (APP_PROPERTY_TYPES.has(prop.type)) {
