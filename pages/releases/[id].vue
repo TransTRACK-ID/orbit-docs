@@ -76,24 +76,13 @@ function countCategories(categories: ReleaseCategories | null) {
   };
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Sticky nav items
-// ═══════════════════════════════════════════════════════════════
-const navItems = computed(() => {
-  const items: { id: string; label: string }[] = [];
-  if (release.value?.features) {
-    release.value.features.forEach((f: ReleaseFeature) => {
-      items.push({ id: f.id, label: f.heading });
-    });
-  }
-  const cats = countCategories(release.value?.categories || null);
-  for (const [key, list] of Object.entries(cats)) {
-    if (list.length > 0 && categoryConfig[key]) {
-      items.push({ id: key, label: categoryConfig[key].label });
-    }
-  }
-  return items;
-});
+const featureOutlineItems = computed(() =>
+  (release.value?.features || []).map((f: ReleaseFeature) => ({
+    id: f.id,
+    label: f.heading,
+    level: 2,
+  }))
+);
 
 // ═══════════════════════════════════════════════════════════════
 // Prev / Next
@@ -109,67 +98,6 @@ const adjacent = computed(() => {
     prev: idx > 0 ? sorted[idx - 1] : null,
     next: idx < sorted.length - 1 ? sorted[idx + 1] : null,
   };
-});
-
-// ═══════════════════════════════════════════════════════════════
-// Scroll spy
-// ═══════════════════════════════════════════════════════════════
-const activeNavIndex = ref(0);
-const scrollSpyCleanup = ref<(() => void) | null>(null);
-
-watch(navItems, async () => {
-  await nextTick();
-  setupScrollSpy();
-});
-
-function scrollToSection(id: string) {
-  const el = document.getElementById(id);
-  if (el) {
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-}
-
-function setupScrollSpy() {
-  if (scrollSpyCleanup.value) {
-    scrollSpyCleanup.value();
-    scrollSpyCleanup.value = null;
-  }
-
-  const navLinks = document.querySelectorAll(".release-nav-list a");
-  if (navLinks.length === 0) return;
-
-  const sections = Array.from(navLinks)
-    .map((a) => {
-      const href = a.getAttribute("href");
-      if (!href) return null;
-      const id = href.startsWith("#") ? href.slice(1) : href;
-      return document.getElementById(id);
-    })
-    .filter(Boolean) as HTMLElement[];
-
-  function onScroll() {
-    const scrollPos = window.scrollY + 140;
-    let activeIndex = 0;
-    sections.forEach((sec, i) => {
-      if (sec && sec.offsetTop <= scrollPos) {
-        activeIndex = i;
-      }
-    });
-    activeNavIndex.value = activeIndex;
-  }
-
-  window.addEventListener("scroll", onScroll, { passive: true });
-  onScroll();
-
-  scrollSpyCleanup.value = () => {
-    window.removeEventListener("scroll", onScroll);
-  };
-}
-
-onBeforeUnmount(() => {
-  if (scrollSpyCleanup.value) {
-    scrollSpyCleanup.value();
-  }
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -337,11 +265,11 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 
             <!-- Article-only: Summary + Features + Media -->
             <template v-if="release.type === 'article'">
-              <!-- Article body (rendered from markdown) -->
-              <MermaidHtml
+              <GeneralMarkdownReader
                 v-if="release.summary"
-                class="article-body"
-                :html="renderMarkdown(release.summary)"
+                :content="release.summary"
+                :extra-outline-items="featureOutlineItems"
+                outline-title="Article Outline"
               />
 
               <!-- Features -->
@@ -519,18 +447,6 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             <div v-else />
           </nav>
         </article>
-
-        <!-- Sticky nav: article only -->
-        <nav v-if="release.type === 'article' && navItems.length > 0" class="release-nav" aria-label="On this page">
-          <div class="release-nav-title">On this page</div>
-          <ul class="release-nav-list">
-            <li v-for="(item, idx) in navItems" :key="item.id">
-              <a :href="`#${item.id}`" :class="{ active: activeNavIndex === idx }" @click.prevent="scrollToSection(item.id)">
-                {{ item.label }}
-              </a>
-            </li>
-          </ul>
-        </nav>
       </div>
     </div>
 
@@ -1024,15 +940,14 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 
 /* ═══ Article layout ═════════════════════════════════════════ */
 .article-layout {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
   width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
 }
 
 .article-wrap {
   width: 100%;
-  max-width: 720px;
+  max-width: none;
 }
 
 /* Hero */

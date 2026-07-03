@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
-import { renderMarkdown } from "~/composables/useMarkdown";
 import { formatDisplayVersion, formatReleaseHeading } from "~/utils/functions";
 import type { ReleaseItem } from "~/composables/useReleases";
 
@@ -242,11 +241,12 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               </ul>
             </div>
           </template>
-          <!-- Article or no categories: raw markdown -->
-          <MermaidHtml
+          <!-- Article or no categories: markdown preview -->
+          <GeneralMarkdownReader
             v-else
-            class="release-summary"
-            :html="renderMarkdown(r.summary || r.heroTitle || '')"
+            mode="compact"
+            :show-outline="false"
+            :content="r.summary || r.heroTitle || ''"
           />
           <div class="release-meta-row">
             <span class="release-app">{{ r.appName }}</span>
@@ -521,68 +521,14 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   color: var(--accent);
 }
 
-.release-summary {
-  font-size: 14px;
-  color: var(--muted);
-  line-height: 1.5;
+.release-body :deep(.markdown-reader--compact) {
   margin: 4px 0 10px;
-  max-height: 120px;
+  max-height: 160px;
   overflow: hidden;
 }
-.release-summary:empty::before {
-  content: "No summary provided.";
-}
-.release-summary > * {
-  margin-bottom: 8px;
-}
-.release-summary > *:last-child {
-  margin-bottom: 0;
-}
-.release-summary h2,
-.release-summary h3 {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--fg);
-  margin: 8px 0 4px;
-}
-.release-summary img {
-  max-width: 100%;
-  max-height: 80px;
-  border-radius: 6px;
-  object-fit: cover;
-}
-.release-summary ul {
-  padding-left: 18px;
-  margin: 4px 0;
-  list-style-type: disc;
-}
-.release-summary ol {
-  padding-left: 18px;
-  margin: 4px 0;
-  list-style-type: decimal;
-}
-.release-summary li {
-  margin-bottom: 2px;
-}
-.release-summary blockquote {
-  border-left: 2px solid var(--accent);
-  padding-left: 10px;
-  margin: 4px 0;
-  font-style: italic;
-}
-.release-summary pre {
-  background: var(--bg);
-  padding: 8px;
-  border-radius: 6px;
-  overflow-x: auto;
-  font-size: 12px;
-}
-.release-summary code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  background: var(--bg);
-  padding: 1px 4px;
-  border-radius: 3px;
+
+.release-body :deep(.markdown-reader--compact .preview-body) {
+  max-width: none;
 }
 
 .release-meta-row {

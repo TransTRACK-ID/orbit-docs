@@ -89,9 +89,8 @@ export function renderMarkdown(md: string): string {
     // ─── Headings with slug IDs for h2 and h3 ───────────────────
     renderer.heading = function ({ tokens, depth }: { tokens: any[]; depth: number }) {
       const text = this.parser.parseInline(tokens);
-      // Strip HTML tags for slug generation
       const plain = text.replace(/<[^>]+>/g, "");
-      if (depth === 2 || depth === 3) {
+      if (depth >= 1 && depth <= 3) {
         const slug = headingSlug(plain);
         return `<h${depth} id="${slug}">${text}</h${depth}>`;
       }
