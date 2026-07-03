@@ -193,6 +193,19 @@ function formatDate(dateStr: string | null) {
   });
 }
 
+function jobScopeLabel(job: DocGenerationJob) {
+  if (job.scope === "repo") {
+    if (job.repoUrl) {
+      const slug = job.repoUrl.replace(/\.git$/, "").replace(/\/$/, "");
+      const parts = slug.split("/");
+      if (parts.length >= 2) return parts.slice(-2).join("/");
+      return slug;
+    }
+    return "Repository SDD";
+  }
+  return "Product (all repos)";
+}
+
 const statusClass: Record<string, string> = {
   cloning: "pill-blue",
   analyzing: "pill-blue",
@@ -688,71 +701,102 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
         </button>
       </div>
 
-      <div v-if="isLoading" class="skeleton-list">
-        <div v-for="n in 3" :key="n" class="skeleton-item">
-          <div class="animate-pulse space-y-2">
-            <div class="h-4 bg-gray-200 rounded w-1/2"></div>
-            <div class="h-3 bg-gray-200 rounded w-3/4"></div>
-          </div>
-        </div>
+      <div v-if="isLoading" class="table-panel">
+        <table class="ds-table">
+          <tbody>
+            <tr v-for="n in 3" :key="n" class="skeleton-row">
+              <td colspan="7"><div class="skeleton-bar w-two-thirds" /></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <div v-else-if="jobs.length === 0" class="empty-state">
         <p>No generation jobs yet. Start your first one above.</p>
       </div>
 
-      <div v-else class="job-list">
-        <div
-          v-for="job in jobs"
-          :key="job.id"
-          class="job-item"
-          :class="{ active: currentJob?.id === job.id }"
-        >
-          <div class="job-main">
-            <div class="job-title-row">
-              <span class="job-repo">
-                {{ job.scope === 'repo' ? (job.repoUrl || 'Repository SDD') : 'Product (all repos)' }}
-              </span>
+      <GeneralDataTable v-else>
+        <thead>
+          <tr>
+            <th>Scope</th>
+            <th>Status</th>
+            <th>Progress</th>
+            <th>Ref</th>
+            <th>Trigger</th>
+            <th>Created</th>
+            <th class="col-actions">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="job in jobs"
+            :key="job.id"
+            :class="{ 'is-selected': currentJob?.id === job.id, 'is-clickable': job.status === 'completed' }"
+            @click="job.status === 'completed' && handleViewResult(job.id)"
+          >
+            <td>
+              <div class="cell-stack">
+                <span class="col-strong">{{ jobScopeLabel(job) }}</span>
+                <span v-if="job.scope === 'repo' && job.repoUrl" class="col-muted col-truncate" :title="job.repoUrl">
+                  {{ job.repoUrl }}
+                </span>
+              </div>
+            </td>
+            <td>
               <span class="pill" :class="statusClass[job.status] || 'pill-blue'">
                 {{ statusLabel[job.status] || job.status }}
               </span>
-              <span v-if="job.trigger === 'webhook'" class="pill pill-muted" title="Triggered by a git tag webhook">
-                webhook
+            </td>
+            <td>
+              <div class="cell-stack">
+                <div class="progress-inline">
+                  <div class="progress-inline__bar" aria-hidden="true">
+                    <div class="progress-inline__fill" :style="{ width: `${job.progressPct}%` }" />
+                  </div>
+                  <span class="progress-inline__pct">{{ job.progressPct }}%</span>
+                </div>
+                <span class="col-muted col-truncate" :title="job.progressMessage || undefined">
+                  {{ job.progressMessage || statusLabel[job.status] || job.status }}
+                </span>
+              </div>
+            </td>
+            <td class="col-num col-muted">
+              {{ job.repoRef || "—" }}
+            </td>
+            <td>
+              <span class="pill" :class="job.trigger === 'webhook' ? 'pill-muted' : 'pill-blue'">
+                {{ job.trigger === 'webhook' ? 'Webhook' : 'Manual' }}
               </span>
-            </div>
-            <div class="job-meta">
-              <span class="num">{{ job.progressPct }}%</span>
-              <span>{{ job.progressMessage || job.status }}</span>
-              <span v-if="job.repoRef" class="job-ref" title="Tag or commit hash">{{ job.repoRef }}</span>
-              <span class="job-date">{{ formatDate(job.createdAt) }}</span>
-            </div>
-          </div>
-
-          <div class="job-actions">
-            <button
-              v-if="job.status === 'completed'"
-              class="btn btn-primary btn-sm"
-              @click="handleViewResult(job.id)"
-            >
-              View Results
-            </button>
-            <button
-              class="btn btn-ghost btn-sm"
-              title="Debug session"
-              @click="handleDebugJob(job)"
-            >
-              Debug
-            </button>
-            <button
-              class="btn btn-ghost btn-sm"
-              title="Remove from history"
-              @click="handleRemove(job.id)"
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      </div>
+            </td>
+            <td class="col-num col-muted">{{ formatDate(job.createdAt) }}</td>
+            <td class="col-actions" @click.stop>
+              <div class="cell-actions">
+                <button
+                  v-if="job.status === 'completed'"
+                  class="btn btn-primary btn-sm"
+                  @click="handleViewResult(job.id)"
+                >
+                  View
+                </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  title="Debug session"
+                  @click="handleDebugJob(job)"
+                >
+                  Debug
+                </button>
+                <button
+                  class="btn btn-ghost btn-sm"
+                  title="Remove from history"
+                  @click="handleRemove(job.id)"
+                >
+                  Remove
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </GeneralDataTable>
     </div>
   </div>
 </template>
@@ -1165,83 +1209,6 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px;
-}
-
-.job-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.job-item {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.job-item:hover {
-  border-color: color-mix(in oklch, var(--fg) 20%, var(--border));
-}
-
-.job-item.active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent);
-}
-
-.job-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.job-title-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.job-repo {
-  font-weight: 500;
-  font-size: 14px;
-  color: var(--fg);
-  word-break: break-all;
-}
-
-.job-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--muted);
-  flex-wrap: wrap;
-}
-
-.job-ref {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  background: color-mix(in oklch, var(--fg) 6%, transparent);
-  color: var(--muted);
-  padding: 1px 6px;
-  border-radius: 4px;
-}
-
-.job-date {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-
-.job-actions {
-  flex-shrink: 0;
 }
 
 /* ── Pills ────────────────────────────────────────────────────── */

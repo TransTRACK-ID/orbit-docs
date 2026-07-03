@@ -456,6 +456,20 @@ const statusLabel: Record<string, string> = {
   archived: "Archived",
 };
 
+const ciStatusClass: Record<string, string> = {
+  passed: "pill-green",
+  failed: "pill-red",
+  pending: "pill-amber",
+  unknown: "pill-muted",
+};
+
+const ciStatusLabel: Record<string, string> = {
+  passed: "Passed",
+  failed: "Failed",
+  pending: "Pending",
+  unknown: "Unknown",
+};
+
 function countCategories(categories: ReleaseItem["categories"]) {
   return {
     added: categories?.added || [],
@@ -602,43 +616,50 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
     </div>
 
     <!-- Versions table -->
-    <div class="card table-card">
-      <table class="ds-table">
-        <thead>
-          <tr>
-            <th class="check-col"></th>
-            <th>Version</th>
-            <th>Date</th>
-            <th>Author</th>
-            <th>Status</th>
-            <th>Release</th>
-            <th>Changelog</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="v in filteredVersions"
-            :key="v.id"
-            :class="{ selected: selectedVersions.includes(v.id), 'cursor-pointer': true }"
-            @click="selectRow(v)"
-          >
-            <td class="check-col" @click.stop>
-              <input
-                type="checkbox"
-                :checked="selectedVersions.includes(v.id)"
-                @change="toggleVersionCheck(v.id, ($event.target as HTMLInputElement).checked)"
-                :aria-label="`Select version ${v.version}`"
-              />
-            </td>
-            <td class="num version-num">v{{ v.version }}</td>
-            <td class="num">{{ formatDate(v.releaseDate || v.createdAt) }}</td>
-            <td>{{ v.createdBy || "—" }}</td>
-            <td>
-              <span class="pill" :class="statusClass[v.status] || 'pill-blue'">
-                {{ statusLabel[v.status] || v.status }}
-              </span>
-            </td>
+    <GeneralDataTable>
+      <thead>
+        <tr>
+          <th class="check-col"></th>
+          <th>Version</th>
+          <th>Branch</th>
+          <th>Date</th>
+          <th>Author</th>
+          <th>Status</th>
+          <th>CI</th>
+          <th>Release</th>
+          <th>Changelog</th>
+          <th class="col-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          v-for="v in filteredVersions"
+          :key="v.id"
+          :class="{ 'is-selected': selectedVersions.includes(v.id), 'is-clickable': true }"
+          @click="selectRow(v)"
+        >
+          <td class="check-col" @click.stop>
+            <input
+              type="checkbox"
+              :checked="selectedVersions.includes(v.id)"
+              @change="toggleVersionCheck(v.id, ($event.target as HTMLInputElement).checked)"
+              :aria-label="`Select version ${v.version}`"
+            />
+          </td>
+          <td class="col-num col-strong">v{{ v.version }}</td>
+          <td class="col-muted col-truncate" :title="v.branch || undefined">{{ v.branch || "—" }}</td>
+          <td class="col-num col-muted">{{ formatDate(v.releaseDate || v.createdAt) }}</td>
+          <td class="col-muted">{{ v.createdBy || "—" }}</td>
+          <td>
+            <span class="pill" :class="statusClass[v.status] || 'pill-blue'">
+              {{ statusLabel[v.status] || v.status }}
+            </span>
+          </td>
+          <td>
+            <span class="pill" :class="ciStatusClass[v.ciStatus] || 'pill-muted'">
+              {{ ciStatusLabel[v.ciStatus] || v.ciStatus }}
+            </span>
+          </td>
             <td>
               <div class="release-cell">
                 <template v-if="v.releases && v.releases.length > 0">
@@ -672,8 +693,8 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
                 Edit
               </NuxtLink>
             </td>
-            <td @click.stop>
-              <div class="flex-gap-sm">
+            <td class="col-actions" @click.stop>
+              <div class="cell-actions">
                 <button class="btn btn-ghost btn-sm" title="Edit version" @click="openEditVersionModal(v)">
                   <IconsPencil size="14" />
                 </button>
@@ -684,16 +705,15 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             </td>
           </tr>
           <tr v-if="isLoading">
-            <td colspan="9" class="empty-cell">
+            <td colspan="10" class="empty-cell">
               <span class="loading-spinner" /> Loading versions…
             </td>
           </tr>
           <tr v-else-if="filteredVersions.length === 0">
-            <td colspan="9" class="empty-cell">No versions found.</td>
+            <td colspan="10" class="empty-cell">No versions found.</td>
           </tr>
         </tbody>
-      </table>
-    </div>
+    </GeneralDataTable>
 
     <!-- Version detail panel -->
     <div v-if="activeDetailVersion" class="version-detail">
@@ -1253,10 +1273,6 @@ h2 {
   border-radius: var(--radius-lg);
   padding: 24px;
 }
-.table-card {
-  padding: 0;
-  overflow: hidden;
-}
 
 .text-muted-sm {
   color: var(--muted);
@@ -1339,53 +1355,9 @@ h2 {
   outline-offset: 2px;
 }
 
-.ds-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-.ds-table th,
-.ds-table td {
-  padding: 14px 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-}
-.ds-table .check-col {
-  width: 40px;
-  padding-right: 0;
-}
-.ds-table .version-num {
-  font-weight: 600;
-}
-.ds-table th {
-  color: var(--muted);
-  font-weight: 500;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.ds-table tbody tr:hover {
-  background: var(--fg-soft);
-}
-.ds-table tbody tr.selected {
-  background: var(--accent-soft);
-}
-.ds-table tbody tr.selected:hover {
-  background: color-mix(in oklch, var(--accent) 18%, transparent);
-}
-.ds-table tbody tr.cursor-pointer {
-  cursor: pointer;
-}
 .num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-}
-
-.empty-cell {
-  text-align: center;
-  color: var(--muted);
-  padding: 32px;
 }
 
 .loading-spinner {

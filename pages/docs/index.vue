@@ -2,6 +2,11 @@
 import { usePageStore } from "~/store/page";
 import type { DocItem } from "~/composables/useDocs";
 import DotsVertical from "~/components/icons/DotsVertical/index.vue";
+import {
+  docListPrimaryLabel,
+  docListSecondaryLabel,
+  groupDocsForList,
+} from "~/utils/doc-display";
 
 definePageMeta({
   auth: true,
@@ -144,18 +149,6 @@ function formatDate(dateStr: string | null) {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function timeAgo(dateStr: string | null) {
-  if (!dateStr) return "";
-  const now = new Date();
-  const d = new Date(dateStr);
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
-  return `${Math.floor(diff / 604800)} weeks ago`;
-}
-
 const statusClass: Record<string, string> = {
   draft: "pill-blue",
   in_review: "pill-amber",
@@ -170,15 +163,13 @@ const statusLabel: Record<string, string> = {
   archived: "Archived",
 };
 
-const sourceLabel: Record<string, string> = {
-  manual: "",
-  generated: "Generated",
-};
+const docGroups = computed(() => groupDocsForList(docs.value));
 
-const sourceClass: Record<string, string> = {
-  manual: "",
-  generated: "pill-purple",
-};
+const showGroupHeaders = computed(
+  () => !appFilter.value && docGroups.value.length > 1
+);
+
+const tableColspan = 5;
 </script>
 
 <template>
@@ -211,15 +202,13 @@ const sourceClass: Record<string, string> = {
       </div>
     </header>
 
-    <div v-if="isLoading" class="doc-grid">
-      <div v-for="n in 3" :key="n" class="doc-card" style="height: 140px">
-        <div class="animate-pulse space-y-3">
-          <div class="h-4 bg-gray-200 rounded w-3/4"></div>
-          <div class="h-3 bg-gray-200 rounded w-1/2"></div>
-          <div class="h-3 bg-gray-200 rounded w-1/3"></div>
-        </div>
-      </div>
-    </div>
+    <GeneralDataTable v-if="isLoading">
+      <tbody>
+        <tr v-for="n in 5" :key="n" class="skeleton-row">
+          <td :colspan="tableColspan"><div class="skeleton-bar w-two-thirds" /></td>
+        </tr>
+      </tbody>
+    </GeneralDataTable>
 
     <div v-else-if="docs.length === 0" class="empty-state">
       <p>No docs found.</p>
@@ -228,59 +217,69 @@ const sourceClass: Record<string, string> = {
       </button>
     </div>
 
-    <div v-else class="doc-grid">
-      <div v-for="doc in docs" :key="doc.id" class="doc-card">
-        <div class="doc-card__header">
-          <div class="doc-card__title-group">
-            <div class="doc-card__title">{{ doc.title }}</div>
-            <div class="doc-card__meta">
-              <span class="doc-card__meta-item">Updated {{ timeAgo(doc.updatedAt) }}</span>
-              <span v-if="doc.app" class="doc-card__meta-item">{{ doc.app.name }}</span>
-            </div>
-          </div>
-          <div class="flex-gap-sm">
-            <span v-if="doc.source === 'generated'" class="pill" :class="sourceClass[doc.source]">
-              {{ sourceLabel[doc.source] }}
-            </span>
-            <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
-              {{ statusLabel[doc.status] || doc.status }}
-            </span>
-          </div>
-        </div>
-
-        <div v-if="doc.tags && doc.tags.length > 0" class="doc-card__tags">
-          <span v-for="tag in doc.tags" :key="tag" class="pill pill-accent">{{ tag }}</span>
-        </div>
-
-        <div class="doc-card__footer">
-          <span class="doc-card__author">{{ doc.author || 'Unknown' }}</span>
-          <div class="doc-card__actions">
-            <NuxtLink :to="`/docs/${doc.id}`" class="btn btn-primary btn-sm">
-              Edit
-            </NuxtLink>
-            <div class="actions-menu">
-              <button type="button" class="btn btn-ghost btn-sm actions-toggle" aria-label="More actions" @click="doc._showActions = !doc._showActions">
-                <DotsVertical />
-              </button>
-              <div v-if="doc._showActions" class="actions-dropdown" @click.stop>
-                <NuxtLink
-                  v-if="doc.status === 'published'"
-                  :to="`/p/${doc.id}`"
-                  target="_blank"
-                  class="actions-item"
-                  @click="doc._showActions = false"
-                >
-                  Public View
+    <GeneralDataTable v-else>
+      <thead>
+        <tr>
+          <th>Document</th>
+          <th>Status</th>
+          <th>Updated</th>
+          <th>By</th>
+          <th class="col-actions">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template v-for="group in docGroups" :key="group.key">
+          <tr v-if="showGroupHeaders" class="group-row">
+            <td :colspan="tableColspan">{{ group.label }}</td>
+          </tr>
+          <tr v-for="doc in group.docs" :key="doc.id">
+            <td>
+              <div class="cell-stack">
+                <NuxtLink :to="`/docs/${doc.id}`" class="col-strong doc-title-link">
+                  {{ docListPrimaryLabel(doc) }}
                 </NuxtLink>
-                <button type="button" class="actions-item actions-danger" @click="doc._showActions = false; confirmDelete(doc)">
-                  Delete
-                </button>
+                <span v-if="docListSecondaryLabel(doc)" class="doc-kind col-truncate">
+                  {{ docListSecondaryLabel(doc) }}
+                </span>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+            </td>
+            <td>
+              <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
+                {{ statusLabel[doc.status] || doc.status }}
+              </span>
+            </td>
+            <td class="col-num col-muted">{{ formatDate(doc.updatedAt) }}</td>
+            <td class="col-muted">{{ doc.author || "—" }}</td>
+            <td class="col-actions">
+              <div class="cell-actions">
+                <NuxtLink :to="`/docs/${doc.id}`" class="btn btn-primary btn-sm">
+                  Open
+                </NuxtLink>
+                <div class="actions-menu">
+                  <button type="button" class="btn btn-ghost btn-sm actions-toggle" aria-label="More actions" @click="doc._showActions = !doc._showActions">
+                    <DotsVertical />
+                  </button>
+                  <div v-if="doc._showActions" class="actions-dropdown" @click.stop>
+                    <NuxtLink
+                      v-if="doc.status === 'published'"
+                      :to="`/p/${doc.id}`"
+                      target="_blank"
+                      class="actions-item"
+                      @click="doc._showActions = false"
+                    >
+                      Public View
+                    </NuxtLink>
+                    <button type="button" class="actions-item actions-danger" @click="doc._showActions = false; confirmDelete(doc)">
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </GeneralDataTable>
 
     <!-- Create Modal -->
     <div class="modal-overlay" :class="{ open: showCreateModal }" @click.self="closeCreateModal">
@@ -396,113 +395,13 @@ const sourceClass: Record<string, string> = {
   border-color: var(--accent);
 }
 
-/* ── Spacing scale ─────────────────────────────────────────────── */
-.docs-page {
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 12px;
-  --space-lg: 16px;
-  --space-xl: 24px;
-  --space-2xl: 32px;
-}
-
-/* ── Doc grid ───────────────────────────────────────────────── */
-.doc-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: var(--space-lg);
-  align-items: stretch;
-}
-
-/* ── Doc card ───────────────────────────────────────────────── */
-.doc-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-lg);
-  display: flex;
-  flex-direction: column;
-  transition: box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.doc-card:hover {
-  box-shadow: 0 4px 12px color-mix(in oklch, var(--fg) 8%, transparent);
-}
-
-/* ── Header: title + meta ───────────────────────────────────── */
-.doc-card__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-sm);
-}
-
-.doc-card__title-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  min-width: 0;
-  flex: 1;
-}
-
-.doc-card__title {
-  font-size: 15px;
-  font-weight: 600;
+.doc-title-link {
   color: var(--fg);
-  line-height: 1.3;
-  letter-spacing: -0.01em;
+  text-decoration: none;
 }
 
-.doc-card__meta {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.doc-card__meta-item + .doc-card__meta-item::before {
-  content: "·";
-  margin-right: var(--space-xs);
-  color: var(--muted);
-  opacity: 0.6;
-}
-
-/* ── Tags ───────────────────────────────────────────────────── */
-.doc-card__tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-xs);
-  margin-top: var(--space-md);
-}
-
-/* ── Footer: author + actions ───────────────────────────────── */
-.doc-card__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-sm);
-  margin-top: auto;
-  padding-top: var(--space-sm);
-  border-top: 1px solid var(--border);
-}
-
-.doc-card__author {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.doc-card__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-  flex-shrink: 0;
+.doc-title-link:hover {
+  color: var(--accent);
 }
 
 .pill {

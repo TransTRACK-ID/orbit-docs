@@ -36,7 +36,7 @@ export default defineNuxtConfig({
     transpile: ["@vuepic/vue-datepicker", "gsap"],
   },
 
-  css: ["@/assets/css/global.css", "@/assets/css/markdown-rich.css"],
+  css: ["@/assets/css/global.css", "@/assets/css/data-table.css", "@/assets/css/markdown-rich.css"],
 
   modules: [
     "@nuxtjs/tailwindcss",
