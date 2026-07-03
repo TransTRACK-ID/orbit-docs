@@ -2,6 +2,7 @@
 import { renderMarkdown } from "~/composables/useMarkdown";
 import type { DocGenerationRepoResult } from "~/composables/useDocGenerator";
 import type { GenerationReviewStatus } from "~/composables/useDocGenerationCollaboration";
+import DocGenerationReviewPanel from "~/components/docs/DocGenerationReviewPanel.vue";
 import {
   buildGeneratedDocLinkMap,
   buildGeneratedDocLinkSources,
@@ -27,6 +28,44 @@ const appIdRef = computed(() => props.appId || "");
 const jobIdRef = computed(() => props.jobId || null);
 
 const collaborationEnabled = computed(() => Boolean(props.jobId && props.appId && !props.readonly));
+
+const showReviewPanel = ref(false);
+const isWideLayout = ref(true);
+
+function syncLayoutMode() {
+  if (typeof window === "undefined") return;
+  isWideLayout.value = window.matchMedia("(min-width: 1080px)").matches;
+}
+
+onMounted(() => {
+  syncLayoutMode();
+  window.addEventListener("resize", syncLayoutMode);
+  if (collaborationEnabled.value) {
+    showReviewPanel.value = isWideLayout.value;
+  }
+});
+
+onBeforeUnmount(() => {
+  if (typeof window !== "undefined") {
+    window.removeEventListener("resize", syncLayoutMode);
+  }
+});
+
+watch(collaborationEnabled, (enabled) => {
+  if (enabled) {
+    showReviewPanel.value = isWideLayout.value;
+  } else {
+    showReviewPanel.value = false;
+  }
+});
+
+const reviewPanelVisible = computed(
+  () => collaborationEnabled.value && (isWideLayout.value || showReviewPanel.value)
+);
+
+function toggleReviewPanel() {
+  showReviewPanel.value = !showReviewPanel.value;
+}
 
 const {
   isLoading: collabLoading,
@@ -106,6 +145,10 @@ watch(
 );
 
 const activeTabMeta = computed(() => tabs.value.find((t) => t.key === activeTab.value) || null);
+
+const totalOpenComments = computed(() =>
+  tabs.value.reduce((sum, tab) => sum + openCommentCount(tab.key), 0)
+);
 
 const activeRepoResult = computed<DocGenerationRepoResult | null>(() => {
   if (!activeTab.value.startsWith("sdd:")) return null;
@@ -305,6 +348,16 @@ async function handleReopenComment(commentId: string) {
           </div>
           <div class="viewer-actions">
             <button
+              v-if="collaborationEnabled"
+              type="button"
+              class="btn btn-review btn-sm"
+              :class="{ active: reviewPanelVisible }"
+              @click="toggleReviewPanel"
+            >
+              Review
+              <span v-if="totalOpenComments > 0" class="review-action-badge">{{ totalOpenComments }}</span>
+            </button>
+            <button
               v-if="!readonly && appId"
               type="button"
               class="btn btn-primary btn-sm"
@@ -347,17 +400,28 @@ async function handleReopenComment(commentId: string) {
       </div>
     </template>
 
-    <div class="viewer-body" :class="{ 'viewer-body--split': collaborationEnabled && tabs.length > 0 }">
+    <div
+      class="viewer-body"
+      :class="{
+        'viewer-body--split': reviewPanelVisible && tabs.length > 0,
+        'viewer-body--review-focus': reviewPanelVisible && !isWideLayout && showReviewPanel,
+      }"
+    >
       <div v-if="tabs.length === 0" class="viewer-empty">
         <p class="viewer-empty-title">No documents generated</p>
         <p class="viewer-empty-desc">The job finished without markdown output. Check agent logs for errors.</p>
       </div>
       <template v-else>
-        <div ref="proseRef" class="viewer-prose-wrap" @click="handleProseClick">
+        <div
+          v-show="!showReviewPanel || isWideLayout"
+          ref="proseRef"
+          class="viewer-prose-wrap"
+          @click="handleProseClick"
+        >
           <MermaidHtml class="markdown-body" :html="renderedContent" />
         </div>
         <DocGenerationReviewPanel
-          v-if="collaborationEnabled && activeTabMeta"
+          v-if="reviewPanelVisible && activeTabMeta"
           :doc-key="activeTab"
           :doc-label="activeTabMeta.label"
           :review-status="activeReviewStatus"
@@ -382,6 +446,7 @@ async function handleReopenComment(commentId: string) {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .viewer-toolbar {
@@ -564,12 +629,50 @@ async function handleReopenComment(commentId: string) {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  min-height: 0;
+  min-height: 420px;
 }
 
 .viewer-body--split .viewer-prose-wrap {
   flex: 1;
   min-width: 0;
+}
+
+.viewer-body--review-focus .viewer-prose-wrap {
+  display: none;
+}
+
+.viewer-body--review-focus :deep(.review-panel) {
+  width: 100%;
+  border-left: none;
+  max-height: none;
+}
+
+.btn-review {
+  border-color: var(--border);
+  color: var(--fg);
+  background: color-mix(in oklch, var(--fg) 4%, var(--surface));
+}
+
+.btn-review.active {
+  color: var(--accent);
+  border-color: color-mix(in oklch, var(--accent) 35%, var(--border));
+  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
+}
+
+.review-action-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: color-mix(in oklch, oklch(55% 0.16 25) 14%, var(--surface));
+  color: oklch(50% 0.14 25);
 }
 
 .doc-tab-badge {
@@ -818,7 +921,7 @@ async function handleReopenComment(commentId: string) {
   color: color-mix(in oklch, var(--accent) 85%, var(--fg));
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1079px) {
   .viewer-body--split {
     flex-direction: column;
   }

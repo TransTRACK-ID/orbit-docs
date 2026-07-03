@@ -21,6 +21,14 @@ const canCollaborate = computed(
   () => isSignedIn.value && Boolean(result.value?.jobId && result.value?.appId)
 );
 
+watch(
+  isSignedIn,
+  (signedIn) => {
+    setPageLayout(signedIn ? "default" : "public");
+  },
+  { immediate: true }
+);
+
 const loginUrl = computed(() => {
   const redirect = encodeURIComponent(route.fullPath);
   return `/login?redirect=${redirect}`;
@@ -66,7 +74,7 @@ useSeoMeta({
         </span>
       </div>
       <p v-if="canCollaborate" class="share-page-note share-page-note--team">
-        Signed in. You can comment and set review status on this session.
+        Signed in. Use the <strong>Review</strong> button above the document to comment and set status per tab.
       </p>
       <p v-else class="share-page-note">
         Read-only view.

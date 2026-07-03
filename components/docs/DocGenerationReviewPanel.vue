@@ -160,13 +160,13 @@ watch(
 
 <style scoped>
 .review-panel {
-  width: 300px;
+  width: min(340px, 38vw);
   flex-shrink: 0;
   border-left: 1px solid var(--border);
   background: color-mix(in oklch, var(--fg) 2%, var(--surface));
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: 420px;
 }
 
 .review-panel-head {
@@ -409,12 +409,13 @@ watch(
   cursor: not-allowed;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1079px) {
   .review-panel {
     width: 100%;
     border-left: none;
     border-top: 1px solid var(--border);
-    max-height: 360px;
+    min-height: 320px;
+    max-height: none;
   }
 }
 </style>
