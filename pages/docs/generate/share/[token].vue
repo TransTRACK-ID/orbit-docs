@@ -9,18 +9,29 @@ definePageMeta({
 
 const route = useRoute();
 const token = computed(() => route.params.token as string);
+const { status: authStatus, getSession } = useAuth();
 
-const result = ref<(DocGenerationResult & { appName?: string }) | null>(null);
+const result = ref<DocGenerationResult | null>(null);
 const sessionAppName = ref<string | null>(null);
 const isLoading = ref(true);
 const loadError = ref<string | null>(null);
 
-onMounted(async () => {
+const isSignedIn = computed(() => authStatus.value === "authenticated");
+const canCollaborate = computed(
+  () => isSignedIn.value && Boolean(result.value?.jobId && result.value?.appId)
+);
+
+const loginUrl = computed(() => {
+  const redirect = encodeURIComponent(route.fullPath);
+  return `/login?redirect=${redirect}`;
+});
+
+async function loadSharedSession() {
   if (!token.value) return;
   isLoading.value = true;
   loadError.value = null;
   try {
-    const data = await $fetch<{ data: DocGenerationResult & { appName?: string; sharedAt?: string | null } }>(
+    const data = await $fetch<{ data: DocGenerationResult & { sharedAt?: string | null } }>(
       `/api/public/generate-docs/${token.value}`
     );
     result.value = data.data;
@@ -31,6 +42,11 @@ onMounted(async () => {
   } finally {
     isLoading.value = false;
   }
+}
+
+onMounted(async () => {
+  await getSession().catch(() => {});
+  await loadSharedSession();
 });
 
 useSeoMeta({
@@ -49,7 +65,14 @@ useSeoMeta({
           {{ sessionAppName ? `${sessionAppName} · ` : "" }}Shared generation session
         </span>
       </div>
-      <p class="share-page-note">Read-only view. Sign in to Orbit to comment or edit.</p>
+      <p v-if="canCollaborate" class="share-page-note share-page-note--team">
+        Signed in. You can comment and set review status on this session.
+      </p>
+      <p v-else class="share-page-note">
+        Read-only view.
+        <NuxtLink :to="loginUrl" class="share-page-login">Sign in to Orbit</NuxtLink>
+        to comment or edit.
+      </p>
     </header>
 
     <div v-if="isLoading" class="share-page-state">
@@ -68,7 +91,9 @@ useSeoMeta({
       :git-snapshot="result.gitSnapshot"
       :sdd="result.sdd"
       :repo-results="result.repoResults"
-      readonly
+      :app-id="result.appId"
+      :job-id="result.jobId"
+      :readonly="!canCollaborate"
     />
   </div>
 </template>
@@ -114,6 +139,20 @@ useSeoMeta({
   color: var(--muted);
 }
 
+.share-page-note--team {
+  color: var(--fg);
+}
+
+.share-page-login {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.share-page-login:hover {
+  text-decoration: underline;
+}
+
 .share-page-state {
   padding: 48px 24px;
   text-align: center;
@@ -130,5 +169,11 @@ useSeoMeta({
 
 .share-page-state--error .share-page-state-title {
   color: oklch(50% 0.14 25);
+}
+</style>
+
+<style>
+.public-shell .public-main:has(.share-page) {
+  max-width: min(1200px, 100%);
 }
 </style>

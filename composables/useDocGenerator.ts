@@ -43,6 +43,8 @@ export interface DocGenerationRepoResult {
 
 export interface DocGenerationResult {
   jobId: string;
+  appId?: string;
+  appName?: string;
   repoUrl: string | null;
   repoRef: string | null;
   scope?: "product" | "repo";
