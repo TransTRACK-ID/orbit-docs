@@ -355,3 +355,34 @@ pre.mermaid:not([data-mermaid-rendered="true"]) {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.mermaid-fallback {
+  margin: 1rem 0;
+  padding: 12px 14px;
+  border: 1px solid var(--od-border, var(--border));
+  border-radius: var(--od-radius, 8px);
+  background: color-mix(in oklch, var(--od-fg, var(--fg)) 3%, transparent);
+}
+
+.mermaid-fallback-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--od-muted, var(--muted));
+}
+
+.mermaid-fallback pre {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--od-radius, 8px);
+  background: color-mix(in oklch, var(--od-fg, var(--fg)) 5%, var(--od-bg, var(--bg)));
+  overflow-x: auto;
+  font-family: var(--od-font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mermaid-fallback code {
+  color: var(--od-fg, var(--fg));
+}
