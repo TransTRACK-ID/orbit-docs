@@ -1,8 +1,9 @@
 import { defineEventHandler, readBody, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { docs, activityLogs, apps, appVersions, docVersions } from "~/server/database/schema";
-import { eq, desc } from "drizzle-orm";
+import { docs, activityLogs, apps, appVersions } from "~/server/database/schema";
+import { eq } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
+import { createDocVersionSnapshot, isValidDocVersionAction } from "~/server/lib/doc-version-snapshot";
 
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
@@ -20,7 +21,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event);
-  const { title, appId, content, status, versionId, tags, author, source, docType } = body || {};
+  const { title, appId, content, status, versionId, tags, author, source, docType, versionAction } = body || {};
 
   const existing = await db
     .select()
@@ -62,25 +63,15 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Auto-save version before update if content or title changed
-  const contentChanged = content !== undefined && content !== existing.content;
-  const titleChanged = title !== undefined && title !== existing.title;
-  if (contentChanged || titleChanged) {
-    const existingVersions = await db
-      .select()
-      .from(docVersions)
-      .where(eq(docVersions.docId, id))
-      .orderBy(desc(docVersions.createdAt));
-
-    const nextVersionNum = existingVersions.length + 1;
-
-    await db.insert(docVersions).values({
-      docId: id,
-      version: `v${nextVersionNum}`,
-      content: existing.content || "",
-      title: existing.title,
-      actor: getActorName(user),
-    });
+  // Snapshot only on explicit save/publish/restore — not autosave.
+  if (isValidDocVersionAction(versionAction)) {
+    await createDocVersionSnapshot(
+      db,
+      id,
+      { title: existing.title, content: existing.content },
+      getActorName(user),
+      versionAction,
+    );
   }
 
   const updateData: Partial<typeof docs.$inferInsert> = {

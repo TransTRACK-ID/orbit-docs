@@ -1,8 +1,9 @@
-import { defineEventHandler, readBody, createError, getRouterParam } from "h3";
+import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { docs, docVersions, activityLogs } from "~/server/database/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
+import { createDocVersionSnapshot } from "~/server/lib/doc-version-snapshot";
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event);
@@ -56,22 +57,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Save current content as a new version before restoring
-  const existingVersions = await db
-    .select()
-    .from(docVersions)
-    .where(eq(docVersions.docId, id))
-    .orderBy(desc(docVersions.createdAt));
-
-  const nextVersionNum = existingVersions.length + 1;
-
-  await db.insert(docVersions).values({
-    docId: id,
-    version: `v${nextVersionNum}`,
-    content: existing.content || "",
-    title: existing.title,
-    actor: getActorName(user),
-  });
+  // Save current content as a restore snapshot before overwriting.
+  await createDocVersionSnapshot(
+    db,
+    id,
+    { title: existing.title, content: existing.content },
+    getActorName(user),
+    "restore",
+  );
 
   // Restore the selected version
   const updatedRow = await db

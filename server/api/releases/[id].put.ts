@@ -3,6 +3,10 @@ import { getDb } from "~/server/database";
 import { releases, apps, activityLogs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
+import {
+  createReleaseVersionSnapshot,
+  isValidReleaseVersionAction,
+} from "~/server/lib/release-version-snapshot";
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event);
@@ -40,6 +44,7 @@ export default defineEventHandler(async (event) => {
     categories,
     type,
     published,
+    versionAction,
   } = body || {};
 
   // Normal releases auto-sync summary/categories from the changelog.
@@ -56,6 +61,20 @@ export default defineEventHandler(async (event) => {
         message: `Normal releases cannot be edited directly for ${disallowed.map((d) => d.name).join(", ")}. Edit the changelog instead.`,
       });
     }
+  }
+
+  if (isValidReleaseVersionAction(versionAction)) {
+    await createReleaseVersionSnapshot(
+      db,
+      id,
+      {
+        heroTitle: existing.heroTitle,
+        summary: existing.summary,
+        published: existing.published,
+      },
+      getActorName(user),
+      versionAction,
+    );
   }
 
   const updateData: Partial<typeof releases.$inferInsert> = {

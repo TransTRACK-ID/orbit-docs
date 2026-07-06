@@ -29,6 +29,7 @@ export interface DocVersion {
   version: string;
   content: string | null;
   title: string | null;
+  action: string;
   actor: string | null;
   createdAt: string | null;
 }
@@ -47,6 +48,7 @@ export interface CreateDocPayload {
   author?: string;
   source?: string;
   docType?: string;
+  versionAction?: "save" | "publish" | "restore";
 }
 
 export const useDocs = () => {

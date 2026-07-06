@@ -97,6 +97,7 @@ export default defineNitroPlugin(async () => {
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE doc_versions ADD COLUMN IF NOT EXISTS action TEXT NOT NULL DEFAULT 'save'`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS releases (
@@ -122,6 +123,20 @@ export default defineNitroPlugin(async () => {
     ADD CONSTRAINT releases_version_id_app_versions_id_fk
     FOREIGN KEY (version_id) REFERENCES app_versions(id) ON DELETE SET NULL
   `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS release_versions (
+      id TEXT PRIMARY KEY,
+      release_id TEXT NOT NULL REFERENCES releases(id) ON DELETE CASCADE,
+      hero_title TEXT,
+      summary TEXT,
+      published BOOLEAN NOT NULL DEFAULT false,
+      action TEXT NOT NULL DEFAULT 'save',
+      actor TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS release_versions_release_id_idx ON release_versions(release_id)`);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS changelogs (

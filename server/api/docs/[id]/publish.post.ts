@@ -1,8 +1,9 @@
 import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { docs, activityLogs, apps, appVersions } from "~/server/database/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
+import { createDocVersionSnapshot } from "~/server/lib/doc-version-snapshot";
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event);
@@ -31,6 +32,14 @@ export default defineEventHandler(async (event) => {
       message: "Doc not found",
     });
   }
+
+  await createDocVersionSnapshot(
+    db,
+    id,
+    { title: existing.title, content: existing.content },
+    getActorName(user),
+    "publish",
+  );
 
   const updatedRow = await db
     .update(docs)

@@ -32,7 +32,20 @@ export const releases = pgTable("releases", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
 
-export const releasesRelations = relations(releases, ({ one }) => ({
+export const releaseVersions = pgTable("release_versions", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  releaseId: text("release_id")
+    .notNull()
+    .references(() => releases.id, { onDelete: "cascade" }),
+  heroTitle: text("hero_title"),
+  summary: text("summary"),
+  published: boolean("published").notNull().default(false),
+  action: text("action").notNull().default("save"),
+  actor: text("actor"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+});
+
+export const releasesRelations = relations(releases, ({ one, many }) => ({
   app: one(apps, {
     fields: [releases.appId],
     references: [apps.id],
@@ -40,5 +53,13 @@ export const releasesRelations = relations(releases, ({ one }) => ({
   version: one(appVersions, {
     fields: [releases.versionId],
     references: [appVersions.id],
+  }),
+  versions: many(releaseVersions),
+}));
+
+export const releaseVersionsRelations = relations(releaseVersions, ({ one }) => ({
+  release: one(releases, {
+    fields: [releaseVersions.releaseId],
+    references: [releases.id],
   }),
 }));

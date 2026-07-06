@@ -2,7 +2,8 @@
 import { usePageStore } from "~/store/page";
 import { copyChangelogToClipboard } from "~/composables/useClipboard";
 import { formatDisplayVersion, formatReleaseHeading } from "~/utils/functions";
-import type { ReleaseItem, ReleaseFeature, ReleaseMedia, ReleaseCategories } from "~/types";
+import { getHistoryActionClass, getHistoryActionLabel } from "~/utils/history-actions";
+import type { ReleaseItem, ReleaseFeature, ReleaseMedia, ReleaseCategories, ReleaseVersion } from "~/types";
 
 definePageMeta({
   auth: true,
@@ -21,8 +22,12 @@ const allReleases = ref<ReleaseItem[]>([]);
 const isFetchingList = ref(false);
 
 onMounted(async () => {
+  document.addEventListener("keydown", onKeydown);
   if (releaseId.value) {
     await fetchRelease(releaseId.value);
+    if (release.value?.type === "article") {
+      await fetchReleaseVersions();
+    }
     // Auto-enter edit mode when coming from list "Edit release" link
     if (route.query.edit === "1" && release.value?.type === "article") {
       enterEditMode();
@@ -160,13 +165,92 @@ async function saveEdit() {
   if (!release.value) return;
   editError.value = '';
 
+  const wasPublished = release.value.published;
+  const versionAction = editDraft.published && !wasPublished ? "publish" : "save";
+
   await updateRelease(release.value.id, {
     heroTitle: editDraft.heroTitle,
     summary: editContent.value,
     published: editDraft.published,
+    versionAction,
   });
+  await fetchReleaseVersions();
   isEditing.value = false;
   editContent.value = '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Version history (article releases)
+// ═══════════════════════════════════════════════════════════════
+const showHistoryPanel = ref(false);
+const releaseVersions = ref<ReleaseVersion[]>([]);
+const isHistoryLoading = ref(false);
+
+const {
+  diff: historyDiff,
+  isLoading: isDiffLoading,
+  error: diffError,
+  isOpen: diffOpen,
+  fetchReleaseDiff,
+  openDiff,
+  closeDiff,
+} = useHistoryDiff();
+
+async function fetchReleaseVersions() {
+  if (!releaseId.value || release.value?.type !== "article") return;
+  isHistoryLoading.value = true;
+  try {
+    const data = await $fetch<{ data: ReleaseVersion[] }>(`/api/releases/${releaseId.value}/versions`);
+    releaseVersions.value = data.data;
+  } catch {
+    releaseVersions.value = [];
+  } finally {
+    isHistoryLoading.value = false;
+  }
+}
+
+function openReleaseHistory() {
+  showHistoryPanel.value = true;
+  document.body.style.overflow = "hidden";
+  fetchReleaseVersions();
+}
+
+function closeReleaseHistory() {
+  showHistoryPanel.value = false;
+  document.body.style.overflow = "";
+}
+
+async function viewReleaseVersionDiff(item: ReleaseVersion) {
+  if (!releaseId.value) return;
+  openDiff();
+  await fetchReleaseDiff(releaseId.value, "", item.id);
+}
+
+async function onDiffFromChange(fromId: string) {
+  if (!releaseId.value || !historyDiff.value) return;
+  await fetchReleaseDiff(releaseId.value, fromId, historyDiff.value.to.id);
+}
+
+async function onDiffToChange(toId: string) {
+  if (!releaseId.value || !historyDiff.value) return;
+  await fetchReleaseDiff(releaseId.value, historyDiff.value.from.id, toId);
+}
+
+function formatHistoryTime(dateStr: string | null) {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function previewReleaseContent(text: string | null, maxLen = 140) {
+  if (!text) return "No content";
+  const cleaned = text.replace(/^\s*[#\-*\d.\[\]>\s]+/gm, " ").replace(/\s+/g, " ").trim();
+  if (cleaned.length <= maxLen) return cleaned;
+  return `${cleaned.slice(0, maxLen).replace(/\s+[^\s]*$/, "")}…`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -194,12 +278,15 @@ async function doDelete() {
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
     showDeleteModal.value = false;
+    if (showHistoryPanel.value) closeReleaseHistory();
     if (isEditing.value) cancelEdit();
   }
 }
 
-onMounted(() => document.addEventListener("keydown", onKeydown));
-onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", onKeydown);
+  document.body.style.overflow = "";
+});
 </script>
 
 <template>
@@ -230,8 +317,16 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         </div>
         <div class="flex-gap-sm">
           <NuxtLink to="/releases" class="btn btn-ghost btn-sm">All releases</NuxtLink>
+          <NuxtLink
+            v-if="release.type === 'normal' && release.versionId"
+            :to="`/changelogs?versionId=${release.versionId}&history=1`"
+            class="btn btn-ghost btn-sm"
+          >
+            View changelog history
+          </NuxtLink>
           <NuxtLink v-if="release.type === 'normal' && release.versionId" :to="`/changelogs?versionId=${release.versionId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
           <template v-if="release.type === 'article'">
+            <button v-if="!isEditing" type="button" class="btn btn-ghost btn-sm" @click="openReleaseHistory">Version history</button>
             <button v-if="!isEditing" type="button" class="btn btn-secondary btn-sm" @click="enterEditMode">Edit Release Article</button>
             <template v-else>
               <button type="button" class="btn btn-secondary btn-sm" @click="cancelEdit">Cancel</button>
@@ -451,6 +546,58 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
     </div>
 
     <!-- Delete Confirmation Modal -->
+    <div class="history-panel" :class="{ open: showHistoryPanel }" role="dialog" aria-modal="true" aria-label="Release version history" @click.self="closeReleaseHistory">
+      <div class="history-drawer">
+        <div class="history-header">
+          <h3>Version history</h3>
+          <button type="button" class="btn btn-ghost history-close" aria-label="Close version history" @click="closeReleaseHistory">✕</button>
+        </div>
+        <div class="history-list">
+          <div v-if="isHistoryLoading" class="history-empty">Loading history…</div>
+          <div v-else-if="releaseVersions.length === 0" class="history-empty">
+            <p>No history yet</p>
+            <span class="meta-label">Save or publish to create history entries</span>
+          </div>
+          <div
+            v-for="item in releaseVersions"
+            :key="item.id"
+            class="history-item"
+          >
+            <div class="history-item-main">
+              <p class="history-preview">{{ previewReleaseContent(item.summary) }}</p>
+              <div class="history-meta-row">
+                <span class="history-time">{{ formatHistoryTime(item.createdAt) }}</span>
+                <span class="history-actor">{{ item.actor || "Unknown" }}</span>
+                <span class="pill" :class="getHistoryActionClass(item.action)">{{ getHistoryActionLabel(item.action) }}</span>
+              </div>
+            </div>
+            <div class="history-item-actions">
+              <button
+                v-if="releaseVersions.length > 1"
+                type="button"
+                class="btn btn-ghost btn-sm"
+                @click.stop="viewReleaseVersionDiff(item)"
+              >
+                View diff
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <DiffModal
+      :open="diffOpen"
+      title="Release diff"
+      :diff="historyDiff"
+      :is-loading="isDiffLoading"
+      :error="diffError"
+      :has-unsaved-changes="isEditing"
+      @close="closeDiff"
+      @update:from-id="onDiffFromChange"
+      @update:to-id="onDiffToChange"
+    />
+
     <div class="modal-overlay" :class="{ open: showDeleteModal }" @click.self="showDeleteModal = false">
       <div class="modal-panel" style="max-width: 420px;">
         <div class="modal-header">
@@ -1549,5 +1696,94 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   .modal-panel {
     transition: none !important;
   }
+}
+
+.history-panel {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in oklch, var(--fg) 35%, transparent);
+  z-index: 1100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.history-panel.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.history-drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: min(420px, 100%);
+  height: 100%;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+}
+
+.history-panel.open .history-drawer {
+  transform: translateX(0);
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.history-list {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+.history-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 10px;
+}
+
+.history-preview {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--fg);
+  line-height: 1.4;
+}
+
+.history-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.history-empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.history-item-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 </style>

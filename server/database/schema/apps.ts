@@ -146,6 +146,7 @@ export const docVersions = pgTable("doc_versions", {
   version: text("version").notNull(),
   content: text("content").default(""),
   title: text("title"),
+  action: text("action").notNull().default("save"),
   actor: text("actor"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });

@@ -3,6 +3,7 @@ import { nextTick, ref } from "vue";
 import { usePageStore } from "~/store/page";
 import { renderMarkdown } from "~/composables/useMarkdown";
 import type { AppVersion } from "~/composables/useApps";
+import { getHistoryActionClass, getHistoryActionLabel } from "~/utils/history-actions";
 
 definePageMeta({
   auth: true,
@@ -114,6 +115,10 @@ onMounted(async () => {
 
   syncUrlQuery();
   isInitializing.value = false;
+
+  if (route.query.history === "1") {
+    openHistory();
+  }
 });
 
 async function loadVersion(versionId: string) {
@@ -594,6 +599,16 @@ function onKeydown(e: KeyboardEvent) {
 const historyItems = ref<Array<{ id: string; versionId: string; content: string; action: string; actor: string | null; createdAt: string | null }>>([]);
 const isHistoryLoading = ref(false);
 
+const {
+  diff: historyDiff,
+  isLoading: isDiffLoading,
+  error: diffError,
+  isOpen: diffOpen,
+  fetchChangelogDiff,
+  openDiff,
+  closeDiff,
+} = useHistoryDiff();
+
 async function fetchHistory() {
   if (!currentVersion.value) return;
   isHistoryLoading.value = true;
@@ -623,20 +638,11 @@ const filteredHistory = computed(() => {
 });
 
 function historyActionClass(action: string): string {
-  switch (action) {
-    case "publish": return "pill-green";
-    case "quick_release": return "pill-amber";
-    case "article_release": return "pill-purple";
-    default: return "pill-muted";
-  }
+  return getHistoryActionClass(action);
 }
 
 function historyActionLabel(action: string): string {
-  switch (action) {
-    case "quick_release": return "quick release";
-    case "article_release": return "article release";
-    default: return action;
-  }
+  return getHistoryActionLabel(action);
 }
 
 function isRestorableAction(action: string): boolean {
@@ -694,6 +700,26 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
   content.value = item.content;
   hasChanges.value = true;
   closeHistory();
+}
+
+async function viewHistoryDiff(item: (typeof historyItems.value)[0]) {
+  if (!currentVersion.value) return;
+  openDiff();
+  await fetchChangelogDiff(currentVersion.value.id, "", item.id);
+}
+
+async function onDiffFromChange(fromId: string) {
+  if (!currentVersion.value || !historyDiff.value) return;
+  await fetchChangelogDiff(currentVersion.value.id, fromId, historyDiff.value.to.id);
+}
+
+async function onDiffToChange(toId: string) {
+  if (!currentVersion.value || !historyDiff.value) return;
+  await fetchChangelogDiff(currentVersion.value.id, historyDiff.value.from.id, toId);
+}
+
+function canViewHistoryDiff(): boolean {
+  return historyItems.value.length > 1;
 }
 </script>
 
@@ -947,10 +973,20 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
                     <span class="pill" :class="historyActionClass(item.action)">{{ historyActionLabel(item.action) }}</span>
                   </div>
                 </div>
-                <button v-if="isRestorableAction(item.action)" type="button" class="btn btn-ghost btn-sm history-restore" @click.stop="restoreHistoryItem(item)">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                  Restore
-                </button>
+                <div class="history-item-actions">
+                  <button
+                    v-if="canViewHistoryDiff()"
+                    type="button"
+                    class="btn btn-ghost btn-sm history-restore"
+                    @click.stop="viewHistoryDiff(item)"
+                  >
+                    View diff
+                  </button>
+                  <button v-if="isRestorableAction(item.action)" type="button" class="btn btn-ghost btn-sm history-restore" @click.stop="restoreHistoryItem(item)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                    Restore
+                  </button>
+                </div>
               </div>
             </div>
           </template>
@@ -1009,6 +1045,18 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
         </div>
       </div>
     </div>
+
+    <DiffModal
+      :open="diffOpen"
+      title="Changelog diff"
+      :diff="historyDiff"
+      :is-loading="isDiffLoading"
+      :error="diffError"
+      :has-unsaved-changes="hasChanges"
+      @close="closeDiff"
+      @update:from-id="onDiffFromChange"
+      @update:to-id="onDiffToChange"
+    />
   </div>
 </template>
 
@@ -1646,6 +1694,14 @@ function restoreHistoryItem(item: (typeof historyItems.value)[0]) {
   margin-left: 8px;
   color: var(--muted);
   transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.history-item-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  margin-left: 8px;
 }
 .history-empty {
   flex: 1;

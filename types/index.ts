@@ -54,6 +54,18 @@ export interface CreateReleasePayload {
   categories?: ReleaseCategories;
   type?: ReleaseType;
   published?: boolean;
+  versionAction?: "save" | "publish" | "restore";
+}
+
+export interface ReleaseVersion {
+  id: string;
+  releaseId: string;
+  heroTitle: string | null;
+  summary: string | null;
+  published: boolean;
+  action: string;
+  actor: string | null;
+  createdAt: string | null;
 }
 
 // Changelog types

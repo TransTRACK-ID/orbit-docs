@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
 import { renderMarkdown, extractHeadings, headingSlug } from "~/composables/useMarkdown";
+import type { DocVersion } from "~/composables/useDocs";
 
 definePageMeta({
   auth: true,
@@ -24,6 +25,16 @@ const {
   fetchDocVersions,
   restoreDocVersion,
 } = useDocs();
+
+const {
+  diff: historyDiff,
+  isLoading: isDiffLoading,
+  error: diffError,
+  isOpen: diffOpen,
+  fetchDocDiff,
+  openDiff,
+  closeDiff,
+} = useHistoryDiff();
 
 const editorContent = ref("");
 const editorTitle = ref("");
@@ -105,15 +116,20 @@ function togglePreview() {
 
 async function saveDraft() {
   if (!docId.value) return;
-  await flushSave({ silent: false });
+  await updateDoc(docId.value, { ...getEditorPayload(), versionAction: "save" });
+  markClean();
   await fetchDocVersions(docId.value);
 }
 
 async function doPublish() {
   if (!docId.value) return;
-  await saveDraft();
+  if (hasPendingChanges()) {
+    await flushSave({ silent: true });
+  }
   await publishDoc(docId.value);
   editorStatus.value = "published";
+  markClean();
+  await fetchDocVersions(docId.value);
 }
 
 function generatePDF() {
@@ -237,6 +253,26 @@ function cancelRestore() {
   restoreConfirmVisible.value = false;
   versionToRestore.value = null;
 }
+
+async function viewVersionDiff(version: DocVersion) {
+  if (!docId.value) return;
+  openDiff();
+  await fetchDocDiff(docId.value, "", version.id);
+}
+
+async function onDiffFromChange(fromId: string) {
+  if (!docId.value || !historyDiff.value) return;
+  await fetchDocDiff(docId.value, fromId, historyDiff.value.to.id);
+}
+
+async function onDiffToChange(toId: string) {
+  if (!docId.value || !historyDiff.value) return;
+  await fetchDocDiff(docId.value, historyDiff.value.from.id, toId);
+}
+
+const hasUnsavedEditorChanges = computed(
+  () => autosaveEnabled.value && (isDirty.value || hasPendingChanges()),
+);
 
 function onKeydown(e: KeyboardEvent) {
   // Ctrl+S / Cmd+S — Save
@@ -678,6 +714,7 @@ const lastModified = computed(() => {
                 :versions="docVersions"
                 :is-loading="isLoadingVersions"
                 @restore="restoreVersion"
+                @view-diff="viewVersionDiff"
               />
             </div>
             </Transition>
@@ -688,6 +725,18 @@ const lastModified = computed(() => {
     </main>
 
     <!-- Restore Confirmation Dialog -->
+    <DiffModal
+      :open="diffOpen"
+      title="Document diff"
+      :diff="historyDiff"
+      :is-loading="isDiffLoading"
+      :error="diffError"
+      :has-unsaved-changes="hasUnsavedEditorChanges"
+      @close="closeDiff"
+      @update:from-id="onDiffFromChange"
+      @update:to-id="onDiffToChange"
+    />
+
     <div v-if="restoreConfirmVisible" class="modal-overlay" @click="cancelRestore">
       <div class="modal-dialog" @click.stop>
         <div class="modal-header">

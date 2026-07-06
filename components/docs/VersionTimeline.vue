@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import type { DocVersion } from "~/composables/useDocs";
+import { getHistoryActionClass, getHistoryActionLabel } from "~/utils/history-actions";
 
 const props = defineProps<{
   versions: DocVersion[];
   isLoading: boolean;
 }>();
 
-const emit = defineEmits<{ restore: [version: any] }>();
+const emit = defineEmits<{
+  restore: [version: DocVersion];
+  viewDiff: [version: DocVersion];
+}>();
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "";
@@ -28,6 +32,14 @@ function timeAgo(dateStr: string | null) {
 
 function onRestore(version: DocVersion) {
   emit("restore", version);
+}
+
+function onViewDiff(version: DocVersion) {
+  emit("viewDiff", version);
+}
+
+function canViewDiff(index: number): boolean {
+  return props.versions.length > 1;
 }
 </script>
 
@@ -64,6 +76,9 @@ function onRestore(version: DocVersion) {
         <div class="timeline-content">
           <div class="timeline-header">
             <span class="timeline-version">{{ version.version }}</span>
+            <span class="pill" :class="getHistoryActionClass(version.action || 'save')">
+              {{ getHistoryActionLabel(version.action || 'save') }}
+            </span>
             <span class="timeline-time">{{ timeAgo(version.createdAt) }}</span>
           </div>
           <div class="timeline-meta">
@@ -71,6 +86,20 @@ function onRestore(version: DocVersion) {
             <span v-if="version.title"> · {{ version.title }}</span>
           </div>
           <div class="timeline-actions">
+            <button
+              v-if="canViewDiff(idx)"
+              type="button"
+              class="timeline-btn"
+              @click="onViewDiff(version)"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="6" y1="3" x2="6" y2="15"/>
+                <circle cx="18" cy="6" r="3"/>
+                <circle cx="6" cy="18" r="3"/>
+                <path d="M18 9a9 9 0 0 1-9 9"/>
+              </svg>
+              View diff
+            </button>
             <button type="button" class="timeline-btn" @click="onRestore(version)">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="1 4 1 10 7 10"/>
@@ -226,6 +255,7 @@ function onRestore(version: DocVersion) {
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 4px;
+  flex-wrap: wrap;
 }
 
 .timeline-version {
