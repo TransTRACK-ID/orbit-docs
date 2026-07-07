@@ -1,15 +1,13 @@
-# Build stage
-FROM node:22-alpine AS builder
+# Build stage — use official bun image to avoid runtime GitHub download in CI
+# (node:22-alpine + bun.sh install fetches bun-linux-x64-musl.zip from github.com).
+FROM oven/bun:1.3.14 AS builder
 
 WORKDIR /app
 
-# git is needed at build time (drizzle generate may need it; also good for consistency)
-RUN apk add --no-cache bash curl git python3 make g++
-
-# Install bun
-RUN curl -fsSL https://bun.sh/install | bash && \
-    cp /root/.bun/bin/bun /usr/local/bin/bun && \
-    rm -rf /root/.bun/install
+# git + build tools for native modules during install
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git python3 make g++ ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
