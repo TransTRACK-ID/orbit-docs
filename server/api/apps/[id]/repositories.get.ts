@@ -38,6 +38,7 @@ export default defineEventHandler(async (event) => {
       hasAccessToken: !!r.accessToken,
       accessTokenPreview: redactToken(r.accessToken),
       sddDocPath: r.sddDocPath,
+      autoMergeDocs: r.autoMergeDocs,
       lastProcessedRef: r.lastProcessedRef,
       webhookUrl: buildWebhookUrl(proto, host, r.id),
       webhookSecret: r.webhookSecret,

@@ -388,6 +388,9 @@ export default defineNitroPlugin(async () => {
   `);
   // Self-hosted support: host_url for GitHub Enterprise / GitLab Self-Hosted
   await pool.query(`ALTER TABLE app_repositories ADD COLUMN IF NOT EXISTS host_url TEXT`);
+  await pool.query(
+    `ALTER TABLE app_repositories ADD COLUMN IF NOT EXISTS auto_merge_docs BOOLEAN NOT NULL DEFAULT false`
+  );
 
   // doc_generation_repo_results table (per-repo SDD results within a job)
   await pool.query(`
@@ -400,11 +403,17 @@ export default defineNitroPlugin(async () => {
       sdd_content TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       pr_url TEXT,
+      pr_status TEXT,
+      merge_error_message TEXT,
       error_message TEXT,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE doc_generation_repo_results ADD COLUMN IF NOT EXISTS pr_status TEXT`);
+  await pool.query(
+    `ALTER TABLE doc_generation_repo_results ADD COLUMN IF NOT EXISTS merge_error_message TEXT`
+  );
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS doc_generation_versions (

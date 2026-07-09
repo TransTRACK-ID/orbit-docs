@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 export const apps = pgTable("apps", {
@@ -63,6 +63,8 @@ export const appRepositories = pgTable("app_repositories", {
   accessToken: text("access_token"),
   webhookSecret: text("webhook_secret"),
   sddDocPath: text("sdd_doc_path").notNull().default("docs/SDD.md"),
+  /** When true, open SDD PRs are merged automatically if the base branch has no conflicts. */
+  autoMergeDocs: boolean("auto_merge_docs").notNull().default(false),
   lastProcessedRef: text("last_processed_ref"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),

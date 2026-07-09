@@ -77,6 +77,7 @@ export default defineEventHandler(async (event) => {
         typeof body?.sddDocPath === "string" && body.sddDocPath.trim()
           ? body.sddDocPath.trim()
           : "docs/SDD.md",
+      autoMergeDocs: body?.autoMergeDocs === true,
       webhookSecret: generateWebhookSecret(),
     })
     .returning()
@@ -95,6 +96,7 @@ export default defineEventHandler(async (event) => {
       hostUrl: row.hostUrl,
       defaultBranch: row.defaultBranch,
       sddDocPath: row.sddDocPath,
+      autoMergeDocs: row.autoMergeDocs,
       hasAccessToken: !!row.accessToken,
       webhookUrl: buildWebhookUrl(proto, host, row.id),
       webhookSecret: row.webhookSecret,

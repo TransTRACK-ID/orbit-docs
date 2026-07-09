@@ -96,6 +96,10 @@ export const docGenerationRepoResults = pgTable("doc_generation_repo_results", {
     .notNull()
     .default("pending"),
   prUrl: text("pr_url"),
+  prStatus: text("pr_status", {
+    enum: ["open", "merged", "merge_failed", "merge_skipped"],
+  }),
+  mergeErrorMessage: text("merge_error_message"),
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),

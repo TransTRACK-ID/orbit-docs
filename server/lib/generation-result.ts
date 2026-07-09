@@ -27,6 +27,8 @@ export interface GenerationResultPayload {
     sdd: string | null;
     status: string;
     prUrl: string | null;
+    prStatus: string | null;
+    mergeErrorMessage: string | null;
     errorMessage: string | null;
   }>;
   versions: Array<{
@@ -93,6 +95,8 @@ export async function loadGenerationResult(
       sdd: r.sddContent,
       status: r.status,
       prUrl: r.prUrl,
+      prStatus: r.prStatus,
+      mergeErrorMessage: r.mergeErrorMessage,
       errorMessage: r.errorMessage,
     })),
     versions: versions.map((v) => ({

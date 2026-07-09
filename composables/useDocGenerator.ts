@@ -38,6 +38,8 @@ export interface DocGenerationRepoResult {
   sdd: string | null;
   status: string;
   prUrl: string | null;
+  prStatus?: string | null;
+  mergeErrorMessage?: string | null;
   errorMessage: string | null;
 }
 

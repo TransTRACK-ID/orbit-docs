@@ -156,6 +156,29 @@ const activeRepoResult = computed<DocGenerationRepoResult | null>(() => {
   return props.repoResults?.find((r) => r.id === id) || null;
 });
 
+function prStatusLabel(result: DocGenerationRepoResult): {
+  tone: "success" | "warn" | "muted" | "error";
+  text: string;
+} | null {
+  if (!result.prUrl) return null;
+  if (result.prStatus === "merged") {
+    return { tone: "success", text: "Merged into base branch" };
+  }
+  if (result.prStatus === "merge_failed") {
+    return {
+      tone: "error",
+      text: result.mergeErrorMessage || "Auto-merge failed",
+    };
+  }
+  if (result.prStatus === "open" && result.mergeErrorMessage) {
+    return { tone: "warn", text: result.mergeErrorMessage };
+  }
+  if (result.prStatus === "open" || !result.prStatus) {
+    return { tone: "muted", text: "Pull request open" };
+  }
+  return null;
+}
+
 const currentContent = computed(() => getContentForTab(activeTab.value));
 
 const currentDocType = computed<"srs" | "fsd" | "sdd" | undefined>(() => {
@@ -383,15 +406,23 @@ async function handleReopenComment(commentId: string) {
           <code v-if="activeRepoResult.repoRef" class="repo-meta-ref">{{ activeRepoResult.repoRef }}</code>
         </div>
         <div class="repo-meta-status">
-          <a
-            v-if="activeRepoResult.prUrl"
-            :href="activeRepoResult.prUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="repo-meta-link"
-          >
-            View pull request
-          </a>
+          <template v-if="activeRepoResult.prUrl">
+            <a
+              :href="activeRepoResult.prUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="repo-meta-link"
+            >
+              {{ activeRepoResult.prStatus === 'merged' ? 'View merged PR' : 'View pull request' }}
+            </a>
+            <span
+              v-if="prStatusLabel(activeRepoResult)"
+              class="repo-pr-status"
+              :class="`repo-pr-status--${prStatusLabel(activeRepoResult)!.tone}`"
+            >
+              {{ prStatusLabel(activeRepoResult)!.text }}
+            </span>
+          </template>
           <span v-else-if="activeRepoResult.status === 'failed'" class="repo-meta-error">
             {{ activeRepoResult.errorMessage || "SDD generation failed" }}
           </span>
@@ -617,6 +648,31 @@ async function handleReopenComment(commentId: string) {
   max-width: 280px;
   text-align: right;
   line-height: 1.4;
+}
+
+.repo-pr-status {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 280px;
+  text-align: right;
+}
+
+.repo-pr-status--success {
+  color: oklch(45% 0.12 145);
+}
+
+.repo-pr-status--warn {
+  color: oklch(50% 0.1 75);
+}
+
+.repo-pr-status--error {
+  color: oklch(50% 0.14 25);
+}
+
+.repo-pr-status--muted {
+  color: var(--muted);
 }
 
 .viewer-body {

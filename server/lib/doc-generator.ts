@@ -23,6 +23,7 @@ import {
   openPullRequest,
   type GitProvider,
 } from "./git-provider";
+import { autoMergePullRequest, type PrMergeStatus } from "./git-merge";
 import { getDocGenerationSettings } from "./doc-generation-settings";
 import { readExistingDoc } from "./existing-doc";
 import {
@@ -576,6 +577,8 @@ async function updateRepoResult(
     sddContent: string;
     status: "pending" | "generating" | "writing_back" | "completed" | "failed";
     prUrl: string;
+    prStatus: PrMergeStatus;
+    mergeErrorMessage: string | null;
     errorMessage: string | null;
   }>
 ): Promise<void> {
@@ -606,6 +609,7 @@ interface RepoRow {
   defaultBranch: string;
   accessToken: string | null;
   sddDocPath: string;
+  autoMergeDocs: boolean;
   lastProcessedRef: string | null;
 }
 
@@ -630,6 +634,7 @@ async function loadAppRepos(appId: string): Promise<RepoRow[]> {
       defaultBranch: r.defaultBranch || "main",
       accessToken: r.accessToken,
       sddDocPath: r.sddDocPath || "docs/SDD.md",
+      autoMergeDocs: r.autoMergeDocs ?? false,
       lastProcessedRef: r.lastProcessedRef,
     }));
   }
@@ -652,6 +657,7 @@ async function loadAppRepos(appId: string): Promise<RepoRow[]> {
         defaultBranch: "main",
         accessToken: null,
         sddDocPath: "docs/SDD.md",
+        autoMergeDocs: false,
         lastProcessedRef: null,
       },
     ];
@@ -682,6 +688,12 @@ function resolveSddDocPath(repo: RepoRow, repoType: SddRepoType): string {
 }
 
 /** Write a document back to a repo via a PR/MR when credentials are available. */
+interface WriteBackResult {
+  prUrl: string | null;
+  prStatus: PrMergeStatus | null;
+  mergeErrorMessage: string | null;
+}
+
 async function writeDocBack(
   repo: RepoRow,
   cloneDir: string,
@@ -689,15 +701,17 @@ async function writeDocBack(
   fileContent: string,
   ref: string | null,
   docLabel: string
-): Promise<string | null> {
-  if (!repo.accessToken) return null;
+): Promise<WriteBackResult> {
+  if (!repo.accessToken) {
+    return { prUrl: null, prStatus: null, mergeErrorMessage: null };
+  }
 
   const suffix = (ref || Date.now().toString()).replace(/[^a-zA-Z0-9._-]/g, "-");
   const slug = docLabel.toLowerCase().replace(/\s+/g, "-");
   const branchName = `orbit-docs/${slug}-update-${suffix}`;
   const refLabel = ref ? ` for ${ref}` : "";
 
-  return await openPullRequest({
+  const prUrl = await openPullRequest({
     provider: repo.provider,
     hostUrl: repo.hostUrl,
     repoUrl: repo.repoUrl,
@@ -713,6 +727,29 @@ async function writeDocBack(
       `This PR updates the ${docLabel} at \`${filePath}\`.\n\n` +
       `Generated automatically by Orbit Docs.`,
   });
+
+  if (!prUrl) {
+    return { prUrl: null, prStatus: null, mergeErrorMessage: null };
+  }
+
+  if (!repo.autoMergeDocs) {
+    return { prUrl, prStatus: "open", mergeErrorMessage: null };
+  }
+
+  const mergeResult = await autoMergePullRequest({
+    provider: repo.provider,
+    hostUrl: repo.hostUrl,
+    repoUrl: repo.repoUrl,
+    token: repo.accessToken,
+    prUrl,
+    baseBranch: repo.defaultBranch,
+  });
+
+  return {
+    prUrl,
+    prStatus: mergeResult.status,
+    mergeErrorMessage: mergeResult.errorMessage ?? null,
+  };
 }
 
 /**
@@ -1006,14 +1043,20 @@ Instructions:
             status: "writing_back",
           });
 
-          let prUrl: string | null = null;
+          let writeBack: WriteBackResult = {
+            prUrl: null,
+            prStatus: null,
+            mergeErrorMessage: null,
+          };
           if (repo.accessToken) {
             await onProgress({
               status: "writing_back",
               progressPct: 92,
-              progressMessage: `Opening PR for ${repo.name}...`,
+              progressMessage: repo.autoMergeDocs
+                ? `Opening and merging PR for ${repo.name}...`
+                : `Opening PR for ${repo.name}...`,
             });
-            prUrl = await writeDocBack(
+            writeBack = await writeDocBack(
               repo,
               dir,
               sddPath,
@@ -1025,7 +1068,9 @@ Instructions:
 
           await updateRepoResult(resultId, {
             status: "completed",
-            prUrl: prUrl || undefined,
+            prUrl: writeBack.prUrl || undefined,
+            prStatus: writeBack.prStatus || undefined,
+            mergeErrorMessage: writeBack.mergeErrorMessage,
           });
 
           if (repo.id && ref) {
@@ -1103,6 +1148,7 @@ export async function generateRepoSdd(
       defaultBranch: repoRow.defaultBranch || "main",
       accessToken: repoRow.accessToken,
       sddDocPath: repoRow.sddDocPath || "docs/SDD.md",
+      autoMergeDocs: repoRow.autoMergeDocs ?? false,
       lastProcessedRef: repoRow.lastProcessedRef,
     };
 
@@ -1206,14 +1252,20 @@ export async function generateRepoSdd(
     await updateJobResult(jobId, "sdd", sddContent);
 
     // Step 4: Write back via PR
-    let prUrl: string | null = null;
+    let writeBack: WriteBackResult = {
+      prUrl: null,
+      prStatus: null,
+      mergeErrorMessage: null,
+    };
     if (repo.accessToken) {
       await onProgress({
         status: "writing_back",
         progressPct: 85,
-        progressMessage: `Opening PR for ${repo.name}...`,
+        progressMessage: repo.autoMergeDocs
+          ? `Opening and merging PR for ${repo.name}...`
+          : `Opening PR for ${repo.name}...`,
       });
-      prUrl = await writeDocBack(
+      writeBack = await writeDocBack(
         repo,
         dir,
         sddPath,
@@ -1225,7 +1277,9 @@ export async function generateRepoSdd(
 
     await updateRepoResult(resultId, {
       status: "completed",
-      prUrl: prUrl || undefined,
+      prUrl: writeBack.prUrl || undefined,
+      prStatus: writeBack.prStatus || undefined,
+      mergeErrorMessage: writeBack.mergeErrorMessage,
     });
     await updateRepoLastProcessedRef(repoId, newTag);
 

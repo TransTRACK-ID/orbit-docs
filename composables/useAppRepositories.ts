@@ -10,6 +10,7 @@ export interface AppRepository {
   hostUrl?: string | null;
   defaultBranch: string;
   sddDocPath: string;
+  autoMergeDocs?: boolean;
   hasAccessToken: boolean;
   accessTokenPreview?: string | null;
   lastProcessedRef?: string | null;
@@ -28,6 +29,7 @@ export interface RepositoryPayload {
   defaultBranch?: string;
   accessToken?: string | null;
   sddDocPath?: string;
+  autoMergeDocs?: boolean;
 }
 
 const repositories = ref<AppRepository[]>([]);

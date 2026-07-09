@@ -54,6 +54,7 @@ export default defineEventHandler(async (event) => {
     patch.defaultBranch = body.defaultBranch.trim();
   if (typeof body?.sddDocPath === "string" && body.sddDocPath.trim())
     patch.sddDocPath = body.sddDocPath.trim();
+  if (body?.autoMergeDocs !== undefined) patch.autoMergeDocs = !!body.autoMergeDocs;
   // Only overwrite the token when a non-empty value is sent (avoids wiping it on edit)
   if (typeof body?.accessToken === "string" && body.accessToken.trim())
     patch.accessToken = body.accessToken.trim();
@@ -80,6 +81,7 @@ export default defineEventHandler(async (event) => {
       hostUrl: row.hostUrl,
       defaultBranch: row.defaultBranch,
       sddDocPath: row.sddDocPath,
+      autoMergeDocs: row.autoMergeDocs,
       hasAccessToken: !!row.accessToken,
       lastProcessedRef: row.lastProcessedRef,
       updatedAt: row.updatedAt,

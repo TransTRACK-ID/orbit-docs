@@ -32,6 +32,7 @@ const blankForm = (): RepositoryPayload & { id?: string; providerChoice: Provide
   defaultBranch: "main",
   accessToken: "",
   sddDocPath: "docs/SDD.md",
+  autoMergeDocs: false,
 });
 
 const form = reactive(blankForm());
@@ -82,6 +83,7 @@ function openEdit(repo: AppRepository) {
     defaultBranch: repo.defaultBranch,
     accessToken: "",
     sddDocPath: repo.sddDocPath,
+    autoMergeDocs: repo.autoMergeDocs ?? false,
   });
   editingId.value = repo.id;
   showForm.value = true;
@@ -116,6 +118,7 @@ async function save() {
     hostUrl: needsHostUrl.value ? (form.hostUrl?.trim() || null) : null,
     defaultBranch: form.defaultBranch?.trim() || "main",
     sddDocPath: form.sddDocPath?.trim() || "docs/SDD.md",
+    autoMergeDocs: !!form.autoMergeDocs,
   };
   // Only send the token when the user actually typed one
   if (form.accessToken && form.accessToken.trim()) {
@@ -231,6 +234,13 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
             <span v-if="!repo.hasAccessToken" class="pill pill-warn" title="No token: write-back PRs disabled">
               no token
             </span>
+            <span
+              v-else-if="repo.autoMergeDocs"
+              class="pill pill-green"
+              title="SDD pull requests merge automatically when there are no conflicts"
+            >
+              auto-merge
+            </span>
           </div>
           <div class="repo-url">{{ repo.repoUrl }}</div>
           <div class="repo-meta">
@@ -343,6 +353,22 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
           </p>
           <p v-else-if="form.providerChoice === 'github-enterprise'" class="field-hint">
             Use a Personal Access Token (classic) with <strong>repo</strong> scope.
+          </p>
+        </div>
+
+        <div class="form-group full auto-merge-row">
+          <label class="checkbox-label">
+            <input
+              v-model="form.autoMergeDocs"
+              type="checkbox"
+              :disabled="!editingId && !form.accessToken"
+            />
+            <span>Auto-merge documentation pull requests</span>
+          </label>
+          <p class="field-hint">
+            When enabled, Orbit merges SDD pull requests after generation if the base branch has
+            no conflicts. Skips merge when conflicts are detected; the PR stays open for manual
+            resolution. Requires a token with merge permissions.
           </p>
         </div>
       </div>
@@ -574,6 +600,25 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
   font-size: 11px;
   color: var(--muted);
   line-height: 1.4;
+}
+
+.auto-merge-row {
+  padding-top: 4px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.checkbox-label input {
+  margin-top: 2px;
+  flex-shrink: 0;
 }
 
 .repo-host {
