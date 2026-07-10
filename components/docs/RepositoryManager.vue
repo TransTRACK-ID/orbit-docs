@@ -48,6 +48,22 @@ const providerLabel = computed(() => {
   return "GitHub";
 });
 
+const editingRepo = computed(() =>
+  editingId.value ? repositories.value.find((r) => r.id === editingId.value) ?? null : null
+);
+
+const canEnableAutoMerge = computed(
+  () => Boolean(form.accessToken?.trim()) || Boolean(editingRepo.value?.hasAccessToken)
+);
+
+function toggleAutoMerge() {
+  if (!canEnableAutoMerge.value) {
+    toast.info("Add an access token before enabling auto-merge.");
+    return;
+  }
+  form.autoMergeDocs = !form.autoMergeDocs;
+}
+
 function onProviderChange() {
   if (form.providerChoice === "github" || form.providerChoice === "github-enterprise") {
     form.provider = "github";
@@ -109,6 +125,10 @@ async function save() {
   }
   if (needsHostUrl.value && !form.hostUrl?.trim()) {
     toast.error(`Instance URL is required for ${providerLabel.value}`);
+    return;
+  }
+  if (form.autoMergeDocs && !canEnableAutoMerge.value) {
+    toast.error("An access token is required to enable auto-merge.");
     return;
   }
   const payload: RepositoryPayload = {
@@ -357,19 +377,27 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
         </div>
 
         <div class="form-group full auto-merge-row">
-          <label class="checkbox-label">
-            <input
-              v-model="form.autoMergeDocs"
-              type="checkbox"
-              :disabled="!editingId && !form.accessToken"
+          <div class="toggle">
+            <button
+              type="button"
+              class="toggle-switch"
+              :class="{ on: form.autoMergeDocs, 'is-disabled': !canEnableAutoMerge }"
+              :aria-pressed="form.autoMergeDocs"
+              aria-label="Auto-merge documentation pull requests"
+              @click="toggleAutoMerge"
             />
-            <span>Auto-merge documentation pull requests</span>
-          </label>
-          <p class="field-hint">
-            When enabled, Orbit merges SDD pull requests after generation if the base branch has
-            no conflicts. Skips merge when conflicts are detected; the PR stays open for manual
-            resolution. Requires a token with merge permissions.
-          </p>
+            <div>
+              <div class="toggle-label">Auto-merge documentation pull requests</div>
+              <p class="field-hint toggle-desc">
+                When enabled, Orbit merges SDD pull requests after generation if the base branch has
+                no conflicts. Skips merge when conflicts are detected; the PR stays open for manual
+                resolution. Requires a token with merge permissions.
+              </p>
+              <p v-if="!canEnableAutoMerge" class="field-hint toggle-desc">
+                Enter an access token above to enable this option.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
       <div class="form-actions">
@@ -606,19 +634,65 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
   padding-top: 4px;
 }
 
-.checkbox-label {
+.toggle {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 12px;
+}
+
+.toggle-switch {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--border);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+  flex-shrink: 0;
+  border: none;
+  padding: 0;
+  margin-top: 2px;
+}
+
+.toggle-switch.on {
+  background: var(--accent);
+}
+
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface);
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--fg) 12%, transparent);
+}
+
+.toggle-switch.on::after {
+  transform: translateX(18px);
+}
+
+.toggle-switch.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.toggle-switch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.toggle-label {
   font-size: 13px;
   font-weight: 500;
   color: var(--fg);
-  cursor: pointer;
 }
 
-.checkbox-label input {
-  margin-top: 2px;
-  flex-shrink: 0;
+.toggle-desc {
+  margin-top: 4px;
 }
 
 .repo-host {
@@ -626,7 +700,7 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
   font-size: 12px;
 }
 
-.form-group input,
+.form-group input:not([type="checkbox"]),
 .form-group select {
   padding: 8px 10px;
   border: 1px solid var(--border);
