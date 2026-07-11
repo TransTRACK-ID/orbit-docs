@@ -69,3 +69,5 @@ docker-compose.override.yml
 # ─── Misc ──────────────────────────────────────────────────
 .cache/
 .parcel-cache/
+
+.orbit/

@@ -1,0 +1,22 @@
+---
+description: Mandatory Chrome DevTools MCP browser testing
+alwaysApply: true
+---
+
+# Browser testing required
+
+Chrome DevTools MCP (chrome-devtools) is enabled for this run.
+Test these URLs: https://orbit.transtrack.ai, https://pass.proton.me/secure-link/FXXZAVFARYZEN6AN6PTY6XZE9W#TN_2h9aX7l7eAow8rjXJbSAsasWDJa06heoYzXIjokw, https://staging…
+
+Before finishing any QA, login, or UI verification task you MUST:
+
+1. Call **navigate_page** or **new_page** to open the target site
+2. Call **take_snapshot** and use element **uid** values from the snapshot
+3. Use **fill**, **click**, and **press_key** for interactions
+4. Capture evidence with **take_screenshot** using filePath: `.orbit/screenshots/<descriptive-name>.png`
+   (e.g. `.orbit/screenshots/login-success.png`). Always save screenshots to this folder.
+
+Tool names are prefixed as `mcp_chrome-devtools_*` in Cursor (e.g. `mcp_chrome-devtools_navigate_page`).
+
+Never report browser test results without using these MCP tools in this run.
+Never substitute curl, wget, fetch, or HTTP-only checks for real UI testing.
