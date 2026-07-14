@@ -36,7 +36,7 @@ export function createAgent(opts: { model?: string; mode?: "agent" | "ask" } = {
 
 /** Lightweight read-only agent for /api/chat (Cursor ask mode). */
 export function createChatAgent() {
-  return createAgent({ mode: "ask" });
+  return createCursorAgent({ mode: "ask", chat: true });
 }
 
 export { createOpencodeAgent, createCursorAgent };

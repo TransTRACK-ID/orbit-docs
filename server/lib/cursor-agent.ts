@@ -1,5 +1,6 @@
 import { spawn } from "child_process";
 import { getCursorModel as getCursorModelFromEnv } from "~/server/utils/agent-config";
+import { getChatWorkspace } from "~/server/lib/chat-workspace";
 
 export interface AnalyzeOptions {
   workdir?: string;
@@ -16,19 +17,27 @@ export interface CursorAgentOptions {
   model?: string;
   /** agent = full tool access (doc generation). ask = read-only Q&A (chat). */
   mode?: CursorExecutionMode;
+  /** Chat-optimized: isolated workspace, end on result, parse assistant stream events. */
+  chat?: boolean;
 }
 
 let cursorInstalledCache: boolean | null = null;
 
 interface CursorEvent {
   type: string;
+  subtype?: string;
   chatId?: string;
+  session_id?: string;
   delta?: string;
   result?: string;
+  text?: string;
   tool?: string;
   args?: Record<string, unknown>;
   error?: string;
-  message?: string;
+  message?: string | {
+    role?: string;
+    content?: Array<{ type?: string; text?: string }>;
+  };
 }
 
 function getCursorPath(): string {
@@ -89,6 +98,7 @@ export async function isCursorAuthenticated(): Promise<{ ok: boolean; method: "l
 export function createCursorAgent(opts: CursorAgentOptions = {}) {
   const model = opts.model || getCursorModel();
   const mode = opts.mode || "agent";
+  const isChat = opts.chat === true;
 
   return {
     async analyze(prompt: string, options: AnalyzeOptions = {}): Promise<string> {
@@ -103,6 +113,8 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
           "then authenticate with: cursor-agent login (or set CURSOR_API_KEY env var)."
         );
       }
+
+      const effectiveWorkdir = workdir || (isChat ? getChatWorkspace() : undefined);
 
       const args = [
         "--print",
@@ -121,8 +133,8 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
         args.push("--model", model);
       }
 
-      if (workdir) {
-        args.push("--workspace", workdir);
+      if (effectiveWorkdir) {
+        args.push("--workspace", effectiveWorkdir);
       }
 
       args.push(prompt);
@@ -130,9 +142,11 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
       return new Promise((resolve, reject) => {
         let accumulated = "";
         let chatId: string | undefined;
+        let settled = false;
+
         const proc = spawn(getCursorPath(), args, {
           stdio: ["ignore", "pipe", "pipe"],
-          cwd: workdir || process.cwd(),
+          cwd: effectiveWorkdir || process.cwd(),
           env: { ...process.env },
         });
 
@@ -144,26 +158,59 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
         let exitCode: number | null = null;
         let stdoutEnded = false;
 
+        const finishEarly = (finalText?: string) => {
+          if (settled) return;
+          settled = true;
+          if (finalText !== undefined) {
+            accumulated = finalText;
+          }
+          try {
+            proc.kill("SIGTERM");
+          } catch {
+            /* noop */
+          }
+          resolve(accumulated);
+        };
+
+        function appendAssistantText(text: string) {
+          if (!text) return;
+          accumulated += text;
+          onText?.(text, accumulated);
+        }
+
         function processEvent(ev: CursorEvent) {
           onDebugEvent?.({ type: `cursor.${ev.type}`, payload: ev as Record<string, unknown> });
 
-          // Always check for content fields regardless of event type
-          if (typeof ev.result === "string" && ev.result) {
-            accumulated = ev.result;
-            onText?.("", accumulated);
+          // Cursor 2026 stream-json: incremental assistant tokens
+          if (ev.type === "assistant" && ev.message && typeof ev.message === "object") {
+            const parts = ev.message.content;
+            if (Array.isArray(parts)) {
+              for (const part of parts) {
+                if (part?.type === "text" && typeof part.text === "string") {
+                  appendAssistantText(part.text);
+                }
+              }
+            }
+          }
+
+          // Legacy / alternate shapes
+          if (typeof ev.result === "string" && ev.result && ev.type !== "result") {
+            if (ev.result.length > accumulated.length) {
+              appendAssistantText(ev.result.slice(accumulated.length));
+            } else if (!accumulated) {
+              appendAssistantText(ev.result);
+            }
           }
           if (typeof ev.delta === "string" && ev.delta) {
-            accumulated += ev.delta;
-            onText?.(ev.delta, accumulated);
+            appendAssistantText(ev.delta);
           }
           if (typeof ev.message === "string" && ev.message) {
-            accumulated += ev.message;
-            onText?.(ev.message, accumulated);
+            appendAssistantText(ev.message);
           }
 
           switch (ev.type) {
             case "start": {
-              chatId = ev.chatId;
+              chatId = ev.chatId || ev.session_id;
               if (chatId) {
                 onDebugEvent?.({
                   type: "cursor.start",
@@ -177,7 +224,17 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
               break;
             }
             case "content": {
-              // delta handled above
+              break;
+            }
+            case "result": {
+              if (ev.subtype === "success" && typeof ev.result === "string") {
+                if (ev.result.length > accumulated.length) {
+                  appendAssistantText(ev.result.slice(accumulated.length));
+                }
+                if (isChat) {
+                  finishEarly(ev.result);
+                }
+              }
               break;
             }
             case "tool_use": {
@@ -189,20 +246,19 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
               onActivity?.(`Tool: ${toolName}(${argSummary})`);
               break;
             }
-            case "end":
-            case "complete":
-            case "finished": {
-              // Final result may be in ev.result (handled above)
-              break;
-            }
             case "error": {
-              const msg = ev.message || ev.error || "Cursor agent error";
+              const msg =
+                (typeof ev.message === "string" ? ev.message : undefined) ||
+                ev.error ||
+                "Cursor agent error";
               onDebugEvent?.({ type: "cursor.error", payload: { message: msg } });
               break;
             }
             default: {
-              // Unknown event type — content fields already handled above
-              onDebugEvent?.({ type: "cursor.unhandled", payload: { type: ev.type, keys: Object.keys(ev) } });
+              onDebugEvent?.({
+                type: "cursor.unhandled",
+                payload: { type: ev.type, subtype: ev.subtype, keys: Object.keys(ev) },
+              });
             }
           }
         }
@@ -265,19 +321,23 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
         });
 
         function checkDone() {
+          if (settled) return;
           if (exitCode === null || !stdoutEnded) return;
 
           if (signal?.aborted) {
+            settled = true;
             reject(new Error("Generation cancelled"));
             return;
           }
           if (exitCode !== 0) {
+            settled = true;
             const stderr = stderrBuf.join("").trim();
             const hint = stderr.includes("auth")
               ? " (Hint: run 'cursor-agent login' to authenticate)"
               : "";
             reject(new Error(`Cursor agent exited with code ${exitCode}${hint}. ${stderr.slice(0, 500)}`));
           } else {
+            settled = true;
             resolve(accumulated);
           }
         }

@@ -70,7 +70,9 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 | `ADMIN_EMAIL` | Recommended | Initial admin email |
 | `ADMIN_PASSWORD` | Recommended | Initial admin password |
 | `NUXT_PUBLIC_APP_URL` | Recommended | Public URL (for webhooks) |
-| `DOC_AGENT` | For AI features | `cursor` (default) or `opencode` — powers doc chat (`/p/{id}`), SRS/FSD/SDD generation, and webhooks |
+| `CHAT_BACKEND` | For doc chat | `auto` (default): OpenRouter if `OPENAI_API_KEY` set, else Cursor |
+| `OPENAI_API_KEY` | For fast chat | OpenRouter/OpenAI key — enables ~2s streaming chat on `/p/{id}` |
+| `DOC_AGENT` | For doc generation | `cursor` (default) or `opencode` — SRS/FSD/SDD + webhook jobs |
 | `CURSOR_API_KEY` | For Cursor agent | API key for headless `cursor-agent` in Docker/production |
 | `CURSOR_MODEL` | Optional | Cursor model (`auto` by default) |
 | `OPENCODE_CONFIG_B64` | For Opencode agent | Base64 opencode config when `DOC_AGENT=opencode` |

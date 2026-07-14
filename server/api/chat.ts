@@ -1,10 +1,13 @@
-import { defineEventHandler, readBody, createError, sendWebResponse } from "h3";
+import { defineEventHandler, readBody, createError, sendWebResponse, type H3Event } from "h3";
+import { streamText } from "ai";
 import { getDb } from "~/server/database";
 import { docs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { getSessionToken } from "~/server/utils/auth";
 import { createChatAgent } from "~/server/lib/agent-factory";
 import { assertDocAgentReady } from "~/server/lib/agent-readiness";
+import { resolveChatBackend } from "~/server/lib/chat-backend";
+import { getCustomOpenAI } from "~/server/lib/openai";
 
 interface ChatMessage {
   role: string;
@@ -23,12 +26,58 @@ function buildChatPrompt(systemPrompt: string, messages: ChatMessage[]): string 
 
 ${lines.join("\n\n")}
 
-Respond as the Assistant. Be concise and helpful. Do not use tools unless necessary to answer the question.`;
+Respond as the Assistant. Be concise and helpful. Answer from the document context only — do not explore the filesystem.`;
+}
+
+async function buildSystemPrompt(event: H3Event, docId?: string) {
+  let systemPrompt =
+    "You are a helpful documentation assistant. Answer questions based on the available documentation. If the context doesn't contain the answer, say so clearly.";
+
+  if (!docId) return systemPrompt;
+
+  const db = getDb();
+  const rows = await db
+    .select({ title: docs.title, content: docs.content, status: docs.status })
+    .from(docs)
+    .where(eq(docs.id, docId))
+    .limit(1);
+
+  const doc = rows[0];
+  let hasAccess = false;
+
+  if (doc?.content) {
+    if (doc.status === "published") {
+      hasAccess = true;
+    } else {
+      hasAccess = !!getSessionToken(event);
+    }
+  }
+
+  if (hasAccess && doc?.content) {
+    systemPrompt = `You are a helpful documentation assistant. You are currently viewing a document titled "${doc.title || "Untitled"}". Here is the document content:
+
+---
+${doc.content}
+---
+
+Answer questions based on the document context above. If the context doesn't contain the answer, say so clearly.`;
+  }
+
+  return systemPrompt;
+}
+
+function startPlainTextStream(event: H3Event) {
+  const res = event.node.res;
+  res.setHeader("Content-Type", "text/plain; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  if (typeof res.flushHeaders === "function") {
+    res.flushHeaders();
+  }
 }
 
 export default defineEventHandler(async (event) => {
-  await assertDocAgentReady();
-
   const body = await readBody(event);
   const { messages, docId } = body || {};
 
@@ -40,96 +89,84 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  let systemPrompt =
-    "You are a helpful documentation assistant. Answer questions based on the available documentation. If the context doesn't contain the answer, say so clearly.";
+  const backend = resolveChatBackend();
+  const systemPrompt = await buildSystemPrompt(event, docId);
+  const chatMessages = messages.map((m: ChatMessage) => ({
+    role: m.role,
+    content: m.content,
+  }));
 
-  // Fetch doc content server-side — never trust client-supplied content
-  if (docId) {
-    const db = getDb();
-    const rows = await db
-      .select({ title: docs.title, content: docs.content, status: docs.status })
-      .from(docs)
-      .where(eq(docs.id, docId))
-      .limit(1);
-
-    const doc = rows[0];
-
-    // Published docs: anyone can chat about them
-    // Non-published docs (draft, in_review): only authenticated users
-    let hasAccess = false;
-    if (doc?.content) {
-      if (doc.status === "published") {
-        hasAccess = true;
-      } else {
-        const token = getSessionToken(event);
-        hasAccess = !!token;
-      }
+  if (backend === "openrouter") {
+    if (!process.env.OPENAI_API_KEY?.trim()) {
+      throw createError({
+        statusCode: 503,
+        statusMessage: "Service Unavailable",
+        message: "CHAT_BACKEND=openrouter requires OPENAI_API_KEY",
+      });
     }
 
-    if (hasAccess && doc?.content) {
-      systemPrompt = `You are a helpful documentation assistant. You are currently viewing a document titled "${doc.title || "Untitled"}". Here is the document content:
+    const model = getCustomOpenAI().chat(process.env.OPENAI_MODEL || "gpt-4o-mini");
+    const result = streamText({
+      model,
+      system: systemPrompt,
+      messages: chatMessages.map((m) => ({
+        role: m.role as "user" | "assistant",
+        content: m.content,
+      })),
+    });
 
----
-${doc.content}
----
-
-Answer questions based on the document context above. If the context doesn't contain the answer, say so clearly.`;
-    }
+    return sendWebResponse(
+      event,
+      result.toTextStreamResponse({
+        headers: {
+          "Cache-Control": "no-cache, no-transform",
+          "X-Accel-Buffering": "no",
+        },
+      }),
+    );
   }
 
+  await assertDocAgentReady();
+
   const agent = createChatAgent();
-  const prompt = buildChatPrompt(
-    systemPrompt,
-    messages.map((m: ChatMessage) => ({
-      role: m.role,
-      content: m.content,
-    })),
-  );
-
+  const prompt = buildChatPrompt(systemPrompt, chatMessages);
   const abortSignal = (event.node.req as { abortSignal?: AbortSignal }).abortSignal;
-  const encoder = new TextEncoder();
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      try {
-        let sentLength = 0;
-        const result = await agent.analyze(prompt, {
-          signal: abortSignal,
-          onText: (delta, accumulated) => {
-            if (delta) {
-              controller.enqueue(encoder.encode(delta));
-              sentLength += delta.length;
-              return;
-            }
-            if (accumulated && accumulated.length > sentLength) {
-              const chunk = accumulated.slice(sentLength);
-              controller.enqueue(encoder.encode(chunk));
-              sentLength = accumulated.length;
-            }
-          },
-        });
-        if (sentLength === 0 && result) {
-          controller.enqueue(encoder.encode(result));
+  startPlainTextStream(event);
+
+  await new Promise<void>((resolve, reject) => {
+    const res = event.node.res;
+
+    const onClose = () => {
+      resolve();
+    };
+    res.on("close", onClose);
+
+    agent
+      .analyze(prompt, {
+        signal: abortSignal,
+        onText: (delta) => {
+          if (!delta || res.writableEnded) return;
+          res.write(delta);
+        },
+      })
+      .then(() => {
+        if (!res.writableEnded) {
+          res.end();
         }
-        controller.close();
-      } catch (err) {
-        if (abortSignal?.aborted) {
-          controller.close();
+        resolve();
+      })
+      .catch((err) => {
+        if (!res.headersSent) {
+          reject(err);
           return;
         }
-        controller.error(err);
-      }
-    },
+        if (!res.writableEnded) {
+          const msg = err instanceof Error ? err.message : "Chat failed";
+          res.write(`\n\n[Error: ${msg}]`);
+          res.end();
+        }
+        resolve();
+      });
   });
-
-  return sendWebResponse(
-    event,
-    new Response(stream, {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-cache, no-transform",
-        "X-Accel-Buffering": "no",
-      },
-    }),
-  );
 });
