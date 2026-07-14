@@ -101,10 +101,11 @@ export const docs = pgTable("docs", {
   versionId: text("version_id").references(() => appVersions.id, { onDelete: "set null" }),
   tags: text("tags").array().default([]),
   author: text("author"),
-  source: text("source", { enum: ["manual", "generated"] })
+  source: text("source", { enum: ["manual", "generated", "op_sync"] })
     .notNull()
     .default("manual"),
-  docType: text("doc_type", { enum: ["srs", "fsd", "sdd", "git_snapshot"] }),
+  docType: text("doc_type", { enum: ["srs", "fsd", "sdd", "git_snapshot", "feature"] }),
+  externalId: text("external_id"),
   notionPageId: text("notion_page_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),

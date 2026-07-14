@@ -11,6 +11,9 @@ interface ChatMessage {
 
 const props = defineProps<{
   docId?: string;
+  appId?: string;
+  featureId?: string;
+  module?: string;
 }>();
 
 const emit = defineEmits<{ close: [] }>();
@@ -92,6 +95,9 @@ async function sendMessage() {
       body: JSON.stringify({
         messages: chatHistory,
         docId: props.docId,
+        appId: props.appId,
+        featureId: props.featureId,
+        module: props.module,
       }),
       signal: abortController.value.signal,
     });

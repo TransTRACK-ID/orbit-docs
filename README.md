@@ -94,6 +94,7 @@ bun run mcp:start    # Start standalone MCP server
 - [Product overview & design principles](PRODUCT.md)
 - [MCP Server](MCP_SERVER.md)
 - [Doc generation plan](implementation_plan.md)
+- [OP feature catalog sync & chat](docs/OP_FEATURE_SYNC.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 

@@ -85,6 +85,12 @@ export default defineNitroPlugin(async () => {
   await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual'`);
   await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS doc_type TEXT`);
   await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS notion_page_id TEXT`);
+  await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS external_id TEXT`);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS docs_app_external_id_unique
+    ON docs (app_id, external_id)
+    WHERE external_id IS NOT NULL
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS doc_versions (
