@@ -1,7 +1,7 @@
 import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { docs, activityLogs, apps, appVersions } from "~/server/database/schema";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
 import { createDocVersionSnapshot } from "~/server/lib/doc-version-snapshot";
 
