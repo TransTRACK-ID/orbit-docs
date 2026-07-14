@@ -109,7 +109,7 @@ export default defineNuxtConfig({
       // Public app URL used to build git webhook URLs (falls back to request host)
       appUrl: process.env.NUXT_PUBLIC_APP_URL || process.env.NUXT_APP_BASE_URL || '',
       // Active document generation agent (shown in UI)
-      docAgent: process.env.DOC_AGENT || 'opencode',
+      docAgent: process.env.DOC_AGENT || 'cursor',
       cursorModel: process.env.CURSOR_MODEL || 'auto',
     },
     // Server-only base URL — can be absolute (e.g. http://127.0.0.1:port/api/preview/taskId)
@@ -129,7 +129,7 @@ export default defineNuxtConfig({
     // Opencode Agent Config (base64-encoded)
     opencodeConfigB64: process.env.OPENCODE_CONFIG_B64,
     // Document generation agent selection
-    docAgent: process.env.DOC_AGENT || 'opencode',
+    docAgent: process.env.DOC_AGENT || 'cursor',
     cursorModel: process.env.CURSOR_MODEL || 'auto',
   },
 

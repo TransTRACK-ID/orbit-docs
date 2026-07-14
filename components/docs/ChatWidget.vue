@@ -97,7 +97,14 @@ async function sendMessage() {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      let detail = `HTTP error! status: ${response.status}`;
+      try {
+        const errBody = await response.json();
+        if (errBody?.message) detail = errBody.message;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(detail);
     }
 
     const reader = response.body?.getReader();
@@ -116,7 +123,7 @@ async function sendMessage() {
   } catch (e: any) {
     if (e.name !== "AbortError") {
       reactiveAssistant.content =
-        "Sorry, I encountered an error. Please try again.";
+        e?.message || "Sorry, I encountered an error. Please try again.";
     }
   } finally {
     isStreaming.value = false;

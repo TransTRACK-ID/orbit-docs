@@ -618,7 +618,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
         <div class="debug-header">
           <span class="debug-title">Debug Session</span>
           <div class="debug-meta">
-            <span v-if="currentJob.opencodeSessionId" class="meta-pill" title="Opencode Session ID">
+            <span v-if="currentJob.opencodeSessionId" class="meta-pill" title="Agent session ID">
               {{ currentJob.opencodeSessionId }}
             </span>
             <span class="meta-pill">{{ debugMeta.total }} events</span>

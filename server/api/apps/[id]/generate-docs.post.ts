@@ -4,9 +4,11 @@ import { docGenerationJobs, apps, appRepositories } from "~/server/database/sche
 import { eq } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
 import { generateProductDocs, updateJobProgress } from "~/server/lib/doc-generator";
+import { assertDocAgentReady } from "~/server/lib/agent-readiness";
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event);
+  await assertDocAgentReady();
   const db = getDb();
   const appId = getRouterParam(event, "id");
 

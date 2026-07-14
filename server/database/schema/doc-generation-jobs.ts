@@ -54,7 +54,7 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   lastEventAt: timestamp("last_event_at", { withTimezone: true }),
   tokensInput: integer("tokens_input").notNull().default(0),
   tokensOutput: integer("tokens_output").notNull().default(0),
-  // Opencode session ID for debugging the agent run.
+  // Agent session ID for debugging (Opencode session or Cursor chat).
   opencodeSessionId: text("opencode_session_id"),
   srsContent: text("srs_content"),
   fsdContent: text("fsd_content"),

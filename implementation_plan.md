@@ -2,7 +2,13 @@
 
 ## Overview
 
-Build a feature for the **Developer** member role that generates Software Requirements Specification (SRS), Functional Specification Document (FSD), and System Design Document (SDD) from a Git repository input. The system uses **Opencode** as a background AI agent to deeply analyze the codebase and populate the templates.
+Build a feature for the **Developer** member role that generates Software Requirements Specification (SRS), Functional Specification Document (FSD), and System Design Document (SDD) from a Git repository input. The system uses a background AI agent to deeply analyze the codebase and populate the templates.
+
+**Default agent (production):** [Cursor Agent CLI](https://cursor.com) (`cursor-agent`) via `DOC_AGENT=cursor` and `CURSOR_API_KEY`.
+
+**Alternative agent:** [Opencode](https://opencode.ai) via `DOC_AGENT=opencode` and `OPENCODE_CONFIG_B64`.
+
+**Doc chat** on published pages (`/p/{id}`) uses the same `DOC_AGENT` backend as doc generation (Cursor CLI or Opencode).
 
 ---
 
@@ -39,7 +45,23 @@ sequenceDiagram
 
 ## New Environment Variables
 
+### Cursor agent (default)
+
 ```env
+DOC_AGENT=cursor
+NUXT_PUBLIC_DOC_AGENT=cursor
+CURSOR_API_KEY=your-cursor-api-key
+CURSOR_MODEL=auto
+```
+
+The Docker image installs `cursor-agent` on Debian (glibc). In production, set `CURSOR_API_KEY` — interactive `cursor-agent login` does not persist across container restarts.
+
+Health check: `GET /api/agent/status`
+
+### Opencode agent (alternative)
+
+```env
+DOC_AGENT=opencode
 # Opencode Agent Config (base64-encoded opencode config.json)
 OPENCODE_CONFIG_B64=<base64 encoded JSON>
 ```
@@ -103,6 +125,9 @@ The base64-decoded config.json should contain:
 | File | Action | Purpose |
 |:---|:---|:---|
 | `server/database/schema/doc-generation-jobs.ts` | **Create** | Drizzle schema for the jobs table |
+| `server/lib/cursor-agent.ts` | **Create** | Cursor CLI wrapper — spawns `cursor-agent`, streams JSON events |
+| `server/lib/agent-factory.ts` | **Create** | Selects Cursor or Opencode from `DOC_AGENT` |
+| `server/lib/agent-readiness.ts` | **Create** | Fail-fast checks before starting generation jobs |
 | `server/lib/opencode-agent.ts` | **Create** | Opencode SDK wrapper — decodes config from env, manages sessions |
 | `server/lib/doc-generator.ts` | **Create** | Core orchestrator — clones repo, builds prompts from templates, runs agent |
 | `server/api/apps/[id]/generate-docs/index.post.ts` | **Create** | POST endpoint to trigger generation |
@@ -157,12 +182,12 @@ The base64-decoded config.json should contain:
 ## Key Design Decisions
 
 > [!IMPORTANT]
-> - **Opencode runs as a managed server** via `@opencode-ai/sdk` `createOpencode()` — spun up per-job and shut down after
-> - **Repository cloned to `/tmp`** with shallow clone for speed
+> - **Default agent is Cursor CLI** (`DOC_AGENT=cursor`) — see `server/lib/cursor-agent.ts`
+> - **Opencode runs as a managed server** via `@opencode-ai/sdk` when `DOC_AGENT=opencode`
+> - **Repository cloned under `ORBIT_REPO_DIR`** with shallow clone for speed (full history for webhook diffs)
 > - **Templates are loaded at runtime** from the `templates/` directory
 > - **SSE streaming** for real-time progress (not polling)
-> - **Config decoded from base64** at server startup from `OPENCODE_CONFIG_B64` env var
-> - **Permission model**: Opencode gets read + bash (for `git clone`, `find`, `cat`), but NO write/edit
+> - **Doc chat** (`/api/chat`) uses the same `DOC_AGENT` backend as doc generation
 
 > [!WARNING]
 > The Opencode agent will need `opencode-ai` CLI and `@opencode-ai/sdk` installed as project dependencies.

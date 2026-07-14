@@ -23,15 +23,20 @@ export function getAgentConfig(): AgentConfig {
   };
 }
 
-export function createAgent(opts: { model?: string } = {}) {
+export function createAgent(opts: { model?: string; mode?: "agent" | "ask" } = {}) {
   const cfg = getAgentConfig();
   const effectiveModel = opts.model || cfg.model;
 
   if (cfg.type === "cursor") {
-    return createCursorAgent({ model: effectiveModel });
+    return createCursorAgent({ model: effectiveModel, mode: opts.mode || "agent" });
   }
 
   return createOpencodeAgent();
+}
+
+/** Lightweight read-only agent for /api/chat (Cursor ask mode). */
+export function createChatAgent() {
+  return createAgent({ mode: "ask" });
 }
 
 export { createOpencodeAgent, createCursorAgent };

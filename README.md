@@ -70,7 +70,10 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 | `ADMIN_EMAIL` | Recommended | Initial admin email |
 | `ADMIN_PASSWORD` | Recommended | Initial admin password |
 | `NUXT_PUBLIC_APP_URL` | Recommended | Public URL (for webhooks) |
-| `OPENAI_API_KEY` | For AI docs | Enables doc generation |
+| `DOC_AGENT` | For AI features | `cursor` (default) or `opencode` — powers doc chat (`/p/{id}`), SRS/FSD/SDD generation, and webhooks |
+| `CURSOR_API_KEY` | For Cursor agent | API key for headless `cursor-agent` in Docker/production |
+| `CURSOR_MODEL` | Optional | Cursor model (`auto` by default) |
+| `OPENCODE_CONFIG_B64` | For Opencode agent | Base64 opencode config when `DOC_AGENT=opencode` |
 | `MCP_API_KEY` | For MCP | Secures the MCP endpoint in production |
 
 `API_BASE_URL` is optional — it enables forwarding auth to an external API. For self-hosted deployments, local database authentication is the default.

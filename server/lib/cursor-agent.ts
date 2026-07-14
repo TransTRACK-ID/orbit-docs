@@ -10,6 +10,16 @@ export interface AnalyzeOptions {
   onDebugEvent?: (event: { type: string; payload: Record<string, unknown> }) => void;
 }
 
+export type CursorExecutionMode = "agent" | "ask";
+
+export interface CursorAgentOptions {
+  model?: string;
+  /** agent = full tool access (doc generation). ask = read-only Q&A (chat). */
+  mode?: CursorExecutionMode;
+}
+
+let cursorInstalledCache: boolean | null = null;
+
 interface CursorEvent {
   type: string;
   chatId?: string;
@@ -30,11 +40,16 @@ function getCursorModel(): string {
 }
 
 export async function isCursorInstalled(): Promise<boolean> {
-  return new Promise((resolve) => {
+  if (cursorInstalledCache !== null) return cursorInstalledCache;
+
+  const installed = await new Promise<boolean>((resolve) => {
     const proc = spawn(getCursorPath(), ["--version"], { stdio: "ignore" });
     proc.on("error", () => resolve(false));
     proc.on("exit", (code) => resolve(code === 0));
   });
+
+  cursorInstalledCache = installed;
+  return installed;
 }
 
 export async function isCursorAuthenticated(): Promise<{ ok: boolean; method: "login" | "api_key" | "none"; error?: string }> {
@@ -71,8 +86,9 @@ export async function isCursorAuthenticated(): Promise<{ ok: boolean; method: "l
   });
 }
 
-export function createCursorAgent(opts: { model?: string } = {}) {
+export function createCursorAgent(opts: CursorAgentOptions = {}) {
   const model = opts.model || getCursorModel();
+  const mode = opts.mode || "agent";
 
   return {
     async analyze(prompt: string, options: AnalyzeOptions = {}): Promise<string> {
@@ -89,11 +105,17 @@ export function createCursorAgent(opts: { model?: string } = {}) {
       }
 
       const args = [
-        "--force",
-        "--approve-mcps",
+        "--print",
         "--output-format", "stream-json",
         "--stream-partial-output",
+        "--trust",
       ];
+
+      if (mode === "ask") {
+        args.push("--mode", "ask");
+      } else {
+        args.push("--force", "--approve-mcps");
+      }
 
       if (model && model !== "auto") {
         args.push("--model", model);
@@ -142,6 +164,16 @@ export function createCursorAgent(opts: { model?: string } = {}) {
           switch (ev.type) {
             case "start": {
               chatId = ev.chatId;
+              if (chatId) {
+                onDebugEvent?.({
+                  type: "cursor.start",
+                  payload: { chatId },
+                });
+                onDebugEvent?.({
+                  type: "session.created",
+                  payload: { sessionId: chatId },
+                });
+              }
               break;
             }
             case "content": {

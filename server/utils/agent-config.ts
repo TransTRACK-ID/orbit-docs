@@ -14,13 +14,13 @@ export function getDocAgent(): AgentType {
     process.env.NUXT_DOC_AGENT ||
     process.env.DOC_AGENT ||
     (config.docAgent as string) ||
-    "opencode";
+    "cursor";
 
   if (raw === "cursor") return "cursor";
   if (raw === "opencode") return "opencode";
 
-  console.warn(`[AgentConfig] Unknown DOC_AGENT "${raw}", falling back to opencode`);
-  return "opencode";
+  console.warn(`[AgentConfig] Unknown DOC_AGENT "${raw}", falling back to cursor`);
+  return "cursor";
 }
 
 export function getCursorModel(): string {

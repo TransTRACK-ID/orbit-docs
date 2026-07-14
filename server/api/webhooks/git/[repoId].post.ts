@@ -15,6 +15,7 @@ import {
   detectTagEvent,
 } from "~/server/lib/webhook-verify";
 import { generateRepoSdd, updateJobProgress } from "~/server/lib/doc-generator";
+import { assertDocAgentReady } from "~/server/lib/agent-readiness";
 import type { GitProvider } from "~/server/lib/git-provider";
 
 /**
@@ -151,6 +152,18 @@ export default defineEventHandler(async (event) => {
   if (!isTag || !tag) {
     setResponseStatus(event, 202);
     return { ok: true, message: "Ignored: not a tag-creation event" };
+  }
+
+  try {
+    await assertDocAgentReady();
+  } catch (error: unknown) {
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? String((error as { message?: string }).message)
+        : "Doc generation agent is not configured";
+    console.error(`[webhook] agent not ready: ${message}`);
+    setResponseStatus(event, 503);
+    return { ok: false, message };
   }
 
   // Resolve a user to attribute the job to (jobs.userId is NOT NULL)
