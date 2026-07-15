@@ -8,7 +8,7 @@ export interface FeatureRow {
   how_to_use: string;
   business_rules: string;
   limitations: string;
-  related_features: string;
+  related_features?: string;
   faq: string;
   sales_pitch?: string;
   version: string;
@@ -27,7 +27,6 @@ export const REQUIRED_FEATURE_FIELDS = [
   "how_to_use",
   "business_rules",
   "limitations",
-  "related_features",
   "faq",
   "version",
   "status",
@@ -130,11 +129,14 @@ export function validateFeatureRow(row: unknown): FeatureValidationError | null 
     }
   }
 
-  if (record.sales_pitch !== undefined && record.sales_pitch !== null && typeof record.sales_pitch !== "string") {
-    return {
-      feature_id: String(featureId),
-      message: "sales_pitch must be a string",
-    };
+  for (const field of ["sales_pitch", "related_features"] as const) {
+    const value = record[field];
+    if (value !== undefined && value !== null && typeof value !== "string") {
+      return {
+        feature_id: String(featureId),
+        message: `${field} must be a string`,
+      };
+    }
   }
 
   return null;
@@ -171,12 +173,14 @@ export function buildFeatureMarkdown(feature: FeatureRow): string {
     "## Limitations",
     feature.limitations.trim(),
     "",
-    "## Related features",
-    feature.related_features.trim(),
-    "",
     "## FAQ",
     feature.faq.trim(),
   ];
+
+  const related = feature.related_features?.trim();
+  if (related) {
+    lines.splice(lines.length - 2, 0, "", "## Related features", related);
+  }
 
   const pitch = feature.sales_pitch?.trim();
   if (pitch) {
@@ -197,7 +201,7 @@ export function normalizeFeatureRow(row: Record<string, unknown>): FeatureRow {
     how_to_use: String(row.how_to_use).trim(),
     business_rules: String(row.business_rules).trim(),
     limitations: String(row.limitations).trim(),
-    related_features: String(row.related_features).trim(),
+    related_features: row.related_features != null ? String(row.related_features).trim() : "",
     faq: String(row.faq).trim(),
     sales_pitch: row.sales_pitch != null ? String(row.sales_pitch).trim() : "",
     version: String(row.version).trim(),

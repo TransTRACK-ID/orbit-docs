@@ -45,6 +45,11 @@ describe("validateFeatureRow", () => {
       validateFeatureRow({ ...sampleFeature, last_updated: new Date("2026-07-14") }),
     ).toBeNull();
   });
+
+  it("accepts missing related_features", () => {
+    const { related_features: _, ...withoutRelated } = sampleFeature;
+    expect(validateFeatureRow(withoutRelated)).toBeNull();
+  });
 });
 
 describe("mapFeatureStatus", () => {
@@ -72,6 +77,13 @@ describe("buildFeatureMarkdown", () => {
       normalizeFeatureRow({ ...sampleFeature, sales_pitch: "" }),
     );
     expect(md).not.toContain("## Sales pitch");
+  });
+
+  it("omits related features when empty", () => {
+    const md = buildFeatureMarkdown(
+      normalizeFeatureRow({ ...sampleFeature, related_features: "" }),
+    );
+    expect(md).not.toContain("## Related features");
   });
 });
 

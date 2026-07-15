@@ -21,7 +21,7 @@ Sync structured feature rows from an OP spreadsheet (via Google Apps Script) int
 | `how_to_use` | Yes | Markdown section |
 | `business_rules` | Yes | Markdown section |
 | `limitations` | Yes | Markdown section |
-| `related_features` | Yes | Markdown section |
+| `related_features` | No | Markdown section (omitted when empty) |
 | `faq` | Yes | Markdown section |
 | `sales_pitch` | No | Markdown section (omitted when empty) |
 | `version` | Yes | Metadata table |
