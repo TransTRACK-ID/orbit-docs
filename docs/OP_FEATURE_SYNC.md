@@ -81,7 +81,8 @@ Content-Type: application/json
   ],
   "options": {
     "archiveMissing": false,
-    "maxBatchSize": 200
+    "maxBatchSize": 200,
+    "validateOnly": false
   }
 }
 ```
@@ -230,12 +231,28 @@ function onOpen() {
  * - Spreadsheet menu: Orbit → Sync now (shows alert)
  * - Apps Script editor: Run manualSyncToOrbit (logs to View → Logs; use for auth + testing)
  */
+function formatSyncSummary(summary) {
+  const lines = [
+    `Created: ${summary.created}`,
+    `Updated: ${summary.updated}`,
+    `Archived: ${summary.archived}`,
+    `Errors: ${summary.errors.length}`,
+  ];
+  if (summary.errors.length > 0) {
+    lines.push('', 'Failed features:');
+    summary.errors.forEach((err) => {
+      const id = err.feature_id ? `${err.feature_id}: ` : '';
+      lines.push(`- ${id}${err.message}`);
+    });
+  }
+  return lines.join('\n');
+}
+
 function manualSyncToOrbit() {
   const ui = getUiSafe();
   try {
     const summary = syncFeaturesToOrbit();
-    const message =
-      `Created: ${summary.created}\nUpdated: ${summary.updated}\nArchived: ${summary.archived}\nErrors: ${summary.errors.length}`;
+    const message = formatSyncSummary(summary);
     if (ui) {
       ui.alert('Orbit sync complete', message, ui.ButtonSet.OK);
     } else {
@@ -314,6 +331,13 @@ function syncFeaturesToOrbit() {
 
   if (status < 200 || status >= 300) {
     throw new Error(body.message || body.statusMessage || `HTTP ${status}`);
+  }
+
+  if (body.data?.errors?.length) {
+    body.data.errors.forEach((err) => {
+      const id = err.feature_id ? `${err.feature_id}: ` : '';
+      Logger.log(`Sync error — ${id}${err.message}`);
+    });
   }
 
   writeBackSyncResults(sheet, headers, values, body.data.results || []);

@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
   try {
     const data = await syncFeaturesToOrbit(appId, features, {
       archiveMissing: options.archiveMissing === true,
+      validateOnly: options.validateOnly === true,
       maxBatchSize:
         typeof options.maxBatchSize === "number" ? options.maxBatchSize : undefined,
     });

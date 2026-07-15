@@ -74,6 +74,31 @@ export function mapFeatureStatus(raw: string): { status: DocStatus; warning?: st
   };
 }
 
+function coerceSpreadsheetValue(value: unknown): string {
+  if (value === undefined || value === null) {
+    return "";
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10);
+  }
+  return String(value);
+}
+
+/** Normalize raw spreadsheet cells (numbers, dates, booleans) before validation. */
+export function coerceFeatureRow(row: Record<string, unknown>): Record<string, unknown> {
+  const coerced: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    coerced[key] = coerceSpreadsheetValue(value);
+  }
+  return coerced;
+}
+
 function requireString(value: unknown, field: string): string | null {
   if (value === undefined || value === null) {
     return `${field} is required`;
@@ -92,7 +117,7 @@ export function validateFeatureRow(row: unknown): FeatureValidationError | null 
     return { message: "Feature row must be an object" };
   }
 
-  const record = row as Record<string, unknown>;
+  const record = coerceFeatureRow(row as Record<string, unknown>);
   const featureId = record.feature_id;
 
   for (const field of REQUIRED_FEATURE_FIELDS) {

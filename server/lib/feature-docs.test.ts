@@ -35,6 +35,16 @@ describe("validateFeatureRow", () => {
     const result = validateFeatureRow({ ...sampleFeature, module: "" });
     expect(result?.message).toContain("module");
   });
+
+  it("accepts numeric version from spreadsheet cells", () => {
+    expect(validateFeatureRow({ ...sampleFeature, version: 2.1 })).toBeNull();
+  });
+
+  it("accepts date last_updated from spreadsheet cells", () => {
+    expect(
+      validateFeatureRow({ ...sampleFeature, last_updated: new Date("2026-07-14") }),
+    ).toBeNull();
+  });
 });
 
 describe("mapFeatureStatus", () => {

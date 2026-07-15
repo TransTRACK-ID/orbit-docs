@@ -5,6 +5,7 @@ import { createDocVersionSnapshot } from "~/server/lib/doc-version-snapshot";
 import {
   type FeatureRow,
   buildFeatureMarkdown,
+  coerceFeatureRow,
   featureTags,
   mapFeatureStatus,
   normalizeFeatureRow,
@@ -15,6 +16,7 @@ import { archiveMissingFeatureDocs } from "~/server/lib/feature-doc-search";
 export interface SyncFeatureOptions {
   archiveMissing?: boolean;
   maxBatchSize?: number;
+  validateOnly?: boolean;
 }
 
 export interface SyncFeatureResultItem {
@@ -81,13 +83,19 @@ export async function syncFeaturesToOrbit(
   const normalizedFeatures: FeatureRow[] = [];
 
   for (const raw of rawFeatures) {
-    const validationError = validateFeatureRow(raw);
+    if (!raw || typeof raw !== "object") {
+      response.errors.push({ message: "Feature row must be an object" });
+      continue;
+    }
+
+    const coerced = coerceFeatureRow(raw as Record<string, unknown>);
+    const validationError = validateFeatureRow(coerced);
     if (validationError) {
       response.errors.push(validationError);
       continue;
     }
 
-    const feature = normalizeFeatureRow(raw as Record<string, unknown>);
+    const feature = normalizeFeatureRow(coerced);
     if (seenIds.has(feature.feature_id)) {
       response.errors.push({
         feature_id: feature.feature_id,
@@ -104,6 +112,19 @@ export async function syncFeaturesToOrbit(
     const content = buildFeatureMarkdown(feature);
     const { status, warning } = mapFeatureStatus(feature.status);
     const tags = featureTags(feature);
+
+    if (options.validateOnly) {
+      response.results.push({
+        feature_id: feature.feature_id,
+        docId: "",
+        status,
+        publicUrl: "",
+        action: "created",
+        warning,
+      });
+      continue;
+    }
+
     const existing = await findExistingFeatureDoc(appId, feature.feature_id);
 
     if (existing) {
