@@ -37,9 +37,8 @@ watch([searchQuery, appFilter], async () => {
 
 const filteredReleases = computed(() => {
   return [...releases.value].sort((a, b) => {
-    if (a.published !== b.published) return a.published ? 1 : -1;
-    const dA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-    const dB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    const dA = new Date(a.releaseDate || a.createdAt || 0).getTime();
+    const dB = new Date(b.releaseDate || b.createdAt || 0).getTime();
     return dB - dA;
   });
 });

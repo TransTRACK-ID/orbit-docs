@@ -1,7 +1,7 @@
 import { defineEventHandler, getQuery, createError } from "h3";
 import { getDb } from "~/server/database";
 import { releases, apps, appVersions } from "~/server/database/schema";
-import { desc, eq, and } from "drizzle-orm";
+import { desc, eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
@@ -51,7 +51,7 @@ export default defineEventHandler(async (event) => {
     .innerJoin(apps, eq(releases.appId, apps.id))
     .leftJoin(appVersions, eq(releases.versionId, appVersions.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(releases.updatedAt))
+    .orderBy(desc(sql`COALESCE(${appVersions.releaseDate}, ${releases.createdAt})`))
     .limit(limit);
 
   // Post-filter by search text (app name, version, summary, heroTitle)
