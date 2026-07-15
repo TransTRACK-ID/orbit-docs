@@ -3,9 +3,13 @@ import { usePageStore } from "~/store/page";
 import type { DocItem } from "~/composables/useDocs";
 import DotsVertical from "~/components/icons/DotsVertical/index.vue";
 import {
+  DOC_LIST_VIEW_OPTIONS,
   docListPrimaryLabel,
   docListSecondaryLabel,
   groupDocsForList,
+  sectionCollapseKey,
+  shouldCollapseKnowledgeSection,
+  type DocListView,
 } from "~/utils/doc-display";
 
 definePageMeta({
@@ -22,6 +26,7 @@ const { docs, isLoading, search, fetchDocs, createDoc, deleteDoc } = useDocs();
 const { apps, fetchApps } = useApps();
 
 const appFilter = ref((route.query.app as string) || "");
+const docView = ref<DocListView>("all");
 
 watch(
   () => route.query.app,
@@ -163,11 +168,44 @@ const statusLabel: Record<string, string> = {
   archived: "Archived",
 };
 
-const docGroups = computed(() => groupDocsForList(docs.value));
+const docGroups = computed(() => groupDocsForList(docs.value, docView.value));
 
-const showGroupHeaders = computed(
-  () => !appFilter.value && docGroups.value.length > 1
+const visibleDocCount = computed(() =>
+  docGroups.value.reduce(
+    (total, group) => total + group.sections.reduce((sum, section) => sum + section.docs.length, 0),
+    0,
+  ),
 );
+
+const showAppHeaders = computed(
+  () => !appFilter.value && docGroups.value.length > 1,
+);
+
+const expandedSections = ref<Set<string>>(new Set());
+
+function isSectionCollapsed(groupKey: string, section: { kind: "product" | "knowledge"; docs: DocItem[] }) {
+  if (section.kind !== "knowledge" || !shouldCollapseKnowledgeSection(section)) {
+    return false;
+  }
+  return !expandedSections.value.has(sectionCollapseKey(groupKey, section.kind));
+}
+
+function toggleSection(groupKey: string, sectionKind: "product" | "knowledge") {
+  const key = sectionCollapseKey(groupKey, sectionKind);
+  const next = new Set(expandedSections.value);
+  if (next.has(key)) {
+    next.delete(key);
+  } else {
+    next.add(key);
+  }
+  expandedSections.value = next;
+}
+
+const pageSubtitle = computed(() => {
+  if (docView.value === "product") return "SRS, FSD, SDD, and manual docs";
+  if (docView.value === "knowledge") return "Synced feature catalog from spreadsheets";
+  return "All documentation across apps";
+});
 
 const tableColspan = 5;
 </script>
@@ -177,15 +215,21 @@ const tableColspan = 5;
     <header class="topbar">
       <div class="flex-gap-md">
         <h1>Docs</h1>
-        <span class="text-muted-sm">All documentation across apps</span>
+        <span class="text-muted-sm">{{ pageSubtitle }}</span>
       </div>
-      <div class="flex-gap-md">
+      <div class="flex-gap-md topbar-actions">
         <input
           v-model="search"
           class="search"
           placeholder="Search docs…"
           aria-label="Search docs"
           @input="onSearch"
+        />
+        <GeneralSearchableDropdown
+          v-model="docView"
+          :options="DOC_LIST_VIEW_OPTIONS"
+          placeholder="Doc type…"
+          search-placeholder="Filter type…"
         />
         <GeneralSearchableDropdown
           v-model="appFilter"
@@ -210,7 +254,7 @@ const tableColspan = 5;
       </tbody>
     </GeneralDataTable>
 
-    <div v-else-if="docs.length === 0" class="empty-state">
+    <div v-else-if="visibleDocCount === 0" class="empty-state">
       <p>No docs found.</p>
       <button type="button" class="btn btn-primary" style="margin-top:12px;" @click="openCreateModal">
         Create your first doc
@@ -229,10 +273,54 @@ const tableColspan = 5;
       </thead>
       <tbody>
         <template v-for="group in docGroups" :key="group.key">
-          <tr v-if="showGroupHeaders" class="group-row">
+          <tr v-if="showAppHeaders" class="group-row">
             <td :colspan="tableColspan">{{ group.label }}</td>
           </tr>
-          <tr v-for="doc in group.docs" :key="doc.id">
+          <template v-for="section in group.sections" :key="`${group.key}-${section.kind}`">
+            <tr v-if="section.label" class="subsection-row">
+              <td :colspan="tableColspan">
+                <div class="subsection-label">
+                  <span>{{ section.label }}</span>
+                  <span v-if="section.kind === 'knowledge'" class="subsection-count">
+                    {{ section.docs.length }} features
+                  </span>
+                </div>
+              </td>
+            </tr>
+            <tr
+              v-if="isSectionCollapsed(group.key, section)"
+              class="section-summary-row"
+              tabindex="0"
+              role="button"
+              :aria-expanded="false"
+              @click="toggleSection(group.key, section.kind)"
+              @keydown.enter.prevent="toggleSection(group.key, section.kind)"
+              @keydown.space.prevent="toggleSection(group.key, section.kind)"
+            >
+              <td :colspan="tableColspan">
+                <div class="section-summary">
+                  <div class="section-summary-copy">
+                    <strong>{{ section.docs.length }} synced features</strong>
+                    <span class="section-summary-hint">Spreadsheet rows are grouped here so product docs stay easy to scan.</span>
+                  </div>
+                  <button type="button" class="btn btn-secondary btn-sm" @click.stop="toggleSection(group.key, section.kind)">
+                    Show all
+                  </button>
+                </div>
+              </td>
+            </tr>
+            <template v-else>
+              <tr
+                v-if="section.kind === 'knowledge' && shouldCollapseKnowledgeSection(section)"
+                class="section-expand-hint-row"
+              >
+                <td :colspan="tableColspan">
+                  <button type="button" class="btn btn-ghost btn-sm section-collapse-btn" @click="toggleSection(group.key, section.kind)">
+                    Collapse knowledge base
+                  </button>
+                </td>
+              </tr>
+              <tr v-for="doc in section.docs" :key="doc.id">
             <td>
               <div class="cell-stack">
                 <NuxtLink :to="`/docs/${doc.id}`" class="col-strong doc-title-link">
@@ -277,6 +365,8 @@ const tableColspan = 5;
               </div>
             </td>
           </tr>
+            </template>
+          </template>
         </template>
       </tbody>
     </GeneralDataTable>
@@ -372,6 +462,12 @@ const tableColspan = 5;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.topbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .topbar h1 {
   margin: 0;

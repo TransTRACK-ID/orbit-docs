@@ -172,6 +172,78 @@
   background: color-mix(in oklch, var(--fg) 3%, transparent);
 }
 
+.ds-table tr.subsection-row td {
+  padding: 8px 16px 4px 24px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+  border-bottom: none;
+}
+
+.ds-table tr.subsection-row:hover {
+  background: transparent;
+}
+
+.ds-table .subsection-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ds-table .subsection-count {
+  font-size: 11px;
+  color: color-mix(in oklch, var(--muted) 85%, var(--fg));
+}
+
+.ds-table tr.section-summary-row td {
+  padding: 14px 16px 14px 24px;
+  background: color-mix(in oklch, var(--fg) 2.5%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
+.ds-table tr.section-summary-row {
+  cursor: pointer;
+}
+
+.ds-table tr.section-summary-row:hover td {
+  background: color-mix(in oklch, var(--fg) 4%, transparent);
+}
+
+.ds-table .section-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ds-table .section-summary-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ds-table .section-summary-copy strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.ds-table .section-summary-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ds-table tr.section-expand-hint-row td {
+  padding: 4px 16px 8px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ds-table .section-collapse-btn {
+  padding-left: 0;
+}
+
 .ds-table .doc-kind {
   font-size: 12px;
   color: var(--muted);

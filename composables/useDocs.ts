@@ -9,8 +9,9 @@ export interface DocItem {
   versionId: string | null;
   tags: string[] | null;
   author: string | null;
-  source: "manual" | "generated";
+  source: "manual" | "generated" | "op_sync";
   docType: string | null;
+  externalId: string | null;
   createdAt: string | null;
   updatedAt: string | null;
   app: { id: string; name: string } | null;

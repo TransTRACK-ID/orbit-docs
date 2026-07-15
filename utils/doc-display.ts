@@ -6,6 +6,7 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   sdd: "SDD Index",
   sdd_index: "SDD Index",
   git_snapshot: "Git Snapshot",
+  feature: "Feature",
 };
 
 /** Canonical titles written by product doc generation. */
@@ -27,9 +28,29 @@ const DOC_TYPE_SORT: Record<string, number> = {
   sdd_index: 4,
 };
 
+export type DocListView = "all" | "product" | "knowledge";
+
+export const DOC_LIST_VIEW_OPTIONS: { id: DocListView; label: string }[] = [
+  { id: "all", label: "All docs" },
+  { id: "product", label: "Product docs" },
+  { id: "knowledge", label: "Knowledge base" },
+];
+
+export const KNOWLEDGE_SECTION_COLLAPSE_THRESHOLD = 8;
+
 export function docTypeLabel(docType: string | null | undefined): string {
   if (!docType) return "—";
   return DOC_TYPE_LABELS[docType] || docType;
+}
+
+export function isFeatureCatalogDoc(doc: DocItem): boolean {
+  return doc.source === "op_sync" && doc.docType === "feature";
+}
+
+export function parseModuleFromTags(tags: string[] | null | undefined): string | null {
+  if (!tags?.length) return null;
+  const tag = tags.find((t) => t.startsWith("module:"));
+  return tag ? tag.slice("module:".length) : null;
 }
 
 export function isGeneratedProductDoc(doc: DocItem): boolean {
@@ -53,18 +74,32 @@ export function docListPrimaryLabel(doc: DocItem): string {
 }
 
 export function docListSecondaryLabel(doc: DocItem): string | null {
+  if (isFeatureCatalogDoc(doc)) {
+    const module = parseModuleFromTags(doc.tags);
+    const id = doc.externalId?.trim();
+    if (id && module) return `${id} · ${module}`;
+    if (id) return id;
+    if (module) return module;
+    return "Synced feature";
+  }
   if (hasCanonicalGeneratedTitle(doc)) return null;
   if (isGeneratedProductDoc(doc)) return docTypeLabel(doc.docType);
   return null;
 }
 
-export interface DocListGroup {
-  key: string;
+export interface DocListSection {
+  kind: "product" | "knowledge";
   label: string;
   docs: DocItem[];
 }
 
-function compareDocs(a: DocItem, b: DocItem): number {
+export interface DocListGroup {
+  key: string;
+  label: string;
+  sections: DocListSection[];
+}
+
+function compareProductDocs(a: DocItem, b: DocItem): number {
   const orderA = DOC_TYPE_SORT[a.docType || ""] ?? 100;
   const orderB = DOC_TYPE_SORT[b.docType || ""] ?? 100;
   if (orderA !== orderB) return orderA - orderB;
@@ -74,10 +109,48 @@ function compareDocs(a: DocItem, b: DocItem): number {
   return a.title.localeCompare(b.title);
 }
 
-export function groupDocsForList(docs: DocItem[]): DocListGroup[] {
+function compareKnowledgeDocs(a: DocItem, b: DocItem): number {
+  const idA = a.externalId || a.title;
+  const idB = b.externalId || b.title;
+  return idA.localeCompare(idB);
+}
+
+export function filterDocsByView(docs: DocItem[], view: DocListView): DocItem[] {
+  if (view === "all") return docs;
+  if (view === "product") return docs.filter((doc) => !isFeatureCatalogDoc(doc));
+  return docs.filter((doc) => isFeatureCatalogDoc(doc));
+}
+
+function buildSections(items: DocItem[]): DocListSection[] {
+  const product = items.filter((doc) => !isFeatureCatalogDoc(doc));
+  const knowledge = items.filter((doc) => isFeatureCatalogDoc(doc));
+  const showSubheaders = product.length > 0 && knowledge.length > 0;
+  const sections: DocListSection[] = [];
+
+  if (product.length > 0) {
+    sections.push({
+      kind: "product",
+      label: showSubheaders ? "Product documentation" : "",
+      docs: [...product].sort(compareProductDocs),
+    });
+  }
+
+  if (knowledge.length > 0) {
+    sections.push({
+      kind: "knowledge",
+      label: showSubheaders ? "Knowledge base" : "",
+      docs: [...knowledge].sort(compareKnowledgeDocs),
+    });
+  }
+
+  return sections;
+}
+
+export function groupDocsForList(docs: DocItem[], view: DocListView = "all"): DocListGroup[] {
+  const filtered = filterDocsByView(docs, view);
   const byApp = new Map<string, DocItem[]>();
 
-  for (const doc of docs) {
+  for (const doc of filtered) {
     const key = doc.app?.id || "__unbound__";
     if (!byApp.has(key)) byApp.set(key, []);
     byApp.get(key)!.push(doc);
@@ -87,11 +160,9 @@ export function groupDocsForList(docs: DocItem[]): DocListGroup[] {
 
   for (const [key, items] of byApp) {
     const label = items[0]?.app?.name || "Other";
-    groups.push({
-      key,
-      label,
-      docs: [...items].sort(compareDocs),
-    });
+    const sections = buildSections(items);
+    if (sections.length === 0) continue;
+    groups.push({ key, label, sections });
   }
 
   groups.sort((a, b) => {
@@ -101,4 +172,12 @@ export function groupDocsForList(docs: DocItem[]): DocListGroup[] {
   });
 
   return groups;
+}
+
+export function sectionCollapseKey(groupKey: string, sectionKind: DocListSection["kind"]): string {
+  return `${groupKey}:${sectionKind}`;
+}
+
+export function shouldCollapseKnowledgeSection(section: DocListSection): boolean {
+  return section.kind === "knowledge" && section.docs.length > KNOWLEDGE_SECTION_COLLAPSE_THRESHOLD;
 }
