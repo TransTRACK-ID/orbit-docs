@@ -137,20 +137,38 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
         args.push("--workspace", effectiveWorkdir);
       }
 
-      args.push(prompt);
-
+      // Pass the prompt on stdin — large SDD prompts (diff + existing doc) exceed
+      // Linux ARG_MAX (~128 KiB) and cause spawn E2BIG when passed as argv.
       return new Promise((resolve, reject) => {
         let accumulated = "";
         let chatId: string | undefined;
         let settled = false;
 
         const proc = spawn(getCursorPath(), args, {
-          stdio: ["ignore", "pipe", "pipe"],
+          stdio: ["pipe", "pipe", "pipe"],
           cwd: effectiveWorkdir || process.cwd(),
           env: { ...process.env },
         });
 
-        onDebugEvent?.({ type: "cursor.spawn", payload: { args, pid: proc.pid } });
+        onDebugEvent?.({
+          type: "cursor.spawn",
+          payload: { args, promptBytes: Buffer.byteLength(prompt, "utf-8"), pid: proc.pid },
+        });
+
+        proc.stdin.on("error", (err) => {
+          if (!settled) {
+            settled = true;
+            reject(new Error(`Cursor agent stdin error: ${err.message}`));
+          }
+        });
+        proc.stdin.write(prompt, "utf-8", (err) => {
+          if (err && !settled) {
+            settled = true;
+            reject(new Error(`Cursor agent failed to write prompt: ${err.message}`));
+            return;
+          }
+          proc.stdin.end();
+        });
 
         const stderrBuf: string[] = [];
 
