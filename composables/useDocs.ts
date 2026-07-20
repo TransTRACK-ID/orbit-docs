@@ -156,7 +156,7 @@ export const useDocs = () => {
     }
   }
 
-  async function publishDoc(id: string) {
+  async function publishDoc(id: string, options?: { silent?: boolean }) {
     try {
       const data = await $fetch<{ data: DocDetail }>(`/api/docs/${id}/publish`, {
         method: "POST",
@@ -168,7 +168,9 @@ export const useDocs = () => {
       if (currentDoc.value && currentDoc.value.id === id) {
         currentDoc.value = { ...currentDoc.value, ...data.data, status: "published" };
       }
-      toast.success(`Published: ${data.data.title}`);
+      if (!options?.silent) {
+        toast.success(`Published: ${data.data.title}`);
+      }
       return data.data;
     } catch (e: any) {
       const msg = e?.data?.message || e?.message || "Failed to publish doc";

@@ -55,8 +55,25 @@ const restoreConfirmVisible = ref(false);
 const versionToRestore = ref<any>(null);
 const isRestoring = ref(false);
 const autosaveReady = ref(false);
+const isPublishing = ref(false);
 
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+
+const isPublished = computed(() => editorStatus.value === "published");
+
+const hasEditorChanges = computed(() => {
+  if (docLoading.value || docNotFound.value || !currentDoc.value) return false;
+  const doc = currentDoc.value;
+  const tagsMatch =
+    JSON.stringify(editorTags.value) === JSON.stringify(doc.tags ? [...doc.tags] : []);
+  return (
+    editorContent.value !== (doc.content || "")
+    || editorTitle.value !== (doc.title || "")
+    || editorStatus.value !== (doc.status || "draft")
+    || (editorVersionId.value ?? null) !== (doc.versionId ?? null)
+    || !tagsMatch
+  );
+});
 
 function getEditorPayload() {
   return {
@@ -91,6 +108,12 @@ const {
 });
 
 const saveStatusLabel = computed(() => {
+  if (docLoading.value || docNotFound.value) return "";
+  if (isPublished.value) {
+    if (isSaving.value || isPublishing.value) return "Saving…";
+    if (hasEditorChanges.value) return "Unsaved changes";
+    return "";
+  }
   if (!autosaveEnabled.value) return "";
   if (saveState.value === "saving" || isSaving.value) return "Saving…";
   if (saveState.value === "error" || isDirty.value || saveState.value === "pending") {
@@ -99,6 +122,9 @@ const saveStatusLabel = computed(() => {
   if (saveState.value === "saved") return "All changes saved";
   return "";
 });
+
+const saveButtonLabel = computed(() => (isPublished.value ? "Save Changes" : "Save Draft"));
+const publishButtonLabel = computed(() => (isPublished.value ? "Update" : "Publish"));
 
 function showToast(msg: string) {
   toastMsg.value = msg;
@@ -116,20 +142,57 @@ function togglePreview() {
 
 async function saveDraft() {
   if (!docId.value) return;
-  await updateDoc(docId.value, { ...getEditorPayload(), versionAction: "save" });
+  const silent = isPublished.value;
+  await updateDoc(docId.value, { ...getEditorPayload(), versionAction: "save" }, { silent });
+  if (silent) {
+    showToast("Changes saved");
+  }
   markClean();
   await fetchDocVersions(docId.value);
 }
 
 async function doPublish() {
-  if (!docId.value) return;
-  if (hasPendingChanges()) {
-    await flushSave({ silent: true });
+  if (!docId.value || isPublishing.value) return;
+  isPublishing.value = true;
+  try {
+    if (isPublished.value) {
+      if (hasEditorChanges.value) {
+        await updateDoc(
+          docId.value,
+          { ...getEditorPayload(), status: "published" },
+          { silent: true },
+        );
+      }
+      await publishDoc(docId.value, { silent: true });
+      showToast("Document updated");
+    } else {
+      if (hasPendingChanges()) {
+        await flushSave({ silent: true });
+      }
+      await publishDoc(docId.value);
+      editorStatus.value = "published";
+    }
+    markClean();
+    await fetchDocVersions(docId.value);
+  } finally {
+    isPublishing.value = false;
   }
-  await publishDoc(docId.value);
-  editorStatus.value = "published";
-  markClean();
-  await fetchDocVersions(docId.value);
+}
+
+async function flushEditorChanges(options: { silent?: boolean } = { silent: true }) {
+  if (!docId.value) return;
+  if (autosaveEnabled.value && hasPendingChanges()) {
+    await flushSave(options);
+    return;
+  }
+  if (hasEditorChanges.value) {
+    await updateDoc(
+      docId.value,
+      { ...getEditorPayload(), versionAction: "save" },
+      options,
+    );
+    markClean();
+  }
 }
 
 function generatePDF() {
@@ -271,7 +334,9 @@ async function onDiffToChange(toId: string) {
 }
 
 const hasUnsavedEditorChanges = computed(
-  () => autosaveEnabled.value && (isDirty.value || hasPendingChanges()),
+  () =>
+    (autosaveEnabled.value && (isDirty.value || hasPendingChanges()))
+    || hasEditorChanges.value,
 );
 
 function onKeydown(e: KeyboardEvent) {
@@ -312,7 +377,7 @@ function resetEditorFields() {
 }
 
 function onBeforeUnload(e: BeforeUnloadEvent) {
-  if (autosaveEnabled.value && hasPendingChanges()) {
+  if (hasUnsavedEditorChanges.value) {
     e.preventDefault();
     e.returnValue = "";
   }
@@ -362,9 +427,9 @@ onBeforeUnmount(() => {
 });
 
 onBeforeRouteLeave(async (_to, _from, next) => {
-  if (autosaveEnabled.value && hasPendingChanges()) {
+  if (hasUnsavedEditorChanges.value) {
     try {
-      await flushSave({ silent: true });
+      await flushEditorChanges({ silent: true });
       next();
     } catch {
       next(false);
@@ -444,14 +509,20 @@ const lastModified = computed(() => {
         <button
           type="button"
           class="btn btn-secondary"
-          :disabled="isSaving"
+          :disabled="isSaving || isPublishing"
           @click="saveDraft"
         >
           <span v-if="isSaving">Saving…</span>
-          <span v-else>Save Draft</span>
+          <span v-else>{{ saveButtonLabel }}</span>
         </button>
-        <button type="button" class="btn btn-primary" @click="doPublish">
-          Publish
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="isSaving || isPublishing"
+          @click="doPublish"
+        >
+          <span v-if="isPublishing">{{ isPublished ? 'Updating…' : 'Publishing…' }}</span>
+          <span v-else>{{ publishButtonLabel }}</span>
         </button>
       </div>
     </header>
@@ -772,7 +843,7 @@ const lastModified = computed(() => {
     <!-- Shortcuts hint -->
     <div class="shortcuts-hint" :class="{ show: shortcutsVisible }">
       <strong>Keyboard shortcuts</strong><br />
-      Ctrl+S — Save draft · Ctrl+P — Preview · Ctrl+? — Show shortcuts
+      Ctrl+S — {{ isPublished ? 'Save changes' : 'Save draft' }} · Ctrl+P — Preview · Ctrl+? — Show shortcuts
     </div>
   </div>
 </template>
