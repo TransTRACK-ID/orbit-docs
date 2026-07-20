@@ -17,17 +17,30 @@ import {
   listFeatureDocIndex,
   searchFeatureDocs,
 } from "~/server/lib/feature-doc-search";
+import {
+  buildListDocsHint,
+  countDocsForFilters,
+  docCategoryCondition,
+  getAppDocCounts,
+  resolveAppRef,
+} from "~/server/lib/mcp-doc-queries";
 import type { DocListView } from "~/utils/doc-display";
 
-function docCategoryCondition(category?: "product" | "knowledge") {
-  if (!category) return undefined;
-  if (category === "knowledge") {
-    return and(
-      eq(schema.docs.source, "op_sync"),
-      eq(schema.docs.docType, "feature"),
-    );
-  }
-  return sql`NOT (${schema.docs.source} = 'op_sync' AND ${schema.docs.docType} = 'feature')`;
+const optionalString = z.preprocess(
+  (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
+  z.string().optional(),
+);
+
+function parseAppRefInput(data: {
+  appId?: string;
+  app_id?: string;
+  appName?: string;
+  app_name?: string;
+}) {
+  return {
+    appId: data.appId ?? data.app_id,
+    appName: data.appName ?? data.app_name,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -52,9 +65,9 @@ export function createMcpServer() {
 /* ------------------------------------------------------------------ */
 
 const ListAppsSchema = z.object({
-  search: z.string().optional(),
-  limit: z.number().min(1).max(100).optional().default(50),
-  offset: z.number().min(0).optional().default(0),
+  search: optionalString,
+  limit: z.coerce.number().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().min(0).optional().default(0),
 });
 
 const GetAppSchema = z.object({
@@ -63,8 +76,8 @@ const GetAppSchema = z.object({
 
 const ListVersionsSchema = z.object({
   appId: z.string(),
-  limit: z.number().min(1).max(100).optional().default(50),
-  offset: z.number().min(0).optional().default(0),
+  limit: z.coerce.number().min(1).max(100).optional().default(50),
+  offset: z.coerce.number().min(0).optional().default(0),
 });
 
 const GetVersionSchema = z.object({
@@ -72,44 +85,103 @@ const GetVersionSchema = z.object({
   versionId: z.string(),
 });
 
-const ListDocsSchema = z.object({
-  appId: z.string().optional(),
-  status: z.enum(["draft", "in_review", "published", "archived"]).optional(),
-  category: z.enum(["product", "knowledge"]).optional(),
-  search: z.string().optional(),
-  includeContent: z.boolean().optional().default(false),
-  limit: z.number().min(1).max(100).optional().default(50),
-  offset: z.number().min(0).optional().default(0),
-});
+const ListDocsSchema = z
+  .object({
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    status: z.enum(["draft", "in_review", "published", "archived"]).optional(),
+    category: z.enum(["product", "knowledge"]).optional(),
+    search: optionalString,
+    includeContent: z.coerce.boolean().optional().default(false),
+    limit: z.coerce.number().min(1).max(100).optional().default(50),
+    offset: z.coerce.number().min(0).optional().default(0),
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    status: data.status,
+    category: data.category,
+    search: data.search,
+    includeContent: data.includeContent,
+    limit: data.limit,
+    offset: data.offset,
+  }));
 
-const ListAppDocumentationSchema = z.object({
-  appId: z.string(),
-  view: z.enum(["all", "product", "knowledge"]).optional().default("all"),
-});
+const ListAppDocumentationSchema = z
+  .object({
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    view: z.enum(["all", "product", "knowledge"]).optional().default("all"),
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    view: data.view,
+  }))
+  .refine((data) => !!(data.appId || data.appName), {
+    message: "Provide appId or appName",
+  });
 
-const SearchFeatureDocsSchema = z.object({
-  appId: z.string(),
-  query: z.string().optional().default(""),
-  module: z.string().optional(),
-  limit: z.number().min(1).max(50).optional().default(20),
-});
+const SearchFeatureDocsSchema = z
+  .object({
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    query: optionalString.default(""),
+    module: optionalString,
+    limit: z.coerce.number().min(1).max(50).optional().default(20),
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    query: data.query ?? "",
+    module: data.module,
+    limit: data.limit,
+  }))
+  .refine((data) => !!(data.appId || data.appName), {
+    message: "Provide appId or appName",
+  });
 
-const ListFeatureDocsSchema = z.object({
-  appId: z.string(),
-  module: z.string().optional(),
-  limit: z.number().min(1).max(200).optional().default(100),
-});
+const ListFeatureDocsSchema = z
+  .object({
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    module: optionalString,
+    limit: z.coerce.number().min(1).max(200).optional().default(100),
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    module: data.module,
+    limit: data.limit,
+  }))
+  .refine((data) => !!(data.appId || data.appName), {
+    message: "Provide appId or appName",
+  });
 
 const GetDocSchema = z.object({
   id: z.string(),
 });
 
-const SearchDocsContentSchema = z.object({
-  query: z.string(),
-  appId: z.string().optional(),
-  category: z.enum(["product", "knowledge"]).optional(),
-  limit: z.number().min(1).max(20).optional().default(10),
-});
+const SearchDocsContentSchema = z
+  .object({
+    query: z.string(),
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    category: z.enum(["product", "knowledge"]).optional(),
+    limit: z.coerce.number().min(1).max(20).optional().default(10),
+  })
+  .transform((data) => ({
+    query: data.query,
+    ...parseAppRefInput(data),
+    category: data.category,
+    limit: data.limit,
+  }));
 
 const ListReleasesSchema = z.object({
   appId: z.string(),
@@ -201,11 +273,12 @@ const TOOLS: Tool[] = [
   {
     name: "list_docs",
     description:
-      "List documentation entries with product/knowledge categorization (matches /docs). Product docs include SRS, FSD, SDD, and manuals. Knowledge base entries are synced spreadsheet features (op_sync).",
+      "List documentation entries with product/knowledge categorization (matches /docs). Prefer list_app_documentation for the grouped view. Accepts appId or appName. Returns total counts and hints when filters hide results.",
     inputSchema: {
       type: "object",
       properties: {
         appId: { type: "string" },
+        appName: { type: "string", description: "Resolve app by name when appId is unknown" },
         status: { type: "string", enum: ["draft", "in_review", "published", "archived"] },
         category: { type: "string", enum: ["product", "knowledge"] },
         search: { type: "string" },
@@ -218,43 +291,43 @@ const TOOLS: Tool[] = [
   {
     name: "list_app_documentation",
     description:
-      "List an app's documentation grouped like the /docs page: Product documentation (SRS, FSD, manuals) and Knowledge base (synced features). Large knowledge bases are summarized instead of listing every row.",
+      "List an app's documentation grouped like the /docs page: Product documentation (SRS, FSD, manuals) and Knowledge base (synced features). Accepts appId or appName.",
     inputSchema: {
       type: "object",
       properties: {
         appId: { type: "string" },
+        appName: { type: "string" },
         view: { type: "string", enum: ["all", "product", "knowledge"] },
       },
-      required: ["appId"],
     },
   },
   {
     name: "search_feature_docs",
     description:
-      "Search the knowledge base (synced spreadsheet features) for an app by title, content, feature ID, or module.",
+      "Search the knowledge base (synced spreadsheet features) for an app by title, content, feature ID, or module. Accepts appId or appName.",
     inputSchema: {
       type: "object",
       properties: {
         appId: { type: "string" },
+        appName: { type: "string" },
         query: { type: "string" },
         module: { type: "string" },
         limit: { type: "number" },
       },
-      required: ["appId"],
     },
   },
   {
     name: "list_feature_docs",
     description:
-      "List knowledge base feature docs for an app (index view). Use when you need feature IDs and titles without full content.",
+      "List knowledge base feature docs for an app (index view). Accepts appId or appName.",
     inputSchema: {
       type: "object",
       properties: {
         appId: { type: "string" },
+        appName: { type: "string" },
         module: { type: "string" },
         limit: { type: "number" },
       },
-      required: ["appId"],
     },
   },
   {
@@ -430,10 +503,13 @@ mcpServer.setRequestHandler(
                 .where(eq(schema.docs.appId, app.id))
                 .then((rows) => rows[0]?.count ?? 0);
 
+              const documentation = await getAppDocCounts(db, app.id);
+
               return {
                 ...app,
                 versionCount,
                 docCount,
+                documentation,
                 latestVersion: latestVersion
                   ? {
                       id: latestVersion.id,
@@ -485,7 +561,7 @@ mcpServer.setRequestHandler(
             };
           }
 
-          const [latestVersion, versionCount, docCount, publishedDocCount, recentVersions, recentActivity] =
+          const [latestVersion, versionCount, docCount, publishedDocCount, documentation, recentVersions, recentActivity] =
             await Promise.all([
               db
                 .select()
@@ -509,6 +585,7 @@ mcpServer.setRequestHandler(
                 .from(schema.docs)
                 .where(and(eq(schema.docs.appId, id), eq(schema.docs.status, "published")))
                 .then((rows) => rows[0]?.count ?? 0),
+              getAppDocCounts(db, id),
               db
                 .select({
                   id: schema.appVersions.id,
@@ -549,6 +626,7 @@ mcpServer.setRequestHandler(
                       versionCount,
                       docCount,
                       publishedDocCount,
+                      documentation,
                       recentVersions,
                       recentActivity,
                     },
@@ -726,10 +804,36 @@ mcpServer.setRequestHandler(
 
         case "list_docs": {
           const params = ListDocsSchema.parse(args);
+          const app = await resolveAppRef(db, {
+            appId: params.appId,
+            appName: params.appName,
+          });
+
+          if ((params.appId || params.appName) && !app.found) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      error: "App not found",
+                      appId: params.appId ?? null,
+                      appName: params.appName ?? null,
+                      hint: "Use list_apps with search or pass appName instead of appId.",
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+              isError: true,
+            };
+          }
+
           const conditions: any[] = [];
 
-          if (params.appId) {
-            conditions.push(eq(schema.docs.appId, params.appId));
+          if (app.id) {
+            conditions.push(eq(schema.docs.appId, app.id));
           }
           if (params.status) {
             conditions.push(eq(schema.docs.status, params.status));
@@ -743,6 +847,8 @@ mcpServer.setRequestHandler(
           }
 
           const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+          const total = await countDocsForFilters(db, conditions);
+          const docCounts = app.id ? await getAppDocCounts(db, app.id) : undefined;
 
           const rows = await db
             .select({
@@ -774,11 +880,38 @@ mcpServer.setRequestHandler(
             formatMcpDoc(row as McpDocRow, { includeContent: params.includeContent }),
           );
 
+          const hint = buildListDocsHint({
+            app,
+            total,
+            count: data.length,
+            status: params.status,
+            category: params.category,
+            docCounts,
+          });
+
           return {
             content: [
               {
                 type: "text",
-                text: JSON.stringify({ data, count: data.length }, null, 2),
+                text: JSON.stringify(
+                  {
+                    app: app.found ? { id: app.id, name: app.name } : null,
+                    filters: {
+                      status: params.status ?? null,
+                      category: params.category ?? null,
+                      search: params.search ?? null,
+                    },
+                    total,
+                    count: data.length,
+                    limit: params.limit,
+                    offset: params.offset,
+                    documentation: docCounts ?? null,
+                    hint,
+                    data,
+                  },
+                  null,
+                  2,
+                ),
               },
             ],
           };
@@ -786,17 +919,28 @@ mcpServer.setRequestHandler(
 
         case "list_app_documentation": {
           const params = ListAppDocumentationSchema.parse(args);
+          const app = await resolveAppRef(db, {
+            appId: params.appId,
+            appName: params.appName,
+          });
 
-          const app = await db
-            .select({ id: schema.apps.id, name: schema.apps.name })
-            .from(schema.apps)
-            .where(eq(schema.apps.id, params.appId))
-            .limit(1)
-            .then((rows) => rows[0]);
-
-          if (!app) {
+          if (!app.found || !app.id) {
             return {
-              content: [{ type: "text", text: JSON.stringify({ error: "App not found" }, null, 2) }],
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      error: "App not found",
+                      appId: params.appId ?? null,
+                      appName: params.appName ?? null,
+                      hint: "Use list_apps with search or pass appName: 'Order Planning'.",
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
               isError: true,
             };
           }
@@ -822,13 +966,14 @@ mcpServer.setRequestHandler(
             .from(schema.docs)
             .leftJoin(schema.apps, eq(schema.docs.appId, schema.apps.id))
             .leftJoin(schema.appVersions, eq(schema.docs.versionId, schema.appVersions.id))
-            .where(eq(schema.docs.appId, params.appId))
+            .where(eq(schema.docs.appId, app.id))
             .orderBy(desc(schema.docs.updatedAt));
 
           const groups = buildGroupedAppDocumentation(
             rows as McpDocRow[],
             params.view as DocListView,
           );
+          const documentation = await getAppDocCounts(db, app.id);
 
           return {
             content: [
@@ -839,6 +984,7 @@ mcpServer.setRequestHandler(
                     data: {
                       app: { id: app.id, name: app.name },
                       view: params.view,
+                      documentation,
                       groups,
                     },
                   },
@@ -852,23 +998,33 @@ mcpServer.setRequestHandler(
 
         case "search_feature_docs": {
           const params = SearchFeatureDocsSchema.parse(args);
+          const app = await resolveAppRef(db, {
+            appId: params.appId,
+            appName: params.appName,
+          });
 
-          const app = await db
-            .select({ id: schema.apps.id })
-            .from(schema.apps)
-            .where(eq(schema.apps.id, params.appId))
-            .limit(1)
-            .then((rows) => rows[0]);
-
-          if (!app) {
+          if (!app.found || !app.id) {
             return {
-              content: [{ type: "text", text: JSON.stringify({ error: "App not found" }, null, 2) }],
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      error: "App not found",
+                      appId: params.appId ?? null,
+                      appName: params.appName ?? null,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
               isError: true,
             };
           }
 
           const results = await searchFeatureDocs({
-            appId: params.appId,
+            appId: app.id,
             query: params.query,
             module: params.module,
             limit: params.limit,
@@ -888,7 +1044,15 @@ mcpServer.setRequestHandler(
             content: [
               {
                 type: "text",
-                text: JSON.stringify({ data, count: data.length }, null, 2),
+                text: JSON.stringify(
+                  {
+                    app: { id: app.id, name: app.name },
+                    data,
+                    count: data.length,
+                  },
+                  null,
+                  2,
+                ),
               },
             ],
           };
@@ -896,32 +1060,53 @@ mcpServer.setRequestHandler(
 
         case "list_feature_docs": {
           const params = ListFeatureDocsSchema.parse(args);
+          const app = await resolveAppRef(db, {
+            appId: params.appId,
+            appName: params.appName,
+          });
 
-          const app = await db
-            .select({ id: schema.apps.id })
-            .from(schema.apps)
-            .where(eq(schema.apps.id, params.appId))
-            .limit(1)
-            .then((rows) => rows[0]);
-
-          if (!app) {
+          if (!app.found || !app.id) {
             return {
-              content: [{ type: "text", text: JSON.stringify({ error: "App not found" }, null, 2) }],
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      error: "App not found",
+                      appId: params.appId ?? null,
+                      appName: params.appName ?? null,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
               isError: true,
             };
           }
 
           const data = await listFeatureDocIndex({
-            appId: params.appId,
+            appId: app.id,
             module: params.module,
             limit: params.limit,
           });
+          const documentation = await getAppDocCounts(db, app.id);
 
           return {
             content: [
               {
                 type: "text",
-                text: JSON.stringify({ data, count: data.length, category: "knowledge" }, null, 2),
+                text: JSON.stringify(
+                  {
+                    app: { id: app.id, name: app.name },
+                    category: "knowledge",
+                    documentation,
+                    data,
+                    count: data.length,
+                  },
+                  null,
+                  2,
+                ),
               },
             ],
           };
@@ -1005,8 +1190,31 @@ mcpServer.setRequestHandler(
         case "search_docs_content": {
           const params = SearchDocsContentSchema.parse(args);
           const query = params.query;
-          const appId = params.appId;
           const limit = params.limit;
+          const app = await resolveAppRef(db, {
+            appId: params.appId,
+            appName: params.appName,
+          });
+
+          if ((params.appId || params.appName) && !app.found) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      error: "App not found",
+                      appId: params.appId ?? null,
+                      appName: params.appName ?? null,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+              isError: true,
+            };
+          }
 
           const searchPattern = "%" + query + "%";
           const conditions = [
@@ -1017,14 +1225,16 @@ mcpServer.setRequestHandler(
             )`,
           ];
 
-          if (appId) {
-            conditions.push(eq(schema.docs.appId, appId));
+          if (app.id) {
+            conditions.push(eq(schema.docs.appId, app.id));
           }
 
           const categoryCondition = docCategoryCondition(params.category);
           if (categoryCondition) {
             conditions.push(categoryCondition);
           }
+
+          const total = await countDocsForFilters(db, conditions);
 
           const rows = await db
             .select({
@@ -1058,7 +1268,16 @@ mcpServer.setRequestHandler(
             content: [
               {
                 type: "text",
-                text: JSON.stringify({ data, count: data.length }, null, 2),
+                text: JSON.stringify(
+                  {
+                    app: app.found ? { id: app.id, name: app.name } : null,
+                    total,
+                    count: data.length,
+                    data,
+                  },
+                  null,
+                  2,
+                ),
               },
             ],
           };
