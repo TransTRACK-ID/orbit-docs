@@ -15,7 +15,7 @@ definePageMeta({
 });
 
 const route = useRoute();
-const { fetchPage } = usePublicSite();
+const { fetchPage, getCachedPage } = usePublicSite();
 
 const siteSlug = computed(() => route.params.siteSlug as string);
 const pageSlug = computed(() => route.params.pageSlug as string);
@@ -73,12 +73,22 @@ const { activeSlug, scrollToSection, refreshScrollSpy, teardownScrollSpy } =
 const { handleContentClick } = useMarkdownCopyHandler();
 
 async function load() {
-  isLoading.value = true;
   error.value = "";
-  page.value = null;
   teardownScrollSpy();
+
+  const cached = getCachedPage(siteSlug.value, pageSlug.value);
+  if (cached) {
+    page.value = cached;
+    isLoading.value = false;
+    await nextTick(() => refreshScrollSpy());
+    return;
+  }
+
+  isLoading.value = true;
+  page.value = null;
   try {
     page.value = await fetchPage(siteSlug.value, pageSlug.value);
+    await nextTick(() => refreshScrollSpy());
   } catch (e: any) {
     error.value = e?.statusMessage || "Page not found";
   } finally {

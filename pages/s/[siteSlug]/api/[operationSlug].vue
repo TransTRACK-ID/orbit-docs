@@ -12,7 +12,7 @@ definePageMeta({
 });
 
 const route = useRoute();
-const { fetchSite } = usePublicSite();
+const { fetchSite, getCachedSite } = usePublicSite();
 
 const siteSlug = computed(() => route.params.siteSlug as string);
 const operationSlug = computed(() => route.params.operationSlug as string);
@@ -48,10 +48,20 @@ const { activeSlug, scrollToSection, setupScrollSpy, refreshScrollSpy, teardownS
   useDocOutline(contentRef);
 
 async function load() {
-  isLoading.value = true;
   error.value = "";
-  site.value = null;
   teardownScrollSpy();
+
+  const cached = getCachedSite(siteSlug.value);
+  if (cached) {
+    site.value = cached;
+    isLoading.value = false;
+    if (!operation.value) error.value = "Operation not found";
+    await nextTick(() => setupScrollSpy("apiContent"));
+    return;
+  }
+
+  isLoading.value = true;
+  site.value = null;
   try {
     site.value = await fetchSite(siteSlug.value);
     if (!operation.value) {

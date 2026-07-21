@@ -15,6 +15,8 @@ const props = defineProps<{
   openapiOperations?: NavOpenApiOperation[];
 }>();
 
+const { prefetchPage, prefetchSite } = usePublicSite();
+
 const pageTitles = computed(() => {
   const map = new Map<string, string>();
   for (const p of props.pages) {
@@ -171,10 +173,35 @@ function tagPanelId(tag: string): string {
 function methodClass(method: string): string {
   return METHOD_COLORS[method.toUpperCase()] || "method-other";
 }
+
+function handleNavPrefetch(event: MouseEvent) {
+  const link = (event.target as HTMLElement | null)?.closest("a[href]") as
+    | HTMLAnchorElement
+    | null;
+  if (!link || link.target === "_blank") return;
+
+  const path = link.getAttribute("href");
+  if (!path) return;
+
+  const pageMatch = path.match(new RegExp(`^/s/${escapeRegExp(props.siteSlug)}/([^/]+)$`));
+  if (pageMatch?.[1]) {
+    prefetchPage(props.siteSlug, pageMatch[1]);
+    return;
+  }
+
+  const apiMatch = path.match(
+    new RegExp(`^/s/${escapeRegExp(props.siteSlug)}/api/([^/]+)$`),
+  );
+  if (apiMatch?.[1]) prefetchSite(props.siteSlug);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 </script>
 
 <template>
-  <nav class="site-nav" aria-label="Site navigation">
+  <nav class="site-nav" aria-label="Site navigation" @mouseover="handleNavPrefetch">
     <p v-if="!hasAnyNavItems" class="site-nav-empty">No pages published yet.</p>
 
     <ul v-else class="doc-nav doc-nav--site doc-nav--sidebar" role="list">

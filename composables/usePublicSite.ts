@@ -38,18 +38,95 @@ export interface PublicSitePageDetail {
   };
 }
 
+const pageCache = new Map<string, PublicSitePageDetail>();
+const pageInflight = new Map<string, Promise<PublicSitePageDetail>>();
+const siteCache = new Map<string, PublicSite>();
+const siteInflight = new Map<string, Promise<PublicSite>>();
+
+function pageCacheKey(siteSlug: string, pageSlug: string) {
+  return `${siteSlug}/${pageSlug}`;
+}
+
+/** @internal test helper */
+export function resetPublicSiteCache() {
+  pageCache.clear();
+  pageInflight.clear();
+  siteCache.clear();
+  siteInflight.clear();
+}
+
 export const usePublicSite = () => {
+  function getCachedPage(siteSlug: string, pageSlug: string): PublicSitePageDetail | undefined {
+    return pageCache.get(pageCacheKey(siteSlug, pageSlug));
+  }
+
+  function getCachedSite(siteSlug: string): PublicSite | undefined {
+    return siteCache.get(siteSlug);
+  }
+
   async function fetchSite(slug: string): Promise<PublicSite> {
-    const res = await $fetch<{ data: PublicSite }>(`/api/public/sites/${slug}`);
-    return res.data;
+    const cached = siteCache.get(slug);
+    if (cached) return cached;
+
+    const inflight = siteInflight.get(slug);
+    if (inflight) return inflight;
+
+    const promise = $fetch<{ data: PublicSite }>(`/api/public/sites/${slug}`)
+      .then((res) => {
+        siteCache.set(slug, res.data);
+        siteInflight.delete(slug);
+        return res.data;
+      })
+      .catch((err) => {
+        siteInflight.delete(slug);
+        throw err;
+      });
+
+    siteInflight.set(slug, promise);
+    return promise;
   }
 
   async function fetchPage(siteSlug: string, pageSlug: string): Promise<PublicSitePageDetail> {
-    const res = await $fetch<{ data: PublicSitePageDetail }>(
+    const key = pageCacheKey(siteSlug, pageSlug);
+    const cached = pageCache.get(key);
+    if (cached) return cached;
+
+    const inflight = pageInflight.get(key);
+    if (inflight) return inflight;
+
+    const promise = $fetch<{ data: PublicSitePageDetail }>(
       `/api/public/sites/${siteSlug}/${pageSlug}`,
-    );
-    return res.data;
+    )
+      .then((res) => {
+        pageCache.set(key, res.data);
+        pageInflight.delete(key);
+        return res.data;
+      })
+      .catch((err) => {
+        pageInflight.delete(key);
+        throw err;
+      });
+
+    pageInflight.set(key, promise);
+    return promise;
   }
 
-  return { fetchSite, fetchPage };
+  function prefetchPage(siteSlug: string, pageSlug: string) {
+    if (pageCache.has(pageCacheKey(siteSlug, pageSlug))) return;
+    void fetchPage(siteSlug, pageSlug).catch(() => {});
+  }
+
+  function prefetchSite(siteSlug: string) {
+    if (siteCache.has(siteSlug)) return;
+    void fetchSite(siteSlug).catch(() => {});
+  }
+
+  return {
+    fetchSite,
+    fetchPage,
+    getCachedPage,
+    getCachedSite,
+    prefetchPage,
+    prefetchSite,
+  };
 };
