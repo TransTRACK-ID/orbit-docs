@@ -6,6 +6,7 @@
 .doc-reader-page {
   --sidebar-width: 272px;
   --outline-sidebar: 240px;
+  --doc-footer-gap: 96px;
 
   min-height: 100vh;
   height: 100vh;
@@ -300,6 +301,14 @@
   width: 100%;
   max-width: 720px;
   min-width: 0;
+}
+
+/* Reliable scroll tail room (flex + overflow containers ignore padding-bottom) */
+.doc-body::after {
+  content: "";
+  display: block;
+  height: var(--doc-footer-gap);
+  pointer-events: none;
 }
 
 .doc-body--wide {

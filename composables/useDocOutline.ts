@@ -17,9 +17,27 @@ export function buildOutlineFromMarkdown(md: string): DocOutlineItem[] {
     }));
 }
 
+/** Pick the last heading whose top edge is at or above the probe line. */
+export function pickActiveHeadingId(
+  headings: Array<{ id: string; top: number }>,
+  probeY: number,
+): string {
+  if (!headings.length) return "";
+  let current = headings[0].id;
+  for (const heading of headings) {
+    if (heading.top <= probeY) current = heading.id;
+    else break;
+  }
+  return current;
+}
+
+const SCROLL_SPY_OFFSET = 96;
+
 export function useDocOutline(contentRef: Ref<HTMLElement | null>) {
   const activeSlug = ref("");
-  let sectionObserver: IntersectionObserver | null = null;
+  const spyRootId = ref("docContent");
+  let scrollCleanup: (() => void) | null = null;
+  let syncActive: (() => void) | null = null;
 
   function scrollToSection(targetId: string) {
     const container = contentRef.value;
@@ -30,45 +48,72 @@ export function useDocOutline(contentRef: Ref<HTMLElement | null>) {
     activeSlug.value = targetId;
   }
 
-  function scrollToTop() {
+  function scrollToTop(rootId = "docContent") {
     const container = contentRef.value;
     if (!container) return;
     container.scrollTo({ top: 0, behavior: "smooth" });
-    activeSlug.value = "";
+    const first = document
+      .getElementById(rootId)
+      ?.querySelector<HTMLElement>("h2[id], h3[id]");
+    activeSlug.value = first?.id ?? "";
   }
 
-  function setupScrollSpy(rootId = "docContent") {
+  function setupScrollSpy(rootId = spyRootId.value) {
+    teardownScrollSpy();
+
     const container = contentRef.value;
     const docContent = document.getElementById(rootId);
     if (!docContent || !container) return;
 
-    const targets = docContent.querySelectorAll<HTMLElement>("h2[id], h3[id]");
-    if (!targets.length) return;
+    spyRootId.value = rootId;
 
-    sectionObserver?.disconnect();
-    sectionObserver = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (visible.length > 0 && visible[0]) {
-          activeSlug.value = visible[0].target.id;
-        }
-      },
-      {
-        root: container,
-        rootMargin: "-10% 0px -60% 0px",
-        threshold: 0,
-      },
-    );
+    syncActive = () => {
+      const headings = [
+        ...docContent.querySelectorAll<HTMLElement>("h2[id], h3[id]"),
+      ];
+      if (!headings.length) {
+        activeSlug.value = "";
+        return;
+      }
 
-    targets.forEach((t) => sectionObserver!.observe(t));
+      const probeY = container.getBoundingClientRect().top + SCROLL_SPY_OFFSET;
+      const positioned = headings.map((heading) => ({
+        id: heading.id,
+        top: heading.getBoundingClientRect().top,
+      }));
+
+      activeSlug.value = pickActiveHeadingId(positioned, probeY);
+    };
+
+    container.addEventListener("scroll", syncActive, { passive: true });
+    scrollCleanup = () => {
+      container.removeEventListener("scroll", syncActive!);
+    };
+
+    syncActive();
+  }
+
+  function refreshScrollSpy() {
+    setupScrollSpy(spyRootId.value);
   }
 
   function teardownScrollSpy() {
-    sectionObserver?.disconnect();
-    sectionObserver = null;
+    scrollCleanup?.();
+    scrollCleanup = null;
+    syncActive = null;
   }
+
+  watch(
+    contentRef,
+    (el) => {
+      if (!el) {
+        teardownScrollSpy();
+        return;
+      }
+      nextTick(() => setupScrollSpy(spyRootId.value));
+    },
+    { flush: "post" },
+  );
 
   onBeforeUnmount(teardownScrollSpy);
 
@@ -77,6 +122,7 @@ export function useDocOutline(contentRef: Ref<HTMLElement | null>) {
     scrollToSection,
     scrollToTop,
     setupScrollSpy,
+    refreshScrollSpy,
     teardownScrollSpy,
   };
 }

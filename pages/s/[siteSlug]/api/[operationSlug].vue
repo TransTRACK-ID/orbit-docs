@@ -44,7 +44,7 @@ const outlineItems = computed<DocOutlineItem[]>(() => {
   return items;
 });
 
-const { activeSlug, scrollToSection, setupScrollSpy, teardownScrollSpy } =
+const { activeSlug, scrollToSection, setupScrollSpy, refreshScrollSpy, teardownScrollSpy } =
   useDocOutline(contentRef);
 
 async function load() {
@@ -56,13 +56,12 @@ async function load() {
     site.value = await fetchSite(siteSlug.value);
     if (!operation.value) {
       error.value = "Operation not found";
-    } else {
-      await nextTick(() => setupScrollSpy("apiContent"));
     }
   } catch (e: any) {
     error.value = e?.statusMessage || "Site not found";
   } finally {
     isLoading.value = false;
+    await nextTick(() => setupScrollSpy("apiContent"));
   }
 }
 
@@ -176,8 +175,8 @@ useHead(() => ({
           <h1 class="doc-body-title">{{ operation.summary || operation.operationId || operation.label }}</h1>
           <p v-if="operation.description" class="ps-op-description">{{ operation.description }}</p>
 
-          <section v-if="operation.parameters.length" id="params" class="ps-op-section">
-            <h2 class="ps-op-section-title">Parameters</h2>
+          <section v-if="operation.parameters.length" class="ps-op-section">
+            <h2 id="params" class="ps-op-section-title">Parameters</h2>
             <table class="param-table">
               <thead>
                 <tr>
@@ -200,8 +199,8 @@ useHead(() => ({
             </table>
           </section>
 
-          <section v-if="operation.requestBody" id="request" class="ps-op-section">
-            <h2 class="ps-op-section-title">
+          <section v-if="operation.requestBody" class="ps-op-section">
+            <h2 id="request" class="ps-op-section-title">
               Request body
               <span class="ps-muted">· {{ operation.requestBody.contentTypes.join(", ") }}</span>
               <span v-if="operation.requestBody.required" class="required-pill">required</span>
@@ -210,8 +209,8 @@ useHead(() => ({
             <pre v-if="requestExample" class="code-block"><code>{{ requestExample }}</code></pre>
           </section>
 
-          <section v-if="operation.responses.length" id="responses" class="ps-op-section">
-            <h2 class="ps-op-section-title">Responses</h2>
+          <section v-if="operation.responses.length" class="ps-op-section">
+            <h2 id="responses" class="ps-op-section-title">Responses</h2>
             <div v-for="r in operation.responses" :key="r.status" class="response-block">
               <div class="response-head">
                 <span class="status-pill">{{ r.status }}</span>

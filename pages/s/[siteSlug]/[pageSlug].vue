@@ -68,7 +68,7 @@ const outlineItems = computed(() =>
   page.value?.content ? buildOutlineFromMarkdown(page.value.content) : [],
 );
 
-const { activeSlug, scrollToSection, setupScrollSpy, teardownScrollSpy } =
+const { activeSlug, scrollToSection, refreshScrollSpy, teardownScrollSpy } =
   useDocOutline(contentRef);
 const { handleContentClick } = useMarkdownCopyHandler();
 
@@ -79,8 +79,6 @@ async function load() {
   teardownScrollSpy();
   try {
     page.value = await fetchPage(siteSlug.value, pageSlug.value);
-    await nextTick();
-    await nextTick(() => setupScrollSpy("docContent"));
   } catch (e: any) {
     error.value = e?.statusMessage || "Page not found";
   } finally {
@@ -89,8 +87,8 @@ async function load() {
 }
 
 watch(renderedHtml, () => {
-  if (!page.value?.content) return;
-  nextTick(() => setupScrollSpy("docContent"));
+  if (!page.value?.content || isLoading.value) return;
+  nextTick(() => refreshScrollSpy());
 });
 
 onMounted(load);

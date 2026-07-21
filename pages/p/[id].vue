@@ -57,7 +57,7 @@ const outlineItems = computed(() =>
   doc.value?.content ? buildOutlineFromMarkdown(doc.value.content) : [],
 );
 
-const { activeSlug, scrollToSection, scrollToTop, setupScrollSpy, teardownScrollSpy } =
+const { activeSlug, scrollToSection, scrollToTop, refreshScrollSpy, teardownScrollSpy } =
   useDocOutline(contentRef);
 const { handleContentClick } = useMarkdownCopyHandler(showToast);
 
@@ -100,17 +100,9 @@ onMounted(async () => {
   }
 });
 
-watch(
-  () => doc.value,
-  (loadedDoc) => {
-    if (!loadedDoc) return;
-    nextTick(() => setupScrollSpy("docContent"));
-  },
-);
-
 watch(renderedHtml, () => {
-  if (!doc.value?.content) return;
-  nextTick(() => setupScrollSpy("docContent"));
+  if (!doc.value?.content || isLoading.value) return;
+  nextTick(() => refreshScrollSpy());
 });
 
 onBeforeUnmount(() => {
@@ -381,20 +373,20 @@ function cancelCommentForm() {
 }
 
 .doc-content--dock-pad {
-  padding-bottom: 112px;
+  --doc-footer-gap: 132px;
 }
 
 .doc-content--dock-pad-expanded {
-  padding-bottom: 240px;
+  --doc-footer-gap: 280px;
 }
 
 @media (max-width: 640px) {
   .doc-content--dock-pad {
-    padding-bottom: 128px;
+    --doc-footer-gap: 160px;
   }
 
   .doc-content--dock-pad-expanded {
-    padding-bottom: 260px;
+    --doc-footer-gap: 300px;
   }
 }
 
