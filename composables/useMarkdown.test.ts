@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderMarkdown, extractHeadings } from "./useMarkdown";
+import { renderMarkdown, extractHeadings, parseFrontmatter, stripFrontmatter } from "./useMarkdown";
 
 describe("renderMarkdown", () => {
   it("should render headings", () => {
@@ -145,5 +145,81 @@ describe("extractHeadings", () => {
 
   it("should return empty array for no headings", () => {
     expect(extractHeadings("no headings here")).toEqual([]);
+  });
+
+  it("should ignore frontmatter when extracting headings", () => {
+    const md = "---\ntitle: T\n---\n# Real heading";
+    expect(extractHeadings(md)).toEqual([{ level: 1, text: "Real heading" }]);
+  });
+});
+
+describe("parseFrontmatter", () => {
+  it("parses simple frontmatter", () => {
+    const md = "---\ntitle: Hello\ndescription: A page\n---\n# Body";
+    const { frontmatter, body } = parseFrontmatter(md);
+    expect(frontmatter.title).toBe("Hello");
+    expect(frontmatter.description).toBe("A page");
+    expect(body).toBe("# Body");
+  });
+
+  it("returns empty frontmatter when none present", () => {
+    const { frontmatter, body } = parseFrontmatter("# Just a heading");
+    expect(frontmatter).toEqual({});
+    expect(body).toBe("# Just a heading");
+  });
+
+  it("normalizes known fields", () => {
+    const md = "---\ntitle: T\nsidebarTitle: Sidebar\nicon: book\nhidden: true\nmode: wide\nkeywords:\n  - a\n  - b\n---\nbody";
+    const { frontmatter } = parseFrontmatter(md);
+    expect(frontmatter).toMatchObject({
+      title: "T",
+      sidebarTitle: "Sidebar",
+      icon: "book",
+      hidden: true,
+      mode: "wide",
+      keywords: ["a", "b"],
+    });
+  });
+
+  it("rejects invalid mode values", () => {
+    const md = "---\nmode: fullscreen\n---\nbody";
+    const { frontmatter } = parseFrontmatter(md);
+    expect(frontmatter.mode).toBeUndefined();
+  });
+
+  it("handles malformed yaml gracefully", () => {
+    const md = "---\ntitle: : :\n---\nbody";
+    const { body } = parseFrontmatter(md);
+    expect(body).toBe("body");
+  });
+
+  it("preserves arbitrary keys", () => {
+    const md = "---\ncustomField: value\n---\nbody";
+    const { frontmatter } = parseFrontmatter(md);
+    expect(frontmatter.customField).toBe("value");
+  });
+});
+
+describe("stripFrontmatter", () => {
+  it("removes a leading frontmatter block", () => {
+    expect(stripFrontmatter("---\ntitle: T\n---\n# Body")).toBe("# Body");
+  });
+
+  it("leaves content without frontmatter untouched", () => {
+    expect(stripFrontmatter("# No frontmatter")).toBe("# No frontmatter");
+  });
+
+  it("does not strip a lone hr", () => {
+    expect(stripFrontmatter("---")).toBe("---");
+  });
+});
+
+describe("renderMarkdown with frontmatter", () => {
+  it("strips frontmatter before rendering", () => {
+    const md = "---\ntitle: T\n---\n# Hello";
+    const html = renderMarkdown(md);
+    expect(html).toContain("Hello");
+    expect(html).toContain("<h1");
+    expect(html).not.toContain("title: T");
   });
 });

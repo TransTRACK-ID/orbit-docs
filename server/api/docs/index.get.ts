@@ -1,6 +1,6 @@
 import { defineEventHandler, getQuery } from "h3";
 import { getDb } from "~/server/database";
-import { docs, apps, appVersions } from "~/server/database/schema";
+import { docs, apps, appVersions, docSites } from "~/server/database/schema";
 import { desc, eq, sql, and } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
 
@@ -22,6 +22,10 @@ export default defineEventHandler(async (event) => {
   if (status) {
     conditions.push(eq(docs.status, status as "draft" | "in_review" | "published" | "archived"));
   }
+  const siteId = typeof query.siteId === "string" ? query.siteId : "";
+  if (siteId) {
+    conditions.push(eq(docs.siteId, siteId));
+  }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -38,14 +42,19 @@ export default defineEventHandler(async (event) => {
       source: docs.source,
       docType: docs.docType,
       externalId: docs.externalId,
+      siteId: docs.siteId,
+      slug: docs.slug,
       createdAt: docs.createdAt,
       updatedAt: docs.updatedAt,
       appName: apps.name,
       version: appVersions.version,
+      siteName: docSites.name,
+      siteSlug: docSites.slug,
     })
     .from(docs)
     .leftJoin(apps, eq(docs.appId, apps.id))
     .leftJoin(appVersions, eq(docs.versionId, appVersions.id))
+    .leftJoin(docSites, eq(docs.siteId, docSites.id))
     .where(whereClause)
     .orderBy(desc(docs.updatedAt));
 
@@ -61,10 +70,13 @@ export default defineEventHandler(async (event) => {
     source: row.source,
     docType: row.docType,
     externalId: row.externalId,
+    siteId: row.siteId,
+    slug: row.slug,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     app: row.appName ? { id: row.appId, name: row.appName } : null,
     version: row.version ? { id: row.versionId, version: row.version } : null,
+    site: row.siteId ? { id: row.siteId, name: row.siteName, slug: row.siteSlug } : null,
   }));
 
   return { data };

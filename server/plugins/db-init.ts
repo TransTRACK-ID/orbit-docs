@@ -92,6 +92,38 @@ export default defineNitroPlugin(async () => {
     WHERE external_id IS NOT NULL
   `);
 
+  // ── doc_sites (multi-page doc sets) ─────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_sites (
+      id TEXT PRIMARY KEY,
+      app_id TEXT REFERENCES apps(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      nav_config JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS doc_sites_slug_unique ON doc_sites (slug)`);
+  await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS site_id TEXT REFERENCES doc_sites(id) ON DELETE SET NULL`);
+  await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS slug TEXT`);
+  await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS frontmatter JSONB DEFAULT '{}'::jsonb`);
+  await pool.query(`ALTER TABLE docs ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS docs_site_slug_unique
+    ON docs (site_id, slug)
+    WHERE slug IS NOT NULL
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS docs_site_id_idx ON docs (site_id)`);
+
+  // OpenAPI site generation columns
+  await pool.query(`ALTER TABLE doc_sites ADD COLUMN IF NOT EXISTS openapi_spec TEXT`);
+  await pool.query(`ALTER TABLE doc_sites ADD COLUMN IF NOT EXISTS openapi_format TEXT`);
+  await pool.query(`ALTER TABLE doc_sites ADD COLUMN IF NOT EXISTS openapi_normalized JSONB`);
+
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS doc_versions (
       id TEXT PRIMARY KEY,

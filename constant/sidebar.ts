@@ -7,6 +7,7 @@ import {
   IconsApiDocs,
   IconsFeedback,
   IconsSettings,
+  IconsDocSites,
 } from "#components";
 import type { ISidebar } from "@/types/sidebar";
 import { markRaw } from "vue";
@@ -45,6 +46,14 @@ export const sidebarMenu: ISidebar[] = [
     label: "Docs",
     route: "/docs",
     icon: markRaw(IconsDocEditor),
+    active: false,
+  },
+
+  {
+    id: "menu__doc_sites",
+    label: "Doc Sites",
+    route: "/sites",
+    icon: markRaw(IconsDocSites),
     active: false,
   },
 

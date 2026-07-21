@@ -1,9 +1,10 @@
 import { defineEventHandler, readBody, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { docs, activityLogs, apps, appVersions } from "~/server/database/schema";
+import { docs, activityLogs, apps, appVersions, docSites } from "~/server/database/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
 import { createDocVersionSnapshot, isValidDocVersionAction } from "~/server/lib/doc-version-snapshot";
+import { parseFrontmatter } from "~/composables/useMarkdown";
 
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
@@ -21,7 +22,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event);
-  const { title, appId, content, status, versionId, tags, author, source, docType, versionAction } = body || {};
+  const { title, appId, content, status, versionId, tags, author, source, docType, versionAction, siteId, slug, sortOrder, frontmatter } = body || {};
 
   const existing = await db
     .select()
@@ -79,13 +80,24 @@ export default defineEventHandler(async (event) => {
   };
   if (title !== undefined) updateData.title = title.trim();
   if (appId !== undefined) updateData.appId = appId || null;
-  if (content !== undefined) updateData.content = content || "";
+  if (content !== undefined) {
+    updateData.content = content || "";
+    const parsed = parseFrontmatter(content || "");
+    updateData.frontmatter = parsed.frontmatter;
+  }
+  if (frontmatter !== undefined) {
+    updateData.frontmatter =
+      frontmatter && typeof frontmatter === "object" ? frontmatter : {};
+  }
   if (status !== undefined) updateData.status = status;
   if (versionId !== undefined) updateData.versionId = versionId || null;
   if (tags !== undefined) updateData.tags = tags.filter((t: string) => t.trim() !== "").map((t: string) => t.trim());
   if (author !== undefined) updateData.author = author || null;
   if (source !== undefined) updateData.source = source;
   if (docType !== undefined) updateData.docType = docType || null;
+  if (siteId !== undefined) updateData.siteId = siteId || null;
+  if (slug !== undefined) updateData.slug = slug ? slug.trim() : null;
+  if (sortOrder !== undefined) updateData.sortOrder = Number(sortOrder) || 0;
 
   const updatedRow = await db
     .update(docs)

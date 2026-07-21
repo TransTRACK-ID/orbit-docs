@@ -1,4 +1,3 @@
-import { useAuth } from "#imports";
 import { defineStore } from "pinia";
 import { toast } from "vue3-toastify";
 import { ValidationError } from "yup";

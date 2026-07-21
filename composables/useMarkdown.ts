@@ -1,5 +1,88 @@
 import { marked } from "marked";
+import { parse as parseYaml } from "yaml";
 import { allowColorHtmlInMarkdown } from "~/composables/inlineColorHtml";
+
+export interface DocFrontmatter {
+  title?: string;
+  description?: string;
+  sidebarTitle?: string;
+  icon?: string;
+  hidden?: boolean;
+  searchable?: boolean;
+  mode?: "default" | "wide" | "center";
+  keywords?: string[];
+  [key: string]: unknown;
+}
+
+export interface ParsedDoc {
+  frontmatter: DocFrontmatter;
+  body: string;
+}
+
+const FRONTMATTER_RE = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
+
+/** Parse YAML frontmatter from a markdown string. Returns frontmatter + body. */
+export function parseFrontmatter(md: string): ParsedDoc {
+  if (!md || typeof md !== "string") return { frontmatter: {}, body: md || "" };
+  const match = md.match(FRONTMATTER_RE);
+  if (!match) return { frontmatter: {}, body: md };
+  const raw = match[1];
+  const body = md.slice(match[0].length);
+  let frontmatter: DocFrontmatter = {};
+  try {
+    const parsed = parseYaml(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      frontmatter = normalizeFrontmatter(parsed as Record<string, unknown>);
+    }
+  } catch (e: any) {
+    console.error("Frontmatter parse error:", e?.message);
+  }
+  return { frontmatter, body };
+}
+
+function normalizeFrontmatter(input: Record<string, unknown>): DocFrontmatter {
+  const out: DocFrontmatter = {};
+  const str = (v: unknown): string | undefined =>
+    typeof v === "string" ? v : v == null ? undefined : String(v);
+  const title = str(input.title);
+  if (title) out.title = title;
+  const description = str(input.description);
+  if (description) out.description = description;
+  const sidebarTitle = str(input.sidebarTitle ?? input.sidebar_title);
+  if (sidebarTitle) out.sidebarTitle = sidebarTitle;
+  const icon = str(input.icon);
+  if (icon) out.icon = icon;
+  if (typeof input.hidden === "boolean") out.hidden = input.hidden;
+  if (typeof input.searchable === "boolean") out.searchable = input.searchable;
+  const mode = str(input.mode);
+  if (mode === "default" || mode === "wide" || mode === "center") out.mode = mode;
+  if (Array.isArray(input.keywords)) {
+    out.keywords = input.keywords.filter((k): k is string => typeof k === "string");
+  }
+  // Preserve arbitrary keys, but skip normalized/known fields so we don't
+  // re-introduce invalid values (e.g. mode: fullscreen).
+  const known = new Set([
+    "title",
+    "description",
+    "sidebarTitle",
+    "sidebar_title",
+    "icon",
+    "hidden",
+    "searchable",
+    "mode",
+    "keywords",
+  ]);
+  for (const [k, v] of Object.entries(input)) {
+    if (!known.has(k) && v != null) out[k] = v as unknown;
+  }
+  return out;
+}
+
+/** Strip frontmatter from a markdown string (no parsing). */
+export function stripFrontmatter(md: string): string {
+  if (!md) return md;
+  return md.replace(FRONTMATTER_RE, "");
+}
 
 // Lazy-load highlight.js for code syntax highlighting
 let _hljs: typeof import("highlight.js").default | null = null;
@@ -80,7 +163,8 @@ function preprocessNotionImageMarkdown(md: string): string {
 
 export function renderMarkdown(md: string): string {
   try {
-    const prepared = preprocessNotionImageMarkdown(md);
+    const stripped = stripFrontmatter(md);
+    const prepared = preprocessNotionImageMarkdown(stripped);
     const renderer = new marked.Renderer();
 
     // ─── Escape raw HTML except safe inline color markup ─────────
@@ -198,7 +282,8 @@ function renderMediaEmbed(url: string, alt: string): string {
 }
 
 export function extractHeadings(md: string): Array<{ level: number; text: string }> {
-  const lines = md.split("\n");
+  const body = stripFrontmatter(md);
+  const lines = body.split("\n");
   const headings: Array<{ level: number; text: string }> = [];
   for (const line of lines) {
     const match = line.match(/^(#{1,3})\s+(.+)$/);

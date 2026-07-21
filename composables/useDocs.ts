@@ -16,6 +16,9 @@ export interface DocItem {
   updatedAt: string | null;
   app: { id: string; name: string } | null;
   version: { id: string; version: string } | null;
+  siteId?: string | null;
+  slug?: string | null;
+  site?: { id: string; name: string; slug: string } | null;
 }
 
 export interface DocVersionOption {
@@ -37,6 +40,11 @@ export interface DocVersion {
 
 export interface DocDetail extends DocItem {
   appVersions: DocVersionOption[];
+  siteId?: string | null;
+  slug?: string | null;
+  frontmatter?: Record<string, unknown> | null;
+  sortOrder?: number;
+  site?: { id: string; name: string; slug: string } | null;
 }
 
 export interface CreateDocPayload {
@@ -50,6 +58,10 @@ export interface CreateDocPayload {
   source?: string;
   docType?: string;
   versionAction?: "save" | "publish" | "restore";
+  siteId?: string | null;
+  slug?: string | null;
+  sortOrder?: number;
+  frontmatter?: Record<string, unknown> | null;
 }
 
 export const useDocs = () => {
@@ -61,7 +73,7 @@ export const useDocs = () => {
   const isLoadingVersions = ref(false);
   const search = ref("");
 
-  async function fetchDocs(filters?: { appId?: string; status?: string }) {
+  async function fetchDocs(filters?: { appId?: string; status?: string; siteId?: string }) {
     isLoading.value = true;
     try {
       const data = await $fetch<{ data: DocItem[] }>("/api/docs", {
@@ -69,6 +81,7 @@ export const useDocs = () => {
           ...(search.value ? { search: search.value } : {}),
           ...(filters?.appId ? { appId: filters.appId } : {}),
           ...(filters?.status ? { status: filters.status } : {}),
+          ...(filters?.siteId ? { siteId: filters.siteId } : {}),
         },
       });
       docs.value = data.data;

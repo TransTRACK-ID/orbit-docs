@@ -11,6 +11,7 @@ import {
   shouldCollapseKnowledgeSection,
   type DocListView,
 } from "~/utils/doc-display";
+import { slugify } from "~/utils/nav-client";
 
 definePageMeta({
   auth: true,
@@ -22,17 +23,27 @@ onBeforeMount(() => {
 });
 
 const route = useRoute();
+const router = useRouter();
 const { docs, isLoading, search, fetchDocs, createDoc, deleteDoc } = useDocs();
 const { apps, fetchApps } = useApps();
+const { docSites, fetchDocSites } = useDocSites();
 
 const appFilter = ref((route.query.app as string) || "");
+const siteFilter = ref((route.query.siteId as string) || "");
 const docView = ref<DocListView>("all");
 
 watch(
   () => route.query.app,
   (app) => {
     appFilter.value = (app as string) || "";
-  }
+  },
+);
+
+watch(
+  () => route.query.siteId,
+  (siteId) => {
+    siteFilter.value = (siteId as string) || "";
+  },
 );
 
 const appFilterOptions = computed(() => [
@@ -40,14 +51,23 @@ const appFilterOptions = computed(() => [
   ...apps.value.map((a) => ({ id: a.id, label: a.name })),
 ]);
 
+const siteFilterOptions = computed(() => [
+  { id: "", label: "All sites" },
+  ...docSites.value.map((s) => ({ id: s.id, label: s.name })),
+]);
+
+const activeSite = computed(() =>
+  siteFilter.value ? docSites.value.find((s) => s.id === siteFilter.value) || null : null,
+);
+
 const appOptions = computed(() => [
   { id: "", label: "Unbound (latest)" },
   ...apps.value.map((a) => ({ id: a.id, label: a.name })),
 ]);
 
 onMounted(async () => {
-  await fetchApps();
-  await fetchDocs({ appId: appFilter.value });
+  await Promise.all([fetchApps(), fetchDocSites()]);
+  await fetchDocs({ appId: appFilter.value, siteId: siteFilter.value || undefined });
   document.addEventListener("keydown", onKeydown);
   document.addEventListener("click", onClickOutside);
 });
@@ -64,8 +84,19 @@ function onClickOutside(e: MouseEvent) {
   }
 }
 
-watch([search, appFilter], async () => {
-  await fetchDocs({ appId: appFilter.value });
+watch([search, appFilter, siteFilter], async () => {
+  await fetchDocs({
+    appId: appFilter.value,
+    siteId: siteFilter.value || undefined,
+  });
+});
+
+watch(siteFilter, (siteId) => {
+  const query = { ...route.query };
+  if (siteId) query.siteId = siteId;
+  else delete query.siteId;
+  router.replace({ query });
+  createForm.siteId = siteId || "";
 });
 
 watch(appFilter, (appId) => {
@@ -76,6 +107,8 @@ const showCreateModal = ref(false);
 const createForm = reactive({
   title: "",
   appId: appFilter.value,
+  siteId: siteFilter.value,
+  slug: "",
   content: "",
   status: "draft",
   tags: [] as string[],
@@ -83,15 +116,40 @@ const createForm = reactive({
 });
 const createTitleError = ref(false);
 
+watch(
+  () => createForm.title,
+  (title) => {
+    if (createForm.siteId && (!createForm.slug || createForm.slug === slugify(prevCreateTitle))) {
+      createForm.slug = slugify(title);
+    }
+    prevCreateTitle = title;
+  },
+);
+
+watch(
+  () => createForm.siteId,
+  (siteId) => {
+    if (siteId && createForm.title.trim()) {
+      if (!createForm.slug || createForm.slug === slugify(prevCreateTitle)) {
+        createForm.slug = slugify(createForm.title);
+      }
+    }
+  },
+);
+let prevCreateTitle = "";
+
 function openCreateModal() {
   showCreateModal.value = true;
   createTitleError.value = false;
   createForm.title = "";
   createForm.appId = appFilter.value;
+  createForm.siteId = siteFilter.value;
+  createForm.slug = "";
   createForm.content = "";
   createForm.status = "draft";
   createForm.tags = [];
   createForm.author = "";
+  prevCreateTitle = "";
 }
 
 function closeCreateModal() {
@@ -109,6 +167,8 @@ async function submitCreate() {
     const doc = await createDoc({
       title: createForm.title.trim(),
       appId: createForm.appId || undefined,
+      siteId: createForm.siteId || null,
+      slug: createForm.siteId && createForm.slug.trim() ? createForm.slug.trim() : null,
       content: createForm.content,
       status: createForm.status,
       tags: createForm.tags,
@@ -202,6 +262,7 @@ function toggleSection(groupKey: string, sectionKind: "product" | "knowledge") {
 }
 
 const pageSubtitle = computed(() => {
+  if (activeSite.value) return `Pages in ${activeSite.value.name}`;
   if (docView.value === "product") return "SRS, FSD, SDD, and manual docs";
   if (docView.value === "knowledge") return "Synced feature catalog from spreadsheets";
   return "All documentation across apps";
@@ -237,6 +298,12 @@ const tableColspan = 5;
           placeholder="Filter by app…"
           search-placeholder="Search apps…"
         />
+        <GeneralSearchableDropdown
+          v-model="siteFilter"
+          :options="siteFilterOptions"
+          placeholder="Filter by site…"
+          search-placeholder="Search sites…"
+        />
         <NuxtLink to="/docs/generate" class="btn btn-secondary">
           ✦ Generate Docs
         </NuxtLink>
@@ -245,6 +312,27 @@ const tableColspan = 5;
         </button>
       </div>
     </header>
+
+    <div v-if="activeSite" class="site-context-banner">
+      <div class="site-context-text">
+        <span class="site-context-label">Doc site</span>
+        <strong>{{ activeSite.name }}</strong>
+        <span class="site-context-slug num">/s/{{ activeSite.slug }}</span>
+      </div>
+      <div class="site-context-actions">
+        <NuxtLink :to="`/sites/${activeSite.id}`" class="btn btn-secondary btn-sm">
+          Manage site
+        </NuxtLink>
+        <NuxtLink
+          v-if="activeSite.status === 'published'"
+          :to="`/s/${activeSite.slug}`"
+          target="_blank"
+          class="btn btn-ghost btn-sm"
+        >
+          Public view ↗
+        </NuxtLink>
+      </div>
+    </div>
 
     <GeneralDataTable v-if="isLoading">
       <tbody>
@@ -329,6 +417,12 @@ const tableColspan = 5;
                 <span v-if="docListSecondaryLabel(doc)" class="doc-kind col-truncate">
                   {{ docListSecondaryLabel(doc) }}
                 </span>
+                <span v-if="doc.site" class="doc-site-badge">
+                  <NuxtLink :to="`/sites/${doc.site.id}`" class="doc-site-link">
+                    {{ doc.site.name }}
+                  </NuxtLink>
+                  <span v-if="doc.slug" class="doc-site-slug num">/s/{{ doc.site.slug }}/{{ doc.slug }}</span>
+                </span>
               </div>
             </td>
             <td>
@@ -408,6 +502,30 @@ const tableColspan = 5;
               />
             </div>
             <div class="form-group">
+              <label for="docSite">Doc site <span class="opt">(optional)</span></label>
+              <GeneralSearchableDropdown
+                id="docSite"
+                v-model="createForm.siteId"
+                :options="[{ id: '', label: 'Not part of a site' }, ...docSites.map((s) => ({ id: s.id, label: s.name }))]"
+                placeholder="Select site…"
+                search-placeholder="Search sites…"
+              />
+            </div>
+            <div v-if="createForm.siteId" class="form-group">
+              <label for="docSlug">Page slug</label>
+              <input
+                id="docSlug"
+                v-model="createForm.slug"
+                type="text"
+                class="input"
+                placeholder="Auto-generated from title"
+              />
+              <span class="field-hint">
+                /s/{{ docSites.find((s) => s.id === createForm.siteId)?.slug || "…" }}/{{ createForm.slug || "…" }}
+                <span class="field-hint-muted"> · you can edit this</span>
+              </span>
+            </div>
+            <div class="form-group">
               <label for="docAuthor">Author</label>
               <AppOwnerSelect id="docAuthor" v-model="createForm.author" />
             </div>
@@ -454,6 +572,74 @@ const tableColspan = 5;
 <style scoped>
 .docs-page {
   /* Inherits global semantic tokens from :root — no local overrides so dark mode works */
+}
+
+.doc-site-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.doc-site-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+.doc-site-link:hover {
+  text-decoration: underline;
+}
+.doc-site-slug {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.site-context-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in oklch, var(--accent) 25%, transparent);
+  border-radius: var(--radius-lg);
+}
+.site-context-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+.site-context-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.site-context-slug {
+  font-size: 12px;
+  color: var(--muted);
+}
+.site-context-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.field-hint {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+.field-hint-muted {
+  font-family: var(--font-body);
+  font-style: italic;
+}
+.opt {
+  color: var(--muted);
+  font-weight: 400;
 }
 
 .topbar {

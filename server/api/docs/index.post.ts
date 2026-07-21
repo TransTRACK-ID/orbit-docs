@@ -3,6 +3,7 @@ import { getDb } from "~/server/database";
 import { docs, activityLogs, docVersions } from "~/server/database/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
+import { parseFrontmatter } from "~/composables/useMarkdown";
 
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
@@ -11,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const db = getDb();
   const body = await readBody(event);
 
-  const { title, appId, content, status, versionId, tags, author, source, docType } = body || {};
+  const { title, appId, content, status, versionId, tags, author, source, docType, siteId, slug, sortOrder } = body || {};
 
   if (!title || typeof title !== "string" || title.trim().length === 0) {
     throw createError({
@@ -107,12 +108,16 @@ export default defineEventHandler(async (event) => {
       title: title.trim(),
       appId: appId || null,
       content: content || "",
+      frontmatter: parseFrontmatter(content || "").frontmatter,
       status: status || "draft",
       versionId: versionId || null,
       tags: Array.isArray(tags) ? tags.filter((t: string) => typeof t === "string" && t.trim() !== "").map((t: string) => t.trim()) : [],
       author: author || getActorName(user),
       source: docSource,
       docType: docTypeValue,
+      siteId: siteId || null,
+      slug: slug ? String(slug).trim() : null,
+      sortOrder: sortOrder !== undefined ? Number(sortOrder) || 0 : 0,
     })
     .returning()
     .then((rows) => rows[0]);

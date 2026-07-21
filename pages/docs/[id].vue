@@ -2,6 +2,7 @@
 import { usePageStore } from "~/store/page";
 import { renderMarkdown, extractHeadings, headingSlug } from "~/composables/useMarkdown";
 import type { DocVersion } from "~/composables/useDocs";
+import { slugify } from "~/utils/nav-client";
 
 definePageMeta({
   auth: true,
@@ -26,6 +27,8 @@ const {
   restoreDocVersion,
 } = useDocs();
 
+const { docSites, fetchDocSites } = useDocSites();
+
 const {
   diff: historyDiff,
   isLoading: isDiffLoading,
@@ -41,6 +44,40 @@ const editorTitle = ref("");
 const editorStatus = ref("draft");
 const editorVersionId = ref<string | null>(null);
 const editorTags = ref<string[]>([]);
+const editorSiteId = ref("");
+const editorSlug = ref("");
+let prevTitleForSlug = "";
+
+function titleForSlug(): string {
+  return editorTitle.value.trim() || editorFmTitle.value.trim();
+}
+
+/** Auto-fill page slug from title while a site is selected; stops if the slug was customized. */
+function syncPageSlugFromTitle(title?: string, force = false) {
+  if (!editorSiteId.value) return;
+  const source = (title ?? titleForSlug()).trim();
+  const next = slugify(source);
+  const current = editorSlug.value.trim();
+  if (force || !current || current === slugify(prevTitleForSlug)) {
+    editorSlug.value = next;
+  }
+  if (source) prevTitleForSlug = source;
+}
+
+function onEditorSiteChange() {
+  if (editorSiteId.value) {
+    syncPageSlugFromTitle(undefined, true);
+  } else {
+    editorSlug.value = "";
+    prevTitleForSlug = "";
+  }
+}
+const editorFmTitle = ref("");
+const editorFmDescription = ref("");
+const editorFmSidebarTitle = ref("");
+const editorFmIcon = ref("");
+const editorFmMode = ref<"default" | "wide" | "center">("default");
+const editorFmHidden = ref(false);
 const tagInputVisible = ref(false);
 const tagInputValue = ref("");
 const previewOnly = ref(false);
@@ -71,6 +108,9 @@ const hasEditorChanges = computed(() => {
     || editorTitle.value !== (doc.title || "")
     || editorStatus.value !== (doc.status || "draft")
     || (editorVersionId.value ?? null) !== (doc.versionId ?? null)
+    || (editorSiteId.value || null) !== (doc.siteId ?? null)
+    || (editorSlug.value.trim() || null) !== (doc.slug ?? null)
+    || JSON.stringify(buildFrontmatter()) !== JSON.stringify(doc.frontmatter || {})
     || !tagsMatch
   );
 });
@@ -82,7 +122,30 @@ function getEditorPayload() {
     status: editorStatus.value,
     versionId: editorVersionId.value ?? null,
     tags: editorTags.value,
+    siteId: editorSiteId.value || null,
+    slug: editorSlug.value.trim() || null,
+    frontmatter: buildFrontmatter(),
   };
+}
+
+function buildFrontmatter(): Record<string, unknown> {
+  const fm: Record<string, unknown> = {};
+  if (editorFmTitle.value.trim()) fm.title = editorFmTitle.value.trim();
+  if (editorFmDescription.value.trim()) fm.description = editorFmDescription.value.trim();
+  if (editorFmSidebarTitle.value.trim()) fm.sidebarTitle = editorFmSidebarTitle.value.trim();
+  if (editorFmIcon.value.trim()) fm.icon = editorFmIcon.value.trim();
+  if (editorFmMode.value !== "default") fm.mode = editorFmMode.value;
+  if (editorFmHidden.value) fm.hidden = true;
+  return fm;
+}
+
+function loadFrontmatter(fm: Record<string, unknown> | null | undefined) {
+  editorFmTitle.value = typeof fm?.title === "string" ? fm.title : "";
+  editorFmDescription.value = typeof fm?.description === "string" ? fm.description : "";
+  editorFmSidebarTitle.value = typeof fm?.sidebarTitle === "string" ? fm.sidebarTitle : "";
+  editorFmIcon.value = typeof fm?.icon === "string" ? fm.icon : "";
+  editorFmMode.value = fm?.mode === "wide" || fm?.mode === "center" ? fm.mode : "default";
+  editorFmHidden.value = fm?.hidden === true;
 }
 
 const autosaveEnabled = computed(
@@ -373,6 +436,10 @@ function resetEditorFields() {
   editorStatus.value = "draft";
   editorVersionId.value = null;
   editorTags.value = [];
+  editorSiteId.value = "";
+  editorSlug.value = "";
+  prevTitleForSlug = "";
+  loadFrontmatter(null);
   activeHeading.value = "";
 }
 
@@ -397,6 +464,13 @@ async function loadDoc() {
       editorStatus.value = currentDoc.value.status || "draft";
       editorVersionId.value = currentDoc.value.versionId || null;
       editorTags.value = currentDoc.value.tags ? [...currentDoc.value.tags] : [];
+      prevTitleForSlug = currentDoc.value.title || "";
+      editorSlug.value = currentDoc.value.slug || "";
+      editorSiteId.value = currentDoc.value.siteId || "";
+      if (editorSiteId.value && !editorSlug.value.trim()) {
+        syncPageSlugFromTitle(undefined, true);
+      }
+      loadFrontmatter(currentDoc.value.frontmatter as Record<string, unknown> | null);
     } else {
       docNotFound.value = true;
     }
@@ -414,6 +488,7 @@ async function loadDoc() {
 onMounted(() => {
   $page.setTitle("Doc Editor");
   loadDoc();
+  fetchDocSites();
   document.addEventListener("keydown", onKeydown);
   document.addEventListener("keydown", onTagRemoveKeydown);
   window.addEventListener("beforeunload", onBeforeUnload);
@@ -439,12 +514,29 @@ onBeforeRouteLeave(async (_to, _from, next) => {
   next();
 });
 
+watch(editorTitle, () => {
+  syncPageSlugFromTitle();
+});
+
+watch(editorFmTitle, () => {
+  if (!editorTitle.value.trim()) syncPageSlugFromTitle();
+});
+
+watch(editorSiteId, (siteId) => {
+  if (siteId) {
+    syncPageSlugFromTitle(undefined, !editorSlug.value.trim());
+  } else {
+    editorSlug.value = "";
+    prevTitleForSlug = "";
+  }
+});
+
 watch(
-  [editorContent, editorTitle, editorStatus, editorVersionId, editorTags],
+  [editorContent, editorTitle, editorStatus, editorVersionId, editorTags, editorSiteId, editorSlug, editorFmTitle, editorFmDescription, editorFmSidebarTitle, editorFmIcon, editorFmMode, editorFmHidden],
   () => {
     scheduleSave();
   },
-  { deep: true }
+  { deep: true },
 );
 
 watch(() => docId.value, () => {
@@ -453,6 +545,10 @@ watch(() => docId.value, () => {
 
 const appName = computed(() => currentDoc.value?.app?.name || "Unbound");
 const statusOptions = ["Draft", "In Review", "Published", "Archived"];
+
+function siteSlugFor(siteId: string): string {
+  return docSites.value.find((s) => s.id === siteId)?.slug || "…";
+}
 const lastModified = computed(() => {
   if (!currentDoc.value?.updatedAt) return "";
   const d = new Date(currentDoc.value.updatedAt);
@@ -735,6 +831,97 @@ const lastModified = computed(() => {
                       {{ v.version }}
                     </option>
                   </select>
+                </div>
+              </div>
+
+              <div class="props-section">
+                <div class="props-section-label">Doc Site</div>
+                <div class="field">
+                  <label for="docSite">Site</label>
+                  <select
+                    id="docSite"
+                    v-model="editorSiteId"
+                    class="select"
+                    @change="onEditorSiteChange"
+                  >
+                    <option value="">Not part of a site</option>
+                    <option
+                      v-for="s in docSites"
+                      :key="s.id"
+                      :value="s.id"
+                    >
+                      {{ s.name }} (/s/{{ s.slug }})
+                    </option>
+                  </select>
+                </div>
+                <div v-if="editorSiteId" class="field">
+                  <label for="docSlug">Page slug</label>
+                  <input
+                    id="docSlug"
+                    v-model="editorSlug"
+                    class="input"
+                    placeholder="Auto-generated from title"
+                  />
+                  <span v-if="editorSlug" class="field-hint">
+                    /s/{{ siteSlugFor(editorSiteId) }}/{{ editorSlug }}
+                    <span class="field-hint-muted"> · edits freely; updates with title until you change it</span>
+                  </span>
+                </div>
+              </div>
+
+              <div class="props-section">
+                <div class="props-section-label">Page metadata</div>
+                <div class="field">
+                  <label for="fmTitle">Page title</label>
+                  <input
+                    id="fmTitle"
+                    v-model="editorFmTitle"
+                    class="input"
+                    placeholder="Defaults to document title"
+                  />
+                </div>
+                <div class="field">
+                  <label for="fmDescription">Description</label>
+                  <input
+                    id="fmDescription"
+                    v-model="editorFmDescription"
+                    class="input"
+                    placeholder="Short summary for SEO + nav"
+                  />
+                </div>
+                <div class="field">
+                  <label for="fmSidebarTitle">Sidebar title</label>
+                  <input
+                    id="fmSidebarTitle"
+                    v-model="editorFmSidebarTitle"
+                    class="input"
+                    placeholder="Override label in site nav"
+                  />
+                </div>
+                <div class="field-row">
+                  <div class="field">
+                    <label for="fmIcon">Icon</label>
+                    <input
+                      id="fmIcon"
+                      v-model="editorFmIcon"
+                      class="input"
+                      placeholder="e.g. book"
+                    />
+                  </div>
+                  <div class="field">
+                    <label for="fmMode">Layout mode</label>
+                    <select id="fmMode" v-model="editorFmMode" class="select">
+                      <option value="default">Default</option>
+                      <option value="wide">Wide</option>
+                      <option value="center">Center</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field field-inline">
+                  <label class="checkbox-label">
+                    <input v-model="editorFmHidden" type="checkbox" />
+                    Hide from site navigation
+                  </label>
                 </div>
               </div>
 
@@ -1446,6 +1633,38 @@ const lastModified = computed(() => {
   font-size: 12px;
   color: var(--muted);
   font-weight: 500;
+}
+
+.field-hint {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+.field-hint-muted {
+  font-family: var(--font-body);
+  font-style: italic;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg);
+  font-weight: 400;
+  cursor: pointer;
 }
 
 .input,

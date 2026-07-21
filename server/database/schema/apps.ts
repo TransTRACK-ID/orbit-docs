@@ -1,5 +1,6 @@
-import { pgTable, text, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, jsonb, boolean, integer } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { docSites } from "./doc-sites";
 
 export const apps = pgTable("apps", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -107,6 +108,10 @@ export const docs = pgTable("docs", {
   docType: text("doc_type", { enum: ["srs", "fsd", "sdd", "git_snapshot", "feature"] }),
   externalId: text("external_id"),
   notionPageId: text("notion_page_id"),
+  siteId: text("site_id").references(() => docSites.id, { onDelete: "set null" }),
+  slug: text("slug"),
+  frontmatter: jsonb("frontmatter").$type<Record<string, unknown>>().default({}),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });
@@ -121,6 +126,10 @@ export const docsRelations = relations(docs, ({ one, many }) => ({
     references: [appVersions.id],
   }),
   docVersions: many(docVersions),
+  site: one(docSites, {
+    fields: [docs.siteId],
+    references: [docSites.id],
+  }),
 }));
 
 export const versionHistory = pgTable("version_history", {

@@ -1,6 +1,6 @@
 import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { docs, apps, appVersions } from "~/server/database/schema";
+import { docs, apps, appVersions, docSites } from "~/server/database/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
 
@@ -29,14 +29,21 @@ export default defineEventHandler(async (event) => {
       author: docs.author,
       source: docs.source,
       docType: docs.docType,
+      siteId: docs.siteId,
+      slug: docs.slug,
+      frontmatter: docs.frontmatter,
+      sortOrder: docs.sortOrder,
       createdAt: docs.createdAt,
       updatedAt: docs.updatedAt,
       appName: apps.name,
       version: appVersions.version,
+      siteName: docSites.name,
+      siteSlug: docSites.slug,
     })
     .from(docs)
     .leftJoin(apps, eq(docs.appId, apps.id))
     .leftJoin(appVersions, eq(docs.versionId, appVersions.id))
+    .leftJoin(docSites, eq(docs.siteId, docSites.id))
     .where(eq(docs.id, id))
     .limit(1);
 
@@ -64,6 +71,9 @@ export default defineEventHandler(async (event) => {
       app: doc.appName ? { id: doc.appId, name: doc.appName } : null,
       version: doc.version ? { id: doc.versionId, version: doc.version } : null,
       appVersions: allVersions,
+      site: doc.siteId
+        ? { id: doc.siteId, name: doc.siteName, slug: doc.siteSlug }
+        : null,
     },
   };
 });

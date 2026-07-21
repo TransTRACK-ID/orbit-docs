@@ -1,0 +1,116 @@
+/*
+ * Public doc site — landing + shell utilities
+ * Reader layout and markdown prose live in doc-reader.css
+ */
+
+.ps-root {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ps-loading,
+.ps-error {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.ps-error h1 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.ps-landing-desc {
+  font-size: 16px;
+  line-height: 1.65;
+  margin: 0 0 40px;
+  color: var(--fg);
+}
+
+.ps-landing-desc--muted {
+  color: var(--muted);
+}
+
+.ps-section {
+  margin-top: 36px;
+}
+
+.ps-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.ps-link-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ps-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.ps-link:hover {
+  text-decoration: underline;
+}
+
+.ps-muted {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+}
+
+/* API operation page helpers */
+.ps-op-headline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.ps-op-description {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--muted);
+  margin: 0 0 28px;
+  white-space: pre-wrap;
+}
+
+.ps-op-section {
+  margin-top: 32px;
+  scroll-margin-top: 24px;
+}
+
+.ps-op-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
