@@ -1,11 +1,18 @@
 <script setup lang="ts">
 import { nextTick } from "vue";
-import { renderMarkdown, extractHeadings, headingSlug } from "~/composables/useMarkdown";
+import DocOutline from "~/components/docs/DocOutline.vue";
+import { renderMarkdown } from "~/composables/useMarkdown";
+import {
+  buildOutlineFromMarkdown,
+  useDocOutline,
+  useMarkdownCopyHandler,
+} from "~/composables/useDocOutline";
 import type { PublishedDocDetail } from "~/composables/usePublishedDocs";
 
 definePageMeta({
   layout: false,
   auth: false,
+  pageTransition: false,
 });
 
 const route = useRoute();
@@ -29,9 +36,7 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 const chatOpen = ref(false);
 
-const activeSlug = ref("");
 const contentRef = ref<HTMLElement | null>(null);
-let sectionObserver: IntersectionObserver | null = null;
 
 function showToast(msg: string) {
   toastMsg.value = msg;
@@ -48,27 +53,13 @@ const renderedHtml = computed(() => {
   return renderMarkdown(doc.value.content);
 });
 
-/* ── Nav items from content headings ─────────────────────────── */
-interface NavItem {
-  type: "section" | "indent";
-  text: string;
-  slug: string;
-}
+const outlineItems = computed(() =>
+  doc.value?.content ? buildOutlineFromMarkdown(doc.value.content) : [],
+);
 
-const navItems = computed<NavItem[]>(() => {
-  if (!doc.value?.content) return [];
-  const headings = extractHeadings(doc.value.content);
-  return headings
-    .filter((h) => h.level === 2 || h.level === 3)
-    .map((h) => {
-      const slug = headingSlug(h.text);
-      return {
-        type: h.level === 2 ? ("section" as const) : ("indent" as const),
-        text: h.text,
-        slug,
-      };
-    });
-});
+const { activeSlug, scrollToSection, scrollToTop, setupScrollSpy, teardownScrollSpy } =
+  useDocOutline(contentRef);
+const { handleContentClick } = useMarkdownCopyHandler(showToast);
 
 onMounted(async () => {
   if (!docId.value) {
@@ -113,75 +104,22 @@ watch(
   () => doc.value,
   (loadedDoc) => {
     if (!loadedDoc) return;
-    nextTick(() => {
-      setupScrollSpy();
-    });
-  }
+    nextTick(() => setupScrollSpy("docContent"));
+  },
 );
 
+watch(renderedHtml, () => {
+  if (!doc.value?.content) return;
+  nextTick(() => setupScrollSpy("docContent"));
+});
+
 onBeforeUnmount(() => {
-  sectionObserver?.disconnect();
-  sectionObserver = null;
+  teardownScrollSpy();
   if (toastTimer) clearTimeout(toastTimer);
 });
 
-function scrollToSection(targetId: string) {
-  const el = document.getElementById(targetId);
-  const container = contentRef.value;
-  if (!el || !container) return;
-  const top = el.offsetTop - container.offsetTop - 16;
-  container.scrollTo({ top, behavior: "smooth" });
-  activeSlug.value = targetId;
-}
-
 function toggleChat() {
   chatOpen.value = !chatOpen.value;
-}
-
-function setupScrollSpy() {
-  const container = contentRef.value;
-  const docContent = document.getElementById("docContent");
-  if (!docContent || !container) return;
-
-  const targets = docContent.querySelectorAll<HTMLElement>("h2[id], h3[id]");
-  if (!targets.length) return;
-
-  sectionObserver?.disconnect();
-  sectionObserver = new IntersectionObserver(
-    (entries) => {
-      const visible = entries
-        .filter((e) => e.isIntersecting)
-        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-      if (visible.length > 0 && visible[0]) {
-        activeSlug.value = visible[0].target.id;
-      }
-    },
-    {
-      root: container,
-      rootMargin: "-10% 0px -60% 0px",
-      threshold: 0,
-    }
-  );
-
-  targets.forEach((t) => sectionObserver!.observe(t));
-}
-
-function copyCode(btn: HTMLButtonElement) {
-  const pre = btn.previousElementSibling as HTMLPreElement | null;
-  if (!pre) return;
-  const code = pre.querySelector("code") || pre;
-  navigator.clipboard
-    .writeText(code.textContent || "")
-    .then(() => {
-      btn.textContent = "Copied";
-      btn.classList.add("copied");
-      showToast("Code copied");
-      setTimeout(() => {
-        btn.textContent = "Copy";
-        btn.classList.remove("copied");
-      }, 2000);
-    })
-    .catch(() => showToast("Copy failed"));
 }
 
 async function voteFeedback(positive: boolean) {
@@ -222,42 +160,15 @@ function cancelCommentForm() {
   showCommentForm.value = false;
   feedbackComment.value = "";
 }
-
-function handleContentClick(e: MouseEvent) {
-  const target = e.target as HTMLElement;
-  const copyBtn = target.closest(".copy-btn") as HTMLButtonElement | null;
-  if (copyBtn) {
-    e.preventDefault();
-    copyCode(copyBtn);
-  }
-}
-
-function scrollToTop() {
-  const container = contentRef.value;
-  if (!container) return;
-  container.scrollTo({ top: 0, behavior: "smooth" });
-  activeSlug.value = "";
-}
-
-function itemHref(item: NavItem): string {
-  return "#" + item.slug;
-}
-
-function itemTarget(item: NavItem): string {
-  return item.slug;
-}
 </script>
 
 <template>
-  <div class="page-root">
+  <div class="doc-reader-page page-root">
     <div v-if="isLoading" class="loading-shell">
       <div class="loading-sidebar">
         <div class="sk-header">
           <div class="sk-title" />
           <div class="sk-meta" />
-        </div>
-        <div class="sk-nav">
-          <div v-for="n in 6" :key="n" class="sk-nav-item" :class="{ indent: n % 3 === 0 }" :style="{ width: `${65 + Math.random() * 25}%` }" />
         </div>
       </div>
       <div class="loading-content">
@@ -278,6 +189,10 @@ function itemTarget(item: NavItem): string {
           <div class="sk-paragraph" style="width: 90%;" />
         </div>
       </div>
+      <div class="loading-outline">
+        <div class="sk-outline-title" />
+        <div v-for="n in 6" :key="n" class="sk-nav-item" :style="{ width: `${60 + (n % 3) * 12}%` }" />
+      </div>
     </div>
 
     <div v-else-if="error" class="error-shell">
@@ -288,56 +203,48 @@ function itemTarget(item: NavItem): string {
     </div>
 
     <div v-else-if="doc" class="doc-shell">
-    <aside class="doc-sidebar">
-      <a class="doc-sidebar-header" href="#docContent" @click.prevent="scrollToTop">
-        <div class="doc-sidebar-title">{{ doc.app?.name || doc.title }}</div>
-        <div class="doc-sidebar-meta num">
-          {{ doc.version?.version ? `v${doc.version.version}` : "" }}
-          <span v-if="doc.updatedAt">· Updated {{ new Date(doc.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }}</span>
-        </div>
-      </a>
-      <ul v-if="navItems.length > 0" id="docNav" class="doc-nav" role="list">
-        <li v-for="(item, idx) in navItems" :key="idx">
-          <a
-            :class="[item.type, { active: activeSlug === item.slug }]"
-            role="listitem"
-            :href="itemHref(item)"
-            :data-target="itemTarget(item)"
-            :tabindex="item.type === 'indent' ? 0 : undefined"
-            @click.prevent="scrollToSection(item.slug)"
-          >
-            {{ item.text }}
-          </a>
-        </li>
-      </ul>
-      <ul v-else id="docNav" class="doc-nav" role="list">
-        <li><a :class="['section', { active: activeSlug === 'docContent' || !activeSlug }]" role="listitem" href="#docContent" data-target="docContent" @click.prevent="scrollToSection('docContent')">{{ doc.app?.name || doc.title }}</a></li>
-      </ul>
-    </aside>
+      <aside class="doc-sidebar">
+        <button type="button" class="doc-sidebar-header" @click="scrollToTop">
+          <div class="doc-sidebar-title">{{ doc.app?.name || doc.title }}</div>
+          <div class="doc-sidebar-meta num">
+            <span v-if="doc.version?.version">v{{ doc.version.version }}</span>
+            <span v-if="doc.updatedAt">
+              {{ doc.version?.version ? " · " : "" }}Updated
+              {{ new Date(doc.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }}
+            </span>
+          </div>
+        </button>
+      </aside>
 
-    <main
-      ref="contentRef"
-      class="content"
-      :class="{
-        'content-dock-pad': !feedbackGiven,
-        'content-dock-pad-expanded': showCommentForm,
-      }"
-    >
-      <article id="docContent" class="doc-body">
-        <div class="flex-gap-sm" style="margin-bottom: 8px;">
-          <span class="pill pill-green">Latest</span>
-          <span v-if="doc.updatedAt" class="meta-label num">
-            Updated {{ new Date(doc.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }}
-          </span>
-        </div>
+      <main
+        ref="contentRef"
+        class="doc-content"
+        :class="{
+          'doc-content--dock-pad': !feedbackGiven,
+          'doc-content--dock-pad-expanded': showCommentForm,
+        }"
+      >
+        <article id="docContent" class="doc-body">
+          <div class="flex-gap-sm doc-body-badges">
+            <span class="pill pill-green">Latest</span>
+            <span v-if="doc.updatedAt" class="meta-label num">
+              Updated {{ new Date(doc.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }}
+            </span>
+          </div>
 
-        <MermaidHtml
-          class="markdown-content"
-          :html="renderedHtml"
-          @click="handleContentClick"
-        />
-      </article>
-    </main>
+          <MermaidHtml
+            class="markdown-content markdown-body"
+            :html="renderedHtml"
+            @click="handleContentClick"
+          />
+        </article>
+      </main>
+
+      <DocOutline
+        :items="outlineItems"
+        :active-slug="activeSlug"
+        @navigate="scrollToSection"
+      />
 
     <!-- AI Chat Toggle -->
     <button
@@ -421,12 +328,6 @@ function itemTarget(item: NavItem): string {
 }
 
 .page-root {
-  --bg: oklch(98% 0.004 250);
-  --surface: oklch(100% 0 0);
-  --fg: oklch(20% 0.02 250);
-  --muted: oklch(55% 0.015 250);
-  --border: oklch(90% 0.006 250);
-  --accent: oklch(55% 0.16 25);
   --accent-soft: color-mix(in oklch, var(--accent) 12%, transparent);
   --fg-soft: color-mix(in oklch, var(--fg) 6%, transparent);
   --font-display: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
@@ -439,190 +340,60 @@ function itemTarget(item: NavItem): string {
   --gap-lg: 24px;
   --radius: 8px;
   --radius-lg: 12px;
-  --sidebar: 260px;
-
-  background: var(--bg);
-  color: var(--fg);
-  font-family: var(--font-body);
-  font-size: var(--fs-body);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  min-height: 100vh;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-button {
+.page-root button {
   font: inherit;
   cursor: pointer;
 }
 
-h1,
-h2,
-h3 {
+.page-root h1,
+.page-root h2,
+.page-root h3 {
   margin: 0;
   font-weight: 600;
 }
 
-.doc-shell {
-  display: flex;
-  height: 100vh;
-  overflow: hidden;
-}
-
-/* Doc nav sidebar */
-.doc-sidebar {
-  width: var(--sidebar);
-  flex-shrink: 0;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
 .doc-sidebar-header {
   display: block;
+  width: 100%;
   padding: 20px;
+  border: none;
   border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
   background: var(--surface);
-  z-index: 2;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
   transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
 .doc-sidebar-header:hover {
   background: color-mix(in oklch, var(--fg) 5%, var(--surface));
 }
+
 .doc-sidebar-header:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-.doc-sidebar-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--fg);
-  margin-bottom: 6px;
-  line-height: 1.3;
-}
-.doc-sidebar-meta {
-  font-size: 12px;
-  color: var(--muted);
-  line-height: 1.4;
-}
-.doc-nav {
-  list-style: none;
-  padding: 16px 12px 32px;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.doc-nav li {
-  margin: 0;
-}
-.doc-nav a {
-  display: block;
-  padding: 7px 12px;
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--muted);
-  cursor: pointer;
-  outline: none;
-  border-radius: 6px;
-  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-}
-.doc-nav a:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 0;
-}
-.doc-nav a:hover {
-  color: var(--fg);
-  background: color-mix(in oklch, var(--fg) 7%, transparent);
-}
-.doc-nav a.section {
-  font-weight: 700;
-  color: var(--fg);
-  font-size: 13.5px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
-}
-.doc-nav a.section:first-child {
-  margin-top: 0;
-  padding-top: 6px;
-  border-top: none;
-}
-.doc-nav a.active {
-  color: var(--accent);
-  font-weight: 600;
-  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
-}
-.doc-nav a.active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 2.5px;
-  height: 18px;
-  border-radius: 0 2px 2px 0;
-  background: var(--accent);
-}
-.doc-nav a.indent {
-  padding-left: 28px;
-  font-size: 12.5px;
-  color: color-mix(in oklch, var(--muted) 85%, var(--fg));
-}
-.doc-nav a.indent.active {
-  color: var(--accent);
-  background: color-mix(in oklch, var(--accent) 10%, var(--surface));
-}
-.doc-nav a.indent.active::before {
-  left: 0;
+
+.doc-body-badges {
+  margin-bottom: 8px;
 }
 
-/* Content */
-.content {
-  flex: 1;
-  min-width: 0;
-  padding: 40px 48px;
-  overflow-y: auto;
-  display: flex;
-  justify-content: center;
-}
-.doc-body {
-  width: 100%;
-  max-width: 720px;
-}
-.content.content-dock-pad {
+.doc-content--dock-pad {
   padding-bottom: 112px;
 }
-.content.content-dock-pad-expanded {
+
+.doc-content--dock-pad-expanded {
   padding-bottom: 240px;
 }
-@media (max-width: 820px) {
-  .doc-sidebar {
-    width: 220px;
-  }
-  .content {
-    padding: 24px;
-  }
-}
+
 @media (max-width: 640px) {
-  .doc-sidebar {
-    display: none;
-  }
-  .content {
-    padding: 20px;
-  }
-  .content.content-dock-pad {
+  .doc-content--dock-pad {
     padding-bottom: 128px;
   }
-  .content.content-dock-pad-expanded {
+
+  .doc-content--dock-pad-expanded {
     padding-bottom: 260px;
   }
 }
@@ -682,189 +453,11 @@ h3 {
   }
 }
 
-.doc-body :deep(h1) {
-  font-size: 32px;
-  margin-bottom: 24px;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-.doc-body :deep(h2) {
-  font-size: 22px;
-  margin: 40px 0 16px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
-  line-height: 1.3;
-  scroll-margin-top: 16px;
-}
-.doc-body :deep(h3) {
-  font-size: 17px;
-  margin: 24px 0 12px;
-  line-height: 1.4;
-  scroll-margin-top: 16px;
-}
-.doc-body :deep(p) {
-  margin: 0 0 16px;
-  line-height: 1.7;
-}
-.doc-body :deep(ul) {
-  padding-left: 28px;
-  margin: 0 0 16px;
-  list-style-type: disc;
-}
-.doc-body :deep(ol) {
-  padding-left: 28px;
-  margin: 0 0 16px;
-  list-style-type: decimal;
-}
-.doc-body :deep(li) {
-  margin: 6px 0;
-}
-.doc-body :deep(li:last-child) {
-  margin-bottom: 0;
-}
-.doc-body :deep(code) {
-  background: var(--bg);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--fg);
-}
-.doc-body :deep(pre) {
-  position: relative;
-  background: var(--bg);
-  padding: 16px;
-  border-radius: var(--radius);
-  overflow: auto;
-  border: 1px solid var(--border);
-  margin: 0 0 16px;
-}
-.doc-body :deep(pre code) {
-  background: none;
-  padding: 0;
-  font-size: 13px;
-  line-height: 1.6;
-}
-.doc-body :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-  margin: 0 0 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
-}
-.doc-body :deep(th),
-.doc-body :deep(td) {
-  padding: 10px 14px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-}
-.doc-body :deep(th) {
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  background: var(--bg);
-}
-.doc-body :deep(tr:last-child td) {
-  border-bottom: none;
-}
-.doc-body :deep(blockquote) {
-  margin: 0 0 16px;
-  padding: 16px 20px;
-  background: var(--accent-soft);
-  border-radius: var(--radius);
-  border: 1px solid color-mix(in oklch, var(--accent) 20%, transparent);
-}
-.doc-body :deep(blockquote p) {
-  margin: 0;
-}
-.doc-body :deep(hr) {
-  border: 0;
-  border-top: 1px solid var(--border);
-  margin: 32px 0;
-}
-.doc-body :deep(a) {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.doc-body :deep(strong) {
-  font-weight: 600;
-  color: var(--fg);
-}
-.doc-body :deep(em) {
-  font-style: italic;
-}
-.doc-body :deep(img) {
-  max-width: 100%;
-  height: auto;
-  border-radius: var(--radius);
-  margin: 8px 0 16px;
-  box-shadow: 0 1px 3px color-mix(in oklch, var(--fg) 8%, transparent);
-}
-
-/* Markdown content wrapper */
-.markdown-content {
-  width: 100%;
-}
-
-/* Code copy button */
-.doc-body :deep(.code-block) {
-  position: relative;
-  margin: 0 0 16px;
-}
-.doc-body :deep(pre) {
-  position: relative;
-  background: var(--bg);
-  padding: 16px;
-  border-radius: var(--radius);
-  overflow: auto;
-  border: 1px solid var(--border);
-  margin: 0;
-}
-.doc-body :deep(.copy-btn) {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  padding: 5px 12px;
-  border-radius: var(--radius);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), background 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    color 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.doc-body :deep(.code-block:hover .copy-btn),
-.doc-body :deep(pre:hover .copy-btn) {
-  opacity: 1;
-}
-.doc-body :deep(.copy-btn:hover) {
-  background: var(--fg-soft);
-  color: var(--fg);
-}
-.doc-body :deep(.copy-btn:focus-visible) {
-  opacity: 1;
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.doc-body :deep(.copy-btn.copied) {
-  background: var(--accent-soft);
-  color: var(--accent);
-  border-color: var(--accent);
-}
-
 /* Feedback dock */
 .feedback-dock-wrap {
   position: fixed;
   bottom: 0;
-  left: var(--sidebar);
+  left: var(--sidebar-width);
   right: 0;
   z-index: 35;
   display: flex;
@@ -1068,7 +661,7 @@ h3 {
   background: var(--bg);
 }
 .loading-sidebar {
-  width: var(--sidebar);
+  width: var(--sidebar-width);
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -1082,6 +675,28 @@ h3 {
   justify-content: center;
   overflow-y: auto;
 }
+.loading-outline {
+  width: var(--outline-sidebar);
+  flex-shrink: 0;
+  padding: 28px 20px;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+.sk-outline-title {
+  width: 72%;
+  height: 12px;
+  margin-bottom: 16px;
+  background: linear-gradient(90deg, var(--border) 25%, var(--bg) 50%, var(--border) 75%);
+  background-size: 200% 100%;
+  border-radius: var(--radius);
+  animation: shimmer 1.5s infinite;
+}
+@media (max-width: 1100px) {
+  .loading-outline {
+    display: none;
+  }
+}
+
 @keyframes shimmer {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }

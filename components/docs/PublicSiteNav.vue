@@ -177,26 +177,22 @@ function methodClass(method: string): string {
   <nav class="site-nav" aria-label="Site navigation">
     <p v-if="!hasAnyNavItems" class="site-nav-empty">No pages published yet.</p>
 
-    <ul v-else class="doc-nav doc-nav--site" role="list">
+    <ul v-else class="doc-nav doc-nav--site doc-nav--sidebar" role="list">
       <template v-for="group in navConfig?.groups || []" :key="group.id">
-        <li v-if="groupHasPages(group)" class="site-nav-group">
-          <div class="site-nav-group-label">{{ group.label }}</div>
-          <ul class="doc-nav doc-nav--nested" role="list">
+        <li v-if="groupHasPages(group)" class="site-nav-section">
+          <div class="site-nav-section-title">{{ group.label }}</div>
+          <ul class="site-nav-links" role="list">
             <li v-for="slug in publishedSlugs(group.pages)" :key="`${group.id}-${slug}`">
-              <NuxtLink :to="href(slug)" class="indent" :class="{ active: isActive(slug) }">
+              <NuxtLink :to="href(slug)" :class="{ active: isActive(slug) }">
                 {{ pageTitle(slug) }}
               </NuxtLink>
             </li>
             <template v-for="sub in group.groups || []" :key="sub.id">
-              <li v-if="groupHasPages(sub)" class="site-nav-subgroup">
-                <div class="site-nav-subgroup-label">{{ sub.label }}</div>
-                <ul class="doc-nav doc-nav--nested" role="list">
+              <li v-if="groupHasPages(sub)" class="site-nav-nested">
+                <div class="site-nav-nested-title">{{ sub.label }}</div>
+                <ul class="site-nav-links" role="list">
                   <li v-for="slug in publishedSlugs(sub.pages)" :key="`${sub.id}-${slug}`">
-                    <NuxtLink
-                      :to="href(slug)"
-                      class="indent indent--deep"
-                      :class="{ active: isActive(slug) }"
-                    >
+                    <NuxtLink :to="href(slug)" :class="{ active: isActive(slug) }">
                       {{ pageTitle(slug) }}
                     </NuxtLink>
                   </li>
@@ -207,11 +203,11 @@ function methodClass(method: string): string {
         </li>
       </template>
 
-      <li v-if="showPagesSection" class="site-nav-group" :class="{ 'site-nav-group--docs': operationsByTag.length > 0 }">
-        <div class="site-nav-group-label">Pages</div>
-        <ul class="doc-nav doc-nav--nested" role="list">
+      <li v-if="showPagesSection" class="site-nav-section">
+        <div class="site-nav-section-title">Pages</div>
+        <ul class="site-nav-links" role="list">
           <li v-for="slug in pagesSectionSlugs" :key="`page-${slug}`">
-            <NuxtLink :to="href(slug)" class="indent" :class="{ active: isActive(slug) }">
+            <NuxtLink :to="href(slug)" :class="{ active: isActive(slug) }">
               {{ pageTitle(slug) }}
             </NuxtLink>
           </li>
@@ -228,21 +224,32 @@ function methodClass(method: string): string {
 
       <li
         v-if="operationsByTag.length"
-        class="site-nav-group site-nav-group--api"
-        :class="{ 'site-nav-group--api-first': hasDocNav }"
+        class="site-nav-section site-nav-section--collapsible"
       >
         <button
           type="button"
-          class="site-nav-collapse-trigger"
+          class="site-nav-section-trigger"
           :aria-expanded="apiExpanded"
           aria-controls="site-nav-api-panel"
           @click="toggleApiSection"
         >
-          <span class="site-nav-collapse-label">
-            <span class="site-nav-group-label site-nav-group-label--inline">API Reference</span>
-            <span class="site-nav-count">{{ apiOperationCount }}</span>
-          </span>
-          <span class="site-nav-chevron" :class="{ 'is-expanded': apiExpanded }" aria-hidden="true" />
+          <span class="site-nav-section-title site-nav-section-title--inline">API reference</span>
+          <span class="site-nav-meta">{{ apiOperationCount }}</span>
+          <svg
+            class="site-nav-chevron"
+            :class="{ 'is-expanded': apiExpanded }"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M6 4.5 10 8 6 11.5"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
         </button>
 
         <div
@@ -263,24 +270,34 @@ function methodClass(method: string): string {
               @click="toggleTag(group.tag)"
             >
               <span class="site-nav-tag-label">{{ group.tag }}</span>
-              <span class="site-nav-count site-nav-count--sub">{{ group.items.length }}</span>
-              <span
+              <span class="site-nav-meta site-nav-meta--sub">{{ group.items.length }}</span>
+              <svg
                 class="site-nav-chevron site-nav-chevron--sm"
                 :class="{ 'is-expanded': isTagExpanded(group.tag) }"
+                viewBox="0 0 16 16"
+                fill="none"
                 aria-hidden="true"
-              />
+              >
+                <path
+                  d="M6 4.5 10 8 6 11.5"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
             </button>
 
             <ul
               v-show="isTagExpanded(group.tag)"
               :id="tagPanelId(group.tag)"
-              class="doc-nav doc-nav--nested"
+              class="site-nav-links site-nav-links--api"
               role="list"
             >
               <li v-for="op in group.items" :key="`oa-${op.slug}`">
                 <NuxtLink
                   :to="operationHref(op.slug)"
-                  class="site-nav-op indent"
+                  class="site-nav-op"
                   :class="{ active: isOperationActive(op.slug) }"
                 >
                   <span class="method-badge" :class="methodClass(op.method)">{{ op.method }}</span>
@@ -320,102 +337,131 @@ function methodClass(method: string): string {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-top: 8px;
-  padding-bottom: 24px;
   overscroll-behavior: contain;
 }
 
-.doc-nav--nested {
-  padding: 0;
-  gap: 0;
+.site-nav-section {
+  margin-top: 20px;
 }
 
-.site-nav-group {
-  margin-top: 8px;
+.site-nav-section:first-child {
+  margin-top: 4px;
 }
 
-.site-nav-group--api,
-.site-nav-group--docs {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
-}
-
-.site-nav-group-label {
-  padding: 8px 12px 4px;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--muted);
+.site-nav-section-title {
+  padding: 0 12px 6px;
+  font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
 }
 
-.site-nav-group-label--inline {
+.site-nav-section-title--inline {
   padding: 0;
+  flex: 1;
+  text-align: left;
 }
 
-.site-nav-collapse-trigger {
+.site-nav-section-trigger {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 8px 12px 6px;
+  gap: 8px;
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  padding: 0 8px 6px;
   border: none;
   background: transparent;
   cursor: pointer;
   font: inherit;
   color: inherit;
-  text-align: left;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
-.site-nav-collapse-trigger:hover {
-  background: color-mix(in oklch, var(--fg) 5%, transparent);
+.site-nav-section-trigger:hover {
+  background: color-mix(in oklch, var(--fg) 4%, transparent);
 }
 
-.site-nav-collapse-trigger:focus-visible {
+.site-nav-section-trigger:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 0;
 }
 
-.site-nav-collapse-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.site-nav-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
-.site-nav-count {
+.site-nav-links :deep(a) {
+  display: block;
+  margin: 0 2px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  border-radius: 8px;
+  color: color-mix(in oklch, var(--muted) 90%, var(--fg));
+  text-decoration: none;
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.site-nav-links :deep(a:hover) {
+  color: var(--fg);
+  background: color-mix(in oklch, var(--fg) 6%, transparent);
+}
+
+.site-nav-links :deep(a.active) {
+  color: var(--accent);
+  font-weight: 500;
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
+}
+
+.site-nav-links--api {
+  padding-left: 4px;
+}
+
+.site-nav-nested {
+  margin-top: 8px;
+}
+
+.site-nav-nested-title {
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.site-nav-meta {
   font-size: 10px;
   font-weight: 600;
-  color: var(--muted);
   font-variant-numeric: tabular-nums;
+  color: var(--muted);
   padding: 1px 6px;
   border-radius: 999px;
   background: color-mix(in oklch, var(--fg) 6%, transparent);
 }
 
-.site-nav-count--sub {
+.site-nav-meta--sub {
   margin-left: auto;
-  margin-right: 6px;
+  margin-right: 4px;
 }
 
 .site-nav-chevron {
   flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-right: 1.5px solid var(--muted);
-  border-bottom: 1.5px solid var(--muted);
-  transform: rotate(-45deg);
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
   transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .site-nav-chevron--sm {
-  width: 6px;
-  height: 6px;
+  width: 12px;
+  height: 12px;
 }
 
 .site-nav-chevron.is-expanded {
-  transform: rotate(45deg);
+  transform: rotate(90deg);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -428,7 +474,6 @@ function methodClass(method: string): string {
   max-height: min(52vh, 480px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  margin: 0 4px 4px;
   padding-bottom: 4px;
 }
 
@@ -439,19 +484,19 @@ function methodClass(method: string): string {
 .site-nav-tag-trigger {
   display: flex;
   align-items: center;
-  width: 100%;
-  padding: 6px 12px 6px 16px;
+  width: calc(100% - 8px);
+  margin: 0 4px;
+  padding: 5px 8px 5px 12px;
   border: none;
   background: transparent;
   cursor: pointer;
   font: inherit;
   color: var(--muted);
   text-align: left;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
 }
 
 .site-nav-tag-trigger:hover {
@@ -472,31 +517,21 @@ function methodClass(method: string): string {
   white-space: nowrap;
 }
 
-.site-nav-subgroup {
-  margin-top: 4px;
-}
-
-.site-nav-subgroup-label {
-  padding: 4px 12px 4px 20px;
-  font-size: 11px;
-  color: var(--muted);
-  font-weight: 500;
-}
-
 .site-nav-external {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 12px;
+  margin: 2px 6px;
+  padding: 6px 10px;
   font-size: 13px;
   color: var(--muted);
   text-decoration: none;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .site-nav-external:hover {
   color: var(--fg);
-  background: color-mix(in oklch, var(--fg) 7%, transparent);
+  background: color-mix(in oklch, var(--fg) 6%, transparent);
 }
 
 .site-nav-external-icon {
@@ -519,13 +554,14 @@ function methodClass(method: string): string {
 .method-badge {
   flex-shrink: 0;
   display: inline-block;
-  min-width: 42px;
-  padding: 2px 6px;
+  min-width: 40px;
+  padding: 2px 5px;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 700;
   font-family: var(--font-mono);
   text-align: center;
+  letter-spacing: 0.02em;
 }
 
 .method-get { background: color-mix(in oklch, oklch(65% 0.15 145) 18%, transparent); color: oklch(45% 0.13 145); }

@@ -4,7 +4,8 @@
  */
 
 .doc-reader-page {
-  --outline-sidebar: 260px;
+  --sidebar-width: 272px;
+  --outline-sidebar: 240px;
 
   min-height: 100vh;
   height: 100vh;
@@ -29,7 +30,7 @@
 }
 
 .doc-sidebar {
-  width: 280px;
+  width: var(--sidebar-width);
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -72,7 +73,7 @@
   flex-direction: column;
 }
 
-/* In-page outline — right rail, mirrors /p/:id left doc-sidebar nav */
+/* In-page outline — right rail */
 .doc-outline-rail {
   width: var(--outline-sidebar);
   flex-shrink: 0;
@@ -81,6 +82,32 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  padding: 28px 0 32px;
+  overscroll-behavior: contain;
+}
+
+.doc-outline-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.01em;
+  flex-shrink: 0;
+}
+
+.doc-outline-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
+.doc-outline-nav {
+  flex: 1;
+  min-height: 0;
 }
 
 .doc-nav {
@@ -172,6 +199,91 @@
 
 .doc-nav a.indent--deep {
   padding-left: 40px;
+}
+
+/* Sidebar navigation (site nav) */
+.doc-sidebar-nav .doc-nav--sidebar {
+  padding: 12px 10px 28px;
+  gap: 1px;
+}
+
+.doc-sidebar-nav .doc-nav--sidebar a {
+  margin: 0 2px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 400;
+  border-radius: 8px;
+  color: color-mix(in oklch, var(--muted) 90%, var(--fg));
+}
+
+.doc-sidebar-nav .doc-nav--sidebar a:hover {
+  color: var(--fg);
+  background: color-mix(in oklch, var(--fg) 6%, transparent);
+}
+
+.doc-sidebar-nav .doc-nav--sidebar a.active {
+  color: var(--accent);
+  font-weight: 500;
+  background: color-mix(in oklch, var(--accent) 8%, transparent);
+}
+
+.doc-sidebar-nav .doc-nav--sidebar a.active::before {
+  display: none;
+}
+
+/* Right-rail outline navigation */
+.doc-outline-rail .doc-nav--outline {
+  padding: 0 12px 8px 16px;
+  gap: 0;
+}
+
+.doc-outline-rail .doc-nav--outline a {
+  padding: 5px 10px 5px 22px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  border-radius: 6px;
+  color: color-mix(in oklch, var(--muted) 88%, var(--fg));
+}
+
+.doc-outline-rail .doc-nav--outline a:hover {
+  color: var(--fg);
+  background: color-mix(in oklch, var(--fg) 5%, transparent);
+}
+
+.doc-outline-rail .doc-nav--outline a.section {
+  margin-top: 0;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  border-top: none;
+  font-weight: 500;
+  font-size: 13px;
+  color: color-mix(in oklch, var(--muted) 88%, var(--fg));
+}
+
+.doc-outline-rail .doc-nav--outline a.indent {
+  padding-left: 34px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.doc-outline-rail .doc-nav--outline a.active {
+  color: var(--accent);
+  font-weight: 500;
+  background: transparent;
+}
+
+.doc-outline-rail .doc-nav--outline a.active::before {
+  left: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.doc-outline-rail .doc-nav--outline a.indent.active::before {
+  left: 20px;
 }
 
 /* Scrollable main column */
