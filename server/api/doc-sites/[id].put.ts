@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event);
-  const { name, slug, description, appId, status, navConfig } = body || {};
+  const { name, slug, description, appId, status, navConfig, clearOpenApi } = body || {};
 
   const updateData: Partial<typeof docSites.$inferInsert> = { updatedAt: new Date() };
 
@@ -69,6 +69,9 @@ export default defineEventHandler(async (event) => {
 
   if (navConfig !== undefined) {
     const normalised = normaliseNavConfig(navConfig);
+    if (clearOpenApi === true) {
+      normalised.openapi = [];
+    }
     updateData.navConfig = normalised;
     // Warn (not block) about referenced slugs that don't exist in the site.
     const referenced = collectReferencedSlugs(normalised);
@@ -82,6 +85,18 @@ export default defineEventHandler(async (event) => {
       if (missing.length > 0) {
         console.warn(`[doc-sites] nav references missing slugs: ${missing.join(", ")}`);
       }
+    }
+  }
+
+  // Clearing the textarea alone does not remove API reference; this flag does.
+  if (clearOpenApi === true) {
+    updateData.openapiSpec = null;
+    updateData.openapiFormat = null;
+    updateData.openapiNormalized = null;
+    if (navConfig === undefined) {
+      const existingNav = normaliseNavConfig(existing.navConfig);
+      existingNav.openapi = [];
+      updateData.navConfig = existingNav;
     }
   }
 

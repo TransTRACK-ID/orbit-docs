@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import PublicSiteNav from "~/components/docs/PublicSiteNav.vue";
 import type { PublicSite } from "~/composables/usePublicSite";
 
 definePageMeta({
@@ -100,77 +99,66 @@ function firstPageSlug(
 </script>
 
 <template>
-  <div class="doc-reader-page">
-    <div v-if="isLoading" class="ps-loading">Loading…</div>
+  <main v-if="isLoading" class="doc-content doc-content--centered">
+    <div class="ps-loading">Loading…</div>
+  </main>
 
-    <div v-else-if="error" class="ps-error">
+  <main v-else-if="error" class="doc-content doc-content--centered">
+    <div class="ps-error">
       <h1>{{ error }}</h1>
       <p>The documentation site you are looking for could not be loaded.</p>
     </div>
+  </main>
 
-    <div v-else-if="site" class="doc-shell">
-      <aside class="doc-sidebar">
-        <div class="doc-sidebar-header">
-          <NuxtLink :to="`/s/${siteSlug}`" class="doc-sidebar-title">{{ site.name }}</NuxtLink>
-          <p v-if="site.app" class="doc-sidebar-meta">{{ site.app.name }}</p>
-        </div>
-        <div class="doc-sidebar-nav">
-          <PublicSiteNav
-            :nav-config="site.navConfig"
-            :site-slug="siteSlug"
-            :pages="site.pages"
-            :openapi-operations="openapiOps"
-            active-page-slug=""
-          />
-        </div>
-      </aside>
+  <main v-else-if="site" class="doc-content">
+    <div class="doc-content-row">
+      <article class="doc-body">
+        <h1 class="doc-body-title">{{ site.name }}</h1>
+        <p v-if="site.description" class="ps-landing-desc">{{ site.description }}</p>
+        <p v-else class="ps-landing-desc ps-landing-desc--muted">Welcome to the documentation.</p>
 
-      <main class="doc-content">
-        <div class="doc-content-row">
-          <article class="doc-body">
-            <h1 class="doc-body-title">{{ site.name }}</h1>
-            <p v-if="site.description" class="ps-landing-desc">{{ site.description }}</p>
-            <p v-else class="ps-landing-desc ps-landing-desc--muted">Welcome to the documentation.</p>
+        <section v-if="docPages.length" class="ps-section">
+          <h2 class="ps-section-title">Pages</h2>
+          <ul class="ps-link-list">
+            <li v-for="p in docPages" :key="p.id">
+              <NuxtLink v-if="p.slug" :to="`/s/${siteSlug}/${p.slug}`" class="ps-link">
+                {{ p.title }}
+              </NuxtLink>
+              <span v-else class="ps-muted">{{ p.title }} (no slug)</span>
+            </li>
+          </ul>
+        </section>
 
-            <section v-if="docPages.length" class="ps-section">
-              <h2 class="ps-section-title">Pages</h2>
-              <ul class="ps-link-list">
-                <li v-for="p in docPages" :key="p.id">
-                  <NuxtLink v-if="p.slug" :to="`/s/${siteSlug}/${p.slug}`" class="ps-link">
-                    {{ p.title }}
-                  </NuxtLink>
-                  <span v-else class="ps-muted">{{ p.title }} (no slug)</span>
-                </li>
-              </ul>
-            </section>
+        <section v-if="apiGroups.length" class="ps-section">
+          <h2 class="ps-section-title">API reference</h2>
+          <p class="ps-muted" style="margin-bottom: 16px">Browse endpoints in the sidebar, or jump to one below.</p>
+          <div v-for="group in apiGroups" :key="group.tag" style="margin-top: 20px">
+            <h3 class="ps-section-title">{{ group.tag }}</h3>
+            <ul class="ps-link-list">
+              <li v-for="op in group.items" :key="op.slug">
+                <NuxtLink :to="`/s/${siteSlug}/api/${op.slug}`" class="ps-link">
+                  <span class="method-badge" :class="`method-${op.method.toLowerCase()}`">{{ op.method }}</span>
+                  {{ op.label }}
+                </NuxtLink>
+              </li>
+            </ul>
+          </div>
+        </section>
 
-            <section v-if="apiGroups.length" class="ps-section">
-              <h2 class="ps-section-title">API reference</h2>
-              <p class="ps-muted" style="margin-bottom: 16px">Browse endpoints in the sidebar, or jump to one below.</p>
-              <div v-for="group in apiGroups" :key="group.tag" style="margin-top: 20px">
-                <h3 class="ps-section-title">{{ group.tag }}</h3>
-                <ul class="ps-link-list">
-                  <li v-for="op in group.items" :key="op.slug">
-                    <NuxtLink :to="`/s/${siteSlug}/api/${op.slug}`" class="ps-link">
-                      <span class="method-badge" :class="`method-${op.method.toLowerCase()}`">{{ op.method }}</span>
-                      {{ op.label }}
-                    </NuxtLink>
-                  </li>
-                </ul>
-              </div>
-            </section>
-
-            <p v-if="!docPages.length && !apiGroups.length" class="ps-muted">
-              This site has no published pages or API operations yet.
-            </p>
-          </article>
-        </div>
-      </main>
+        <p v-if="!docPages.length && !apiGroups.length" class="ps-muted">
+          This site has no published pages or API operations yet.
+        </p>
+      </article>
     </div>
-  </div>
+  </main>
 </template>
 
 <style scoped>
+.doc-content--centered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .method-badge {
   font-size: 10px;
   font-weight: 700;

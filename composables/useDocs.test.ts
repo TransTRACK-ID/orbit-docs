@@ -111,4 +111,67 @@ describe("useDocs composable", () => {
     expect(currentDoc.value).toBeNull();
     expect(mockToastSuccess).toHaveBeenCalledWith("Doc deleted");
   });
+
+  it("should bulk update knowledge doc status", async () => {
+    mockFetch.mockResolvedValueOnce({
+      data: {
+        status: "published",
+        updated: 2,
+        skipped: 0,
+        ids: ["d1", "d2"],
+        updatedAt: "2026-03-23T00:00:00.000Z",
+      },
+    });
+
+    const { docs, bulkUpdateStatus } = useDocs();
+    docs.value = [
+      {
+        id: "d1",
+        appId: "a1",
+        title: "Feat A",
+        content: "",
+        status: "draft",
+        versionId: null,
+        tags: null,
+        author: null,
+        source: "op_sync",
+        docType: "feature",
+        externalId: "F-1",
+        createdAt: null,
+        updatedAt: null,
+        app: null,
+        version: null,
+      },
+      {
+        id: "d2",
+        appId: "a1",
+        title: "Feat B",
+        content: "",
+        status: "draft",
+        versionId: null,
+        tags: null,
+        author: null,
+        source: "op_sync",
+        docType: "feature",
+        externalId: "F-2",
+        createdAt: null,
+        updatedAt: null,
+        app: null,
+        version: null,
+      },
+    ];
+
+    const result = await bulkUpdateStatus(["d1", "d2"], "published");
+
+    expect(result.updated).toBe(2);
+    expect(docs.value.every((d) => d.status === "published")).toBe(true);
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/docs/bulk-status",
+      expect.objectContaining({
+        method: "PUT",
+        body: { ids: ["d1", "d2"], status: "published" },
+      }),
+    );
+    expect(mockToastSuccess).toHaveBeenCalledWith("2 docs set to Published");
+  });
 });

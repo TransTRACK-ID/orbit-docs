@@ -6,6 +6,12 @@ import {
   unlistedPublishedSlugs,
 } from "~/utils/nav-client";
 
+/**
+ * Module-scoped so sidebar scroll survives component remounts (page ↔ API
+ * routes remount PublicSiteNav; an instance-scoped map would reset to empty).
+ */
+const navScrollBySite = new Map<string, number>();
+
 const props = defineProps<{
   navConfig: NavConfig | null;
   siteSlug: string;
@@ -16,6 +22,38 @@ const props = defineProps<{
 }>();
 
 const { prefetchPage, prefetchSite } = usePublicSite();
+
+const navListRef = ref<HTMLElement | null>(null);
+
+function saveNavScroll() {
+  const el = navListRef.value;
+  if (!el) return;
+  navScrollBySite.set(props.siteSlug, el.scrollTop);
+}
+
+function restoreNavScroll() {
+  const el = navListRef.value;
+  if (!el) return;
+  const saved = navScrollBySite.get(props.siteSlug);
+  if (saved == null) return;
+  el.scrollTop = saved;
+  // Layout can settle a frame late (fonts, expanded sections); reassert once.
+  requestAnimationFrame(() => {
+    if (navListRef.value) navListRef.value.scrollTop = saved;
+  });
+}
+
+function onNavScroll() {
+  saveNavScroll();
+}
+
+watch(
+  () => props.siteSlug,
+  (slug, prev) => {
+    if (prev) saveNavScroll();
+    nextTick(() => restoreNavScroll());
+  },
+);
 
 const pageTitles = computed(() => {
   const map = new Map<string, string>();
@@ -156,7 +194,15 @@ function isTagExpanded(tag: string): boolean {
   return expandedTags.value.has(tag);
 }
 
-onMounted(syncApiExpansion);
+onMounted(() => {
+  syncApiExpansion();
+  nextTick(() => restoreNavScroll());
+});
+
+onBeforeUnmount(() => {
+  saveNavScroll();
+});
+
 watch(() => props.activeOperationSlug, syncApiExpansion);
 
 const METHOD_COLORS: Record<string, string> = {
@@ -204,7 +250,13 @@ function escapeRegExp(value: string): string {
   <nav class="site-nav" aria-label="Site navigation" @mouseover="handleNavPrefetch">
     <p v-if="!hasAnyNavItems" class="site-nav-empty">No pages published yet.</p>
 
-    <ul v-else class="doc-nav doc-nav--site doc-nav--sidebar" role="list">
+    <ul
+      v-else
+      ref="navListRef"
+      class="doc-nav doc-nav--site doc-nav--sidebar"
+      role="list"
+      @scroll.passive="onNavScroll"
+    >
       <template v-for="group in navConfig?.groups || []" :key="group.id">
         <li v-if="groupHasPages(group)" class="site-nav-section">
           <div class="site-nav-section-title">{{ group.label }}</div>

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import PublicSiteNav from "~/components/docs/PublicSiteNav.vue";
 import DocOutline from "~/components/docs/DocOutline.vue";
 import type { NormalizedOpenApiOperation } from "~/server/database/schema";
 import type { DocOutlineItem } from "~/composables/useDocOutline";
@@ -28,12 +27,6 @@ const operation = computed<NormalizedOpenApiOperation | null>(() => {
   return norm.operationBySlug[operationSlug.value] || null;
 });
 
-const openapiOps = computed(() => {
-  const fromNav = site.value?.navConfig?.openapi;
-  if (fromNav?.length) return fromNav;
-  return site.value?.openapiNormalized?.operations || [];
-});
-
 const outlineItems = computed<DocOutlineItem[]>(() => {
   const op = operation.value;
   if (!op) return [];
@@ -56,22 +49,36 @@ async function load() {
     site.value = cached;
     isLoading.value = false;
     if (!operation.value) error.value = "Operation not found";
-    await nextTick(() => setupScrollSpy("apiContent"));
+    else error.value = "";
+    await nextTick(() => {
+      contentRef.value?.scrollTo?.({ top: 0 });
+      setupScrollSpy("apiContent");
+    });
     return;
   }
 
-  isLoading.value = true;
-  site.value = null;
+  const keepContent = !!site.value;
+  if (!keepContent) {
+    isLoading.value = true;
+    site.value = null;
+  }
+
   try {
     site.value = await fetchSite(siteSlug.value);
     if (!operation.value) {
       error.value = "Operation not found";
+    } else {
+      error.value = "";
     }
   } catch (e: any) {
     error.value = e?.statusMessage || "Site not found";
+    if (!keepContent) site.value = null;
   } finally {
     isLoading.value = false;
-    await nextTick(() => setupScrollSpy("apiContent"));
+    await nextTick(() => {
+      contentRef.value?.scrollTo?.({ top: 0 });
+      setupScrollSpy("apiContent");
+    });
   }
 }
 
@@ -149,100 +156,100 @@ useHead(() => ({
 </script>
 
 <template>
-  <div class="doc-reader-page">
-    <div v-if="isLoading" class="ps-loading">Loading…</div>
+  <main
+    v-if="isLoading && !site"
+    class="doc-content doc-content--centered"
+  >
+    <div class="ps-loading">Loading…</div>
+  </main>
 
-    <div v-else-if="error || !operation" class="ps-error">
+  <main
+    v-else-if="(error || !operation) && !site"
+    class="doc-content doc-content--centered"
+  >
+    <div class="ps-error">
       <h1>{{ error || "Operation not found" }}</h1>
       <p>The API operation you are looking for could not be loaded.</p>
     </div>
+  </main>
 
-    <div v-else class="doc-shell">
-      <aside class="doc-sidebar">
-        <div class="doc-sidebar-header">
-          <NuxtLink :to="`/s/${siteSlug}`" class="doc-sidebar-title">{{ site?.name }}</NuxtLink>
-          <p v-if="site?.app" class="doc-sidebar-meta">{{ site.app.name }}</p>
+  <template v-else-if="site">
+    <main ref="contentRef" class="doc-content">
+      <div v-if="error || !operation" class="ps-error ps-error--inline">
+        <h1>{{ error || "Operation not found" }}</h1>
+        <p>The API operation you are looking for could not be loaded.</p>
+      </div>
+      <article v-else id="apiContent" class="doc-body">
+        <div class="ps-op-headline">
+          <span class="method-badge" :class="methodClass(operation.method)">{{ operation.method }}</span>
+          <code class="op-path">{{ operation.path }}</code>
+          <span v-if="operation.deprecated" class="deprecated-pill">deprecated</span>
         </div>
-        <div class="doc-sidebar-nav">
-          <PublicSiteNav
-            :nav-config="site?.navConfig || null"
-            :site-slug="siteSlug"
-            :pages="site?.pages || []"
-            :openapi-operations="openapiOps"
-            active-page-slug=""
-            :active-operation-slug="operationSlug"
-          />
-        </div>
-      </aside>
+        <h1 class="doc-body-title">{{ operation.summary || operation.operationId || operation.label }}</h1>
+        <p v-if="operation.description" class="ps-op-description">{{ operation.description }}</p>
 
-      <main ref="contentRef" class="doc-content">
-        <article id="apiContent" class="doc-body">
-          <div class="ps-op-headline">
-            <span class="method-badge" :class="methodClass(operation.method)">{{ operation.method }}</span>
-            <code class="op-path">{{ operation.path }}</code>
-            <span v-if="operation.deprecated" class="deprecated-pill">deprecated</span>
-          </div>
-          <h1 class="doc-body-title">{{ operation.summary || operation.operationId || operation.label }}</h1>
-          <p v-if="operation.description" class="ps-op-description">{{ operation.description }}</p>
+        <section v-if="operation.parameters.length" class="ps-op-section">
+          <h2 id="params" class="ps-op-section-title">Parameters</h2>
+          <table class="param-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>In</th>
+                <th>Required</th>
+                <th>Description</th>
+                <th>Schema</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="p in operation.parameters" :key="`${p.in}-${p.name}`">
+                <td class="mono">{{ p.name }}</td>
+                <td>{{ p.in }}</td>
+                <td>{{ p.required ? "yes" : "no" }}</td>
+                <td>{{ p.description || "—" }}</td>
+                <td class="mono schema-cell">{{ p.schema ? prettyJson(p.schema) : "—" }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
 
-          <section v-if="operation.parameters.length" class="ps-op-section">
-            <h2 id="params" class="ps-op-section-title">Parameters</h2>
-            <table class="param-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>In</th>
-                  <th>Required</th>
-                  <th>Description</th>
-                  <th>Schema</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="p in operation.parameters" :key="`${p.in}-${p.name}`">
-                  <td class="mono">{{ p.name }}</td>
-                  <td>{{ p.in }}</td>
-                  <td>{{ p.required ? "yes" : "no" }}</td>
-                  <td>{{ p.description || "—" }}</td>
-                  <td class="mono schema-cell">{{ p.schema ? prettyJson(p.schema) : "—" }}</td>
-                </tr>
-              </tbody>
-            </table>
-          </section>
+        <section v-if="operation.requestBody" class="ps-op-section">
+          <h2 id="request" class="ps-op-section-title">
+            Request body
+            <span class="ps-muted">· {{ operation.requestBody.contentTypes.join(", ") }}</span>
+            <span v-if="operation.requestBody.required" class="required-pill">required</span>
+          </h2>
+          <p v-if="operation.requestBody.description" class="ps-muted">{{ operation.requestBody.description }}</p>
+          <pre v-if="requestExample" class="code-block"><code>{{ requestExample }}</code></pre>
+        </section>
 
-          <section v-if="operation.requestBody" class="ps-op-section">
-            <h2 id="request" class="ps-op-section-title">
-              Request body
-              <span class="ps-muted">· {{ operation.requestBody.contentTypes.join(", ") }}</span>
-              <span v-if="operation.requestBody.required" class="required-pill">required</span>
-            </h2>
-            <p v-if="operation.requestBody.description" class="ps-muted">{{ operation.requestBody.description }}</p>
-            <pre v-if="requestExample" class="code-block"><code>{{ requestExample }}</code></pre>
-          </section>
-
-          <section v-if="operation.responses.length" class="ps-op-section">
-            <h2 id="responses" class="ps-op-section-title">Responses</h2>
-            <div v-for="r in operation.responses" :key="r.status" class="response-block">
-              <div class="response-head">
-                <span class="status-pill">{{ r.status }}</span>
-                <span class="ps-muted">{{ r.contentTypes.join(", ") }}</span>
-              </div>
-              <p v-if="r.description">{{ r.description }}</p>
-              <pre v-if="responseExample && (r.status === '200' || r.status === '201')" class="code-block"><code>{{ responseExample }}</code></pre>
+        <section v-if="operation.responses.length" class="ps-op-section">
+          <h2 id="responses" class="ps-op-section-title">Responses</h2>
+          <div v-for="r in operation.responses" :key="r.status" class="response-block">
+            <div class="response-head">
+              <span class="status-pill">{{ r.status }}</span>
+              <span class="ps-muted">{{ r.contentTypes.join(", ") }}</span>
             </div>
-          </section>
-        </article>
-      </main>
+            <p v-if="r.description">{{ r.description }}</p>
+            <pre v-if="responseExample && (r.status === '200' || r.status === '201')" class="code-block"><code>{{ responseExample }}</code></pre>
+          </div>
+        </section>
+      </article>
+    </main>
 
-      <DocOutline
-        :items="outlineItems"
-        :active-slug="activeSlug"
-        @navigate="scrollToSection"
-      />
-    </div>
-  </div>
+    <DocOutline
+      :items="outlineItems"
+      :active-slug="activeSlug"
+      @navigate="scrollToSection"
+    />
+  </template>
 </template>
 
 <style scoped>
+.doc-content--centered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .method-badge {
   display: inline-block;
   min-width: 56px;

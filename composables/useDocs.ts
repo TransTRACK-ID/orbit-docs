@@ -219,6 +219,58 @@ export const useDocs = () => {
     }
   }
 
+  async function bulkUpdateStatus(
+    ids: string[],
+    status: DocItem["status"],
+  ): Promise<{ updated: number; skipped: number; status: DocItem["status"]; updatedAt: string }> {
+    try {
+      const data = await $fetch<{
+        data: { updated: number; skipped: number; status: DocItem["status"]; ids: string[]; updatedAt: string };
+      }>("/api/docs/bulk-status", {
+        method: "PUT",
+        body: { ids, status },
+      });
+
+      const updatedIds = new Set(data.data.ids);
+      const updatedAt = data.data.updatedAt;
+      docs.value = docs.value.map((d) =>
+        updatedIds.has(d.id) ? { ...d, status: data.data.status, updatedAt } : d,
+      );
+      if (currentDoc.value && updatedIds.has(currentDoc.value.id)) {
+        currentDoc.value = {
+          ...currentDoc.value,
+          status: data.data.status,
+          updatedAt,
+        };
+      }
+
+      const label =
+        status === "in_review"
+          ? "In Review"
+          : status.charAt(0).toUpperCase() + status.slice(1);
+      toast.success(
+        data.data.updated === 1
+          ? `1 doc set to ${label}`
+          : `${data.data.updated} docs set to ${label}`,
+      );
+      if (data.data.skipped > 0) {
+        toast.error(
+          `${data.data.skipped} doc${data.data.skipped === 1 ? "" : "s"} skipped (not Knowledge base)`,
+        );
+      }
+      return data.data;
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to update status";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
+      throw e;
+    }
+  }
+
   async function fetchDocVersions(id: string) {
     isLoadingVersions.value = true;
     try {
@@ -274,6 +326,7 @@ export const useDocs = () => {
     updateDoc,
     publishDoc,
     deleteDoc,
+    bulkUpdateStatus,
     fetchDocVersions,
     restoreDocVersion,
   };

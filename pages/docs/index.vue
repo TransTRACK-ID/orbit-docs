@@ -7,6 +7,7 @@ import {
   docListPrimaryLabel,
   docListSecondaryLabel,
   groupDocsForList,
+  isFeatureCatalogDoc,
   sectionCollapseKey,
   shouldCollapseKnowledgeSection,
   type DocListView,
@@ -24,7 +25,7 @@ onBeforeMount(() => {
 
 const route = useRoute();
 const router = useRouter();
-const { docs, isLoading, search, fetchDocs, createDoc, deleteDoc } = useDocs();
+const { docs, isLoading, search, fetchDocs, createDoc, deleteDoc, bulkUpdateStatus } = useDocs();
 const { apps, fetchApps } = useApps();
 const { docSites, fetchDocSites } = useDocSites();
 
@@ -203,6 +204,10 @@ function onSearch() {
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
+    if (selectedDocIds.value.size > 0) {
+      clearSelection();
+      return;
+    }
     search.value = "";
     appFilter.value = "";
   }
@@ -268,7 +273,102 @@ const pageSubtitle = computed(() => {
   return "All documentation across apps";
 });
 
-const tableColspan = 5;
+/** Bulk status is for Knowledge base (synced feature) docs only. */
+const bulkSelectionEnabled = computed(() => docView.value !== "product");
+
+const selectedDocIds = ref<Set<string>>(new Set());
+const bulkStatus = ref<DocItem["status"]>("published");
+const isBulkUpdating = ref(false);
+
+const selectableKnowledgeIds = computed(() => {
+  if (!bulkSelectionEnabled.value) return [] as string[];
+  const ids: string[] = [];
+  for (const group of docGroups.value) {
+    for (const section of group.sections) {
+      if (section.kind !== "knowledge") continue;
+      if (isSectionCollapsed(group.key, section)) continue;
+      for (const doc of section.docs) ids.push(doc.id);
+    }
+  }
+  return ids;
+});
+
+const selectedCount = computed(() => selectedDocIds.value.size);
+
+const allVisibleSelected = computed(
+  () =>
+    selectableKnowledgeIds.value.length > 0
+    && selectableKnowledgeIds.value.every((id) => selectedDocIds.value.has(id)),
+);
+
+const someVisibleSelected = computed(
+  () => selectableKnowledgeIds.value.some((id) => selectedDocIds.value.has(id)),
+);
+
+const bulkStatusOptions: { value: DocItem["status"]; label: string }[] = [
+  { value: "draft", label: "Draft" },
+  { value: "in_review", label: "In Review" },
+  { value: "published", label: "Published" },
+  { value: "archived", label: "Archived" },
+];
+
+function clearSelection() {
+  selectedDocIds.value = new Set();
+}
+
+function toggleDocSelection(docId: string) {
+  const next = new Set(selectedDocIds.value);
+  if (next.has(docId)) next.delete(docId);
+  else next.add(docId);
+  selectedDocIds.value = next;
+}
+
+function toggleSelectAllVisible() {
+  if (allVisibleSelected.value) {
+    const visible = new Set(selectableKnowledgeIds.value);
+    selectedDocIds.value = new Set(
+      [...selectedDocIds.value].filter((id) => !visible.has(id)),
+    );
+    return;
+  }
+  selectedDocIds.value = new Set([
+    ...selectedDocIds.value,
+    ...selectableKnowledgeIds.value,
+  ]);
+}
+
+function selectAllInSection(docsInSection: DocItem[]) {
+  selectedDocIds.value = new Set([
+    ...selectedDocIds.value,
+    ...docsInSection.map((d) => d.id),
+  ]);
+}
+
+async function applyBulkStatus() {
+  if (!selectedCount.value || isBulkUpdating.value) return;
+  const ids = [...selectedDocIds.value];
+  isBulkUpdating.value = true;
+  try {
+    await bulkUpdateStatus(ids, bulkStatus.value);
+    clearSelection();
+  } catch {
+    // toast in composable
+  } finally {
+    isBulkUpdating.value = false;
+  }
+}
+
+watch([docView, search, appFilter, siteFilter], () => {
+  clearSelection();
+});
+
+watch(docs, () => {
+  const valid = new Set(docs.value.filter(isFeatureCatalogDoc).map((d) => d.id));
+  const next = new Set([...selectedDocIds.value].filter((id) => valid.has(id)));
+  if (next.size !== selectedDocIds.value.size) selectedDocIds.value = next;
+});
+
+const tableColspan = computed(() => (bulkSelectionEnabled.value ? 6 : 5));
 </script>
 
 <template>
@@ -334,6 +434,47 @@ const tableColspan = 5;
       </div>
     </div>
 
+    <div
+      v-if="bulkSelectionEnabled && selectedCount > 0"
+      class="selection-bar active"
+      role="region"
+      aria-label="Bulk status update"
+    >
+      <span>
+        <span class="num">{{ selectedCount }}</span>
+        feature{{ selectedCount === 1 ? "" : "s" }} selected
+      </span>
+      <label class="selection-status">
+        <span class="selection-status-label">Set status</span>
+        <select
+          v-model="bulkStatus"
+          class="select selection-status-select"
+          :disabled="isBulkUpdating"
+          aria-label="Status to apply"
+        >
+          <option v-for="o in bulkStatusOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+        </select>
+      </label>
+      <button
+        type="button"
+        class="btn btn-primary btn-sm"
+        :disabled="isBulkUpdating"
+        @click="applyBulkStatus"
+      >
+        <span v-if="isBulkUpdating">Updating…</span>
+        <span v-else>Update status</span>
+      </button>
+      <button
+        type="button"
+        class="btn btn-ghost btn-sm"
+        style="margin-left: auto;"
+        :disabled="isBulkUpdating"
+        @click="clearSelection"
+      >
+        Clear
+      </button>
+    </div>
+
     <GeneralDataTable v-if="isLoading">
       <tbody>
         <tr v-for="n in 5" :key="n" class="skeleton-row">
@@ -352,6 +493,17 @@ const tableColspan = 5;
     <GeneralDataTable v-else>
       <thead>
         <tr>
+          <th v-if="bulkSelectionEnabled" class="check-col">
+            <input
+              type="checkbox"
+              class="row-check"
+              :checked="allVisibleSelected"
+              :indeterminate.prop="someVisibleSelected && !allVisibleSelected"
+              :disabled="!selectableKnowledgeIds.length || isBulkUpdating"
+              aria-label="Select all visible Knowledge base docs"
+              @change="toggleSelectAllVisible"
+            />
+          </th>
           <th>Document</th>
           <th>Status</th>
           <th>Updated</th>
@@ -372,6 +524,15 @@ const tableColspan = 5;
                   <span v-if="section.kind === 'knowledge'" class="subsection-count">
                     {{ section.docs.length }} features
                   </span>
+                  <button
+                    v-if="bulkSelectionEnabled && section.kind === 'knowledge' && !isSectionCollapsed(group.key, section)"
+                    type="button"
+                    class="btn btn-ghost btn-sm subsection-select-all"
+                    :disabled="isBulkUpdating"
+                    @click="selectAllInSection(section.docs)"
+                  >
+                    Select all
+                  </button>
                 </div>
               </td>
             </tr>
@@ -408,57 +569,72 @@ const tableColspan = 5;
                   </button>
                 </td>
               </tr>
-              <tr v-for="doc in section.docs" :key="doc.id">
-            <td>
-              <div class="cell-stack">
-                <NuxtLink :to="`/docs/${doc.id}`" class="col-strong doc-title-link">
-                  {{ docListPrimaryLabel(doc) }}
-                </NuxtLink>
-                <span v-if="docListSecondaryLabel(doc)" class="doc-kind col-truncate">
-                  {{ docListSecondaryLabel(doc) }}
-                </span>
-                <span v-if="doc.site" class="doc-site-badge">
-                  <NuxtLink :to="`/sites/${doc.site.id}`" class="doc-site-link">
-                    {{ doc.site.name }}
-                  </NuxtLink>
-                  <span v-if="doc.slug" class="doc-site-slug num">/s/{{ doc.site.slug }}/{{ doc.slug }}</span>
-                </span>
-              </div>
-            </td>
-            <td>
-              <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
-                {{ statusLabel[doc.status] || doc.status }}
-              </span>
-            </td>
-            <td class="col-num col-muted">{{ formatDate(doc.updatedAt) }}</td>
-            <td class="col-muted">{{ doc.author || "—" }}</td>
-            <td class="col-actions">
-              <div class="cell-actions">
-                <NuxtLink :to="`/docs/${doc.id}`" class="btn btn-primary btn-sm">
-                  Open
-                </NuxtLink>
-                <div class="actions-menu">
-                  <button type="button" class="btn btn-ghost btn-sm actions-toggle" aria-label="More actions" @click="doc._showActions = !doc._showActions">
-                    <DotsVertical />
-                  </button>
-                  <div v-if="doc._showActions" class="actions-dropdown" @click.stop>
-                    <NuxtLink
-                      v-if="doc.status === 'published'"
-                      :to="`/p/${doc.id}`"
-                      target="_blank"
-                      class="actions-item"
-                      @click="doc._showActions = false"
-                    >
-                      Public View
+              <tr
+                v-for="doc in section.docs"
+                :key="doc.id"
+                :class="{ 'is-selected': selectedDocIds.has(doc.id) }"
+              >
+                <td v-if="bulkSelectionEnabled" class="check-col" @click.stop>
+                  <input
+                    v-if="section.kind === 'knowledge'"
+                    type="checkbox"
+                    class="row-check"
+                    :checked="selectedDocIds.has(doc.id)"
+                    :disabled="isBulkUpdating"
+                    :aria-label="`Select ${docListPrimaryLabel(doc)}`"
+                    @change="toggleDocSelection(doc.id)"
+                  />
+                </td>
+                <td>
+                  <div class="cell-stack">
+                    <NuxtLink :to="`/docs/${doc.id}`" class="col-strong doc-title-link">
+                      {{ docListPrimaryLabel(doc) }}
                     </NuxtLink>
-                    <button type="button" class="actions-item actions-danger" @click="doc._showActions = false; confirmDelete(doc)">
-                      Delete
-                    </button>
+                    <span v-if="docListSecondaryLabel(doc)" class="doc-kind col-truncate">
+                      {{ docListSecondaryLabel(doc) }}
+                    </span>
+                    <span v-if="doc.site" class="doc-site-badge">
+                      <NuxtLink :to="`/sites/${doc.site.id}`" class="doc-site-link">
+                        {{ doc.site.name }}
+                      </NuxtLink>
+                      <span v-if="doc.slug" class="doc-site-slug num">/s/{{ doc.site.slug }}/{{ doc.slug }}</span>
+                    </span>
                   </div>
-                </div>
-              </div>
-            </td>
-          </tr>
+                </td>
+                <td>
+                  <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
+                    {{ statusLabel[doc.status] || doc.status }}
+                  </span>
+                </td>
+                <td class="col-num col-muted">{{ formatDate(doc.updatedAt) }}</td>
+                <td class="col-muted">{{ doc.author || "—" }}</td>
+                <td class="col-actions">
+                  <div class="cell-actions">
+                    <NuxtLink :to="`/docs/${doc.id}`" class="btn btn-primary btn-sm">
+                      Open
+                    </NuxtLink>
+                    <div class="actions-menu">
+                      <button type="button" class="btn btn-ghost btn-sm actions-toggle" aria-label="More actions" @click="doc._showActions = !doc._showActions">
+                        <DotsVertical />
+                      </button>
+                      <div v-if="doc._showActions" class="actions-dropdown" @click.stop>
+                        <NuxtLink
+                          v-if="doc.status === 'published'"
+                          :to="`/p/${doc.id}`"
+                          target="_blank"
+                          class="actions-item"
+                          @click="doc._showActions = false"
+                        >
+                          Public View
+                        </NuxtLink>
+                        <button type="button" class="actions-item actions-danger" @click="doc._showActions = false; confirmDelete(doc)">
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
             </template>
           </template>
         </template>
@@ -640,6 +816,52 @@ const tableColspan = 5;
 .opt {
   color: var(--muted);
   font-weight: 400;
+}
+
+.selection-bar {
+  display: none;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in oklch, var(--accent) 20%, transparent);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+.selection-bar.active {
+  display: flex;
+}
+.selection-bar .num {
+  font-weight: 600;
+  color: var(--accent);
+}
+.selection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.selection-status-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.selection-status-select {
+  width: auto;
+  min-width: 140px;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+.row-check {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.subsection-select-all {
+  margin-left: auto;
 }
 
 .topbar {

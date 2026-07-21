@@ -32,6 +32,24 @@
   color: var(--fg);
 }
 
+.ps-error--inline {
+  min-height: 0;
+  flex: 1;
+  justify-content: flex-start;
+  padding-top: 48px;
+}
+
+.doc-body.is-content-loading {
+  opacity: 0.55;
+  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doc-body.is-content-loading {
+    transition: none;
+  }
+}
+
 .ps-landing-desc {
   font-size: 16px;
   line-height: 1.65;

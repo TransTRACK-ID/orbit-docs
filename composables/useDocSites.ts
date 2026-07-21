@@ -1,5 +1,6 @@
 import { toast } from "vue3-toastify";
 import type { NavConfig, NormalizedOpenApi } from "~/server/database/schema";
+import { invalidatePublicSite } from "~/composables/usePublicSite";
 
 export interface DocSitePage {
   id: string;
@@ -47,7 +48,10 @@ export interface CreateDocSitePayload {
   navConfig?: NavConfig;
 }
 
-export interface UpdateDocSitePayload extends Partial<CreateDocSitePayload> {}
+export interface UpdateDocSitePayload extends Partial<CreateDocSitePayload> {
+  /** Clear stored OpenAPI spec, normalized ops, and navConfig.openapi entries. */
+  clearOpenApi?: boolean;
+}
 
 export const useDocSites = () => {
   const docSites = ref<DocSiteItem[]>([]);
@@ -213,6 +217,44 @@ export const useDocSites = () => {
     }
   }
 
+  async function clearOpenApi(id: string) {
+    isSaving.value = true;
+    try {
+      const data = await $fetch<{ data: DocSiteItem }>(`/api/doc-sites/${id}`, {
+        method: "PUT",
+        body: { clearOpenApi: true },
+      });
+      const idx = docSites.value.findIndex((s) => s.id === id);
+      if (idx !== -1) {
+        docSites.value[idx] = { ...docSites.value[idx], ...data.data };
+      }
+      if (currentSite.value && currentSite.value.id === id) {
+        currentSite.value = {
+          ...currentSite.value,
+          ...data.data,
+          openapiSpec: null,
+          openapiFormat: null,
+          openapiNormalized: null,
+          navConfig: data.data.navConfig,
+        };
+      }
+      invalidatePublicSite(data.data.slug);
+      toast.success("API reference removed");
+      return data.data;
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to remove API reference";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
+      throw e;
+    } finally {
+      isSaving.value = false;
+    }
+  }
+
   return {
     docSites,
     currentSite,
@@ -226,5 +268,6 @@ export const useDocSites = () => {
     updateDocSite,
     deleteDocSite,
     generateOpenApi,
+    clearOpenApi,
   };
 };

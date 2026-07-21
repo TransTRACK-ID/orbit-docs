@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import PublicSiteNav from "~/components/docs/PublicSiteNav.vue";
 import DocOutline from "~/components/docs/DocOutline.vue";
 import { renderMarkdown } from "~/composables/useMarkdown";
 import {
@@ -22,15 +21,9 @@ const pageSlug = computed(() => route.params.pageSlug as string);
 
 const page = ref<any>(null);
 const isLoading = ref(true);
+const isContentLoading = ref(false);
 const error = ref("");
 const contentRef = ref<HTMLElement | null>(null);
-
-const sitePages = computed(() => page.value?.site?.pages || []);
-const openapiOps = computed(() => {
-  const fromNav = page.value?.site?.navConfig?.openapi;
-  if (fromNav?.length) return fromNav;
-  return page.value?.site?.openapiNormalized?.operations || [];
-});
 
 const frontmatter = computed<Record<string, any>>(
   () => (page.value?.frontmatter as Record<string, any>) || {},
@@ -80,19 +73,35 @@ async function load() {
   if (cached) {
     page.value = cached;
     isLoading.value = false;
-    await nextTick(() => refreshScrollSpy());
+    isContentLoading.value = false;
+    await nextTick(() => {
+      contentRef.value?.scrollTo?.({ top: 0 });
+      refreshScrollSpy();
+    });
     return;
   }
 
-  isLoading.value = true;
-  page.value = null;
+  const keepContent = !!page.value;
+  if (keepContent) {
+    isContentLoading.value = true;
+  } else {
+    isLoading.value = true;
+    page.value = null;
+  }
+
   try {
     page.value = await fetchPage(siteSlug.value, pageSlug.value);
-    await nextTick(() => refreshScrollSpy());
+    error.value = "";
+    await nextTick(() => {
+      contentRef.value?.scrollTo?.({ top: 0 });
+      refreshScrollSpy();
+    });
   } catch (e: any) {
     error.value = e?.statusMessage || "Page not found";
+    if (!keepContent) page.value = null;
   } finally {
     isLoading.value = false;
+    isContentLoading.value = false;
   }
 }
 
@@ -106,54 +115,58 @@ watch([siteSlug, pageSlug], load);
 </script>
 
 <template>
-  <div class="doc-reader-page">
-    <div v-if="isLoading" class="ps-loading">Loading…</div>
+  <main
+    v-if="isLoading && !page"
+    class="doc-content doc-content--centered"
+  >
+    <div class="ps-loading">Loading…</div>
+  </main>
 
-    <div v-else-if="error" class="ps-error">
+  <main
+    v-else-if="error && !page"
+    class="doc-content doc-content--centered"
+  >
+    <div class="ps-error">
       <h1>{{ error }}</h1>
       <p>The page you are looking for could not be loaded.</p>
     </div>
+  </main>
 
-    <div v-else-if="page" class="doc-shell">
-      <aside class="doc-sidebar">
-        <div class="doc-sidebar-header">
-          <NuxtLink :to="`/s/${siteSlug}`" class="doc-sidebar-title">{{ page.site.name }}</NuxtLink>
-          <p v-if="page.site.app" class="doc-sidebar-meta">{{ page.site.app.name }}</p>
-        </div>
-        <div class="doc-sidebar-nav">
-          <PublicSiteNav
-            :nav-config="page.site.navConfig"
-            :site-slug="siteSlug"
-            :pages="sitePages"
-            :openapi-operations="openapiOps"
-            :active-page-slug="pageSlug as string"
-          />
-        </div>
-      </aside>
+  <template v-else-if="page">
+    <main ref="contentRef" class="doc-content" :aria-busy="isContentLoading">
+      <div v-if="error" class="ps-error ps-error--inline">
+        <h1>{{ error }}</h1>
+        <p>The page you are looking for could not be loaded.</p>
+      </div>
+      <article v-else id="docContent" :class="[bodyClass, { 'is-content-loading': isContentLoading }]">
+        <header class="doc-body-header">
+          <h1 class="doc-body-title">{{ displayTitle }}</h1>
+          <div v-if="page.updatedAt" class="doc-body-meta">
+            Updated {{ new Date(page.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }}
+            <span v-if="page.author"> · {{ page.author }}</span>
+          </div>
+        </header>
 
-      <main ref="contentRef" class="doc-content">
-        <article id="docContent" :class="bodyClass">
-          <header class="doc-body-header">
-            <h1 class="doc-body-title">{{ displayTitle }}</h1>
-            <div v-if="page.updatedAt" class="doc-body-meta">
-              Updated {{ new Date(page.updatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) }}
-              <span v-if="page.author"> · {{ page.author }}</span>
-            </div>
-          </header>
+        <MermaidHtml
+          class="markdown-content markdown-body"
+          :html="renderedHtml"
+          @click="handleContentClick"
+        />
+      </article>
+    </main>
 
-          <MermaidHtml
-            class="markdown-content markdown-body"
-            :html="renderedHtml"
-            @click="handleContentClick"
-          />
-        </article>
-      </main>
-
-      <DocOutline
-        :items="outlineItems"
-        :active-slug="activeSlug"
-        @navigate="scrollToSection"
-      />
-    </div>
-  </div>
+    <DocOutline
+      :items="outlineItems"
+      :active-slug="activeSlug"
+      @navigate="scrollToSection"
+    />
+  </template>
 </template>
+
+<style scoped>
+.doc-content--centered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+</style>

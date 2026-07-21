@@ -1,0 +1,286 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-03-23T08:31:00.000Z",
+  "title": "Design System: Orbit Docs",
+  "extensions": {
+    "colorMeta": {
+      "bg": {
+        "role": "neutral",
+        "displayName": "Cool Mist Canvas",
+        "canonical": "oklch(98% 0.004 250)",
+        "tonalRamp": [
+          "oklch(18% 0.02 250)",
+          "oklch(28% 0.018 250)",
+          "oklch(38% 0.016 250)",
+          "oklch(48% 0.014 250)",
+          "oklch(58% 0.012 250)",
+          "oklch(68% 0.01 250)",
+          "oklch(78% 0.008 250)",
+          "oklch(98% 0.004 250)"
+        ]
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Clean Sheet",
+        "canonical": "oklch(100% 0 0)",
+        "tonalRamp": [
+          "oklch(20% 0.02 250)",
+          "oklch(30% 0.018 250)",
+          "oklch(40% 0.015 250)",
+          "oklch(50% 0.012 250)",
+          "oklch(60% 0.01 250)",
+          "oklch(70% 0.008 250)",
+          "oklch(85% 0.005 250)",
+          "oklch(100% 0 0)"
+        ]
+      },
+      "fg": {
+        "role": "neutral",
+        "displayName": "Ink Slate",
+        "canonical": "oklch(20% 0.02 250)",
+        "tonalRamp": [
+          "oklch(15% 0.02 250)",
+          "oklch(22% 0.02 250)",
+          "oklch(30% 0.018 250)",
+          "oklch(40% 0.016 250)",
+          "oklch(50% 0.014 250)",
+          "oklch(60% 0.012 250)",
+          "oklch(75% 0.01 250)",
+          "oklch(96% 0.005 250)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Quiet Graphite",
+        "canonical": "oklch(55% 0.015 250)",
+        "tonalRamp": [
+          "oklch(25% 0.018 250)",
+          "oklch(35% 0.016 250)",
+          "oklch(45% 0.015 250)",
+          "oklch(55% 0.015 250)",
+          "oklch(65% 0.012 250)",
+          "oklch(75% 0.01 250)",
+          "oklch(85% 0.008 250)",
+          "oklch(95% 0.005 250)"
+        ]
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Soft Divider",
+        "canonical": "oklch(90% 0.006 250)",
+        "tonalRamp": [
+          "oklch(30% 0.02 250)",
+          "oklch(40% 0.018 250)",
+          "oklch(50% 0.015 250)",
+          "oklch(60% 0.012 250)",
+          "oklch(70% 0.01 250)",
+          "oklch(80% 0.008 250)",
+          "oklch(90% 0.006 250)",
+          "oklch(98% 0.004 250)"
+        ]
+      },
+      "accent": {
+        "role": "primary",
+        "displayName": "Warm Signal Coral",
+        "canonical": "oklch(55% 0.16 25)",
+        "tonalRamp": [
+          "oklch(28% 0.12 25)",
+          "oklch(38% 0.14 25)",
+          "oklch(48% 0.15 25)",
+          "oklch(55% 0.16 25)",
+          "oklch(62% 0.15 25)",
+          "oklch(72% 0.12 25)",
+          "oklch(85% 0.08 25)",
+          "oklch(95% 0.03 25)"
+        ]
+      },
+      "success": {
+        "role": "tertiary",
+        "displayName": "Verified Green",
+        "canonical": "oklch(60% 0.18 145)",
+        "tonalRamp": [
+          "oklch(28% 0.12 145)",
+          "oklch(38% 0.14 145)",
+          "oklch(48% 0.16 145)",
+          "oklch(55% 0.17 145)",
+          "oklch(60% 0.18 145)",
+          "oklch(70% 0.15 145)",
+          "oklch(82% 0.1 145)",
+          "oklch(94% 0.04 145)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles in topbars and reader article headings."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Card section titles and modal headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Sidebar names and emphasized list labels."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Default UI copy, forms, and table cells at 14px."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase mono table headers and meta stamps."
+      },
+      "mono": {
+        "displayName": "Mono",
+        "purpose": "Slugs, code snippets, and numeric data."
+      }
+    },
+    "shadows": [
+      {
+        "name": "focus-ring",
+        "value": "0 0 0 3px color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent)",
+        "purpose": "Input and search focus state."
+      },
+      {
+        "name": "modal-scrim",
+        "value": "color-mix(in oklch, oklch(20% 0.02 250) 25%, transparent)",
+        "purpose": "Modal overlay background with optional 4px backdrop blur."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-standard",
+        "value": "cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Default 150ms transitions on buttons, borders, and backgrounds."
+      },
+      {
+        "name": "ease-out-quart",
+        "value": "cubic-bezier(0.25, 1, 0.5, 1)",
+        "purpose": "Reader nav chevron and outline interactions."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "480px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1100px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main call to action: save, create, add selected.",
+      "html": "<button type=\"button\" class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; border-radius: 8px; border: 1px solid oklch(55% 0.16 25); font-family: -apple-system, BlinkMacSystemFont, \"Inter\", \"Segoe UI\", system-ui, sans-serif; font-size: 14px; font-weight: 500; line-height: 1.2; cursor: pointer; background: oklch(55% 0.16 25); color: oklch(100% 0 0); transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: color-mix(in oklch, oklch(55% 0.16 25) 88%, black); } .ds-btn-primary:focus-visible { outline: 2px solid oklch(55% 0.16 25); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.55; cursor: not-allowed; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Secondary actions: cancel, close, alternate paths.",
+      "html": "<button type=\"button\" class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; border-radius: 8px; border: 1px solid oklch(90% 0.006 250); font-family: -apple-system, BlinkMacSystemFont, \"Inter\", \"Segoe UI\", system-ui, sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; background: transparent; color: oklch(20% 0.02 250); transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-secondary:hover { border-color: oklch(20% 0.02 250); } .ds-btn-secondary:focus-visible { outline: 2px solid oklch(55% 0.16 25); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Low-emphasis navigation and toolbar actions.",
+      "html": "<button type=\"button\" class=\"ds-btn-ghost\">← Sites</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; justify-content: center; padding: 8px 16px; border-radius: 8px; border: 1px solid transparent; font-family: -apple-system, BlinkMacSystemFont, \"Inter\", \"Segoe UI\", system-ui, sans-serif; font-size: 14px; font-weight: 500; cursor: pointer; background: transparent; color: oklch(55% 0.015 250); transition: background 0.15s, color 0.15s; } .ds-btn-ghost:hover { color: oklch(20% 0.02 250); background: color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent); } .ds-btn-ghost:focus-visible { outline: 2px solid oklch(55% 0.16 25); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-default",
+      "description": "Default text field for forms, search, and modals.",
+      "html": "<input type=\"text\" class=\"ds-input\" placeholder=\"Search docs…\" />",
+      "css": ".ds-input { width: 100%; padding: 8px 12px; border: 1px solid oklch(90% 0.006 250); border-radius: 8px; background: oklch(98% 0.004 250); font-family: -apple-system, BlinkMacSystemFont, \"Inter\", \"Segoe UI\", system-ui, sans-serif; font-size: 14px; color: oklch(20% 0.02 250); transition: border-color 0.15s, box-shadow 0.15s; } .ds-input:focus { outline: none; border-color: oklch(55% 0.16 25); box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent); } .ds-input::placeholder { color: oklch(55% 0.015 250); }"
+    },
+    {
+      "name": "Status Pill",
+      "kind": "chip",
+      "refersTo": "card-surface",
+      "description": "Published / draft status tags in page lists.",
+      "html": "<span class=\"ds-pill ds-pill-green\">published</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; text-transform: lowercase; } .ds-pill-green { background: color-mix(in oklch, oklch(65% 0.15 145) 15%, transparent); color: oklch(45% 0.13 145); } .ds-pill-blue { background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent); color: oklch(55% 0.14 255); }"
+    },
+    {
+      "name": "Section Card",
+      "kind": "card",
+      "refersTo": "card-surface",
+      "description": "Grouped settings and editor sections on site/doc pages.",
+      "html": "<section class=\"ds-card\"><h2 class=\"ds-card-title\">Details</h2><p class=\"ds-card-body\">Site name, slug, and status.</p></section>",
+      "css": ".ds-card { background: oklch(100% 0 0); border: 1px solid oklch(90% 0.006 250); border-radius: 12px; padding: 24px; } .ds-card-title { margin: 0 0 12px; font-size: 18px; font-weight: 600; color: oklch(20% 0.02 250); } .ds-card-body { margin: 0; font-size: 14px; line-height: 1.5; color: oklch(55% 0.015 250); }"
+    },
+    {
+      "name": "Data Table Row",
+      "kind": "custom",
+      "refersTo": "card-surface",
+      "description": "Scan-first list rows in docs, releases, and feedback tables.",
+      "html": "<table class=\"ds-table-demo\"><thead><tr><th>Title</th><th>Status</th></tr></thead><tbody><tr class=\"ds-row\"><td class=\"ds-strong\">API Reference</td><td class=\"ds-muted\">draft</td></tr><tr class=\"ds-row is-selected\"><td class=\"ds-strong\">Getting Started</td><td class=\"ds-muted\">published</td></tr></tbody></table>",
+      "css": ".ds-table-demo { width: 100%; border-collapse: collapse; font-size: 14px; background: oklch(100% 0 0); border: 1px solid oklch(90% 0.006 250); border-radius: 12px; overflow: hidden; } .ds-table-demo th { padding: 12px 16px; text-align: left; color: oklch(55% 0.015 250); font-family: \"JetBrains Mono\", ui-monospace, monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; border-bottom: 1px solid oklch(90% 0.006 250); } .ds-table-demo td { padding: 12px 16px; border-bottom: 1px solid oklch(90% 0.006 250); } .ds-row:hover { background: color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent); } .ds-row.is-selected { background: color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent); } .ds-strong { font-weight: 600; color: oklch(20% 0.02 250); } .ds-muted { color: oklch(55% 0.015 250); font-size: 13px; }"
+    },
+    {
+      "name": "Sidebar Nav Link",
+      "kind": "nav",
+      "refersTo": "button-ghost",
+      "description": "Doc reader sidebar page link with active state.",
+      "html": "<nav class=\"ds-nav\"><a href=\"#\" class=\"ds-nav-link is-active\">View History Order</a><a href=\"#\" class=\"ds-nav-link\">User Log Activity</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 2px; padding: 8px; } .ds-nav-link { display: block; padding: 6px 10px; border-radius: 8px; font-size: 13px; font-weight: 400; line-height: 1.4; color: color-mix(in oklch, oklch(55% 0.015 250) 90%, oklch(20% 0.02 250)); text-decoration: none; transition: color 0.15s, background 0.15s; } .ds-nav-link:hover { color: oklch(20% 0.02 250); background: color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent); } .ds-nav-link.is-active { color: oklch(55% 0.16 25); font-weight: 500; background: color-mix(in oklch, oklch(55% 0.16 25) 8%, transparent); } .ds-nav-link:focus-visible { outline: 2px solid oklch(55% 0.16 25); outline-offset: 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Version Ledger",
+    "overview": "Orbit Docs is built for software teams in focused work sessions: editing docs, reviewing versions, publishing releases. The interface should disappear into the task. Surfaces are calm, cool, and lightly tinted; a single warm accent marks primary actions and current selection. Density is practical (tables, sidebars, forms) without clutter. This system rejects marketing spectacle.",
+    "keyCharacteristics": [
+      "Content-first layout with minimal chrome",
+      "Restrained palette: cool neutrals + warm coral accent used sparingly",
+      "System sans (Inter / native stack) with mono for labels, slugs, and data",
+      "Flat surfaces at rest; depth via borders, tonal fills, and focus rings",
+      "Shared primitives (.btn, .input, .ds-table) across admin surfaces",
+      "Dark mode via .dark class on the same OKLCH token family"
+    ],
+    "rules": [
+      {
+        "name": "The One Accent Rule",
+        "body": "The warm coral accent appears on primary actions, selection, and focus only. It must not wallpaper backgrounds, headings, or decorative chrome. If more than ~10% of a viewport reads as accent, pull back.",
+        "section": "colors"
+      },
+      {
+        "name": "The Tinted Neutral Rule",
+        "body": "Never use pure #000 or #fff. Neutrals carry a slight cool hue (chroma ~0.004–0.02, hue ~250).",
+        "section": "colors"
+      },
+      {
+        "name": "The Mono-For-Data Rule",
+        "body": "Slugs, timestamps, version numbers, and table headers use --font-mono with tabular nums. Body copy stays in the sans stack.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Cards and panels do not cast shadows at rest. Elevation appears only for modals, floating FABs, and explicit overlay layers.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use semantic tokens (--bg, --surface, --fg, --accent) so light and dark modes stay aligned.",
+      "Do keep primary actions as .btn-primary with the warm accent; secondary paths as ghost or secondary.",
+      "Do use borders and tonal hovers before reaching for shadows.",
+      "Do respect prefers-reduced-motion for app transitions.",
+      "Do cap reader prose at comfortable line lengths and let markdown content dominate the viewport."
+    ],
+    "donts": [
+      "Don't use marketing-heavy landing patterns with hero metrics and gradient text.",
+      "Don't build cluttered dashboards with nested cards and excessive chrome.",
+      "Don't default to generic SaaS cream-and-blue aesthetics or AI slop template layouts.",
+      "Don't over-animate interfaces; motion must convey state, not decoration.",
+      "Don't use border-left or border-right greater than 1px as a colored accent stripe on cards or list items.",
+      "Don't use background-clip: text gradient headings.",
+      "Don't use glassmorphism or backdrop blur except on modal overlays.",
+      "Don't nest cards inside cards; use spacing and dividers for inner hierarchy."
+    ]
+  }
+}

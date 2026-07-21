@@ -24,6 +24,7 @@ const {
   fetchSitePages,
   updateDocSite,
   generateOpenApi,
+  clearOpenApi,
 } = useDocSites();
 const { apps, fetchApps } = useApps();
 const { docs: allDocs, fetchDocs, createDoc, updateDoc } = useDocs();
@@ -49,10 +50,42 @@ const newPageTitle = ref("");
 const isCreatingPage = ref(false);
 const showAddExisting = ref(false);
 const addExistingSearch = ref("");
+const addExistingAppFilter = ref("");
+const selectedDocIds = ref<Set<string>>(new Set());
 const isBindingPage = ref(false);
+const isLoadingAddExisting = ref(false);
 
-const unboundDocs = computed(() =>
-  allDocs.value.filter((d) => !d.siteId && d.title.toLowerCase().includes(addExistingSearch.value.trim().toLowerCase())),
+const addExistingAppOptions = computed(() => [
+  { id: "", label: "All apps" },
+  ...apps.value.map((a) => ({ id: a.id, label: a.name })),
+  { id: "__unbound__", label: "No app" },
+]);
+
+const filteredUnboundDocs = computed(() => {
+  const q = addExistingSearch.value.trim().toLowerCase();
+  return allDocs.value.filter((d) => {
+    if (d.siteId) return false;
+    if (addExistingAppFilter.value === "__unbound__" && d.appId) return false;
+    if (
+      addExistingAppFilter.value
+      && addExistingAppFilter.value !== "__unbound__"
+      && d.appId !== addExistingAppFilter.value
+    ) {
+      return false;
+    }
+    if (q && !d.title.toLowerCase().includes(q)) return false;
+    return true;
+  });
+});
+
+const selectedCount = computed(() => selectedDocIds.value.size);
+const allVisibleSelected = computed(
+  () =>
+    filteredUnboundDocs.value.length > 0
+    && filteredUnboundDocs.value.every((d) => selectedDocIds.value.has(d.id)),
+);
+const someVisibleSelected = computed(
+  () => filteredUnboundDocs.value.some((d) => selectedDocIds.value.has(d.id)),
 );
 
 function uniquePageSlug(base: string): string {
@@ -96,21 +129,41 @@ async function createPage() {
   }
 }
 
-async function bindExistingDoc(docId: string, title: string) {
-  if (isBindingPage.value) return;
+function uniquePageSlugFromSet(base: string, taken: Set<string>): string {
+  let slug = slugify(base) || "page";
+  let i = 2;
+  while (taken.has(slug)) {
+    slug = `${slugify(base) || "page"}-${i++}`;
+  }
+  taken.add(slug);
+  return slug;
+}
+
+async function bindExistingDocs(docsToBind: Array<{ id: string; title: string }>) {
+  if (!docsToBind.length || isBindingPage.value) return;
   isBindingPage.value = true;
   try {
-    const slug = uniquePageSlug(title);
-    await updateDoc(docId, {
-      title,
-      siteId: siteId.value,
-      slug,
-    });
-    addSlugToNav(slug);
+    const takenSlugs = new Set(
+      sitePages.value.map((p) => p.slug).filter(Boolean) as string[],
+    );
+    for (const doc of docsToBind) {
+      const slug = uniquePageSlugFromSet(doc.title, takenSlugs);
+      await updateDoc(
+        doc.id,
+        {
+          title: doc.title,
+          siteId: siteId.value,
+          slug,
+        },
+        { silent: true },
+      );
+      addSlugToNav(slug);
+    }
     await updateDocSite(siteId.value, { navConfig: navConfig.value });
     await fetchSitePages(siteId.value);
-    showAddExisting.value = false;
-    addExistingSearch.value = "";
+    const count = docsToBind.length;
+    toast.success(count === 1 ? "Doc added to site" : `${count} docs added to site`);
+    closeAddExisting();
   } catch {
     // toast in composable
   } finally {
@@ -118,11 +171,67 @@ async function bindExistingDoc(docId: string, title: string) {
   }
 }
 
+async function bindSelectedDocs() {
+  const docsToBind = filteredUnboundDocs.value
+    .filter((d) => selectedDocIds.value.has(d.id))
+    .map((d) => ({ id: d.id, title: d.title }));
+  await bindExistingDocs(docsToBind);
+}
+
+function toggleDocSelection(docId: string) {
+  const next = new Set(selectedDocIds.value);
+  if (next.has(docId)) next.delete(docId);
+  else next.add(docId);
+  selectedDocIds.value = next;
+}
+
+function toggleSelectAllVisible() {
+  if (allVisibleSelected.value) {
+    const visible = new Set(filteredUnboundDocs.value.map((d) => d.id));
+    selectedDocIds.value = new Set(
+      [...selectedDocIds.value].filter((id) => !visible.has(id)),
+    );
+    return;
+  }
+  selectedDocIds.value = new Set([
+    ...selectedDocIds.value,
+    ...filteredUnboundDocs.value.map((d) => d.id),
+  ]);
+}
+
+function closeAddExisting() {
+  showAddExisting.value = false;
+  addExistingSearch.value = "";
+  addExistingAppFilter.value = "";
+  selectedDocIds.value = new Set();
+}
+
+async function loadAddExistingDocs() {
+  isLoadingAddExisting.value = true;
+  try {
+    const appId =
+      addExistingAppFilter.value && addExistingAppFilter.value !== "__unbound__"
+        ? addExistingAppFilter.value
+        : undefined;
+    await fetchDocs(appId ? { appId } : undefined);
+  } finally {
+    isLoadingAddExisting.value = false;
+  }
+}
+
 async function openAddExisting() {
   showAddExisting.value = true;
   addExistingSearch.value = "";
-  await fetchDocs();
+  addExistingAppFilter.value = form.appId || "";
+  selectedDocIds.value = new Set();
+  await loadAddExistingDocs();
 }
+
+watch(addExistingAppFilter, () => {
+  if (!showAddExisting.value) return;
+  selectedDocIds.value = new Set();
+  void loadAddExistingDocs();
+});
 
 const appOptions = computed(() => [
   { id: "", label: "Unbound" },
@@ -199,6 +308,13 @@ async function save() {
 
 const publicUrl = computed(() => `/s/${form.slug}`);
 
+const hasApiReference = computed(
+  () =>
+    !!openapiResult.value
+    || !!(navConfig.value.openapi && navConfig.value.openapi.length)
+    || !!openapiSpec.value.trim(),
+);
+
 async function generateOpenApiSite() {
   if (!openapiSpec.value.trim()) {
     toast.error("Paste an OpenAPI spec first");
@@ -209,6 +325,21 @@ async function generateOpenApiSite() {
     const res = await generateOpenApi(siteId.value, openapiSpec.value, openapiFormat.value);
     openapiResult.value = { operationsCount: res.operationsCount, tags: res.tags };
     navConfig.value = res.navConfig;
+  } catch {
+    // toast handled in composable
+  } finally {
+    openapiGenerating.value = false;
+  }
+}
+
+async function removeApiReference() {
+  if (openapiGenerating.value || isSaving.value) return;
+  openapiGenerating.value = true;
+  try {
+    const updated = await clearOpenApi(siteId.value);
+    openapiSpec.value = "";
+    openapiResult.value = null;
+    navConfig.value = updated.navConfig || { groups: [], pages: [], external: [], openapi: [] };
   } catch {
     // toast handled in composable
   } finally {
@@ -334,6 +465,15 @@ function onSpecFile(e: Event) {
               <span v-if="openapiGenerating">Generating…</span>
               <span v-else>Generate API site</span>
             </button>
+            <button
+              v-if="hasApiReference"
+              type="button"
+              class="btn btn-secondary"
+              :disabled="openapiGenerating || isSaving"
+              @click="removeApiReference"
+            >
+              Remove API reference
+            </button>
             <span v-if="openapiResult" class="oa-result">
               {{ openapiResult.operationsCount }} operations
               <span v-if="openapiResult.tags.length"> · tags: {{ openapiResult.tags.join(", ") }}</span>
@@ -390,37 +530,73 @@ function onSpecFile(e: Event) {
     </div>
 
     <!-- Add existing doc modal -->
-    <div v-if="showAddExisting" class="modal-overlay" @click="showAddExisting = false">
-      <div class="modal-dialog" @click.stop>
+    <div v-if="showAddExisting" class="modal-overlay" @click="closeAddExisting">
+      <div class="modal-dialog modal-dialog--add-docs" role="dialog" aria-labelledby="add-docs-title" @click.stop>
         <div class="modal-header">
-          <h3>Add existing doc</h3>
-          <p class="modal-desc">Bind an unassigned doc to this site. It will get a page slug and appear in the nav.</p>
+          <h3 id="add-docs-title">Add existing docs</h3>
+          <p class="modal-desc">
+            Select unassigned docs to bind to this site. Each gets a page slug and is added to the nav.
+          </p>
         </div>
-        <input
-          v-model="addExistingSearch"
-          class="input"
-          placeholder="Search docs…"
-          aria-label="Search docs to add"
-        />
-        <ul v-if="unboundDocs.length" class="bind-doc-list">
-          <li v-for="doc in unboundDocs.slice(0, 20)" :key="doc.id" class="bind-doc-item">
-            <div class="bind-doc-info">
-              <span class="bind-doc-title">{{ doc.title }}</span>
-              <span class="bind-doc-meta">{{ doc.status }} · {{ doc.app?.name || "Unbound" }}</span>
-            </div>
-            <button
-              type="button"
-              class="btn btn-secondary btn-sm"
-              :disabled="isBindingPage"
-              @click="bindExistingDoc(doc.id, doc.title)"
-            >
-              Add
-            </button>
+
+        <div class="bind-doc-toolbar">
+          <input
+            v-model="addExistingSearch"
+            class="input bind-doc-search"
+            placeholder="Search by title…"
+            aria-label="Search docs to add"
+          />
+          <select v-model="addExistingAppFilter" class="select bind-doc-app-filter" aria-label="Filter by app">
+            <option v-for="o in addExistingAppOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
+          </select>
+        </div>
+
+        <div v-if="filteredUnboundDocs.length" class="bind-doc-selection-bar">
+          <label class="bind-doc-select-all">
+            <input
+              type="checkbox"
+              class="bind-doc-checkbox"
+              :checked="allVisibleSelected"
+              :indeterminate="someVisibleSelected && !allVisibleSelected"
+              @change="toggleSelectAllVisible"
+            />
+            <span>Select all ({{ filteredUnboundDocs.length }})</span>
+          </label>
+          <span v-if="selectedCount" class="bind-doc-selected-count num">{{ selectedCount }} selected</span>
+        </div>
+
+        <div v-if="isLoadingAddExisting" class="bind-doc-loading">Loading docs…</div>
+        <ul v-else-if="filteredUnboundDocs.length" class="bind-doc-list">
+          <li v-for="doc in filteredUnboundDocs" :key="doc.id">
+            <label class="bind-doc-item" :class="{ 'is-selected': selectedDocIds.has(doc.id) }">
+              <input
+                type="checkbox"
+                class="bind-doc-checkbox"
+                :checked="selectedDocIds.has(doc.id)"
+                @change="toggleDocSelection(doc.id)"
+              />
+              <span class="bind-doc-info">
+                <span class="bind-doc-title">{{ doc.title }}</span>
+                <span class="bind-doc-meta">
+                  {{ doc.status }} · {{ doc.app?.name || "No app" }}
+                </span>
+              </span>
+            </label>
           </li>
         </ul>
-        <p v-else class="empty-small">No unassigned docs match your search.</p>
+        <p v-else class="empty-small bind-doc-empty">No unassigned docs match your filters.</p>
+
         <div class="modal-actions">
-          <button type="button" class="btn btn-secondary" @click="showAddExisting = false">Close</button>
+          <button type="button" class="btn btn-secondary" @click="closeAddExisting">Cancel</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="!selectedCount || isBindingPage"
+            @click="bindSelectedDocs"
+          >
+            <span v-if="isBindingPage">Adding…</span>
+            <span v-else>Add selected{{ selectedCount ? ` (${selectedCount})` : "" }}</span>
+          </button>
         </div>
       </div>
     </div>

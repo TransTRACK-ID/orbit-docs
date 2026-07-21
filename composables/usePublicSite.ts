@@ -55,6 +55,22 @@ export function resetPublicSiteCache() {
   siteInflight.clear();
 }
 
+/** Drop cached public site/page payloads (e.g. after admin clears OpenAPI). */
+export function invalidatePublicSite(siteSlug?: string) {
+  if (!siteSlug) {
+    resetPublicSiteCache();
+    return;
+  }
+  siteCache.delete(siteSlug);
+  siteInflight.delete(siteSlug);
+  for (const key of [...pageCache.keys()]) {
+    if (key === siteSlug || key.startsWith(`${siteSlug}/`)) {
+      pageCache.delete(key);
+      pageInflight.delete(key);
+    }
+  }
+}
+
 export const usePublicSite = () => {
   function getCachedPage(siteSlug: string, pageSlug: string): PublicSitePageDetail | undefined {
     return pageCache.get(pageCacheKey(siteSlug, pageSlug));

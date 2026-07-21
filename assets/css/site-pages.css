@@ -445,34 +445,121 @@
   width: 100%;
   margin-bottom: 12px;
 }
-.site-editor .bind-doc-list {
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-  max-height: 280px;
-  overflow-y: auto;
+.site-editor .modal-dialog {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 520px;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 12px;
 }
-.site-editor .bind-doc-item {
+.site-editor .modal-dialog--add-docs {
+  max-width: 600px;
+  max-height: min(88vh, 720px);
+}
+.site-editor .bind-doc-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.site-editor .bind-doc-search {
+  flex: 1;
+  min-width: 0;
+}
+.site-editor .bind-doc-app-filter {
+  width: 148px;
+  flex-shrink: 0;
+}
+.site-editor .bind-doc-selection-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 12px;
+  padding: 0 2px;
+  min-height: 20px;
+}
+.site-editor .bind-doc-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.site-editor .bind-doc-selected-count {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 500;
+}
+.site-editor .bind-doc-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+.site-editor .bind-doc-loading {
+  padding: 32px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+.site-editor .bind-doc-empty {
+  padding: 24px 0;
+  text-align: center;
+}
+.site-editor .bind-doc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-height: 120px;
+  max-height: min(50vh, 420px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
+  background: color-mix(in oklch, var(--fg) 2%, var(--surface));
+}
+.site-editor .bind-doc-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
+  transition: background 0.15s ease-out;
+}
+.site-editor .bind-doc-list li:last-child .bind-doc-item {
+  border-bottom: none;
+}
+.site-editor .bind-doc-item:hover {
+  background: color-mix(in oklch, var(--fg) 4%, transparent);
+}
+.site-editor .bind-doc-item.is-selected {
+  background: color-mix(in oklch, var(--accent) 6%, transparent);
+}
+.site-editor .bind-doc-item:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 .site-editor .bind-doc-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
 }
 .site-editor .bind-doc-title {
   font-size: 13px;
   font-weight: 500;
+  line-height: 1.35;
 }
 .site-editor .bind-doc-meta {
   font-size: 11px;
@@ -488,17 +575,6 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-}
-.site-editor .modal-dialog {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 24px;
-  max-width: 520px;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 .site-editor .modal-header h3 {
   margin: 0 0 6px;
