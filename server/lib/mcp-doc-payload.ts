@@ -82,7 +82,22 @@ export function formatMcpDoc(row: McpDocRow, options?: { includeContent?: boolea
   return base;
 }
 
-export function buildGroupedAppDocumentation(rows: McpDocRow[], view: DocListView = "all") {
+export interface AppDocGroupOptions {
+  /**
+   * When true (default), large Knowledge base sections (> threshold) are
+   * collapsed to an empty doc list with a summary hint, mirroring the /docs
+   * UI. Set to false for MCP consumers so the model always receives the full
+   * Knowledge base index and can actually report on it.
+   */
+  collapseKnowledge?: boolean;
+}
+
+export function buildGroupedAppDocumentation(
+  rows: McpDocRow[],
+  view: DocListView = "all",
+  options: AppDocGroupOptions = {},
+) {
+  const collapseKnowledge = options.collapseKnowledge ?? true;
   const items = rows.map(toDocItem);
   const groups = groupDocsForList(items, view);
 
@@ -90,7 +105,10 @@ export function buildGroupedAppDocumentation(rows: McpDocRow[], view: DocListVie
     appId: group.key === "__unbound__" ? null : group.key,
     appName: group.label,
     sections: group.sections.map((section) => {
-      const collapsed = shouldCollapseKnowledgeSection(section);
+      // Only knowledge sections are ever collapsed, and only when the caller
+      // wants the /docs-style compact view. MCP callers pass
+      // collapseKnowledge:false so the model sees every feature.
+      const collapsed = collapseKnowledge && shouldCollapseKnowledgeSection(section);
       return {
         kind: section.kind,
         label:

@@ -112,4 +112,28 @@ describe("buildGroupedAppDocumentation", () => {
     expect(section.docs).toHaveLength(0);
     expect(section.summary).toContain("10 synced features");
   });
+
+  it("returns the full knowledge list when collapseKnowledge is false", () => {
+    const featureRows = Array.from({ length: 10 }, (_, index) =>
+      makeRow({
+        id: `f-${index}`,
+        title: `Feature ${index}`,
+        source: "op_sync",
+        docType: "feature",
+        externalId: `F-${index}`,
+      }),
+    );
+
+    const groups = buildGroupedAppDocumentation(featureRows, "knowledge", {
+      collapseKnowledge: false,
+    });
+    const section = groups[0].sections[0];
+
+    expect(section.collapsed).toBe(false);
+    expect(section.summary).toBeNull();
+    expect(section.docs).toHaveLength(10);
+    expect(section.docs.map((doc) => doc.title)).toEqual(
+      expect.arrayContaining(Array.from({ length: 10 }, (_, i) => `Feature ${i}`)),
+    );
+  });
 });

@@ -57,6 +57,19 @@ export function createMcpServer() {
       capabilities: {
         tools: {},
       },
+      instructions: [
+        "You are connected to the Orbit Docs platform. Every app has two kinds of documentation:",
+        "- Product documentation: SRS, FSD, SDD, manuals (source = generated or manual).",
+        "- Knowledge base: features synced from spreadsheets (source = op_sync, docType = feature). This is the /docs 'Knowledge base' view.",
+        "",
+        "To answer any question about an app's documentation, follow this workflow:",
+        "1. Call list_apps (optionally with search) to find the app and get its id.",
+        "2. Call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty.",
+        "3. To read a doc's full content, call get_doc with the doc id.",
+        "4. To find docs by keyword, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
+        "",
+        "Always ground answers in the data returned by these tools and cite doc titles / ids. Never say 'no documentation exists' without first calling list_app_documentation for the app.",
+      ].join("\n"),
     }
   );
 
@@ -291,7 +304,7 @@ const TOOLS: Tool[] = [
   {
     name: "list_app_documentation",
     description:
-      "List an app's documentation grouped like the /docs page: Product documentation (SRS, FSD, manuals) and Knowledge base (synced features). Accepts appId or appName.",
+      "List an app's documentation grouped like the /docs page: Product documentation (SRS, FSD, manuals) and Knowledge base (synced features). Returns EVERY Knowledge base feature (title, id, externalId, module) — the Knowledge base section is never collapsed, so this is the right tool to answer 'what documentation exists for this app'. Accepts appId or appName.",
     inputSchema: {
       type: "object",
       properties: {
@@ -972,6 +985,9 @@ mcpServer.setRequestHandler(
           const groups = buildGroupedAppDocumentation(
             rows as McpDocRow[],
             params.view as DocListView,
+            // MCP consumers need the full Knowledge base index so the model can
+            // actually report on every feature, instead of an empty collapsed list.
+            { collapseKnowledge: false },
           );
           const documentation = await getAppDocCounts(db, app.id);
 
