@@ -41,10 +41,18 @@ export function useDocOutline(contentRef: Ref<HTMLElement | null>) {
 
   function scrollToSection(targetId: string) {
     const container = contentRef.value;
+    if (!container) return;
     const el = document.getElementById(targetId);
-    if (!el || !container) return;
-    const top = el.offsetTop - container.offsetTop - 16;
-    container.scrollTo({ top, behavior: "smooth" });
+    if (!el) return;
+    // Use getBoundingClientRect for reliable cross-browser positioning inside
+    // a nested scroll container (offsetTop is relative to offsetParent, which
+    // may not be the scroll container itself if it lacks position:relative).
+    const top =
+      el.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      container.scrollTop -
+      16;
+    container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
     activeSlug.value = targetId;
   }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick } from "vue";
 import DocOutline from "~/components/docs/DocOutline.vue";
-import { renderMarkdown } from "~/composables/useMarkdown";
+import { renderMarkdown, headingSlug } from "~/composables/useMarkdown";
 import {
   buildOutlineFromMarkdown,
   useDocOutline,
@@ -61,6 +61,69 @@ const { activeSlug, scrollToSection, scrollToTop, refreshScrollSpy, teardownScro
   useDocOutline(contentRef);
 const { handleContentClick } = useMarkdownCopyHandler(showToast);
 
+// Scroll to the heading id from route.hash. The hash may not exactly match
+// the heading's DOM id (e.g. double dashes where headingSlug produces single
+// dashes), so we try exact → normalized → fuzzy matching.
+function scrollToHashFromRoute(): boolean {
+  const hash = route.hash;
+  if (!hash) return false;
+  const rawId = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (!rawId) return false;
+
+  // Special case: feedback section
+  if (rawId === "docFeedback") {
+    const container = contentRef.value;
+    const feedbackEl = document.getElementById("docFeedback");
+    if (container && feedbackEl) {
+      const top =
+        feedbackEl.getBoundingClientRect().top -
+        container.getBoundingClientRect().top +
+        container.scrollTop;
+      container.scrollTo({ top, behavior: "smooth" });
+    }
+    return true;
+  }
+
+  // 1. Exact match
+  if (document.getElementById(rawId)) {
+    scrollToSection(rawId);
+    return true;
+  }
+
+  // 2. Normalize the hash the same way heading IDs are generated
+  const normalized = headingSlug(rawId);
+  if (normalized && document.getElementById(normalized)) {
+    scrollToSection(normalized);
+    return true;
+  }
+
+  // 3. Fuzzy: compare normalized hash against normalized heading IDs
+  const docEl = document.getElementById("docContent");
+  if (docEl) {
+    for (const heading of docEl.querySelectorAll<HTMLElement>("h2[id], h3[id]")) {
+      if (headingSlug(heading.id) === normalized || heading.id === normalized) {
+        scrollToSection(heading.id);
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+// Wait for the rendered HTML to be in the DOM, then attempt the hash scroll.
+// Mermaid/async rendering can delay heading availability, so retry with
+// increasing delays.
+async function applyHashAfterRender() {
+  await nextTick();
+  if (scrollToHashFromRoute()) return;
+  const delays = [50, 100, 200, 400, 800, 1200];
+  for (const delay of delays) {
+    await new Promise((r) => setTimeout(r, delay));
+    if (scrollToHashFromRoute()) return;
+  }
+}
+
 onMounted(async () => {
   if (!docId.value) {
     error.value = "No document ID provided";
@@ -78,27 +141,25 @@ onMounted(async () => {
         feedbackHelpful.value = status.feedback.helpful;
       }
     }
-    nextTick(() => {
-      if (route.hash) {
-        const hash = route.hash.slice(1);
-        if (hash === "docFeedback") {
-          const container = contentRef.value;
-          const feedbackEl = document.getElementById("docFeedback");
-          if (container && feedbackEl) {
-            const top = feedbackEl.offsetTop - container.offsetTop;
-            container.scrollTo({ top, behavior: "smooth" });
-          }
-        } else {
-          scrollToSection(hash);
-        }
-      }
-    });
+    if (route.hash) {
+      applyHashAfterRender();
+    }
   } catch (e: any) {
     error.value = e?.data?.message || "Documentation not found";
   } finally {
     isLoading.value = false;
   }
 });
+
+// Handle in-page hash changes (e.g. user clicks a #section link while
+// already on the page — route params don't change, only the hash does).
+watch(
+  () => route.hash,
+  (hash) => {
+    if (!hash || !doc.value || !contentRef.value) return;
+    scrollToHashFromRoute();
+  },
+);
 
 watch(renderedHtml, () => {
   if (!doc.value?.content || isLoading.value) return;

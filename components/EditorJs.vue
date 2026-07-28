@@ -35,6 +35,16 @@ const undoInstance = ref<any>(null);
 let pasteCleanup: (() => void) | null = null;
 let linkHoverCleanup: (() => void) | null = null;
 
+// Guards against the v-model feedback loop:
+//   user types → onChange emits update:modelValue → parent updates
+//   modelValue → watch fires → render() → cursor/scroll reset.
+// isInternalUpdate skips the watcher for changes that originated inside
+// this component. isRendering suppresses onChange while we ourselves call
+// render() (e.g. on external modelValue updates) so we don't re-emit and
+// re-trigger the loop.
+let isInternalUpdate = false;
+let isRendering = false;
+
 async function insertPastedBlocks(blocks: Array<{ type: string; data: Record<string, any> }>) {
   const editor = editorInstance.value;
   if (!editor || blocks.length === 0) return;
@@ -395,16 +405,31 @@ async function initEditor() {
       emit("ready");
     },
     onChange: async () => {
+      // Suppress the change event while we're rendering due to an external
+      // modelValue update — otherwise the render triggers onChange, which
+      // emits update:modelValue, which re-triggers the watcher (feedback loop).
+      if (isRendering) return;
+
       const output = await editor.save();
       const { editorJsToMarkdown, sanitizeEditorJsData } = await import("~/composables/useEditorJsConverter");
+      // Sanitize only for the emitted payload + markdown. Do NOT re-render
+      // the editor here: calling editor.render() mid-typing rebuilds the
+      // entire DOM and resets the user's scroll position and caret.
+      // Sanitization is applied at save-to-server time instead.
       const sanitized = sanitizeEditorJsData(output);
-      const needsRender = JSON.stringify(sanitized.blocks) !== JSON.stringify(output.blocks);
-      if (needsRender) {
-        await editor.render(sanitized);
-      }
       const markdown = editorJsToMarkdown(sanitized);
+
+      // Mark this as an internal update so the props.modelValue watcher
+      // (which fires after the parent round-trips our emit) does not
+      // re-render the editor for a change that originated here.
+      isInternalUpdate = true;
       emit("update:modelValue", markdown);
       emit("change", sanitized, markdown);
+      // Safety net: if the parent doesn't round-trip the value (e.g. it
+      // guards against identical updates), clear the flag on the next tick
+      // so a subsequent external change isn't incorrectly skipped.
+      await nextTick();
+      isInternalUpdate = false;
     },
   });
 
@@ -412,15 +437,33 @@ async function initEditor() {
 }
 
 // ── Watch modelValue changes from parent ─────────────────────
+// Only re-render when the parent EXTERNALLY changes the value. Changes that
+// originated from our own onChange emit are flagged via isInternalUpdate and
+// skipped here — otherwise the lossy markdown↔editorJs roundtrip would
+// trigger editor.render() on every keystroke, resetting scroll and caret.
 watch(() => props.modelValue, async (newVal) => {
   if (!editorInstance.value || !isReady.value) return;
+  if (isInternalUpdate) {
+    isInternalUpdate = false;
+    return;
+  }
+
   const current = await editorInstance.value.save();
   const { editorJsToMarkdown } = await import("~/composables/useEditorJsConverter");
   const currentMd = editorJsToMarkdown(current);
-  if (currentMd !== newVal) {
-    // Re-initialize with new data
-    const { markdownToEditorJs } = await import("~/composables/useEditorJsConverter");
+  if (currentMd === newVal) return;
+
+  const { markdownToEditorJs } = await import("~/composables/useEditorJsConverter");
+  // Suppress onChange while we render the new external data so it doesn't
+  // re-emit update:modelValue and bounce back into this watcher.
+  isRendering = true;
+  try {
     await editorInstance.value.render(markdownToEditorJs(newVal || ""));
+  } finally {
+    // Reset on the next tick so Editor.js finishes firing its change events
+    // from the render before we stop suppressing.
+    await nextTick();
+    isRendering = false;
   }
 });
 

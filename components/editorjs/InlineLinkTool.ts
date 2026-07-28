@@ -2,6 +2,7 @@ import type { API } from "@editorjs/editorjs";
 import type { InlineTool } from "@editorjs/editorjs";
 import {
   defaultLinkLabel,
+  isInternalLink,
   looksLikeUrl,
   prepareLinkUrl,
 } from "~/components/editorjs/linkUtils";
@@ -108,8 +109,8 @@ export default class InlineLinkTool implements InlineTool {
     return {
       a: {
         href: true,
-        target: "_blank",
-        rel: "nofollow noopener noreferrer",
+        target: true,
+        rel: true,
       },
     };
   }
@@ -344,8 +345,12 @@ export default class InlineLinkTool implements InlineTool {
     const range = selection.getRangeAt(0);
     const link = document.createElement("a");
     link.href = href;
-    link.target = "_blank";
-    link.rel = "nofollow noopener noreferrer";
+    // Internal/relative links open in the same tab; external links open in
+    // a new tab with safe rel attributes.
+    if (!isInternalLink(href)) {
+      link.target = "_blank";
+      link.rel = "nofollow noopener noreferrer";
+    }
     link.textContent = label;
 
     range.deleteContents();
