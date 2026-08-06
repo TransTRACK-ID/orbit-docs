@@ -20,10 +20,12 @@ export const useVersions = () => {
   const isUpdating = ref(false);
   const isDeleting = ref(false);
 
-  async function fetchVersions(appId: string) {
+  async function fetchVersions(appId?: string) {
     isLoading.value = true;
     try {
-      const data = await $fetch<{ data: AppVersion[] }>(`/api/apps/${appId}/versions`);
+      const data = await $fetch<{ data: AppVersion[] }>("/api/versions", {
+        query: appId ? { appId } : undefined,
+      });
       versions.value = data.data;
     } catch (e: any) {
       if (e?.statusCode === 401) {

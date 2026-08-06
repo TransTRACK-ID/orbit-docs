@@ -22,7 +22,7 @@ describe("useVersions composable", () => {
     mockFetch.mockReset();
   });
 
-  it("should fetch versions", async () => {
+  it("should fetch versions for a specific app", async () => {
     const data = {
       data: [
         { id: "v1", appId: "a1", version: "1.0.0", status: "draft", createdBy: null, releaseDate: null, releaseNotes: null, branch: null, tags: null, commitHash: null, approver: null, ciStatus: "unknown", createdAt: null, updatedAt: null },
@@ -33,9 +33,26 @@ describe("useVersions composable", () => {
     const { versions, fetchVersions, isLoading } = useVersions();
     await fetchVersions("a1");
 
+    expect(mockFetch).toHaveBeenCalledWith("/api/versions", { query: { appId: "a1" } });
     expect(versions.value).toHaveLength(1);
     expect(versions.value[0].version).toBe("1.0.0");
     expect(isLoading.value).toBe(false);
+  });
+
+  it("should fetch versions across all apps when no appId is given", async () => {
+    const data = {
+      data: [
+        { id: "v1", appId: "a1", appName: "App One", version: "1.0.0", status: "draft", createdBy: null, releaseDate: null, releaseNotes: null, branch: null, tags: null, commitHash: null, approver: null, ciStatus: "unknown", createdAt: null, updatedAt: null },
+        { id: "v2", appId: "a2", appName: "App Two", version: "2.0.0", status: "published", createdBy: null, releaseDate: null, releaseNotes: null, branch: null, tags: null, commitHash: null, approver: null, ciStatus: "unknown", createdAt: null, updatedAt: null },
+      ],
+    };
+    mockFetch.mockResolvedValueOnce(data);
+
+    const { versions, fetchVersions } = useVersions();
+    await fetchVersions();
+
+    expect(mockFetch).toHaveBeenCalledWith("/api/versions", { query: undefined });
+    expect(versions.value).toHaveLength(2);
   });
 
   it("should create a version", async () => {

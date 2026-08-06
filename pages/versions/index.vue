@@ -24,44 +24,64 @@ const isArchiving = ref(false);
 const route = useRoute();
 const router = useRouter();
 
-// App selector: shared across pages via store + localStorage
+// App filter: "" = all apps (aligned with /docs and /releases); app id when scoped
 $page.hydrateSelection();
-const selectedAppId = computed({
-  get: () => $page.selectedAppId,
-  set: (val: string) => $page.setSelectedAppId(val)
-});
+const appFilter = ref((route.query.app as string) || "");
+
+watch(
+  () => route.query.app,
+  (app) => {
+    appFilter.value = (app as string) || "";
+  },
+);
+
+function syncUrlQuery() {
+  const query = { ...route.query };
+  if (appFilter.value) query.app = appFilter.value;
+  else delete query.app;
+  router.replace({ query });
+}
 
 onMounted(async () => {
   await fetchApps();
   const appQuery = route.query.app as string;
   const persistedAppId = $page.selectedAppId;
 
-  // Restore selection: URL param > persisted store > first app
   if (appQuery && apps.value.find((a) => a.id === appQuery)) {
-    selectedAppId.value = appQuery;
-  } else if (persistedAppId && apps.value.find((a) => a.id === persistedAppId)) {
-    selectedAppId.value = persistedAppId;
-  } else if (apps.value.length > 0) {
-    selectedAppId.value = apps.value[0].id;
+    appFilter.value = appQuery;
+  } else if (!appQuery && persistedAppId && apps.value.find((a) => a.id === persistedAppId)) {
+    appFilter.value = persistedAppId;
+  } else if (!appQuery) {
+    appFilter.value = "";
   }
-  if (selectedAppId.value) {
-    await fetchVersions(selectedAppId.value);
-  }
-});
 
-watch(selectedAppId, async (id) => {
-  if (id) {
-    await fetchVersions(id);
-    selectedVersions.value = [];
-    activeDetailVersion.value = null;
+  await fetchVersions(appFilter.value || undefined);
+  if (appFilter.value) {
+    $page.setSelectedAppId(appFilter.value);
   }
 });
 
-const selectedApp = computed(() => apps.value.find((a) => a.id === selectedAppId.value));
+watch(appFilter, async (id) => {
+  await fetchVersions(id || undefined);
+  if (id) $page.setSelectedAppId(id);
+  selectedVersions.value = [];
+  activeDetailVersion.value = null;
+  syncUrlQuery();
+});
 
-const appOptions = computed(() =>
-  apps.value.map((a) => ({ id: a.id, label: a.name }))
+const showAllApps = computed(() => !appFilter.value);
+const selectedApp = computed(() =>
+  appFilter.value ? apps.value.find((a) => a.id === appFilter.value) : null,
 );
+
+const appFilterOptions = computed(() => [
+  { id: "", label: "All apps" },
+  ...apps.value.map((a) => ({ id: a.id, label: a.name })),
+]);
+
+function appNameForVersion(version: AppVersion) {
+  return version.appName || apps.value.find((a) => a.id === version.appId)?.name || "Release";
+}
 
 // Search
 const searchQuery = ref("");
@@ -73,6 +93,7 @@ const filteredVersions = computed(() => {
     result = result.filter(
       (v) =>
         v.version.toLowerCase().includes(q) ||
+        (v.appName && v.appName.toLowerCase().includes(q)) ||
         (v.createdBy && v.createdBy.toLowerCase().includes(q)) ||
         (v.releaseNotes && v.releaseNotes.toLowerCase().includes(q)) ||
         (v.branch && v.branch.toLowerCase().includes(q))
@@ -116,14 +137,16 @@ const compareBtnText = computed(() => {
 
 // Bulk archive selected versions
 async function archiveSelectedVersions() {
-  if (!selectedAppId.value || selectedVersions.value.length === 0 || isArchiving.value) return;
+  if (selectedVersions.value.length === 0 || isArchiving.value) return;
   isArchiving.value = true;
   try {
     for (const versionId of selectedVersions.value) {
-      await updateVersion(selectedAppId.value, versionId, { status: "archived" });
+      const version = versions.value.find((v) => v.id === versionId);
+      if (!version) continue;
+      await updateVersion(version.appId, versionId, { status: "archived" });
     }
     selectedVersions.value = [];
-    await fetchVersions(selectedAppId.value);
+    await fetchVersions(appFilter.value || undefined);
   } finally {
     isArchiving.value = false;
   }
@@ -225,8 +248,8 @@ async function submitNewVersion() {
     return;
   }
   newVersionError.value = false;
-  if (!selectedAppId.value || isCreating.value) return;
-  const newVersion = await createVersion(selectedAppId.value, {
+  if (!appFilter.value || isCreating.value) return;
+  const newVersion = await createVersion(appFilter.value, {
     version: cleanVersion,
     status: newVersionForm.status,
     releaseDate: newVersionForm.releaseDate || undefined,
@@ -239,11 +262,11 @@ async function submitNewVersion() {
   });
 
   // Auto-create quick release (normal) for the new version
-  if (newVersion?.id && selectedAppId.value) {
+  if (newVersion?.id && appFilter.value) {
     try {
       const categories = parseChangelogMarkdown(newVersionForm.releaseNotes || "");
       await createRelease({
-        appId: selectedAppId.value,
+        appId: appFilter.value,
         versionId: newVersion.id,
         heroTitle: `${selectedApp.value?.name || "Release"} v${newVersion.version}`,
         summary: (newVersionForm.releaseNotes || "").slice(0, 500),
@@ -261,7 +284,7 @@ async function submitNewVersion() {
   closeNewVersionModal();
   // Navigate to changelog editor with the new version pre-selected
   if (newVersion?.id) {
-    await navigateTo(`/changelogs?app=${selectedAppId.value}&versionId=${newVersion.id}`);
+    await navigateTo(`/changelogs?app=${appFilter.value}&versionId=${newVersion.id}`);
   }
 }
 
@@ -308,8 +331,8 @@ async function submitEditVersion() {
     return;
   }
   editVersionError.value = false;
-  if (!editingVersion.value || !selectedAppId.value) return;
-  await updateVersion(selectedAppId.value, editingVersion.value.id, {
+  if (!editingVersion.value) return;
+  await updateVersion(editingVersion.value.appId, editingVersion.value.id, {
     version: cleanVersion,
     status: editVersionForm.status,
     releaseDate: editVersionForm.releaseDate || undefined,
@@ -331,8 +354,8 @@ function confirmDeleteVersion(version: AppVersion) {
 }
 
 async function doDeleteVersion() {
-  if (!versionToDelete.value || !selectedAppId.value) return;
-  await deleteVersion(selectedAppId.value, versionToDelete.value.id);
+  if (!versionToDelete.value) return;
+  await deleteVersion(versionToDelete.value.appId, versionToDelete.value.id);
   versionToDelete.value = null;
 }
 
@@ -348,7 +371,7 @@ const isPublishingArticle = ref(false);
 
 function openArticleModal(version: AppVersion) {
   articleVersion.value = version;
-  articleForm.heroTitle = `${selectedApp.value?.name || "Release"} v${version.version}`;
+  articleForm.heroTitle = `${appNameForVersion(version)} v${version.version}`;
   articleForm.featureHeading = "";
   articleForm.featureDesc = "";
   showArticleModal.value = true;
@@ -395,7 +418,7 @@ function parseChangelogToCategories(text: string | null): Record<string, string[
 }
 
 async function submitArticle() {
-  if (!articleVersion.value || !selectedAppId.value || isPublishingArticle.value) return;
+  if (!articleVersion.value || isPublishingArticle.value) return;
 
   isPublishingArticle.value = true;
   try {
@@ -410,9 +433,9 @@ async function submitArticle() {
     }
 
     const release = await createRelease({
-      appId: selectedAppId.value,
+      appId: articleVersion.value.appId,
       versionId: articleVersion.value.id,
-      heroTitle: articleForm.heroTitle.trim() || `${selectedApp.value?.name || "Release"} v${articleVersion.value.version}`,
+      heroTitle: articleForm.heroTitle.trim() || `${appNameForVersion(articleVersion.value)} v${articleVersion.value.version}`,
       summary: (articleVersion.value.releaseNotes || "").slice(0, 500),
       features: features.length > 0 ? features : undefined,
       categories,
@@ -548,12 +571,18 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
           aria-label="Search versions"
         />
         <GeneralSearchableDropdown
-          v-model="selectedAppId"
-          :options="appOptions"
-          placeholder="Select app…"
+          v-model="appFilter"
+          :options="appFilterOptions"
+          placeholder="Filter by app…"
           search-placeholder="Search apps…"
         />
-        <button type="button" class="btn btn-primary" @click="openNewVersionModal">
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="!appFilter"
+          :title="!appFilter ? 'Select an app to create a version' : undefined"
+          @click="openNewVersionModal"
+        >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <path d="M12 5v14M5 12h14" />
           </svg>
@@ -573,15 +602,25 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         </template>
         <template v-else>
           <h2 class="section-title">
-            {{ selectedApp?.name ?? "—" }} · {{ versions.length }} version{{ versions.length === 1 ? "" : "s" }}
+            <template v-if="showAllApps">
+              All apps · {{ versions.length }} version{{ versions.length === 1 ? "" : "s" }}
+            </template>
+            <template v-else>
+              {{ selectedApp?.name ?? "—" }} · {{ versions.length }} version{{ versions.length === 1 ? "" : "s" }}
+            </template>
           </h2>
           <p class="text-muted-sm" style="margin: 4px 0 0;">
-            Current:
-            <span v-if="selectedApp?.latestVersion" class="num pill pill-blue">v{{ selectedApp.latestVersion.version }}</span>
-            <span v-else class="text-muted-sm">No version</span>
-            <span v-if="selectedApp?.latestVersion?.createdAt">
-              · Published {{ formatDate(selectedApp.latestVersion.createdAt) }}
-            </span>
+            <template v-if="showAllApps">
+              Versions across every application
+            </template>
+            <template v-else>
+              Current:
+              <span v-if="selectedApp?.latestVersion" class="num pill pill-blue">v{{ selectedApp.latestVersion.version }}</span>
+              <span v-else class="text-muted-sm">No version</span>
+              <span v-if="selectedApp?.latestVersion?.createdAt">
+                · Published {{ formatDate(selectedApp.latestVersion.createdAt) }}
+              </span>
+            </template>
           </p>
         </template>
       </div>
@@ -620,6 +659,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
       <thead>
         <tr>
           <th class="check-col"></th>
+          <th v-if="showAllApps">App</th>
           <th>Version</th>
           <th>Branch</th>
           <th>Date</th>
@@ -645,6 +685,15 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               @change="toggleVersionCheck(v.id, ($event.target as HTMLInputElement).checked)"
               :aria-label="`Select version ${v.version}`"
             />
+          </td>
+          <td v-if="showAllApps" class="col-muted">
+            <NuxtLink
+              :to="`/versions?app=${v.appId}`"
+              class="app-filter-link"
+              @click.stop
+            >
+              {{ v.appName || "—" }}
+            </NuxtLink>
           </td>
           <td class="col-num col-strong">v{{ v.version }}</td>
           <td class="col-muted col-truncate" :title="v.branch || undefined">{{ v.branch || "—" }}</td>
@@ -689,7 +738,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               </div>
             </td>
             <td>
-              <NuxtLink :to="`/changelogs?versionId=${v.id}`" class="btn btn-ghost btn-sm" @click.stop>
+              <NuxtLink :to="`/changelogs?app=${v.appId}&versionId=${v.id}`" class="btn btn-ghost btn-sm" @click.stop>
                 Edit
               </NuxtLink>
             </td>
@@ -705,12 +754,12 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
             </td>
           </tr>
           <tr v-if="isLoading">
-            <td colspan="10" class="empty-cell">
+            <td :colspan="showAllApps ? 11 : 10" class="empty-cell">
               <span class="loading-spinner" /> Loading versions…
             </td>
           </tr>
           <tr v-else-if="filteredVersions.length === 0">
-            <td colspan="10" class="empty-cell">No versions found.</td>
+            <td :colspan="showAllApps ? 11 : 10" class="empty-cell">No versions found.</td>
           </tr>
         </tbody>
     </GeneralDataTable>
@@ -730,7 +779,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               class="btn btn-ghost btn-sm"
               @click="copyChangelogToClipboard(
                 activeReleaseDetail.categories,
-                { version: activeDetailVersion.version, appName: selectedApp?.name, releaseDate: activeDetailVersion.releaseDate }
+                { version: activeDetailVersion.version, appName: appNameForVersion(activeDetailVersion), releaseDate: activeDetailVersion.releaseDate }
               )"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -739,7 +788,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               </svg>
               Copy
             </button>
-            <NuxtLink :to="`/changelogs?versionId=${activeDetailVersion.id}`" class="btn btn-ghost btn-sm">
+            <NuxtLink :to="`/changelogs?app=${activeDetailVersion.appId}&versionId=${activeDetailVersion.id}`" class="btn btn-ghost btn-sm">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
@@ -1943,6 +1992,16 @@ h2 {
   font-size: 12px;
   color: var(--muted);
   margin-top: 4px;
+}
+
+.app-filter-link {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.app-filter-link:hover {
+  color: var(--accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
