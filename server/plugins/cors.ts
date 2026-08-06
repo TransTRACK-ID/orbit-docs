@@ -2,31 +2,10 @@
  * CORS (Cross-Origin Resource Sharing) Plugin
  * Adds CORS headers to API routes to prevent unauthorized cross-origin requests (M1).
  * In production, restrict to the configured public app URL.
+ * CORS preflight (OPTIONS) is short-circuited by `server/api/[...].options.ts`.
  */
 
-import { getPublicAppUrl } from "~/server/utils/runtime-env";
-
-const ALLOWED_ORIGINS = new Set([
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "https://localhost:3000",
-]);
-
-const ALLOWED_WILDCARD_DOMAINS = [
-  ".transtrack.id",
-  ".transtrack.co",
-  ".transtrack.ai",
-];
-
-function isWildcardAllowed(origin: string): boolean {
-  try {
-    const url = new URL(origin);
-    const hostname = url.hostname;
-    return ALLOWED_WILDCARD_DOMAINS.some((domain) => hostname.endsWith(domain));
-  } catch {
-    return false;
-  }
-}
+import { getCorsHeaders } from "~/server/utils/cors";
 
 export default defineNitroPlugin((nitroApp) => {
   nitroApp.hooks.hook('beforeResponse', (event) => {
@@ -42,33 +21,11 @@ export default defineNitroPlugin((nitroApp) => {
       return;
     }
 
-    const origin = getRequestHeader(event, 'origin') || '';
-    const publicUrl = getPublicAppUrl();
+    const origin = getRequestHeader(event, 'origin') || undefined;
+    const headers = getCorsHeaders(origin);
 
-    // Add configured public URL to allowed origins
-    if (publicUrl) {
-      ALLOWED_ORIGINS.add(publicUrl);
-      // Also add https variant if only http is set
-      if (publicUrl.startsWith('http://')) {
-        ALLOWED_ORIGINS.add(publicUrl.replace('http://', 'https://'));
-      }
+    for (const [key, value] of Object.entries(headers)) {
+      event.node.res.setHeader(key, value);
     }
-
-    // Allow same-origin requests (no origin header) or explicitly allowed origins
-    const isAllowed =
-      !origin ||
-      ALLOWED_ORIGINS.has(origin) ||
-      origin.endsWith('.orbit.local') ||
-      isWildcardAllowed(origin);
-
-    if (isAllowed && origin) {
-      event.node.res.setHeader('Access-Control-Allow-Origin', origin);
-      event.node.res.setHeader('Vary', 'Origin');
-    }
-
-    event.node.res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-    event.node.res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key');
-    event.node.res.setHeader('Access-Control-Allow-Credentials', 'true');
-    event.node.res.setHeader('Access-Control-Max-Age', '86400');
   });
 });
