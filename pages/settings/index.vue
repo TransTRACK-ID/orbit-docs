@@ -516,13 +516,13 @@ async function revokeAllKeys() {
 }
 
 // ─── MCP Connection ───────────────────────────────────────────────
-const mcpConfig = ref<{ host: string; url: string; protocol: string; configured: boolean } | null>(null);
+const mcpConfig = ref<{ host: string; url: string; protocol: string; configured: boolean; authRequired: boolean } | null>(null);
 const mcpLoading = ref(false);
 
 async function fetchMcpConfig() {
   mcpLoading.value = true;
   try {
-    const { data } = await $fetch<{ data: { host: string; url: string; protocol: string; configured: boolean } }>("/api/mcp-config");
+    const { data } = await $fetch<{ data: { host: string; url: string; protocol: string; configured: boolean; authRequired: boolean } }>("/api/mcp-config");
     mcpConfig.value = data;
   } catch (e) {
     console.error("Failed to fetch MCP config", e);
@@ -533,6 +533,12 @@ async function fetchMcpConfig() {
 
 const mcpUrlHttps = computed(() => mcpConfig.value?.url || "https://localhost:41244/mcp");
 
+const mcpAuthRequired = computed(() => mcpConfig.value?.authRequired ?? true);
+
+const mcpHeaders = computed(() =>
+  mcpAuthRequired.value ? { Authorization: "Bearer <your_mcp_api_key>" } : undefined,
+);
+
 const mcpAgents = [
   {
     name: "OpenCode / Kilocode",
@@ -541,7 +547,7 @@ const mcpAgents = [
         mcpServers: {
           orbit_docs: {
             url: mcpUrlHttps.value,
-            headers: { Authorization: "Bearer YOUR_MCP_API_KEY" },
+            ...(mcpHeaders.value ? { headers: mcpHeaders.value } : {}),
           },
         },
       }, null, 2);
@@ -555,7 +561,7 @@ const mcpAgents = [
           servers: {
             orbit_docs: {
               url: mcpUrlHttps.value,
-              headers: { Authorization: "Bearer YOUR_MCP_API_KEY" },
+              ...(mcpHeaders.value ? { headers: mcpHeaders.value } : {}),
             },
           },
         },
@@ -569,7 +575,7 @@ const mcpAgents = [
         mcpServers: {
           orbit_docs: {
             url: mcpUrlHttps.value,
-            headers: { Authorization: "Bearer YOUR_MCP_API_KEY" },
+            ...(mcpHeaders.value ? { headers: mcpHeaders.value } : {}),
             disabled: false,
             autoApprove: [],
           },
@@ -584,7 +590,7 @@ const mcpAgents = [
         name: "orbit_docs",
         type: "HTTP",
         url: mcpUrlHttps.value,
-        headers: { Authorization: "Bearer YOUR_MCP_API_KEY" },
+        ...(mcpHeaders.value ? { headers: mcpHeaders.value } : {}),
       }, null, 2);
     },
   },
@@ -1432,9 +1438,12 @@ function getCallbackUrl(provider: SsoProvider): string {
                 </div>
                 <div class="form-group">
                   <label>Authentication</label>
-                  <p class="desc" style="margin: 0 0 8px;">
-                    Provide your API key via the <code>Authorization: Bearer &lt;key&gt;</code> header.
-                    Find your API key in the MCP_API_KEY environment variable on your server.
+                  <p v-if="!mcpAuthRequired" class="desc" style="margin: 0 0 8px;">
+                    No authorization required — connect your remote MCP client to the URL above with no <code>Authorization</code> header.
+                  </p>
+                  <p v-else class="desc" style="margin: 0 0 8px;">
+                    <code>MCP_API_KEY</code> is set on the server, so remote connections must authenticate with
+                    <code>Authorization: Bearer &lt;key&gt;</code> using the value of the <code>MCP_API_KEY</code> environment variable.
                   </p>
                 </div>
               </div>

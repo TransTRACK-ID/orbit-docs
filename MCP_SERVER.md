@@ -15,8 +15,13 @@ The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open p
 - **Pagination** on all list endpoints
 - **HTTP SSE transport** for real-time communication
 - **CORS enabled** for cross-origin access
-- **API Key authentication** for secure production deployment
 - **Health check endpoint** at `/health`
+
+> **In-app endpoint auth:** The Nuxt-hosted endpoint at `/api/mcp/connect` (shown on the **Settings → MCP Connection** page) follows the `MCP_API_KEY` environment variable:
+> - If `MCP_API_KEY` is **not set**, the endpoint is **public** — remote MCP clients connect with just the URL and no `Authorization` header.
+> - If `MCP_API_KEY` **is set**, all connections must authenticate with `Authorization: Bearer <key>` or `X-API-Key`.
+>
+> The standalone server (`npm run mcp:start`) has the same conditional `MCP_API_KEY` auth described below.
 - **Docker support** for easy deployment
 
 ## Available Tools

@@ -17,6 +17,8 @@ export default defineEventHandler((event) => {
       protocol,
       // Whether the server thinks MCP is configured
       configured: !!configuredMcpHost,
+      // When MCP_API_KEY is set, remote clients must send Authorization: Bearer <key>
+      authRequired: !!process.env.MCP_API_KEY,
     },
   };
 });

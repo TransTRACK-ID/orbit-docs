@@ -3,10 +3,11 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createMcpServer, checkMcpApiKey, transports } from "~/server/utils/mcp-server";
 
 export default defineEventHandler(async (event) => {
-  // Check API key
+  // Pass through when MCP_API_KEY is unset (public). When it IS set, require a
+  // matching key so existing remote clients must authenticate.
   const authHeader = getHeader(event, "authorization");
   const apiKeyHeader = getHeader(event, "x-api-key");
-  
+
   if (!checkMcpApiKey(authHeader, apiKeyHeader)) {
     throw createError({
       statusCode: 401,
