@@ -1,4 +1,4 @@
-import { headingSlug } from "~/composables/useMarkdown";
+import { assignUniqueHeadingSlugs } from "~/composables/useMarkdown";
 
 export interface MarkdownOutlineItem {
   key: string;
@@ -11,11 +11,12 @@ export function buildMarkdownOutline(
   headings: Array<{ level: number; text: string }>,
   extra: Array<{ id: string; label: string; level?: number }> = []
 ): MarkdownOutlineItem[] {
-  const fromMarkdown = headings.map((h) => ({
-    key: `h:${h.text}`,
+  const slugs = assignUniqueHeadingSlugs(headings.map((h) => h.text));
+  const fromMarkdown = headings.map((h, i) => ({
+    key: `h:${slugs[i]}`,
     label: h.text,
     level: h.level,
-    targetId: headingSlug(h.text),
+    targetId: slugs[i],
   }));
   const fromExtra = extra.map((item) => ({
     key: `id:${item.id}`,
@@ -29,34 +30,14 @@ export function buildMarkdownOutline(
 export function useMarkdownOutline(containerRef: Ref<HTMLElement | null | undefined>) {
   const activeKey = ref("");
 
-  function resolveHeadingElement(text: string): HTMLElement | null {
-    const root = containerRef.value;
-    if (!root) return null;
-    const slug = headingSlug(text);
-    let el = root.querySelector<HTMLElement>(`#${CSS.escape(slug)}`);
-    if (!el) {
-      for (const heading of root.querySelectorAll<HTMLElement>("h1, h2, h3")) {
-        if (heading.textContent?.trim() === text) {
-          el = heading;
-          break;
-        }
-      }
-    }
-    return el;
+  function resolveElement(item: MarkdownOutlineItem): HTMLElement | null {
+    if (!item.targetId) return null;
+    return document.getElementById(item.targetId);
   }
 
   function scrollToItem(item: MarkdownOutlineItem) {
     activeKey.value = item.key;
-    const root = containerRef.value;
-    if (!root) return;
-
-    let el: HTMLElement | null = null;
-    if (item.key.startsWith("h:")) {
-      el = resolveHeadingElement(item.label);
-    } else if (item.targetId) {
-      el = document.getElementById(item.targetId);
-    }
-
+    const el = resolveElement(item);
     if (!el) return;
 
     const top = el.getBoundingClientRect().top + window.scrollY - 96;
@@ -73,12 +54,7 @@ export function useMarkdownOutline(containerRef: Ref<HTMLElement | null | undefi
     if (!items.length) return;
 
     const sections = items
-      .map((item) => {
-        if (item.key.startsWith("h:")) {
-          return resolveHeadingElement(item.label);
-        }
-        return item.targetId ? document.getElementById(item.targetId) : null;
-      })
+      .map((item) => resolveElement(item))
       .filter(Boolean) as HTMLElement[];
 
     if (!sections.length) return;

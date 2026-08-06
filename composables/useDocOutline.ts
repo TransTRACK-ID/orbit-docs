@@ -1,4 +1,4 @@
-import { extractHeadings, headingSlug } from "~/composables/useMarkdown";
+import { assignUniqueHeadingSlugs, extractHeadings } from "~/composables/useMarkdown";
 
 export interface DocOutlineItem {
   type: "section" | "indent";
@@ -8,13 +8,13 @@ export interface DocOutlineItem {
 
 export function buildOutlineFromMarkdown(md: string): DocOutlineItem[] {
   if (!md) return [];
-  return extractHeadings(md)
-    .filter((h) => h.level === 2 || h.level === 3)
-    .map((h) => ({
-      type: h.level === 2 ? ("section" as const) : ("indent" as const),
-      text: h.text,
-      slug: headingSlug(h.text),
-    }));
+  const filtered = extractHeadings(md).filter((h) => h.level === 2 || h.level === 3);
+  const slugs = assignUniqueHeadingSlugs(filtered.map((h) => h.text));
+  return filtered.map((h, i) => ({
+    type: h.level === 2 ? ("section" as const) : ("indent" as const),
+    text: h.text,
+    slug: slugs[i],
+  }));
 }
 
 /** Pick the last heading whose top edge is at or above the probe line. */

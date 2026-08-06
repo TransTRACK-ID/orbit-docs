@@ -148,6 +148,27 @@ export function headingSlug(text: string): string {
   return slug;
 }
 
+/** Assign unique slugs when multiple headings share the same text (e.g. repeated "Feature Overview"). */
+export function assignUniqueHeadingSlugs(texts: string[]): string[] {
+  const counts = new Map<string, number>();
+  return texts.map((text) => {
+    const base = headingSlug(text);
+    const seen = counts.get(base) ?? 0;
+    counts.set(base, seen + 1);
+    return seen === 0 ? base : `${base}-${seen + 1}`;
+  });
+}
+
+function createHeadingSlugAllocator() {
+  const counts = new Map<string, number>();
+  return (text: string) => {
+    const base = headingSlug(text);
+    const seen = counts.get(base) ?? 0;
+    counts.set(base, seen + 1);
+    return seen === 0 ? base : `${base}-${seen + 1}`;
+  };
+}
+
 function preprocessNotionImageMarkdown(md: string): string {
   return md.replace(
     /^!([^!\[\n]+\.(?:gif|jpe?g|png|webp|tiff|svg|bmp))$/gim,
@@ -166,6 +187,7 @@ export function renderMarkdown(md: string): string {
     const stripped = stripFrontmatter(md);
     const prepared = preprocessNotionImageMarkdown(stripped);
     const renderer = new marked.Renderer();
+    const slugForHeading = createHeadingSlugAllocator();
 
     // ─── Escape raw HTML except safe inline color markup ─────────
     renderer.html = ({ text }: { text: string }) => allowColorHtmlInMarkdown(text);
@@ -175,7 +197,7 @@ export function renderMarkdown(md: string): string {
       const text = this.parser.parseInline(tokens);
       const plain = text.replace(/<[^>]+>/g, "");
       if (depth >= 1 && depth <= 3) {
-        const slug = headingSlug(plain);
+        const slug = slugForHeading(plain);
         return `<h${depth} id="${slug}">${text}</h${depth}>`;
       }
       return `<h${depth}>${text}</h${depth}>`;

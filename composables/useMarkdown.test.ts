@@ -5,8 +5,15 @@ describe("renderMarkdown", () => {
   it("should render headings", () => {
     const md = "# Hello\n## World";
     const html = renderMarkdown(md);
-    expect(html).toContain("<h1>Hello</h1>");
+    expect(html).toContain('<h1 id="hello">Hello</h1>');
     expect(html).toContain('<h2 id="world">World</h2>');
+  });
+
+  it("assigns unique ids to duplicate heading text", () => {
+    const md = "# Section A\n## Feature Overview\n# Section B\n## Feature Overview";
+    const html = renderMarkdown(md);
+    expect(html).toContain('<h2 id="feature-overview">Feature Overview</h2>');
+    expect(html).toContain('<h2 id="feature-overview-2">Feature Overview</h2>');
   });
 
   it("should render paragraphs", () => {
