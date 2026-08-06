@@ -1,4 +1,5 @@
 import { defineEventHandler, getQuery, getHeader, createError, readBody } from "h3";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { transports, checkMcpApiKey } from "~/server/utils/mcp-server";
 
 export default defineEventHandler(async (event) => {
@@ -18,12 +19,20 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event);
   const sessionId = query.sessionId as string;
   const transport = transports[sessionId];
-  
+
   if (!transport) {
     throw createError({
       statusCode: 400,
       statusMessage: "Bad Request",
       message: "No transport found for sessionId",
+    });
+  }
+
+  if (!(transport instanceof SSEServerTransport)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: "Session exists but uses a different transport protocol",
     });
   }
 

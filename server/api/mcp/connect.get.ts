@@ -1,19 +1,15 @@
-import { defineEventHandler, getHeader, createError, getRequestURL } from "h3";
+import { defineEventHandler, getHeader, getRequestURL } from "h3";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { createMcpServer, checkMcpApiKey, transports } from "~/server/utils/mcp-server";
+import { createMcpServer, transports } from "~/server/utils/mcp-server";
+import { assertMcpAuth, handleStreamableHttpRequest } from "~/server/utils/mcp-streamable-http";
 
 export default defineEventHandler(async (event) => {
-  // Pass through when MCP_API_KEY is unset (public). When it IS set, require a
-  // matching key so existing remote clients must authenticate.
-  const authHeader = getHeader(event, "authorization");
-  const apiKeyHeader = getHeader(event, "x-api-key");
+  assertMcpAuth(event);
 
-  if (!checkMcpApiKey(authHeader, apiKeyHeader)) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: "Unauthorized",
-      message: "Invalid or missing API key. Provide it via Authorization: Bearer <key> or X-API-Key header.",
-    });
+  // Streamable HTTP clients open an SSE stream with GET + mcp-session-id.
+  if (getHeader(event, "mcp-session-id")) {
+    await handleStreamableHttpRequest(event);
+    return;
   }
 
   // Get the request URL to determine the message endpoint
