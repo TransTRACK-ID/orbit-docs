@@ -1,16 +1,10 @@
 <script setup lang="ts">
 import { sidebarMenu } from "@/constant/sidebar";
-import { useAuthStore } from "~/store/auth";
 
 const route = useRoute();
 const { workspace } = useSettings();
-const $auth = useAuthStore();
 const { data } = useAuth();
 const { can, syncFromCurrentMember, isSuperAdmin, role } = usePermissions();
-
-onMounted(() => {
-  syncFromCurrentMember();
-});
 
 function canViewNavItem(item: (typeof sidebarMenu)[number]) {
   if (!item.permission) return true;
@@ -26,26 +20,28 @@ const workspaceNavItems = computed(() =>
   )
 );
 
-const accountNavItems = computed(() =>
-  sidebarMenu.filter((item) => item.id === "menu__settings" && canViewNavItem(item))
+const canViewSettings = computed(() =>
+  sidebarMenu.some((item) => item.id === "menu__settings" && canViewNavItem(item))
 );
 
 const isActive = (path: string) => route.path === path || route.path.startsWith(path + "/");
 
 const user = computed(() => {
   const d = data.value as any;
-  // v1.2.0 local provider returns a flat session object directly
   if (d?.id || d?.email) {
     return d;
   }
-  // legacy fallback: wrapped response
   return d?.data?.user || d?.user || null;
 });
 
 const userName = computed(() => user.value?.name || "");
 const userEmail = computed(() => user.value?.email || "");
+const roleLabel = computed(() => {
+  if (isSuperAdmin.value) return "Super Admin";
+  if (role.value) return role.value.replace(/_/g, " ");
+  return "";
+});
 
-/* mobile drawer state */
 const isMobileOpen = ref(false);
 const firstNavLinkRef = ref<HTMLAnchorElement | null>(null);
 
@@ -64,11 +60,6 @@ function closeMobile() {
   document.body.style.overflow = "";
 }
 
-function toggleMobile() {
-  if (isMobileOpen.value) closeMobile();
-  else openMobile();
-}
-
 function onEscape(e: KeyboardEvent) {
   if (e.key === "Escape" && isMobileOpen.value) {
     closeMobile();
@@ -81,61 +72,61 @@ function onResize() {
   }
 }
 
+const isCollapsed = ref(false);
+const isMobileViewport = ref(false);
+
+function updateViewport() {
+  isMobileViewport.value = window.innerWidth <= MOBILE_BREAKPOINT;
+}
+
+const showCollapsedRail = computed(
+  () => isCollapsed.value && !isMobileViewport.value
+);
+
 onMounted(() => {
+  syncFromCurrentMember();
   window.addEventListener("keydown", onEscape);
   window.addEventListener("resize", onResize);
+  updateViewport();
+  window.addEventListener("resize", updateViewport);
+
+  const saved = localStorage.getItem("sidebar-collapsed");
+  if (saved !== null) {
+    isCollapsed.value = saved === "true";
+  }
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("keydown", onEscape);
   window.removeEventListener("resize", onResize);
+  window.removeEventListener("resize", updateViewport);
   document.body.style.overflow = "";
 });
 
-/* route change closes drawer on mobile */
 watch(() => route.path, () => {
   if (isMobileOpen.value) closeMobile();
 });
 
-/* collapse state (desktop only) */
-const isCollapsed = ref(false);
-
-onMounted(() => {
-  const saved = localStorage.getItem('sidebar-collapsed');
-  if (saved !== null) {
-    isCollapsed.value = saved === 'true';
-  }
-});
-
 function toggleCollapse() {
   isCollapsed.value = !isCollapsed.value;
-  localStorage.setItem('sidebar-collapsed', String(isCollapsed.value));
-}
-
-function logout() {
-  $auth.logout().catch(() => {
-    // signOut handles navigation; only force-redirect on error
-    window.location.href = "/login";
-  });
+  localStorage.setItem("sidebar-collapsed", String(isCollapsed.value));
 }
 </script>
 
 <template>
-  <!-- mobile toggle button (fixed, sits on top of content) -->
   <button
     class="mobile-nav-toggle"
     aria-label="Open navigation"
-    aria-expanded="false"
+    :aria-expanded="isMobileOpen"
     @click="openMobile"
   >
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-      <line x1="3" y1="6" x2="21" y2="6"/>
-      <line x1="3" y1="12" x2="21" y2="12"/>
-      <line x1="3" y1="18" x2="21" y2="18"/>
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
     </svg>
   </button>
 
-  <!-- backdrop -->
   <div
     v-if="isMobileOpen"
     class="sidebar-backdrop"
@@ -147,406 +138,602 @@ function logout() {
     class="sidebar"
     :class="{ 'sidebar--mobile-open': isMobileOpen, 'sidebar--collapsed': isCollapsed }"
   >
-    <div class="sidebar-brand">
+    <header class="sidebar-header">
       <button
         class="mobile-close-btn"
         aria-label="Close navigation"
         @click="closeMobile"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/>
+          <line x1="18" y1="6" x2="6" y2="18" />
+          <line x1="6" y1="6" x2="18" y2="18" />
         </svg>
       </button>
 
-      <img
-        v-if="workspace?.logoUrl"
-        :src="workspace.logoUrl"
-        alt="Workspace logo"
-        class="workspace-logo"
-      />
-      <svg
-        v-else
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        width="22"
-        height="22"
+      <div class="brand-lockup">
+        <img
+          v-if="workspace?.logoUrl"
+          :src="workspace.logoUrl"
+          alt="Workspace logo"
+          class="workspace-logo"
+        />
+        <svg
+          v-else
+          class="brand-mark"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          <path d="M2 12h20" />
+        </svg>
+        <span class="brand-text">{{ workspace?.name || "Orbit Docs" }}</span>
+      </div>
+
+      <button
+        class="sidebar-collapse-toggle"
+        :class="{ 'is-collapsed': isCollapsed }"
+        :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        @click="toggleCollapse"
       >
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-        <path d="M2 12h20"/>
-      </svg>
-      <span class="brand-text">{{ workspace?.name || "Orbit Docs" }}</span>
-    </div>
-
-    <nav class="sidebar-nav">
-      <div class="nav-group">
-        <div class="nav-group-title">Workspace</div>
-        <NuxtLink
-          v-for="(item, idx) in workspaceNavItems"
-          :key="item.id"
-          ref="(el: any) => { if (idx === 0) firstNavLinkRef = el }"
-          :to="item.route"
-          class="nav-item"
-          :class="{ active: isActive(item.route || '') }"
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
         >
-          <component :is="item.icon" size="16" />
-          <span>{{ item.label }}</span>
-        </NuxtLink>
-      </div>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M9 3v18" />
+        </svg>
+      </button>
+    </header>
 
-      <div class="nav-group" style="margin-top: auto;">
-        <div class="nav-group-title">Account</div>
-        <NuxtLink
-          v-for="item in accountNavItems"
-          :key="item.id"
-          :to="item.route"
-          class="nav-item"
-          :class="{ active: isActive(item.route || '') }"
-        >
-          <component :is="item.icon" size="16" />
-          <span>{{ item.label }}</span>
-        </NuxtLink>
-
-        <div v-if="user" class="sidebar-profile">
-          <div class="profile-row">
-            <general-avatar :src="null" :size="28" :name="userName" />
-            <div class="profile-info">
-              <div class="profile-name">{{ userName }}</div>
-              <div v-if="isSuperAdmin" class="profile-role">Super Admin</div>
-              <div v-else-if="role" class="profile-role">{{ role.replace("_", " ") }}</div>
-              <div v-if="userEmail" class="profile-email">{{ userEmail }}</div>
-            </div>
-          </div>
-          <button class="logout-btn" @click="logout">
-            <IconsLogout size="16" class="logout-icon" />
-            <span>Sign out</span>
-          </button>
-        </div>
-      </div>
+    <nav class="sidebar-nav" aria-label="Main navigation">
+      <NuxtLink
+        v-for="(item, idx) in workspaceNavItems"
+        :key="item.id"
+        ref="(el: any) => { if (idx === 0) firstNavLinkRef = el }"
+        :to="item.route"
+        class="nav-item"
+        :class="{ active: isActive(item.route || '') }"
+        :title="isCollapsed ? item.label : undefined"
+        :aria-label="isCollapsed ? item.label : undefined"
+      >
+        <span class="nav-icon" aria-hidden="true">
+          <component :is="item.icon" size="18" />
+        </span>
+        <span class="nav-label">{{ item.label }}</span>
+      </NuxtLink>
     </nav>
 
-    <button
-      class="sidebar-collapse-toggle"
-      :aria-label="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-      :title="isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-      @click="toggleCollapse"
-    >
-      <svg
-        width="16"
-        height="16"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <polyline v-if="!isCollapsed" points="15 18 9 12 15 6" />
-        <polyline v-else points="9 18 15 12 9 6" />
-      </svg>
-    </button>
+    <footer v-if="user" class="sidebar-footer">
+      <div v-if="showCollapsedRail" class="footer-rail">
+        <NuxtLink
+          v-if="canViewSettings"
+          to="/settings?tab=profile"
+          class="rail-btn"
+          :class="{ active: isActive('/settings') }"
+          title="Profile & settings"
+          aria-label="Profile and settings"
+        >
+          <IconsSettings size="18" />
+        </NuxtLink>
+        <NuxtLink
+          to="/settings?tab=profile"
+          class="rail-avatar"
+          :title="userName"
+          aria-label="Open profile"
+        >
+          <general-avatar :src="null" :size="32" :name="userName" />
+        </NuxtLink>
+      </div>
+
+      <div v-else class="profile-card">
+          <NuxtLink to="/settings?tab=profile" class="profile-card-link" aria-label="Open profile">
+            <general-avatar :src="null" :size="36" :name="userName" />
+            <div class="profile-meta">
+              <div class="profile-name">{{ userName }}</div>
+              <div v-if="roleLabel" class="profile-badge">{{ roleLabel }}</div>
+              <div v-if="userEmail" class="profile-email">{{ userEmail }}</div>
+            </div>
+          </NuxtLink>
+          <div class="profile-actions">
+            <NuxtLink
+              v-if="canViewSettings"
+              to="/settings?tab=profile"
+              class="icon-btn"
+              :class="{ active: isActive('/settings') }"
+              aria-label="Profile and settings"
+              title="Profile and settings"
+            >
+              <IconsSettings size="18" />
+            </NuxtLink>
+          </div>
+        </div>
+    </footer>
   </aside>
 </template>
 
 <style scoped>
-/* ─── mobile toggle button ─────────────────────────────────────── */
+.sidebar {
+  --sb-space-1: 8px;
+  --sb-space-2: 12px;
+  --sb-space-3: 16px;
+  --sb-space-4: 24px;
+  --sb-width-expanded: 260px;
+  --sb-width-collapsed: 64px;
+  --sb-item-height: 40px;
+  --sb-icon-size: 18px;
+  --sb-radius: var(--radius, 8px);
+  --sb-ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --sb-ease-snap: cubic-bezier(0.22, 1, 0.36, 1);
+  --sb-duration-fast: 150ms;
+  --sb-duration-med: 220ms;
+  --sb-duration-drawer: 250ms;
+
+  width: var(--sb-width-expanded);
+  flex-shrink: 0;
+  background: var(--surface, oklch(100% 0 0));
+  border-right: 1px solid var(--border, oklch(90% 0.006 250));
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100vh;
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  overflow: hidden;
+  transition: width var(--sb-duration-med) var(--sb-ease-out);
+}
+
 .mobile-nav-toggle {
   display: none;
   position: fixed;
-  top: 16px;
-  left: 16px;
+  top: var(--sb-space-3);
+  left: var(--sb-space-3);
   z-index: 40;
   width: 40px;
   height: 40px;
-  border-radius: 8px;
+  border-radius: var(--sb-radius);
   border: 1px solid var(--border, oklch(90% 0.006 250));
   background: var(--surface, oklch(100% 0 0));
   color: var(--fg, oklch(20% 0.02 250));
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background var(--sb-duration-fast) var(--sb-ease-out),
+    transform 100ms var(--sb-ease-snap);
 }
+
+.mobile-nav-toggle:active {
+  transform: scale(0.96);
+}
+
 .mobile-nav-toggle:hover {
   background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
 }
-.mobile-nav-toggle:focus-visible {
+
+.mobile-nav-toggle:focus-visible,
+.sidebar-collapse-toggle:focus-visible,
+.icon-btn:focus-visible,
+.rail-btn:focus-visible,
+.nav-item:focus-visible {
   outline: 2px solid var(--accent, oklch(55% 0.16 25));
   outline-offset: 2px;
 }
 
-/* ─── backdrop ───────────────────────────────────────────────── */
 .sidebar-backdrop {
   position: fixed;
   inset: 0;
   z-index: 48;
   background: color-mix(in oklch, oklch(20% 0.02 250) 40%, transparent);
-  animation: fadeIn 0.2s ease-out;
-}
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  animation: backdrop-in var(--sb-duration-drawer) var(--sb-ease-out) both;
 }
 
-/* ─── sidebar ────────────────────────────────────────────────── */
-.sidebar {
-  width: 240px;
-  flex-shrink: 0;
-  background: var(--surface, oklch(100% 0 0));
-  border-right: 1px solid var(--border, oklch(90% 0.006 250));
-  padding: 24px 0;
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sidebar-header {
   display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  position: sticky;
-  top: 0;
-  align-self: flex-start;
-  height: 100vh;
-  overflow-y: auto;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  align-items: center;
+  gap: var(--sb-space-2);
+  min-height: 56px;
+  padding: var(--sb-space-3) var(--sb-space-3) var(--sb-space-2);
+  flex-shrink: 0;
+}
+
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.brand-mark,
+.workspace-logo {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.brand-mark {
+  color: var(--accent, oklch(55% 0.16 25));
+}
+
+.workspace-logo {
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.brand-text {
+  font-family: var(--font-display, -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--fg, oklch(20% 0.02 250));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity var(--sb-duration-med) var(--sb-ease-out),
+    max-width var(--sb-duration-med) var(--sb-ease-out),
+    transform var(--sb-duration-med) var(--sb-ease-out);
+}
+
+.sidebar-collapse-toggle,
+.mobile-close-btn,
+.icon-btn,
+.rail-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted, oklch(55% 0.015 250));
+  cursor: pointer;
+  transition:
+    color var(--sb-duration-fast) var(--sb-ease-out),
+    background var(--sb-duration-fast) var(--sb-ease-out),
+    transform 100ms var(--sb-ease-snap);
+}
+
+.sidebar-collapse-toggle svg {
+  transition: transform var(--sb-duration-med) var(--sb-ease-out);
+}
+
+.sidebar-collapse-toggle.is-collapsed svg {
+  transform: scaleX(-1);
+}
+
+.sidebar-collapse-toggle:active,
+.icon-btn:active,
+.rail-btn:active,
+.mobile-close-btn:active {
+  transform: scale(0.94);
+}
+
+.sidebar-collapse-toggle {
+  width: var(--sb-item-height);
+  height: var(--sb-item-height);
+  border-radius: var(--sb-radius);
+  flex-shrink: 0;
+}
+
+.sidebar-collapse-toggle:hover,
+.icon-btn:hover,
+.rail-btn:hover {
+  color: var(--fg, oklch(20% 0.02 250));
+  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
 }
 
 .mobile-close-btn {
   display: none;
-  align-items: center;
-  justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
-  border: none;
-  background: transparent;
-  color: var(--muted, oklch(55% 0.015 250));
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-  margin-right: 4px;
-  flex-shrink: 0;
-}
-.mobile-close-btn:hover {
-  color: var(--fg, oklch(20% 0.02 250));
-  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
-}
-.mobile-close-btn:focus-visible {
-  outline: 2px solid var(--accent, oklch(55% 0.16 25));
-  outline-offset: 2px;
+  border-radius: var(--sb-radius);
+  margin-right: var(--sb-space-1);
 }
 
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 20px 24px;
-  font-family: var(--font-display, -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif);
-  font-size: 18px;
-  font-weight: 600;
-  border-bottom: 1px solid var(--border, oklch(90% 0.006 250));
-  margin-bottom: 12px;
-  color: var(--fg, oklch(20% 0.02 250));
-}
-.sidebar-brand svg {
-  color: var(--accent, oklch(55% 0.16 25));
-  flex-shrink: 0;
-}
-.workspace-logo {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-  flex-shrink: 0;
-  border-radius: 4px;
-}
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  gap: 2px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--sb-space-1) var(--sb-space-2);
+  scrollbar-gutter: stable;
 }
-.nav-group {
-  padding: 8px 0;
-}
-.nav-group-title {
-  padding: 8px 20px;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted, oklch(55% 0.015 250));
-  font-weight: 500;
-}
+
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  margin: 2px 12px;
-  border-radius: 8px;
+  gap: var(--sb-space-2);
+  min-height: var(--sb-item-height);
+  padding: 0 var(--sb-space-2);
+  border-radius: var(--sb-radius);
   font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
   color: var(--muted, oklch(55% 0.015 250));
-  transition: background .1s cubic-bezier(.4,0,.2,1), color .1s cubic-bezier(.4,0,.2,1);
   text-decoration: none;
+  transition:
+    background var(--sb-duration-fast) var(--sb-ease-out),
+    color var(--sb-duration-fast) var(--sb-ease-out),
+    transform 100ms var(--sb-ease-snap);
 }
+
+.nav-item:active {
+  transform: scale(0.98);
+}
+
 .nav-item:hover {
   background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
   color: var(--fg, oklch(20% 0.02 250));
 }
+
 .nav-item.active {
   background: var(--accent-soft, color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent));
   color: var(--accent, oklch(55% 0.16 25));
-  font-weight: 500;
-}
-.nav-item svg {
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-  color: currentColor;
-}
-.nav-item:focus-visible {
-  outline: 2px solid var(--accent, oklch(55% 0.16 25));
-  outline-offset: 2px;
-  border-radius: 8px;
 }
 
-.sidebar-profile {
-  padding: 12px;
-  margin: 8px 12px 0;
-  border-radius: 8px;
-  border: 1px solid var(--border, oklch(90% 0.006 250));
-  background: var(--bg, oklch(98% 0.004 250));
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
 }
-.profile-row {
+
+.nav-icon :deep(svg) {
+  width: var(--sb-icon-size);
+  height: var(--sb-icon-size);
+}
+
+.nav-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity var(--sb-duration-med) var(--sb-ease-out),
+    max-width var(--sb-duration-med) var(--sb-ease-out),
+    transform var(--sb-duration-med) var(--sb-ease-out);
+}
+
+.sidebar-footer {
+  padding: var(--sb-space-2) var(--sb-space-2) var(--sb-space-3);
+  border-top: 1px solid var(--border, oklch(90% 0.006 250));
+  flex-shrink: 0;
+}
+
+.footer-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sb-space-2);
+}
+
+.rail-btn {
+  width: var(--sb-item-height);
+  height: var(--sb-item-height);
+  border-radius: var(--sb-radius);
+  text-decoration: none;
+}
+
+.rail-btn.active {
+  background: var(--accent-soft, color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent));
+  color: var(--accent, oklch(55% 0.16 25));
+}
+
+.profile-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--sb-space-2);
+  padding: var(--sb-space-1) var(--sb-space-1);
+}
+
+.profile-card-link {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--sb-space-2);
+  min-width: 0;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--sb-radius);
+  transition: background var(--sb-duration-fast) var(--sb-ease-out);
+}
+
+.profile-card-link:hover {
+  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
+}
+
+.profile-card-link:focus-visible {
+  outline: 2px solid var(--accent, oklch(55% 0.16 25));
+  outline-offset: 2px;
+}
+
+.rail-avatar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  justify-content: center;
+  padding: var(--sb-space-1) 0;
+  border-radius: var(--sb-radius);
+  text-decoration: none;
+  transition: background var(--sb-duration-fast) var(--sb-ease-out);
 }
-.profile-info {
+
+.rail-avatar:hover {
+  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
+}
+
+.rail-avatar:focus-visible {
+  outline: 2px solid var(--accent, oklch(55% 0.16 25));
+  outline-offset: 2px;
+}
+
+.profile-meta {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
-  overflow: hidden;
 }
+
 .profile-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
+  line-height: 1.35;
   color: var(--fg, oklch(20% 0.02 250));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.profile-email {
-  font-size: 11px;
+
+.profile-badge {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 8%, transparent));
   color: var(--muted, oklch(55% 0.015 250));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.profile-role {
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-transform: capitalize;
+}
+
+.profile-email {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted, oklch(55% 0.015 250));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--sb-radius);
+  text-decoration: none;
+}
+
+.icon-btn.active {
+  background: var(--accent-soft, color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent));
   color: var(--accent, oklch(55% 0.16 25));
 }
-.logout-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border, oklch(90% 0.006 250));
-  background: transparent;
-  color: var(--muted, oklch(55% 0.015 250));
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-  font-family: inherit;
-}
-.logout-btn:hover {
-  color: var(--fg, oklch(20% 0.02 250));
-  border-color: var(--fg, oklch(20% 0.02 250));
-  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
-}
-.logout-icon {
-  stroke: currentColor;
-  flex-shrink: 0;
-}
 
-/* ─── collapse toggle ────────────────────────────────────────── */
-.sidebar-collapse-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--muted, oklch(55% 0.015 250));
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s;
-  margin: 8px auto;
-  flex-shrink: 0;
-  padding: 0;
-}
-.sidebar-collapse-toggle:hover {
-  color: var(--fg, oklch(20% 0.02 250));
-  background: var(--fg-soft, color-mix(in oklch, oklch(20% 0.02 250) 6%, transparent));
-}
-.sidebar-collapse-toggle:focus-visible {
-  outline: 2px solid var(--accent, oklch(55% 0.16 25));
-  outline-offset: 2px;
-}
-
-/* ─── collapsed state ────────────────────────────────────────── */
 .sidebar--collapsed {
-  width: 64px;
-  padding: 16px 0;
+  --sb-rail-track: var(--sb-item-height);
+  width: var(--sb-width-collapsed);
+  justify-items: center;
 }
-.sidebar--collapsed .sidebar-brand {
-  padding: 0 8px 16px;
+
+.sidebar--collapsed .sidebar-header {
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sb-space-2);
+  width: var(--sb-rail-track);
+  padding: var(--sb-space-3) 0 var(--sb-space-2);
+  min-height: auto;
+  box-sizing: border-box;
+}
+
+.sidebar--collapsed .brand-lockup {
+  flex: 0;
   justify-content: center;
+  align-items: center;
+  gap: 0;
+  width: var(--sb-rail-track);
+  height: var(--sb-rail-track);
 }
-.sidebar--collapsed .brand-text {
+
+.sidebar--collapsed .sidebar-collapse-toggle {
+  margin: 0;
+}
+
+.sidebar--collapsed .brand-text,
+.sidebar--collapsed .nav-label {
   display: none;
 }
-.sidebar--collapsed .nav-group-title {
+
+.sidebar--collapsed .sidebar-nav {
+  width: var(--sb-rail-track);
+  padding: var(--sb-space-1) 0;
+  align-items: stretch;
+  scrollbar-gutter: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar--collapsed .sidebar-nav::-webkit-scrollbar {
   display: none;
 }
+
 .sidebar--collapsed .nav-item {
   justify-content: center;
+  align-items: center;
   gap: 0;
-  padding: 8px;
-  margin: 2px 8px;
-}
-.sidebar--collapsed .nav-item span {
-  display: none;
-}
-.sidebar--collapsed .sidebar-profile {
-  padding: 8px;
-  margin: 8px 8px 0;
-}
-.sidebar--collapsed .profile-row {
-  margin-bottom: 8px;
-  justify-content: center;
-}
-.sidebar--collapsed .profile-info {
-  display: none;
-}
-.sidebar--collapsed .logout-btn {
-  justify-content: center;
-  padding: 8px;
-  gap: 0;
-}
-.sidebar--collapsed .logout-btn span {
-  display: none;
-}
-.sidebar--collapsed .sidebar-collapse-toggle {
-  margin: 8px auto;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  padding: 0;
+  margin: 0;
 }
 
-/* ─── mobile breakpoint ──────────────────────────────────────── */
+.sidebar--collapsed .nav-icon {
+  width: var(--sb-icon-size);
+  height: var(--sb-icon-size);
+  margin: 0 auto;
+}
+
+.sidebar--collapsed .sidebar-footer {
+  width: var(--sb-rail-track);
+  padding: var(--sb-space-2) 0 var(--sb-space-3);
+  box-sizing: border-box;
+}
+
+.sidebar--collapsed .footer-rail {
+  width: 100%;
+  margin: 0;
+}
+
+.sidebar--collapsed .rail-avatar {
+  width: 100%;
+  height: var(--sb-rail-track);
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 768px) {
   .mobile-nav-toggle {
     display: inline-flex;
@@ -557,21 +744,85 @@ function logout() {
     top: 0;
     left: 0;
     z-index: 50;
+    width: min(88vw, 300px);
     transform: translateX(-100%);
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform var(--sb-duration-drawer) var(--sb-ease-out);
     box-shadow: 4px 0 24px color-mix(in oklch, oklch(20% 0.02 250) 12%, transparent);
     border-right: none;
   }
+
   .sidebar--mobile-open {
     transform: translateX(0);
+    will-change: transform;
+  }
+
+  .sidebar--collapsed {
+    width: min(88vw, 300px);
+    justify-items: stretch;
+  }
+
+  .sidebar--collapsed .brand-text,
+  .sidebar--collapsed .nav-label {
+    display: block;
+  }
+
+  .sidebar--collapsed .sidebar-header,
+  .sidebar--collapsed .sidebar-nav,
+  .sidebar--collapsed .sidebar-footer {
+    width: auto;
+    padding-left: var(--sb-space-3);
+    padding-right: var(--sb-space-3);
+  }
+
+  .sidebar--collapsed .sidebar-nav {
+    align-items: stretch;
+    scrollbar-width: auto;
+    -ms-overflow-style: auto;
+  }
+
+  .sidebar--collapsed .sidebar-nav::-webkit-scrollbar {
+    display: block;
+  }
+
+  .sidebar--collapsed .nav-item {
+    width: auto;
+    justify-content: flex-start;
+    padding: 0 var(--sb-space-2);
+  }
+
+  .sidebar--collapsed .nav-icon {
+    margin: 0;
+  }
+
+  .sidebar--collapsed .footer-rail {
+    width: auto;
+  }
+
+  .sidebar--collapsed .sidebar-header {
+    flex-direction: row;
+    align-items: center;
+    padding: var(--sb-space-3);
+    min-height: 56px;
+  }
+
+  .sidebar--collapsed .brand-lockup {
+    justify-content: flex-start;
+  }
+
+  .sidebar--collapsed .nav-item {
+    width: auto;
+    min-width: 0;
+    justify-content: flex-start;
+    padding: 0 var(--sb-space-2);
+    margin: 0;
+  }
+
+  .sidebar--collapsed .sidebar-nav {
+    padding: var(--sb-space-1) var(--sb-space-2);
   }
 
   .mobile-close-btn {
     display: inline-flex;
-  }
-
-  .sidebar-brand {
-    padding: 0 16px 20px;
   }
 
   .sidebar-collapse-toggle {
@@ -580,9 +831,21 @@ function logout() {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sidebar {
-    transition: none;
+  .sidebar,
+  .mobile-nav-toggle,
+  .brand-text,
+  .nav-label,
+  .nav-item,
+  .sidebar-collapse-toggle,
+  .sidebar-collapse-toggle svg,
+  .icon-btn,
+  .rail-btn,
+  .mobile-close-btn {
+    transition: none !important;
+    animation: none !important;
+    transform: none !important;
   }
+
   .sidebar-backdrop {
     animation: none;
   }

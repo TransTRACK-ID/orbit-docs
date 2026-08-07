@@ -11,6 +11,7 @@ import type {
 import type { SsoProvider, SsoProviderType } from "~/types/sso";
 import { SSO_PROVIDER_METADATA } from "~/types/sso";
 import type { RolePermissionMatrix } from "~/types/permissions";
+import { useAuthStore } from "~/store/auth";
 
 definePageMeta({
   auth: true,
@@ -61,6 +62,7 @@ const route = useRoute();
 
 const {
   isSuperAdmin,
+  role,
   accessMatrix,
   accessGroups,
   accessRoles,
@@ -85,6 +87,7 @@ const {
 } = useSsoSettings();
 
 const { data: authData } = useAuth();
+const $auth = useAuthStore();
 
 const currentUserEmail = computed(() => {
   const d = authData.value as any;
@@ -95,6 +98,22 @@ const currentUserEmail = computed(() => {
   // legacy fallback: wrapped response
   return d?.data?.user?.email || d?.user?.email || null;
 });
+
+const currentUserName = computed(() => {
+  const d = authData.value as any;
+  if (d?.name) {
+    return d.name;
+  }
+  return d?.data?.user?.name || d?.user?.name || currentMember.value?.name || "";
+});
+
+async function handleLogout() {
+  try {
+    await $auth.logout();
+  } catch {
+    window.location.href = "/login";
+  }
+}
 
 const myPendingInvitation = computed(() => {
   if (!currentUserEmail.value) return null;
@@ -110,13 +129,14 @@ async function acceptMyInvitation() {
   await acceptInvitation(myPendingInvitation.value.id);
 }
 
-const activeTab = ref<"general" | "team" | "access" | "integrations" | "mcp" | "sso">("general");
+const activeTab = ref<"profile" | "general" | "team" | "access" | "integrations" | "mcp" | "sso">("general");
 const isSettingsRoleLoaded = ref(false);
 
 type SettingsTabId = typeof activeTab.value;
 
 function isSettingsTabId(value: string): value is SettingsTabId {
   return (
+    value === "profile" ||
     value === "general" ||
     value === "team" ||
     value === "access" ||
@@ -131,8 +151,11 @@ const settingsTabs = computed(() => {
     return [];
   }
 
+  const profileTab = { id: "profile" as const, label: "Profile" };
+
   if (isSuperAdmin.value) {
     return [
+      profileTab,
       { id: "general" as const, label: "General" },
       { id: "team" as const, label: "Team Members" },
       { id: "access" as const, label: "Access" },
@@ -142,7 +165,10 @@ const settingsTabs = computed(() => {
     ];
   }
 
-  return [{ id: "mcp" as const, label: "MCP Connection" }];
+  return [
+    profileTab,
+    { id: "mcp" as const, label: "MCP Connection" },
+  ];
 });
 
 function ensureAllowedActiveTab() {
@@ -150,7 +176,7 @@ function ensureAllowedActiveTab() {
 
   const allowedTabs = settingsTabs.value.map((tab) => tab.id);
   if (!allowedTabs.includes(activeTab.value)) {
-    activeTab.value = "mcp";
+    activeTab.value = allowedTabs[0] ?? "profile";
   }
 }
 
@@ -208,15 +234,15 @@ onMounted(async () => {
   if (isSuperAdmin.value) {
     await loadSuperAdminSettings();
   } else {
-    activeTab.value = "mcp";
+    activeTab.value = "profile";
   }
 
   const tabQuery = route.query.tab;
   if (typeof tabQuery === "string" && isSettingsTabId(tabQuery)) {
-    if (isSuperAdmin.value || tabQuery === "mcp") {
+    if (isSuperAdmin.value || tabQuery === "mcp" || tabQuery === "profile") {
       activeTab.value = tabQuery;
     } else {
-      activeTab.value = "mcp";
+      activeTab.value = "profile";
     }
   }
 
@@ -933,6 +959,39 @@ function getCallbackUrl(provider: SsoProvider): string {
 
       <!-- Settings panels -->
       <div class="settings-panels">
+        <!-- Profile -->
+        <div v-show="activeTab === 'profile'" class="settings-panel">
+          <div class="setting-section profile-section">
+            <h3>Profile</h3>
+            <p class="desc">Your account details for this workspace.</p>
+            <div class="profile-summary">
+              <general-avatar :src="null" :size="48" :name="currentUserName" />
+              <div class="profile-summary-meta">
+                <div class="profile-summary-name">{{ currentUserName || "User" }}</div>
+                <div v-if="currentUserEmail" class="profile-summary-email">{{ currentUserEmail }}</div>
+                <div class="profile-summary-badges">
+                  <span v-if="isSuperAdmin" class="pill pill-green">Super Admin</span>
+                  <span v-else-if="role" class="pill" :class="rolePillClass[role]">{{ roleLabel[role] }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-section">
+            <h3>Session</h3>
+            <p class="desc">Sign out of Orbit Docs on this device.</p>
+            <button
+              type="button"
+              class="btn btn-danger"
+              :disabled="$auth.isLoading"
+              @click="handleLogout"
+            >
+              <span v-if="$auth.isLoading">Signing out…</span>
+              <span v-else>Sign out</span>
+            </button>
+          </div>
+        </div>
+
         <!-- General -->
         <div v-show="activeTab === 'general' && isSuperAdmin" class="settings-panel">
           <div class="setting-section">
@@ -1933,6 +1992,37 @@ function getCallbackUrl(provider: SsoProvider): string {
 
 .settings-panel-access {
   padding-top: 4px;
+}
+
+.profile-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.profile-summary-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.profile-summary-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.profile-summary-email {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.profile-summary-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 .setting-section {
