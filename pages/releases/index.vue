@@ -8,6 +8,11 @@ definePageMeta({
 });
 
 const $page = usePageStore();
+const { can } = usePermissions();
+
+const canWriteChangelogs = computed(() => can("changelogs:write"));
+const canWriteReleases = computed(() => can("releases:write"));
+
 onBeforeMount(() => {
   $page.setTitle("Releases");
 });
@@ -280,7 +285,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               {{ countCategories(r.categories).security.length }} security
             </span>
             <NuxtLink
-              v-if="r.type === 'normal' && r.versionId"
+              v-if="r.type === 'normal' && r.versionId && canWriteChangelogs"
               :to="`/changelogs?versionId=${r.versionId}`"
               class="btn btn-ghost btn-sm"
               style="margin-left: auto;"
@@ -289,7 +294,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
               Edit changelog
             </NuxtLink>
             <NuxtLink
-              v-else
+              v-else-if="canWriteReleases"
               :to="`/releases/${r.id}?edit=1`"
               class="btn btn-ghost btn-sm"
               style="margin-left: auto;"

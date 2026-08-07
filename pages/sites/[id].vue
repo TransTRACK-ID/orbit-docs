@@ -12,6 +12,10 @@ definePageMeta({
 const $page = usePageStore();
 const route = useRoute();
 const router = useRouter();
+const { can } = usePermissions();
+
+const canWriteDocSites = computed(() => can("doc_sites:write"));
+const canWriteDocs = computed(() => can("docs:write"));
 
 const siteId = computed(() => route.params.id as string);
 
@@ -376,7 +380,7 @@ function onSpecFile(e: Event) {
         >
           Public View
         </NuxtLink>
-        <button type="button" class="btn btn-primary" :disabled="isSaving" @click="save">
+        <button v-if="canWriteDocSites" type="button" class="btn btn-primary" :disabled="isSaving" @click="save">
           <span v-if="isSaving">Saving…</span>
           <span v-else>Save</span>
         </button>
@@ -386,6 +390,7 @@ function onSpecFile(e: Event) {
     <div v-if="isLoading && !loaded" class="loading">Loading…</div>
 
     <div v-else class="editor-grid">
+      <fieldset class="editor-fieldset" :disabled="!canWriteDocSites">
       <div class="main-col">
         <section class="card">
           <h2 class="card-title">Details</h2>
@@ -499,6 +504,7 @@ function onSpecFile(e: Event) {
               @keydown.enter.prevent="createPage"
             />
             <button
+              v-if="canWriteDocs"
               type="button"
               class="btn btn-primary btn-sm"
               :disabled="!newPageTitle.trim() || isCreatingPage"
@@ -507,7 +513,7 @@ function onSpecFile(e: Event) {
               {{ isCreatingPage ? "Creating…" : "+ New page" }}
             </button>
           </div>
-          <button type="button" class="btn btn-secondary btn-sm pages-add-existing" @click="openAddExisting">
+          <button v-if="canWriteDocs" type="button" class="btn btn-secondary btn-sm pages-add-existing" @click="openAddExisting">
             Add existing doc
           </button>
 
@@ -527,6 +533,7 @@ function onSpecFile(e: Event) {
           </ul>
         </section>
       </aside>
+      </fieldset>
     </div>
 
     <!-- Add existing doc modal -->

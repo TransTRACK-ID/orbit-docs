@@ -25,7 +25,14 @@ onBeforeMount(() => {
 
 const route = useRoute();
 const router = useRouter();
+const { can, canAny } = usePermissions();
 const { docs, isLoading, search, fetchDocs, createDoc, deleteDoc, bulkUpdateStatus } = useDocs();
+
+const canWriteDocs = computed(() => can("docs:write"));
+const canPublishDocs = computed(() => can("docs:publish"));
+const canRunDocGeneration = computed(() => can("doc_generation:run"));
+const canManageDocSites = computed(() => can("doc_sites:write"));
+const canBulkUpdateDocs = computed(() => canAny("docs:write", "docs:publish"));
 const { apps, fetchApps } = useApps();
 const { docSites, fetchDocSites } = useDocSites();
 
@@ -274,7 +281,9 @@ const pageSubtitle = computed(() => {
 });
 
 /** Bulk status is for Knowledge base (synced feature) docs only. */
-const bulkSelectionEnabled = computed(() => docView.value !== "product");
+const bulkSelectionEnabled = computed(
+  () => docView.value !== "product" && canBulkUpdateDocs.value
+);
 
 const selectedDocIds = ref<Set<string>>(new Set());
 const bulkStatus = ref<DocItem["status"]>("published");
@@ -346,6 +355,9 @@ function selectAllInSection(docsInSection: DocItem[]) {
 
 async function applyBulkStatus() {
   if (!selectedCount.value || isBulkUpdating.value) return;
+  const needsPublish = bulkStatus.value === "published" || bulkStatus.value === "archived";
+  if (needsPublish && !can("docs:publish")) return;
+  if (!can("docs:write")) return;
   const ids = [...selectedDocIds.value];
   isBulkUpdating.value = true;
   try {
@@ -404,10 +416,10 @@ const tableColspan = computed(() => (bulkSelectionEnabled.value ? 6 : 5));
           placeholder="Filter by site…"
           search-placeholder="Search sites…"
         />
-        <NuxtLink to="/docs/generate" class="btn btn-secondary">
+        <NuxtLink v-if="canRunDocGeneration" to="/docs/generate" class="btn btn-secondary">
           ✦ Generate Docs
         </NuxtLink>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
+        <button v-if="canWriteDocs" type="button" class="btn btn-primary" @click="openCreateModal">
           + New Doc
         </button>
       </div>
@@ -420,7 +432,7 @@ const tableColspan = computed(() => (bulkSelectionEnabled.value ? 6 : 5));
         <span class="site-context-slug num">/s/{{ activeSite.slug }}</span>
       </div>
       <div class="site-context-actions">
-        <NuxtLink :to="`/sites/${activeSite.id}`" class="btn btn-secondary btn-sm">
+        <NuxtLink v-if="canManageDocSites" :to="`/sites/${activeSite.id}`" class="btn btn-secondary btn-sm">
           Manage site
         </NuxtLink>
         <NuxtLink
@@ -485,7 +497,7 @@ const tableColspan = computed(() => (bulkSelectionEnabled.value ? 6 : 5));
 
     <div v-else-if="visibleDocCount === 0" class="empty-state">
       <p>No docs found.</p>
-      <button type="button" class="btn btn-primary" style="margin-top:12px;" @click="openCreateModal">
+      <button v-if="canWriteDocs" type="button" class="btn btn-primary" style="margin-top:12px;" @click="openCreateModal">
         Create your first doc
       </button>
     </div>
@@ -613,8 +625,14 @@ const tableColspan = computed(() => (bulkSelectionEnabled.value ? 6 : 5));
                     <NuxtLink :to="`/docs/${doc.id}`" class="btn btn-primary btn-sm">
                       Open
                     </NuxtLink>
-                    <div class="actions-menu">
-                      <button type="button" class="btn btn-ghost btn-sm actions-toggle" aria-label="More actions" @click="doc._showActions = !doc._showActions">
+                    <div v-if="canWriteDocs || doc.status === 'published'" class="actions-menu">
+                      <button
+                        v-if="canWriteDocs"
+                        type="button"
+                        class="btn btn-ghost btn-sm actions-toggle"
+                        aria-label="More actions"
+                        @click="doc._showActions = !doc._showActions"
+                      >
                         <DotsVertical />
                       </button>
                       <div v-if="doc._showActions" class="actions-dropdown" @click.stop>
@@ -627,7 +645,12 @@ const tableColspan = computed(() => (bulkSelectionEnabled.value ? 6 : 5));
                         >
                           Public View
                         </NuxtLink>
-                        <button type="button" class="actions-item actions-danger" @click="doc._showActions = false; confirmDelete(doc)">
+                        <button
+                          v-if="canWriteDocs"
+                          type="button"
+                          class="actions-item actions-danger"
+                          @click="doc._showActions = false; confirmDelete(doc)"
+                        >
                           Delete
                         </button>
                       </div>

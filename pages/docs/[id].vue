@@ -11,6 +11,10 @@ definePageMeta({
 const route = useRoute();
 const router = useRouter();
 const $page = usePageStore();
+const { can } = usePermissions();
+
+const canWriteDocs = computed(() => can("docs:write"));
+const canPublishDocs = computed(() => can("docs:publish"));
 
 const docId = computed(() => route.params.id as string);
 
@@ -603,6 +607,7 @@ const lastModified = computed(() => {
           {{ previewOnly ? "Editor" : "Preview" }}
         </button>
         <button
+          v-if="canWriteDocs"
           type="button"
           class="btn btn-secondary"
           :disabled="isSaving || isPublishing"
@@ -612,6 +617,7 @@ const lastModified = computed(() => {
           <span v-else>{{ saveButtonLabel }}</span>
         </button>
         <button
+          v-if="canPublishDocs"
           type="button"
           class="btn btn-primary"
           :disabled="isSaving || isPublishing"
@@ -701,6 +707,7 @@ const lastModified = computed(() => {
               <EditorJs
                 v-if="!previewOnly"
                 v-model="editorContent"
+                :read-only="!canWriteDocs"
                 placeholder="Write your technical documentation..."
                 style="height:100%;"
               />

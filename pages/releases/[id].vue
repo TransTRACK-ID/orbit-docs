@@ -12,6 +12,11 @@ definePageMeta({
 const $page = usePageStore();
 const route = useRoute();
 const router = useRouter();
+const { can } = usePermissions();
+
+const canWriteReleases = computed(() => can("releases:write"));
+const canPublishReleases = computed(() => can("releases:publish"));
+const canWriteChangelogs = computed(() => can("changelogs:write"));
 
 const { release, isLoading, isUpdating, isDeleting, fetchRelease, updateRelease, deleteRelease } = useReleases();
 
@@ -324,11 +329,11 @@ onBeforeUnmount(() => {
           >
             View changelog history
           </NuxtLink>
-          <NuxtLink v-if="release.type === 'normal' && release.versionId" :to="`/changelogs?versionId=${release.versionId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
+          <NuxtLink v-if="release.type === 'normal' && release.versionId && canWriteChangelogs" :to="`/changelogs?versionId=${release.versionId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
           <template v-if="release.type === 'article'">
             <button v-if="!isEditing" type="button" class="btn btn-ghost btn-sm" @click="openReleaseHistory">Version history</button>
-            <button v-if="!isEditing" type="button" class="btn btn-secondary btn-sm" @click="enterEditMode">Edit Release Article</button>
-            <template v-else>
+            <button v-if="!isEditing && canWriteReleases" type="button" class="btn btn-secondary btn-sm" @click="enterEditMode">Edit Release Article</button>
+            <template v-else-if="isEditing && canWriteReleases">
               <button type="button" class="btn btn-secondary btn-sm" @click="cancelEdit">Cancel</button>
               <button type="button" class="btn btn-primary btn-sm" :disabled="isUpdating" @click="saveEdit">
                 <span v-if="isUpdating">Saving…</span>
@@ -336,7 +341,7 @@ onBeforeUnmount(() => {
               </button>
             </template>
           </template>
-          <button type="button" class="btn btn-danger btn-sm" @click="confirmDelete">Delete</button>
+          <button v-if="canWriteReleases" type="button" class="btn btn-danger btn-sm" @click="confirmDelete">Delete</button>
         </div>
       </header>
 
@@ -470,6 +475,7 @@ onBeforeUnmount(() => {
                 <ClientOnly>
                   <EditorJs
                     v-model="editContent"
+                    :read-only="!canWriteReleases"
                     placeholder="Write your release article content..."
                     style="min-height:400px;"
                   />

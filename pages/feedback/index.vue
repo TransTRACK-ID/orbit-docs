@@ -18,11 +18,11 @@ const activeTab = ref<FeedbackTab>("public");
 const { apps, fetchApps } = useApps();
 const { docs: publishedDocs, fetchDocs } = useDocs();
 const { currentMember, fetchCurrentMember } = useSettings();
+const { can } = usePermissions();
 
-const isSuperAdmin = computed(() => {
-  const member = currentMember.value as (typeof currentMember.value & { isSuperAdmin?: boolean }) | null;
-  return Boolean(member?.isSuperAdmin);
-});
+const canManageFeedback = computed(() => can("feedback:manage"));
+const canReadInternalFeedback = computed(() => can("internal_feedback:read"));
+const canManageInternalFeedback = computed(() => can("internal_feedback:manage"));
 
 const firstPublishedDoc = computed(() =>
   publishedDocs.value.find((d) => d.status === "published") ?? null
@@ -106,7 +106,7 @@ onMounted(async () => {
 
 async function loadFeedback() {
   if (activeTab.value === "internal") {
-    if (!isSuperAdmin.value) return;
+    if (!canReadInternalFeedback.value) return;
     await fetchInternalFeedback({
       search: internalSearchQuery.value.trim() || undefined,
       status: internalStatusFilter.value || undefined,
@@ -131,7 +131,7 @@ watch([internalSearchQuery, internalStatusFilter, internalCategoryFilter], () =>
 });
 
 watch(activeTab, (tab) => {
-  if (tab === "internal" && !isSuperAdmin.value) {
+  if (tab === "internal" && !canReadInternalFeedback.value) {
     activeTab.value = "public";
     return;
   }
@@ -249,7 +249,7 @@ const categoryClass: Record<string, string> = {
       </div>
     </header>
 
-    <div v-if="isSuperAdmin" class="feedback-tabs" role="tablist" aria-label="Feedback source">
+    <div v-if="canReadInternalFeedback" class="feedback-tabs" role="tablist" aria-label="Feedback source">
       <button
         type="button"
         role="tab"
@@ -397,7 +397,7 @@ const categoryClass: Record<string, string> = {
             </td>
             <td class="num cell-muted">{{ formatDate(item.createdAt) }}</td>
             <td class="actions-col">
-              <div class="row-actions">
+              <div v-if="canManageFeedback" class="row-actions">
                 <select
                   class="select select-sm"
                   :value="item.status"
@@ -417,6 +417,7 @@ const categoryClass: Record<string, string> = {
                   <IconsTrash size="14" />
                 </button>
               </div>
+              <span v-else class="cell-muted">—</span>
             </td>
           </tr>
         </tbody>
@@ -472,7 +473,7 @@ const categoryClass: Record<string, string> = {
             </td>
             <td class="num cell-muted">{{ formatDate(item.createdAt) }}</td>
             <td class="actions-col">
-              <div class="row-actions">
+              <div v-if="canManageInternalFeedback" class="row-actions">
                 <select
                   class="select select-sm"
                   :value="item.status"
@@ -492,6 +493,7 @@ const categoryClass: Record<string, string> = {
                   <IconsTrash size="14" />
                 </button>
               </div>
+              <span v-else class="cell-muted">—</span>
             </td>
           </tr>
         </tbody>

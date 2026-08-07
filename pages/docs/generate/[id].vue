@@ -14,6 +14,9 @@ const route = useRoute();
 const appId = route.params.id as string;
 
 const $page = usePageStore();
+const { can } = usePermissions();
+
+const canRunDocGeneration = computed(() => can("doc_generation:run"));
 
 // Agent configuration from public runtime config
 const publicConfig = useRuntimeConfig().public;
@@ -486,7 +489,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
     </div>
 
     <!-- Form -->
-    <div class="form-section">
+    <div v-if="canRunDocGeneration" class="form-section">
       <h2>New Generation</h2>
       <DocGeneratorForm
         :app-id="appId"
@@ -495,6 +498,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
         @generate="handleGenerate"
       />
     </div>
+    <p v-else class="text-muted-sm">You do not have permission to run doc generation.</p>
 
     <!-- ─── Progress + Agent Logs panel ─────────────────────────── -->
     <div v-if="showProgress" class="progress-section">
@@ -577,7 +581,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 
         <!-- Cancel button when job is active -->
         <div v-if="hasPendingJob" class="progress-actions">
-          <button class="btn btn-danger btn-sm" @click="handleCancel(currentJob!.id)">
+          <button v-if="canRunDocGeneration" class="btn btn-danger btn-sm" @click="handleCancel(currentJob!.id)">
             Cancel Generation
           </button>
         </div>
@@ -786,6 +790,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
                   Debug
                 </button>
                 <button
+                  v-if="canRunDocGeneration"
                   class="btn btn-ghost btn-sm"
                   title="Remove from history"
                   @click="handleRemove(job.id)"

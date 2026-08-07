@@ -7,6 +7,16 @@ definePageMeta({
 });
 
 const $page = usePageStore();
+const { can, canAny } = usePermissions();
+
+const canCreateApp = computed(() => can("apps:write"));
+const canEditApp = computed(() => can("apps:write"));
+const canDeleteApp = computed(() => can("apps:delete"));
+const canGenerateDocs = computed(() => can("doc_generation:run"));
+const canOpenAppMenu = computed(() =>
+  canAny("apps:write", "apps:delete", "doc_generation:run")
+);
+
 onBeforeMount(() => {
   $page.setTitle("Apps");
 });
@@ -312,7 +322,7 @@ const statusLabel: Record<string, string> = {
           placeholder="Search apps, versions, docs…"
           aria-label="Search apps, versions, and docs"
         />
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
+        <button v-if="canCreateApp" type="button" class="btn btn-primary" @click="openCreateModal">
           + New App
         </button>
       </div>
@@ -520,7 +530,7 @@ const statusLabel: Record<string, string> = {
               Versions &rarr;
             </NuxtLink>
           </div>
-          <div class="app-card-actions">
+          <div v-if="canOpenAppMenu" class="app-card-actions">
             <div class="action-dropdown-wrap" style="position: relative;">
               <button
                 class="btn btn-ghost btn-sm action-btn"
@@ -541,14 +551,16 @@ const statusLabel: Record<string, string> = {
                   Releases
                 </NuxtLink>
                 <NuxtLink
+                  v-if="canGenerateDocs"
                   :to="`/docs/generate/${app.id}`"
                   class="dropdown-item"
                   @click="openAppMenu = null"
                 >
                   Generate Docs
                 </NuxtLink>
-                <div class="dropdown-divider" />
+                <div v-if="canGenerateDocs && (canEditApp || canDeleteApp)" class="dropdown-divider" />
                 <button
+                  v-if="canEditApp"
                   class="dropdown-item"
                   @click="openEditModal(app); openAppMenu = null"
                 >
@@ -556,6 +568,7 @@ const statusLabel: Record<string, string> = {
                   Edit
                 </button>
                 <button
+                  v-if="canDeleteApp"
                   class="dropdown-item"
                   @click="confirmDelete(app); openAppMenu = null"
                 >

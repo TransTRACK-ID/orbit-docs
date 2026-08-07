@@ -12,6 +12,10 @@ definePageMeta({
 const route = useRoute();
 const router = useRouter();
 const $page = usePageStore();
+const { can } = usePermissions();
+
+const canWriteChangelogs = computed(() => can("changelogs:write"));
+const canPublishReleases = computed(() => can("releases:publish"));
 
 const { apps, fetchApps } = useApps();
 const { versions, fetchVersions, fetchVersionById, updateVersion } = useVersions();
@@ -763,7 +767,7 @@ function canViewHistoryDiff(): boolean {
             search-placeholder="Search versions…"
           />
         </div>
-        <div class="release-actions">
+        <div v-if="canWriteChangelogs" class="release-actions">
           <button
             type="button"
             class="btn btn-sm btn-secondary"
@@ -914,6 +918,7 @@ function canViewHistoryDiff(): boolean {
           <ClientOnly>
             <EditorJs
               v-model="content"
+              :read-only="!canWriteChangelogs"
               placeholder="Enter changelog markdown…"
               style="height:100%;"
             />
@@ -982,7 +987,7 @@ function canViewHistoryDiff(): boolean {
                   >
                     View diff
                   </button>
-                  <button v-if="isRestorableAction(item.action)" type="button" class="btn btn-ghost btn-sm history-restore" @click.stop="restoreHistoryItem(item)">
+                  <button v-if="canWriteChangelogs && isRestorableAction(item.action)" type="button" class="btn btn-ghost btn-sm history-restore" @click.stop="restoreHistoryItem(item)">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                     Restore
                   </button>
@@ -1038,7 +1043,7 @@ function canViewHistoryDiff(): boolean {
         </div>
         <div class="release-footer">
           <button type="button" class="btn btn-secondary" @click="closeReleasePanel">Cancel</button>
-          <button type="button" class="btn btn-primary" :disabled="isPublishingRelease || !currentVersion" @click="submitPublishRelease">
+          <button v-if="canPublishReleases" type="button" class="btn btn-primary" :disabled="isPublishingRelease || !currentVersion" @click="submitPublishRelease">
             <span v-if="isPublishingRelease">Publishing…</span>
             <span v-else>Publish Article</span>
           </button>

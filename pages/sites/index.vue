@@ -14,7 +14,10 @@ onBeforeMount(() => {
 });
 
 const router = useRouter();
+const { can } = usePermissions();
 const { docSites, isLoading, fetchDocSites, createDocSite, deleteDocSite } = useDocSites();
+
+const canWriteDocSites = computed(() => can("doc_sites:write"));
 
 const searchQuery = ref("");
 const showCreateModal = ref(false);
@@ -131,7 +134,7 @@ function timeAgo(dateStr: string | null) {
           placeholder="Search doc sites…"
           aria-label="Search doc sites"
         />
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
+        <button v-if="canWriteDocSites" type="button" class="btn btn-primary" @click="openCreateModal">
           + New Doc Site
         </button>
       </div>
@@ -152,7 +155,7 @@ function timeAgo(dateStr: string | null) {
 
     <div v-else-if="filteredSites.length === 0" class="empty-state">
       <p>No doc sites yet.</p>
-      <button type="button" class="btn btn-primary" @click="openCreateModal">
+      <button v-if="canWriteDocSites" type="button" class="btn btn-primary" @click="openCreateModal">
         Create your first doc site
       </button>
     </div>
