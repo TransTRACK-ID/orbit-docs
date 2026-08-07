@@ -188,9 +188,12 @@ export async function cloneOrPull(
       `git -C "${cloneDir}" remote set-url origin "${authUrl}"`,
       { timeout: 60000 }
     ).catch(() => {});
-    await execGit(`git -C "${cloneDir}" fetch --all --tags --prune`, {
-      timeout: 180000,
-    });
+    // --force updates tags that were moved on the remote (avoids "would clobber
+    // existing tag"); --prune-tags drops tags removed upstream.
+    await execGit(
+      `git -C "${cloneDir}" fetch --all --tags --prune --prune-tags --force`,
+      { timeout: 180000 }
+    );
     if (safeBranch) {
       await checkoutBranch(cloneDir, safeBranch);
     }
@@ -211,7 +214,7 @@ export async function cloneOrPull(
       throw new Error(`Git clone failed: ${stderr}`);
     }
     // Ensure tags available for diffing
-    await execGit(`git -C "${cloneDir}" fetch --tags`, {
+    await execGit(`git -C "${cloneDir}" fetch --tags --force`, {
       timeout: 120000,
     }).catch(() => {});
   }
