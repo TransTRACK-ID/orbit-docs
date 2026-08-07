@@ -1,36 +1,26 @@
-import { defineEventHandler, getHeader, createError } from "h3";
+import { defineEventHandler } from "h3";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { createMcpServer, checkMcpApiKey, transports } from "~/server/utils/mcp-server";
+import { createMcpServer, transports } from "~/server/utils/mcp-server";
+import { assertMcpAuth } from "~/server/utils/mcp-auth";
 
 export default defineEventHandler(async (event) => {
-  // Pass through when MCP_API_KEY is unset (public). When it IS set, require a
-  // matching key so existing remote clients must authenticate.
-  const authHeader = getHeader(event, "authorization");
-  const apiKeyHeader = getHeader(event, "x-api-key");
-
-  if (!checkMcpApiKey(authHeader, apiKeyHeader)) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: "Unauthorized",
-      message: "Invalid or missing API key. Provide it via Authorization: Bearer <key> or X-API-Key header.",
-    });
-  }
+  assertMcpAuth(event);
 
   const res = event.node.res;
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
-  
+
   const messagePath = "/api/mcp/message";
-  
+
   const transport = new SSEServerTransport(messagePath, res);
   transports[transport.sessionId] = transport;
-  
+
   res.on("close", () => {
     delete transports[transport.sessionId];
   });
-  
+
   const mcpServer = createMcpServer();
   await mcpServer.connect(transport);
 });

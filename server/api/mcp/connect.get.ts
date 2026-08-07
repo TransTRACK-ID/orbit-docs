@@ -1,7 +1,8 @@
 import { defineEventHandler, getHeader, getRequestURL } from "h3";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { createMcpServer, transports } from "~/server/utils/mcp-server";
-import { assertMcpAuth, handleStreamableHttpRequest } from "~/server/utils/mcp-streamable-http";
+import { assertMcpAuth } from "~/server/utils/mcp-auth";
+import { handleStreamableHttpRequest } from "~/server/utils/mcp-streamable-http";
 
 export default defineEventHandler(async (event) => {
   assertMcpAuth(event);

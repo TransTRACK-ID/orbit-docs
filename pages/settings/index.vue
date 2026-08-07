@@ -516,13 +516,33 @@ async function revokeAllKeys() {
 }
 
 // ─── MCP Connection ───────────────────────────────────────────────
-const mcpConfig = ref<{ host: string; url: string; protocol: string; configured: boolean; authRequired: boolean } | null>(null);
+const mcpConfig = ref<{
+  host: string;
+  url: string;
+  protocol: string;
+  configured: boolean;
+  authRequired: boolean;
+  oauthEnabled: boolean;
+  oauthMetadataUrl: string | null;
+  protectedResourceMetadataUrl: string | null;
+} | null>(null);
 const mcpLoading = ref(false);
 
 async function fetchMcpConfig() {
   mcpLoading.value = true;
   try {
-    const { data } = await $fetch<{ data: { host: string; url: string; protocol: string; configured: boolean; authRequired: boolean } }>("/api/mcp-config");
+    const { data } = await $fetch<{
+      data: {
+        host: string;
+        url: string;
+        protocol: string;
+        configured: boolean;
+        authRequired: boolean;
+        oauthEnabled: boolean;
+        oauthMetadataUrl: string | null;
+        protectedResourceMetadataUrl: string | null;
+      };
+    }>("/api/mcp-config");
     mcpConfig.value = data;
   } catch (e) {
     console.error("Failed to fetch MCP config", e);
@@ -534,6 +554,7 @@ async function fetchMcpConfig() {
 const mcpUrlHttps = computed(() => mcpConfig.value?.url || "https://localhost:41244/mcp");
 
 const mcpAuthRequired = computed(() => mcpConfig.value?.authRequired ?? true);
+const mcpOAuthEnabled = computed(() => mcpConfig.value?.oauthEnabled ?? false);
 
 const mcpHeaders = computed(() =>
   mcpAuthRequired.value ? { Authorization: "Bearer <your_mcp_api_key>" } : undefined,
@@ -591,6 +612,19 @@ const mcpAgents = [
         type: "HTTP",
         url: mcpUrlHttps.value,
         ...(mcpHeaders.value ? { headers: mcpHeaders.value } : {}),
+      }, null, 2);
+    },
+  },
+  {
+    name: "Gemini Spark",
+    get json() {
+      return JSON.stringify({
+        mcpUrl: mcpUrlHttps.value,
+        advancedSettings: {
+          clientId: "<MCP_OAUTH_CLIENT_ID from server env>",
+          clientSecret: "<MCP_OAUTH_CLIENT_SECRET from server env>",
+        },
+        note: "Set MCP_OAUTH_CLIENT_ID and MCP_OAUTH_CLIENT_SECRET on the server, then add this URL in gemini.google.com → Settings → Connected Apps → Custom apps for Spark.",
       }, null, 2);
     },
   },
@@ -1441,10 +1475,21 @@ function getCallbackUrl(provider: SsoProvider): string {
                   <p v-if="!mcpAuthRequired" class="desc" style="margin: 0 0 8px;">
                     No authorization required — connect your remote MCP client to the URL above with no <code>Authorization</code> header.
                   </p>
-                  <p v-else class="desc" style="margin: 0 0 8px;">
-                    <code>MCP_API_KEY</code> is set on the server, so remote connections must authenticate with
-                    <code>Authorization: Bearer &lt;key&gt;</code> using the value of the <code>MCP_API_KEY</code> environment variable.
-                  </p>
+                  <template v-else>
+                    <p v-if="mcpOAuthEnabled" class="desc" style="margin: 0 0 8px;">
+                      <span class="pill pill-green">OAuth enabled</span>
+                      Gemini Spark can connect via account linking. Cursor and other agents can still use
+                      <code>Authorization: Bearer &lt;MCP_API_KEY&gt;</code> when <code>MCP_API_KEY</code> is set.
+                    </p>
+                    <p v-else class="desc" style="margin: 0 0 8px;">
+                      <code>MCP_API_KEY</code> is set on the server, so remote connections must authenticate with
+                      <code>Authorization: Bearer &lt;key&gt;</code> using the value of the <code>MCP_API_KEY</code> environment variable.
+                    </p>
+                    <p v-if="mcpOAuthEnabled && mcpConfig?.oauthMetadataUrl" class="desc" style="margin: 0;">
+                      OAuth metadata:
+                      <code>{{ mcpConfig.oauthMetadataUrl }}</code>
+                    </p>
+                  </template>
                 </div>
               </div>
             </div>

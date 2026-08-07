@@ -1,24 +1,12 @@
 import type { H3Event } from "h3";
-import { getHeader, readBody, createError } from "h3";
+import { getHeader, readBody } from "h3";
 import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { createMcpServer, checkMcpApiKey, transports } from "~/server/utils/mcp-server";
+import { createMcpServer, transports } from "~/server/utils/mcp-server";
 import { InMemoryEventStore } from "~/server/utils/mcp-event-store";
-
-export function assertMcpAuth(event: H3Event) {
-  const authHeader = getHeader(event, "authorization");
-  const apiKeyHeader = getHeader(event, "x-api-key");
-
-  if (!checkMcpApiKey(authHeader, apiKeyHeader)) {
-    throw createError({
-      statusCode: 401,
-      statusMessage: "Unauthorized",
-      message: "Invalid or missing API key. Provide it via Authorization: Bearer <key> or X-API-Key header.",
-    });
-  }
-}
+import { assertMcpAuth } from "~/server/utils/mcp-auth";
 
 function sendJsonRpcError(res: ServerResponse, status: number, message: string) {
   if (res.headersSent) {

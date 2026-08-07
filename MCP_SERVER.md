@@ -17,11 +17,11 @@ The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open p
 - **CORS enabled** for cross-origin access
 - **Health check endpoint** at `/health`
 
-> **In-app endpoint auth:** The Nuxt-hosted endpoint at `/api/mcp/connect` (shown on the **Settings → MCP Connection** page) follows the `MCP_API_KEY` environment variable:
-> - If `MCP_API_KEY` is **not set**, the endpoint is **public** — remote MCP clients connect with just the URL and no `Authorization` header.
-> - If `MCP_API_KEY` **is set**, all connections must authenticate with `Authorization: Bearer <key>` or `X-API-Key`.
+> **In-app endpoint auth:** The Nuxt-hosted endpoint at `/api/mcp/connect` (shown on the **Settings → MCP Connection** page) supports:
+> - **Static API key** (`MCP_API_KEY`) — `Authorization: Bearer <key>` or `X-API-Key` for Cursor, OpenCode, etc.
+> - **OAuth 2.0 + PKCE** (`MCP_OAUTH_CLIENT_ID` + `MCP_OAUTH_CLIENT_SECRET`) — for Gemini Spark custom connected apps
 >
-> The standalone server (`npm run mcp:start`) has the same conditional `MCP_API_KEY` auth described below.
+> If neither is set, the endpoint is **public**.
 - **Docker support** for easy deployment
 
 ## Available Tools
@@ -95,9 +95,30 @@ MCP_PORT=41244
 
 # Required for production - API key to secure the endpoint
 MCP_API_KEY=your_secret_api_key_here
+
+# Optional - OAuth for Gemini Spark (authorization code + PKCE)
+MCP_OAUTH_CLIENT_ID=your-mcp-oauth-client-id
+MCP_OAUTH_CLIENT_SECRET=your-mcp-oauth-client-secret
+MCP_OAUTH_ISSUER=https://docs.yourdomain.com
+# MCP_OAUTH_REDIRECT_URIS=https://oauth-redirect.googleusercontent.com/r/your-callback
 ```
 
-> **Security Note:** If `MCP_API_KEY` is not set, the server will start but will print a warning. It will be accessible to anyone with the URL. Always set this in production.
+> **Security Note:** If `MCP_API_KEY` is not set and OAuth is not configured, the in-app endpoint is public. Always set at least one auth method in production.
+
+### Gemini Spark (OAuth)
+
+1. Generate credentials: `openssl rand -hex 16` and `openssl rand -hex 32`
+2. Add `MCP_OAUTH_CLIENT_ID`, `MCP_OAUTH_CLIENT_SECRET`, and `MCP_OAUTH_ISSUER` to your server `.env`
+3. In **gemini.google.com** → Settings → Connected Apps → Custom apps for Spark:
+   - MCP URL: `https://docs.yourdomain.com/api/mcp/connect`
+   - Advanced settings → paste Client ID and Client Secret from step 1
+4. Click **Next** and approve the consent screen
+
+Verify OAuth metadata:
+
+```bash
+curl https://docs.yourdomain.com/.well-known/oauth-protected-resource/api/mcp/connect
+```
 
 ### 3. Start the MCP Server
 
