@@ -21,6 +21,8 @@ $page.setTitle("Reset password");
 
 const isLoading = ref(false);
 const isSubmitted = ref(false);
+const disablePasswordAuth = ref(false);
+const isLoadingAuthOptions = ref(true);
 
 const schema = object({
   email: string()
@@ -48,12 +50,28 @@ const onSubmitForgot = handleSubmit(async (values) => {
 function goToLogin() {
   router.push("/login");
 }
+
+onMounted(async () => {
+  isLoadingAuthOptions.value = true;
+  try {
+    const response = await $fetch<{ disablePasswordAuth?: boolean }>("/api/auth/sso/providers");
+    disablePasswordAuth.value = Boolean(response.disablePasswordAuth);
+    if (disablePasswordAuth.value) {
+      await router.replace("/login");
+    }
+  } catch {
+    disablePasswordAuth.value = false;
+  } finally {
+    isLoadingAuthOptions.value = false;
+  }
+});
 </script>
 
 <template>
   <AppLayoutsAuth>
     <!-- Card -->
     <div
+      v-if="!isLoadingAuthOptions"
       class="bg-[var(--od-surface)] border border-[var(--od-border)] rounded-[var(--od-radius-lg)] p-6"
     >
       <template v-if="!isSubmitted">

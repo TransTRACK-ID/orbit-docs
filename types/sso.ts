@@ -56,6 +56,8 @@ export interface SsoConfig {
   providers: SsoProvider[];
   defaultProvider?: string;
   allowMultipleProviders: boolean;
+  /** When true and at least one SSO provider is enabled, hide email/password login and registration. */
+  disablePasswordAuth?: boolean;
 }
 
 // Provider metadata for UI

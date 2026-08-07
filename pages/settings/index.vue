@@ -80,6 +80,7 @@ const {
   saveSsoProvider,
   deleteSsoProvider,
   toggleSsoProvider,
+  togglePasswordAuth,
   buildEmptyProvider,
 } = useSsoSettings();
 
@@ -110,22 +111,48 @@ async function acceptMyInvitation() {
 }
 
 const activeTab = ref<"general" | "team" | "access" | "integrations" | "mcp" | "sso">("general");
+const isSettingsRoleLoaded = ref(false);
+
+type SettingsTabId = typeof activeTab.value;
+
+function isSettingsTabId(value: string): value is SettingsTabId {
+  return (
+    value === "general" ||
+    value === "team" ||
+    value === "access" ||
+    value === "integrations" ||
+    value === "sso" ||
+    value === "mcp"
+  );
+}
 
 const settingsTabs = computed(() => {
-  const tabs: Array<{ id: typeof activeTab.value; label: string }> = [
-    { id: "general", label: "General" },
-    { id: "team", label: "Team Members" },
-  ];
-  if (isSuperAdmin.value) {
-    tabs.push({ id: "access", label: "Access" });
+  if (!isSettingsRoleLoaded.value) {
+    return [];
   }
-  tabs.push(
-    { id: "integrations", label: "Integrations" },
-    { id: "sso", label: "SSO" },
-    { id: "mcp", label: "MCP Connection" }
-  );
-  return tabs;
+
+  if (isSuperAdmin.value) {
+    return [
+      { id: "general" as const, label: "General" },
+      { id: "team" as const, label: "Team Members" },
+      { id: "access" as const, label: "Access" },
+      { id: "integrations" as const, label: "Integrations" },
+      { id: "sso" as const, label: "SSO" },
+      { id: "mcp" as const, label: "MCP Connection" },
+    ];
+  }
+
+  return [{ id: "mcp" as const, label: "MCP Connection" }];
 });
+
+function ensureAllowedActiveTab() {
+  if (!isSettingsRoleLoaded.value) return;
+
+  const allowedTabs = settingsTabs.value.map((tab) => tab.id);
+  if (!allowedTabs.includes(activeTab.value)) {
+    activeTab.value = "mcp";
+  }
+}
 
 async function handleSaveAccessMatrix(matrix: RolePermissionMatrix) {
   try {
@@ -151,25 +178,51 @@ watch(activeTab, (tab) => {
 });
 
 watch(isSuperAdmin, (superAdmin) => {
+  ensureAllowedActiveTab();
   if (superAdmin && activeTab.value === "access") void ensureAccessTabLoaded();
 });
 
-onMounted(async () => {
+watch(settingsTabs, ensureAllowedActiveTab, { immediate: true });
+
+async function loadSuperAdminSettings() {
   fetchWorkspace();
   fetchTeam();
-  await fetchCurrentMember();
-  fetchPendingInvitations();
   fetchIntegrations();
   fetchNotifications();
   fetchDocGeneration();
   fetchApiKeys();
-  fetchMcpConfig();
   fetchSsoConfig();
+
+  if (can("integrations:read")) {
+    await fetchNotionSettings();
+  }
+}
+
+onMounted(async () => {
+  await fetchCurrentMember();
   await syncFromCurrentMember();
 
+  fetchMcpConfig();
+  fetchPendingInvitations();
+
+  if (isSuperAdmin.value) {
+    await loadSuperAdminSettings();
+  } else {
+    activeTab.value = "mcp";
+  }
+
   const tabQuery = route.query.tab;
-  if (tabQuery === "access" && isSuperAdmin.value) {
-    activeTab.value = "access";
+  if (typeof tabQuery === "string" && isSettingsTabId(tabQuery)) {
+    if (isSuperAdmin.value || tabQuery === "mcp") {
+      activeTab.value = tabQuery;
+    } else {
+      activeTab.value = "mcp";
+    }
+  }
+
+  ensureAllowedActiveTab();
+
+  if (activeTab.value === "access" && isSuperAdmin.value) {
     await ensureAccessTabLoaded();
   }
 
@@ -177,9 +230,8 @@ onMounted(async () => {
     toast.error("You do not have permission to open that page.");
   }
 
-  if (can("integrations:read")) {
-    fetchNotionSettings();
-  }
+  isSettingsRoleLoaded.value = true;
+  ensureAllowedActiveTab();
 });
 
 // ─── Notion integration ─────────────────────────────────────────
@@ -307,7 +359,13 @@ const isAdmin = computed(() => can("integrations:write"));
 watch(
   () => currentMember.value,
   (member) => {
-    if (member && can("integrations:read") && !notionSettings.value && !isLoadingNotion.value) {
+    if (
+      isSuperAdmin.value &&
+      member &&
+      can("integrations:read") &&
+      !notionSettings.value &&
+      !isLoadingNotion.value
+    ) {
       fetchNotionSettings();
     }
   }
@@ -791,6 +849,18 @@ async function submitSsoProvider() {
 
 async function doToggleProvider(provider: SsoProvider) {
   await toggleSsoProvider(provider.id, !provider.enabled);
+  if (ssoConfig.value && !hasEnabledSsoProviders.value) {
+    ssoConfig.value.disablePasswordAuth = false;
+  }
+}
+
+const hasEnabledSsoProviders = computed(() =>
+  (ssoConfig.value?.providers ?? []).some((provider) => provider.enabled)
+);
+
+async function togglePasswordAuthSetting() {
+  if (!ssoConfig.value || !hasEnabledSsoProviders.value) return;
+  await togglePasswordAuth(!ssoConfig.value.disablePasswordAuth);
 }
 
 const providerToDelete = ref<SsoProvider | null>(null);
@@ -802,6 +872,9 @@ function confirmDeleteProvider(provider: SsoProvider) {
 async function doDeleteProvider() {
   if (!providerToDelete.value) return;
   await deleteSsoProvider(providerToDelete.value.id);
+  if (ssoConfig.value && !hasEnabledSsoProviders.value) {
+    ssoConfig.value.disablePasswordAuth = false;
+  }
   providerToDelete.value = null;
 }
 
@@ -828,9 +901,25 @@ function getCallbackUrl(provider: SsoProvider): string {
 <template>
   <div class="settings-page">
     <!-- Settings layout -->
-    <div class="settings-layout">
+    <div v-if="!isSettingsRoleLoaded" class="settings-layout">
+      <div class="settings-panels">
+        <div class="setting-section">
+          <div class="skeleton-wrap">
+            <div class="skeleton-line w-1/3" />
+            <div class="skeleton-line w-full" />
+            <div class="skeleton-line w-2/3" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-else class="settings-layout">
       <!-- Settings navigation -->
-      <nav class="settings-nav" aria-label="Settings sections">
+      <nav
+        v-if="settingsTabs.length > 1"
+        class="settings-nav"
+        aria-label="Settings sections"
+      >
         <button
           v-for="tab in settingsTabs"
           :key="tab.id"
@@ -845,7 +934,7 @@ function getCallbackUrl(provider: SsoProvider): string {
       <!-- Settings panels -->
       <div class="settings-panels">
         <!-- General -->
-        <div v-show="activeTab === 'general'" class="settings-panel">
+        <div v-show="activeTab === 'general' && isSuperAdmin" class="settings-panel">
           <div class="setting-section">
             <h3>Workspace</h3>
             <p class="desc">Configure your workspace name and public-facing details.</p>
@@ -1049,7 +1138,7 @@ function getCallbackUrl(provider: SsoProvider): string {
         </div>
 
         <!-- Team -->
-        <div v-show="activeTab === 'team'" class="settings-panel">
+        <div v-show="activeTab === 'team' && isSuperAdmin" class="settings-panel">
           <div class="setting-section">
             <!-- Pending invitation banner for current user -->
             <div
@@ -1151,12 +1240,8 @@ function getCallbackUrl(provider: SsoProvider): string {
         </div>
 
         <!-- Access (super admin) -->
-        <div v-show="activeTab === 'access'" class="settings-panel">
-          <div v-if="!isSuperAdmin" class="setting-section">
-            <h3>Access</h3>
-            <p class="desc">Super admin access is required to manage role permissions.</p>
-          </div>
-          <div v-else class="setting-section">
+        <div v-show="activeTab === 'access' && isSuperAdmin" class="settings-panel">
+          <div class="setting-section">
             <SettingsAccessMatrix
               :matrix="accessMatrix"
               :groups="accessGroups"
@@ -1170,7 +1255,7 @@ function getCallbackUrl(provider: SsoProvider): string {
         </div>
 
         <!-- Integrations -->
-        <div v-show="activeTab === 'integrations'" class="settings-panel">
+        <div v-show="activeTab === 'integrations' && isSuperAdmin" class="settings-panel">
           <div v-if="!isAdmin" class="setting-section">
             <h3>Integrations</h3>
             <p class="desc">Admin access is required to configure integrations.</p>
@@ -1398,7 +1483,7 @@ function getCallbackUrl(provider: SsoProvider): string {
         </div>
 
         <!-- SSO Configuration -->
-        <div v-show="activeTab === 'sso'" class="settings-panel">
+        <div v-show="activeTab === 'sso' && isSuperAdmin" class="settings-panel">
           <div class="setting-section">
             <div class="row-between" style="margin-bottom: 20px;">
               <div>
@@ -1502,6 +1587,30 @@ function getCallbackUrl(provider: SsoProvider): string {
                   <span class="sso-type-dot" :style="{ background: providerTypeColor(pt) }"></span>
                   {{ providerTypeLabel(pt) }}
                 </button>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="isSuperAdmin && ssoConfig && hasEnabledSsoProviders"
+            class="setting-section"
+          >
+            <h3>Sign-in Options</h3>
+            <p class="desc">
+              Control whether users can sign in with email and password on the login and register pages.
+            </p>
+            <div class="toggle">
+              <button
+                class="toggle-switch"
+                :class="{ on: ssoConfig.disablePasswordAuth }"
+                aria-label="Disable email and password sign-in"
+                @click="togglePasswordAuthSetting"
+              />
+              <div>
+                <div class="toggle-label">Disable email and password sign-in</div>
+                <div class="toggle-desc">
+                  Hide email and password fields on login and register when SSO is available.
+                </div>
               </div>
             </div>
           </div>

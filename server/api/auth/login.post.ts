@@ -15,6 +15,7 @@ import {
 } from "~/server/utils/runtime-env";
 import { ensureTeamMember } from "~/server/utils/team-access";
 import { verifyPassword, signJwtToken, type SessionUser } from "~/server/utils/auth";
+import { ensurePasswordAuthAllowed, getSsoConfig } from "~/server/utils/sso-config";
 import { getDb } from "~/server/database";
 import { users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
@@ -93,8 +94,14 @@ export default defineEventHandler(async (event) => {
     const adminPassword = getAdminPassword();
     const jwtSecret = getJwtSecret();
     const AUTH_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 5; // 5 days
+    const isAdminLogin =
+      adminEmail && adminPassword && email === adminEmail && password === adminPassword;
 
-    if (adminEmail && adminPassword && email === adminEmail && password === adminPassword) {
+    if (!isAdminLogin) {
+      ensurePasswordAuthAllowed(await getSsoConfig());
+    }
+
+    if (isAdminLogin) {
       // Generate JWT for admin
       const token = jwtSecret
         ? signJwtToken({ sub: email, email, name: 'Admin' }, jwtSecret, AUTH_SESSION_MAX_AGE_SECONDS)

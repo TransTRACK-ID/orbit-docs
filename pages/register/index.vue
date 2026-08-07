@@ -5,6 +5,12 @@ import { useAuthStore } from "~/store/auth";
 import { usePageStore } from "~/store/page";
 import { toast } from "vue3-toastify";
 
+interface SsoProviderUI {
+  id: string;
+  type: string;
+  name: string;
+}
+
 definePageMeta({
   auth: {
     unauthenticatedOnly: true,
@@ -18,13 +24,47 @@ definePageMeta({
 
 const $auth = useAuthStore();
 const $page = usePageStore();
-const router = useRouter();
+const route = useRoute();
 
 $page.setTitle("Create your account");
 
 const isShowPw = ref(false);
 const isShowConfirmPw = ref(false);
 const serverError = ref("");
+const ssoProviders = ref<SsoProviderUI[]>([]);
+const disablePasswordAuth = ref(false);
+const isLoadingAuthOptions = ref(true);
+
+const showPasswordRegistration = computed(
+  () => !disablePasswordAuth.value || ssoProviders.value.length === 0
+);
+
+function getSsoLoginUrl(provider: SsoProviderUI) {
+  const redirect = (route.query.redirect as string) || "/";
+  return `/api/auth/sso/${provider.type}/login?providerId=${encodeURIComponent(provider.id)}&redirect=${encodeURIComponent(redirect)}`;
+}
+
+async function fetchAuthOptions() {
+  isLoadingAuthOptions.value = true;
+  try {
+    const response = await $fetch<{
+      providers: SsoProviderUI[];
+      disablePasswordAuth?: boolean;
+    }>("/api/auth/sso/providers");
+    ssoProviders.value = response.providers || [];
+    disablePasswordAuth.value = Boolean(response.disablePasswordAuth);
+  } catch (e) {
+    console.error("Failed to fetch auth options:", e);
+    ssoProviders.value = [];
+    disablePasswordAuth.value = false;
+  } finally {
+    isLoadingAuthOptions.value = false;
+  }
+}
+
+onMounted(() => {
+  void fetchAuthOptions();
+});
 
 const schema = object({
   name: string().required("Full name is required"),
@@ -107,10 +147,19 @@ const onSubmitRegister = handleSubmit(async (values) => {
         Create your account
       </h1>
       <p class="text-[14px] text-[var(--od-muted)] mb-6">
-        Join your team's documentation workspace.
+        <template v-if="showPasswordRegistration">
+          Join your team's documentation workspace.
+        </template>
+        <template v-else>
+          Registration is managed through your organization's SSO provider.
+        </template>
       </p>
 
-      <form @submit.prevent="onSubmitRegister" class="space-y-4">
+      <div v-if="isLoadingAuthOptions" class="text-[14px] text-[var(--od-muted)]">
+        Loading sign-in options…
+      </div>
+
+      <form v-else-if="showPasswordRegistration" @submit.prevent="onSubmitRegister" class="space-y-4">
         <!-- Server error -->
         <div
           v-if="serverError"
@@ -350,6 +399,17 @@ const onSubmitRegister = handleSubmit(async (values) => {
           <span v-else>Create account</span>
         </button>
       </form>
+
+      <div v-else-if="ssoProviders.length > 0" class="space-y-2">
+        <a
+          v-for="provider in ssoProviders"
+          :key="provider.id"
+          :href="getSsoLoginUrl(provider)"
+          class="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-[14px] font-medium text-[var(--od-fg)] bg-[var(--od-bg)] border border-[var(--od-border)] rounded-[var(--od-radius)] transition-colors hover:bg-[var(--od-surface-hover)] hover:border-[var(--od-border-hover)]"
+        >
+          <span class="capitalize">{{ provider.name }}</span>
+        </a>
+      </div>
 
       <!-- Footer -->
       <div

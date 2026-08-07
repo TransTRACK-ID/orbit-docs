@@ -125,6 +125,34 @@ export const useSsoSettings = () => {
     }
   }
 
+  async function togglePasswordAuth(disablePasswordAuth: boolean) {
+    try {
+      const data = await $fetch<{ success: boolean; config: SsoConfig }>(
+        "/api/settings/sso/password-auth",
+        {
+          method: "PATCH",
+          body: { disablePasswordAuth },
+        }
+      );
+      ssoConfig.value = data.config;
+      toast.success(
+        disablePasswordAuth
+          ? "Email and password sign-in disabled on login and register pages"
+          : "Email and password sign-in enabled on login and register pages"
+      );
+      return data.config;
+    } catch (e: any) {
+      const msg = e?.data?.message || e?.message || "Failed to update sign-in settings";
+      if (e?.statusCode === 401) {
+        toast.error("Session expired. Please sign in again.");
+        navigateTo("/login");
+      } else {
+        toast.error(msg);
+      }
+      throw e;
+    }
+  }
+
   function buildEmptyProvider(type: SsoProviderType): SsoProvider {
     const now = new Date().toISOString();
     const base = {
@@ -162,6 +190,7 @@ export const useSsoSettings = () => {
     deleteSsoProvider,
     toggleSsoProvider,
     setDefaultProvider,
+    togglePasswordAuth,
     buildEmptyProvider,
   };
 };

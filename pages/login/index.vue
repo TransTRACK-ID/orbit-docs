@@ -33,6 +33,9 @@ const isShowNotificationError = ref(false);
 const rememberMe = ref(false);
 const ssoProviders = ref<SsoProviderUI[]>([]);
 const isLoadingSso = ref(false);
+const disablePasswordAuth = ref(false);
+
+const showPasswordLogin = computed(() => !disablePasswordAuth.value || ssoProviders.value.length === 0);
 
 const schema = object({
   email: string()
@@ -61,11 +64,16 @@ const onSubmitLogin = handleSubmit(async (values) => {
 async function fetchSsoProviders() {
   isLoadingSso.value = true;
   try {
-    const response = await $fetch<{ providers: SsoProviderUI[] }>('/api/auth/sso/providers');
+    const response = await $fetch<{
+      providers: SsoProviderUI[];
+      disablePasswordAuth?: boolean;
+    }>("/api/auth/sso/providers");
     ssoProviders.value = response.providers || [];
+    disablePasswordAuth.value = Boolean(response.disablePasswordAuth);
   } catch (e) {
-    console.error('Failed to fetch SSO providers:', e);
+    console.error("Failed to fetch SSO providers:", e);
     ssoProviders.value = [];
+    disablePasswordAuth.value = false;
   } finally {
     isLoadingSso.value = false;
   }
@@ -92,10 +100,15 @@ onMounted(async () => {
         Sign in
       </h1>
       <p class="text-[14px] text-[var(--od-muted)] mb-6">
-        Enter your credentials to access your workspace.
+        <template v-if="showPasswordLogin">
+          Enter your credentials to access your workspace.
+        </template>
+        <template v-else>
+          Sign in with your organization's SSO provider.
+        </template>
       </p>
 
-      <form @submit.prevent="onSubmitLogin" class="space-y-4">
+      <form v-if="showPasswordLogin" @submit.prevent="onSubmitLogin" class="space-y-4">
         <!-- Global error -->
         <div
           v-if="isShowNotificationError"
@@ -235,13 +248,13 @@ onMounted(async () => {
       </form>
 
       <!-- SSO Providers (only when providers are configured) -->
-      <div v-if="ssoProviders.length > 0" class="mt-6">
-        <div class="relative flex items-center justify-center mb-4">
+      <div v-if="ssoProviders.length > 0" :class="showPasswordLogin ? 'mt-6' : ''">
+        <div v-if="showPasswordLogin" class="relative flex items-center justify-center mb-4">
           <div class="absolute inset-0 flex items-center">
             <div class="w-full border-t border-[var(--od-border)]"></div>
           </div>
           <span class="relative bg-[var(--od-surface)] px-3 text-[12px] text-[var(--od-muted)] uppercase tracking-wider">
-            Or continue with
+            {{ showPasswordLogin ? 'Or continue with' : 'Continue with' }}
           </span>
         </div>
 
@@ -259,6 +272,7 @@ onMounted(async () => {
 
       <!-- Footer -->
       <div
+        v-if="showPasswordLogin"
         class="mt-6 pt-4 border-t border-[var(--od-border)] text-center text-[13px] text-[var(--od-muted)]"
       >
         Don't have an account?

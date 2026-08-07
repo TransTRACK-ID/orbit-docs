@@ -12,6 +12,7 @@ import {
 } from "~/server/utils/runtime-env";
 import { ensureTeamMember } from "~/server/utils/team-access";
 import { hashPassword, type SessionUser } from "~/server/utils/auth";
+import { ensurePasswordAuthAllowed, getSsoConfig } from "~/server/utils/sso-config";
 import { getDb } from "~/server/database";
 import { users } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
@@ -90,6 +91,8 @@ export default defineEventHandler(async (event) => {
         message: "Password must be at least 8 characters",
       });
     }
+
+    ensurePasswordAuthAllowed(await getSsoConfig());
 
     const appKey = getAppKey();
 

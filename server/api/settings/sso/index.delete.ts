@@ -2,6 +2,7 @@ import type { SsoConfig } from '~/types/sso';
 import { getDb } from '~/server/database';
 import { settings } from '~/server/database/schema';
 import { eq } from 'drizzle-orm';
+import { hasEnabledSsoProviders } from '~/server/utils/sso-config';
 
 export default defineEventHandler(async (event) => {
   try {
@@ -54,6 +55,10 @@ export default defineEventHandler(async (event) => {
     // If this was the default provider, clear it
     if (ssoConfig.defaultProvider === providerId) {
       ssoConfig.defaultProvider = undefined;
+    }
+
+    if (!hasEnabledSsoProviders(ssoConfig)) {
+      ssoConfig.disablePasswordAuth = false;
     }
     
     // Save back

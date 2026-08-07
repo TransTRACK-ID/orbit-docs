@@ -2,6 +2,7 @@ import type { SsoConfig } from '~/types/sso';
 import { getDb } from '~/server/database';
 import { settings } from '~/server/database/schema';
 import { eq } from 'drizzle-orm';
+import { hasEnabledSsoProviders } from '~/server/utils/sso-config';
 
 export default defineEventHandler(async (event) => {
   try {
@@ -51,6 +52,10 @@ export default defineEventHandler(async (event) => {
     
     provider.enabled = enabled;
     provider.updatedAt = new Date().toISOString();
+
+    if (!hasEnabledSsoProviders(ssoConfig)) {
+      ssoConfig.disablePasswordAuth = false;
+    }
     
     // Save back
     const configJson = JSON.stringify(ssoConfig);
