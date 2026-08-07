@@ -33,7 +33,10 @@ export type PermissionKey =
   | "api_keys:read"
   | "api_keys:write"
   | "doc_generation:read"
-  | "doc_generation:run";
+  | "doc_generation:run"
+  | "adrs:read"
+  | "adrs:write"
+  | "adrs:publish";
 
 export interface PermissionDefinition {
   key: PermissionKey;

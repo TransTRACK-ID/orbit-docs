@@ -12,9 +12,19 @@ describe("permissions", () => {
     expect(roleHasPermission("viewer", "docs:write", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(false);
   });
 
-  it("gives admin workspace management permissions", () => {
-    expect(roleHasPermission("admin", "settings:write", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(true);
-    expect(roleHasPermission("admin", "team:manage", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(true);
+  it("gives admin ADR management permissions", () => {
+    expect(roleHasPermission("admin", "adrs:read", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(true);
+    expect(roleHasPermission("admin", "adrs:write", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(true);
+    expect(roleHasPermission("admin", "adrs:publish", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(true);
+  });
+
+  it("does not give product_manager ADR permissions by default", () => {
+    expect(roleHasPermission("product_manager", "adrs:read", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(
+      false
+    );
+    expect(roleHasPermission("product_manager", "adrs:write", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(
+      false
+    );
   });
 
   it("merges stored overrides without dropping defaults", () => {

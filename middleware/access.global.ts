@@ -18,6 +18,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     "/api-docs": "api_docs:read",
     "/feedback": "feedback:read",
     "/settings": "settings:read",
+    "/settings/adr": "adrs:read",
   };
 
   const matched = Object.entries(routePermissionMap).find(([prefix]) =>

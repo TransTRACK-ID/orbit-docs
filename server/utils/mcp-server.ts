@@ -29,6 +29,14 @@ import {
 } from "~/server/lib/mcp-doc-queries";
 import { buildDocPublicUrls, buildReleasePublicUrls } from "~/server/lib/mcp-public-urls";
 import type { DocListView } from "~/utils/doc-display";
+import {
+  formatAdrApiItem,
+  formatAdrConstraintSummary,
+  formatMcpAdrMetadata,
+  listAdrs,
+  listBindingAdrs,
+} from "~/server/lib/adr-queries";
+import type { AdrStatus } from "~/types/adr";
 
 const optionalString = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
@@ -78,6 +86,14 @@ export function createMcpServer() {
         "3. To read a doc's full content, call get_doc with the doc id.",
         "4. To find docs by keyword, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
         "5. To share links with users, use publicUrl/publicPath on docs and doc sites. Call list_doc_sites or get_doc_site for published site URLs (/s/{siteSlug}). Published docs return /p/{id} or /s/{siteSlug}/{pageSlug} when part of a published site.",
+        "",
+        "ARCHITECTURAL DECISION RECORDS (ADRs):",
+        "- ADRs are binding architectural constraints, not optional background.",
+        "- Before architecture, API design, or doc recommendations for an app, call list_architectural_decisions with bindingOnly=true (or get_binding_constraints).",
+        "- Published ADRs with adr_status \"accepted\" MUST be followed.",
+        "- If your answer conflicts with a binding ADR, follow the ADR and explain the conflict.",
+        "- Do not recommend alternatives that violate accepted ADRs unless the user explicitly asks to supersede or revisit the decision.",
+        "- ADRs with status \"proposed\", \"deprecated\", or \"superseded\" are informational only.",
         "",
         "Always ground answers in the data returned by these tools and cite doc titles / ids. Never say 'no documentation exists' without first calling list_app_documentation for the app.",
       ].join("\n"),
@@ -267,6 +283,46 @@ const GetDocSiteSchema = z
   })
   .refine((data) => !!(data.id || data.slug), {
     message: "Provide id or slug",
+  });
+
+const ListArchitecturalDecisionsSchema = z
+  .object({
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    adrStatus: z.enum(["proposed", "accepted", "deprecated", "superseded"]).optional(),
+    bindingOnly: z.coerce.boolean().optional().default(false),
+    scope: optionalString,
+    includeContent: z.coerce.boolean().optional().default(true),
+    limit: z.coerce.number().min(1).max(100).optional().default(50),
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    adrStatus: data.adrStatus as AdrStatus | undefined,
+    bindingOnly: data.bindingOnly,
+    scope: data.scope,
+    includeContent: data.includeContent,
+    limit: data.limit,
+  }))
+  .refine((data) => !!(data.appId || data.appName), {
+    message: "Provide appId or appName",
+  });
+
+const GetBindingConstraintsSchema = z
+  .object({
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    scope: optionalString,
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    scope: data.scope,
+  }))
+  .refine((data) => !!(data.appId || data.appName), {
+    message: "Provide appId or appName",
   });
 
 /* ------------------------------------------------------------------ */
@@ -519,6 +575,51 @@ const TOOLS: Tool[] = [
       properties: {
         id: { type: "string" },
         slug: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "list_architectural_decisions",
+    description:
+      "List Architectural Decision Records (ADRs) for an app. " +
+      "ADRs with adr_status 'accepted' and status 'published' are BINDING constraints — " +
+      "agents must follow them and must not recommend alternatives that violate them. " +
+      "Call this BEFORE making architecture, API, or design recommendations.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        appId: { type: "string" },
+        appName: { type: "string" },
+        adrStatus: {
+          type: "string",
+          enum: ["proposed", "accepted", "deprecated", "superseded"],
+          description: "Filter by ADR lifecycle status. Omit to return all.",
+        },
+        bindingOnly: {
+          type: "boolean",
+          default: false,
+          description: "When true, return only published + accepted ADRs.",
+        },
+        scope: {
+          type: "string",
+          description: "Filter ADRs applicable to this scope (e.g. 'backend', 'api').",
+        },
+        includeContent: { type: "boolean", default: true },
+        limit: { type: "number", default: 50 },
+      },
+    },
+  },
+  {
+    name: "get_binding_constraints",
+    description:
+      "Get a compact summary of all binding (published + accepted) ADRs for an app. " +
+      "Use at the start of any architecture or design task.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        appId: { type: "string" },
+        appName: { type: "string" },
+        scope: { type: "string" },
       },
     },
   },
@@ -1229,6 +1330,15 @@ mcpServer.setRequestHandler(
             .where(eq(schema.docVersions.docId, id))
             .orderBy(desc(schema.docVersions.createdAt));
 
+          const formattedDoc = formatMcpDoc(doc as McpDocRow, { includeContent: true });
+          const adr =
+            doc.docType === "adr"
+              ? formatMcpAdrMetadata({
+                  status: doc.status,
+                  frontmatter: doc.frontmatter as Record<string, unknown> | null,
+                })
+              : undefined;
+
           return {
             content: [
               {
@@ -1236,7 +1346,8 @@ mcpServer.setRequestHandler(
                 text: JSON.stringify(
                   {
                     data: {
-                      ...formatMcpDoc(doc as McpDocRow, { includeContent: true }),
+                      ...formattedDoc,
+                      ...(adr ? { adr } : {}),
                       appVersions: allVersions,
                       docVersions,
                     },
@@ -1827,6 +1938,117 @@ mcpServer.setRequestHandler(
                       pages,
                       publishedPageCount: pages.filter((page) => page.status === "published").length,
                     },
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        case "list_architectural_decisions": {
+          const params = ListArchitecturalDecisionsSchema.parse(args);
+          const app = await resolveAppRef(db, {
+            appId: params.appId,
+            appName: params.appName,
+          });
+
+          if (!app.found || !app.id) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      error: "App not found",
+                      appId: params.appId ?? null,
+                      appName: params.appName ?? null,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          const rows = await listAdrs(db, {
+            appId: app.id,
+            adrStatus: params.adrStatus,
+            bindingOnly: params.bindingOnly,
+            scope: params.scope,
+            includeContent: params.includeContent,
+            limit: params.limit,
+          });
+
+          const bindingRows = rows.filter(
+            (row) => row.status === "published" && row.frontmatter?.adr_status === "accepted"
+          );
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    app: { id: app.id, name: app.name },
+                    bindingCount: bindingRows.length,
+                    adrs: rows.map((row) =>
+                      formatAdrApiItem(row, { includeContent: params.includeContent })
+                    ),
+                    constraintSummary: formatAdrConstraintSummary(bindingRows),
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        case "get_binding_constraints": {
+          const params = GetBindingConstraintsSchema.parse(args);
+          const app = await resolveAppRef(db, {
+            appId: params.appId,
+            appName: params.appName,
+          });
+
+          if (!app.found || !app.id) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      error: "App not found",
+                      appId: params.appId ?? null,
+                      appName: params.appName ?? null,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          const rows = await listBindingAdrs(db, app.id, {
+            scope: params.scope,
+            includeContent: true,
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    app: { id: app.id, name: app.name },
+                    bindingCount: rows.length,
+                    constraintSummary: formatAdrConstraintSummary(rows),
                   },
                   null,
                   2,

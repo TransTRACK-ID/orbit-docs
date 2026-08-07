@@ -3,9 +3,13 @@ import { getDb } from "~/server/database";
 import { docs, apps, appVersions, docSites } from "~/server/database/schema";
 import { desc, eq, sql, and } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
+import { getAuthContext } from "~/server/utils/rbac";
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
+  const auth = await getAuthContext(event);
+  const canReadDraftAdrs =
+    auth.isSuperAdmin || auth.permissions.includes("adrs:read");
   const db = getDb();
   const query = getQuery(event);
   const search = typeof query.search === "string" ? query.search : "";
@@ -41,6 +45,7 @@ export default defineEventHandler(async (event) => {
       author: docs.author,
       source: docs.source,
       docType: docs.docType,
+      frontmatter: docs.frontmatter,
       externalId: docs.externalId,
       siteId: docs.siteId,
       slug: docs.slug,
@@ -58,7 +63,13 @@ export default defineEventHandler(async (event) => {
     .where(whereClause)
     .orderBy(desc(docs.updatedAt));
 
-  const data = rows.map((row) => ({
+  const data = rows
+    .filter((row) => {
+      if (row.docType !== "adr") return true;
+      if (row.status === "published") return true;
+      return canReadDraftAdrs;
+    })
+    .map((row) => ({
     id: row.id,
     appId: row.appId,
     title: row.title,
@@ -69,6 +80,7 @@ export default defineEventHandler(async (event) => {
     author: row.author,
     source: row.source,
     docType: row.docType,
+    frontmatter: row.frontmatter,
     externalId: row.externalId,
     siteId: row.siteId,
     slug: row.slug,

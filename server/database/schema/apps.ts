@@ -105,7 +105,9 @@ export const docs = pgTable("docs", {
   source: text("source", { enum: ["manual", "generated", "op_sync"] })
     .notNull()
     .default("manual"),
-  docType: text("doc_type", { enum: ["srs", "fsd", "sdd", "git_snapshot", "feature"] }),
+  docType: text("doc_type", {
+    enum: ["srs", "fsd", "sdd", "git_snapshot", "feature", "adr"],
+  }),
   externalId: text("external_id"),
   notionPageId: text("notion_page_id"),
   siteId: text("site_id").references(() => docSites.id, { onDelete: "set null" }),

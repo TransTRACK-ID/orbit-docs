@@ -10,7 +10,6 @@ import { parseFrontmatter } from "~/composables/useMarkdown";
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requirePermission(event, "docs:write");
   const db = getDb();
   const id = getRouterParam(event, "id");
 
@@ -21,9 +20,6 @@ export default defineEventHandler(async (event) => {
       message: "Doc ID is required",
     });
   }
-
-  const body = await readBody(event);
-  const { title, appId, content, status, versionId, tags, author, source, docType, versionAction, siteId, slug, sortOrder, frontmatter } = body || {};
 
   const existing = await db
     .select()
@@ -38,6 +34,30 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Not Found",
       message: "Doc not found",
     });
+  }
+
+  const body = await readBody(event);
+  const { title, appId, content, status, versionId, tags, author, source, docType, versionAction, siteId, slug, sortOrder, frontmatter } = body || {};
+
+  const isAdrDoc = existing.docType === "adr" || docType === "adr";
+  const { user, permissions } = await requirePermission(
+    event,
+    isAdrDoc ? "adrs:write" : "docs:write"
+  );
+
+  if (status !== undefined) {
+    const nextStatus = status;
+    const statusChanging = nextStatus !== existing.status;
+    const publishingOrArchiving =
+      statusChanging && (nextStatus === "published" || nextStatus === "archived");
+
+    if (isAdrDoc && publishingOrArchiving && !permissions.includes("adrs:publish")) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: "Forbidden",
+        message: "Missing permission: adrs:publish",
+      });
+    }
   }
 
   // Validate status if provided

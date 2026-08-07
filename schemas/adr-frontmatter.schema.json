@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orbit-docs.dev/schemas/adr-frontmatter.json",
+  "title": "ADR Frontmatter",
+  "type": "object",
+  "properties": {
+    "adr_status": {
+      "type": "string",
+      "enum": ["proposed", "accepted", "deprecated", "superseded"],
+      "default": "proposed"
+    },
+    "adr_number": { "type": "integer", "minimum": 1 },
+    "supersedes": { "type": "string", "format": "uuid" },
+    "scope": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "date": { "type": "string", "format": "date" },
+    "deciders": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

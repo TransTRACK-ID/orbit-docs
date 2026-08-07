@@ -1,4 +1,5 @@
 import type { DocItem } from "~/composables/useDocs";
+import { parseAdrFrontmatter } from "~/types/adr";
 
 export const DOC_TYPE_LABELS: Record<string, string> = {
   srs: "SRS",
@@ -7,6 +8,7 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   sdd_index: "SDD Index",
   git_snapshot: "Git Snapshot",
   feature: "Feature",
+  adr: "ADR",
 };
 
 /** Canonical titles written by product doc generation. */
@@ -28,12 +30,13 @@ const DOC_TYPE_SORT: Record<string, number> = {
   sdd_index: 4,
 };
 
-export type DocListView = "all" | "product" | "knowledge";
+export type DocListView = "all" | "product" | "knowledge" | "adrs";
 
 export const DOC_LIST_VIEW_OPTIONS: { id: DocListView; label: string }[] = [
   { id: "all", label: "All docs" },
   { id: "product", label: "Product docs" },
   { id: "knowledge", label: "Knowledge base" },
+  { id: "adrs", label: "Architectural decisions" },
 ];
 
 export const KNOWLEDGE_SECTION_COLLAPSE_THRESHOLD = 8;
@@ -45,6 +48,32 @@ export function docTypeLabel(docType: string | null | undefined): string {
 
 export function isFeatureCatalogDoc(doc: DocItem): boolean {
   return doc.source === "op_sync" && doc.docType === "feature";
+}
+
+export function isAdrDoc(doc: Pick<DocItem, "docType">): boolean {
+  return doc.docType === "adr";
+}
+
+export function isBindingAdr(
+  doc: Pick<DocItem, "docType" | "status"> & {
+    frontmatter?: Record<string, unknown> | null;
+  }
+): boolean {
+  if (!isAdrDoc(doc)) return false;
+  if (doc.status !== "published") return false;
+  const fm = parseAdrFrontmatter(doc.frontmatter ?? undefined);
+  return fm.adr_status === "accepted";
+}
+
+export function adrDisplayLabel(
+  doc: Pick<DocItem, "title" | "docType"> & {
+    frontmatter?: Record<string, unknown> | null;
+  }
+): string {
+  const fm = parseAdrFrontmatter(doc.frontmatter ?? undefined);
+  const num = fm.adr_number;
+  const prefix = num != null ? `ADR-${String(num).padStart(3, "0")}` : "ADR";
+  return `${prefix}: ${doc.title}`;
 }
 
 export function parseModuleFromTags(tags: string[] | null | undefined): string | null {
@@ -68,12 +97,25 @@ export function hasCanonicalGeneratedTitle(doc: DocItem): boolean {
   return title.toLowerCase().includes(slug);
 }
 
-export function docListPrimaryLabel(doc: DocItem): string {
+export function docListPrimaryLabel(
+  doc: DocItem & { frontmatter?: Record<string, unknown> | null }
+): string {
+  if (isAdrDoc(doc)) return adrDisplayLabel(doc);
   if (hasCanonicalGeneratedTitle(doc)) return docTypeLabel(doc.docType);
   return doc.title;
 }
 
-export function docListSecondaryLabel(doc: DocItem): string | null {
+export function docListSecondaryLabel(
+  doc: DocItem & { frontmatter?: Record<string, unknown> | null }
+): string | null {
+  if (isAdrDoc(doc)) {
+    if (isBindingAdr(doc)) return "Binding constraint";
+    const fm = parseAdrFrontmatter(doc.frontmatter ?? undefined);
+    if (fm.adr_status) {
+      return fm.adr_status.charAt(0).toUpperCase() + fm.adr_status.slice(1);
+    }
+    return "Architectural decision";
+  }
   if (isFeatureCatalogDoc(doc)) {
     const module = parseModuleFromTags(doc.tags);
     const id = doc.externalId?.trim();
@@ -87,8 +129,10 @@ export function docListSecondaryLabel(doc: DocItem): string | null {
   return null;
 }
 
+export type DocListSectionKind = "product" | "knowledge" | "architectural_decisions";
+
 export interface DocListSection {
-  kind: "product" | "knowledge";
+  kind: DocListSectionKind;
   label: string;
   docs: DocItem[];
 }
@@ -115,16 +159,65 @@ function compareKnowledgeDocs(a: DocItem, b: DocItem): number {
   return idA.localeCompare(idB);
 }
 
-export function filterDocsByView(docs: DocItem[], view: DocListView): DocItem[] {
-  if (view === "all") return docs;
-  if (view === "product") return docs.filter((doc) => !isFeatureCatalogDoc(doc));
-  return docs.filter((doc) => isFeatureCatalogDoc(doc));
+function compareAdrDocs(
+  a: DocItem & { frontmatter?: Record<string, unknown> | null },
+  b: DocItem & { frontmatter?: Record<string, unknown> | null }
+): number {
+  const numA = parseAdrFrontmatter(a.frontmatter ?? undefined).adr_number ?? 999_999;
+  const numB = parseAdrFrontmatter(b.frontmatter ?? undefined).adr_number ?? 999_999;
+  if (numA !== numB) return numA - numB;
+  return a.title.localeCompare(b.title);
 }
 
-function buildSections(items: DocItem[]): DocListSection[] {
-  const product = items.filter((doc) => !isFeatureCatalogDoc(doc));
+/** Published ADRs visible on `/docs`; draft ADRs stay in Settings unless user has `adrs:read`. */
+export function isPublishedAdrForDocsList(
+  doc: Pick<DocItem, "docType" | "status">
+): boolean {
+  return isAdrDoc(doc) && doc.status === "published";
+}
+
+export function filterDocsForDocsPage(
+  docs: Array<DocItem & { frontmatter?: Record<string, unknown> | null }>,
+  canReadDraftAdrs: boolean
+): DocItem[] {
+  return docs.filter((doc) => {
+    if (!isAdrDoc(doc)) return true;
+    if (doc.status === "published") return true;
+    return canReadDraftAdrs;
+  });
+}
+
+export function filterDocsByView(
+  docs: DocItem[],
+  view: DocListView,
+  options?: { includeDraftAdrs?: boolean }
+): DocItem[] {
+  const includeDraftAdrs = options?.includeDraftAdrs ?? false;
+  const visibleAdr = (doc: DocItem) =>
+    doc.status === "published" || includeDraftAdrs;
+
+  if (view === "all") {
+    return docs.filter((doc) => !isAdrDoc(doc) || visibleAdr(doc));
+  }
+  if (view === "product") {
+    return docs.filter((doc) => !isFeatureCatalogDoc(doc) && !isAdrDoc(doc));
+  }
+  if (view === "knowledge") return docs.filter((doc) => isFeatureCatalogDoc(doc));
+  return docs.filter((doc) => isAdrDoc(doc) && visibleAdr(doc));
+}
+
+function buildSections(
+  items: DocItem[],
+  options?: { includeDraftAdrs?: boolean }
+): DocListSection[] {
+  const includeDraftAdrs = options?.includeDraftAdrs ?? false;
+  const product = items.filter((doc) => !isFeatureCatalogDoc(doc) && !isAdrDoc(doc));
+  const adrs = items.filter(
+    (doc) => isAdrDoc(doc) && (doc.status === "published" || includeDraftAdrs)
+  );
   const knowledge = items.filter((doc) => isFeatureCatalogDoc(doc));
-  const showSubheaders = product.length > 0 && knowledge.length > 0;
+  const sectionFamilies = [product, adrs, knowledge].filter((section) => section.length > 0);
+  const showSubheaders = sectionFamilies.length > 1;
   const sections: DocListSection[] = [];
 
   if (product.length > 0) {
@@ -132,6 +225,14 @@ function buildSections(items: DocItem[]): DocListSection[] {
       kind: "product",
       label: showSubheaders ? "Product documentation" : "",
       docs: [...product].sort(compareProductDocs),
+    });
+  }
+
+  if (adrs.length > 0) {
+    sections.push({
+      kind: "architectural_decisions",
+      label: showSubheaders ? "Architectural decisions" : "",
+      docs: [...adrs].sort(compareAdrDocs),
     });
   }
 
@@ -146,8 +247,12 @@ function buildSections(items: DocItem[]): DocListSection[] {
   return sections;
 }
 
-export function groupDocsForList(docs: DocItem[], view: DocListView = "all"): DocListGroup[] {
-  const filtered = filterDocsByView(docs, view);
+export function groupDocsForList(
+  docs: DocItem[],
+  view: DocListView = "all",
+  options?: { includeDraftAdrs?: boolean }
+): DocListGroup[] {
+  const filtered = filterDocsByView(docs, view, options);
   const byApp = new Map<string, DocItem[]>();
 
   for (const doc of filtered) {
@@ -160,7 +265,7 @@ export function groupDocsForList(docs: DocItem[], view: DocListView = "all"): Do
 
   for (const [key, items] of byApp) {
     const label = items[0]?.app?.name || "Other";
-    const sections = buildSections(items);
+    const sections = buildSections(items, options);
     if (sections.length === 0) continue;
     groups.push({ key, label, sections });
   }

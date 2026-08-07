@@ -14,6 +14,7 @@ import {
   listFeatureDocIndex,
   searchFeatureDocs,
 } from "~/server/lib/feature-doc-search";
+import { formatAdrConstraintSummary, listBindingAdrs } from "~/server/lib/adr-queries";
 
 interface ChatMessage {
   role: string;
@@ -97,6 +98,10 @@ async function buildSystemPrompt(event: H3Event, options: ChatContextOptions): P
       .reverse()
       .find((m) => m.role === "user" && m.content.trim())?.content;
 
+    const constraints = await formatAdrConstraintSummary(
+      await listBindingAdrs(getDb(), options.appId)
+    );
+
     const query = lastUserMessage?.trim() || "";
     const matchedDocs = await searchFeatureDocs({
       appId: options.appId,
@@ -115,11 +120,18 @@ async function buildSystemPrompt(event: H3Event, options: ChatContextOptions): P
 
     if (matchedDocs.length > 0 || index.length > 0) {
       const context = buildMultiDocContext(matchedDocs, index);
-      return `You are a helpful product documentation assistant for this application. Use the feature documentation below to answer questions.
+      const adrBlock = constraints
+        ? `BINDING ARCHITECTURAL DECISIONS:\n${constraints}\n\n`
+        : "";
+      return `${adrBlock}You are a helpful product documentation assistant for this application. Use the feature documentation below to answer questions.
 
 ${context}
 
 If the context does not contain the answer, say so clearly and suggest which module or feature the user might mean.`;
+    }
+
+    if (constraints) {
+      return `BINDING ARCHITECTURAL DECISIONS:\n${constraints}\n\nYou are a helpful product documentation assistant for this application. Answer architecture and design questions in alignment with the binding ADRs above. If the context does not contain the answer, say so clearly.`;
     }
   }
 

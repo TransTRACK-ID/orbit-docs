@@ -9,11 +9,16 @@ import { parseFrontmatter } from "~/composables/useMarkdown";
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
 export default defineEventHandler(async (event) => {
-  const { user } = await requirePermission(event, "docs:write");
   const db = getDb();
   const body = await readBody(event);
 
   const { title, appId, content, status, versionId, tags, author, source, docType, siteId, slug, sortOrder } = body || {};
+
+  const docTypeValue = docType || null;
+  const { user } =
+    docTypeValue === "adr"
+      ? await requirePermission(event, "adrs:write")
+      : await requirePermission(event, "docs:write");
 
   if (!title || typeof title !== "string" || title.trim().length === 0) {
     throw createError({
@@ -40,7 +45,6 @@ export default defineEventHandler(async (event) => {
   }
 
   const docSource = source || "manual";
-  const docTypeValue = docType || null;
 
   // ── Upsert for generated docs: find existing by appId + docType + source ──
   if (docSource === "generated" && appId && docTypeValue) {

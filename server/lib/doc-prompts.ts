@@ -7,6 +7,32 @@
  *   must update it while preserving structure and unchanged sections.
  */
 
+export const ADR_UPDATE_ALIGNMENT_NOTE = `When updating this document, preserve alignment with binding ADRs listed above.
+If the codebase has drifted from an ADR, note the drift in a "Deviations" section
+rather than silently overwriting the ADR's intent.`;
+
+export function prependAdrConstraints(
+  prompt: string,
+  constraintSummary: string,
+  options?: { isUpdate?: boolean }
+): string {
+  if (!constraintSummary.trim()) return prompt;
+
+  let block = `BINDING ARCHITECTURAL DECISIONS (you MUST NOT contradict these):
+
+${constraintSummary}`;
+
+  if (options?.isUpdate) {
+    block += `\n\n${ADR_UPDATE_ALIGNMENT_NOTE}`;
+  }
+
+  return `${block}
+
+---
+
+${prompt}`;
+}
+
 // ── PRD (internal type = srs, UI = PRD) ─────────────────────────
 
 export function buildPrdCreatePrompt(

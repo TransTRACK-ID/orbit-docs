@@ -3,11 +3,13 @@ import {
   docListPrimaryLabel,
   docListSecondaryLabel,
   groupDocsForList,
+  isAdrDoc,
   isFeatureCatalogDoc,
   shouldCollapseKnowledgeSection,
   type DocListView,
 } from "~/utils/doc-display";
 import { buildDocPublicUrls } from "~/server/lib/mcp-public-urls";
+import { formatAdrApiItem } from "~/server/lib/adr-queries";
 
 export type McpDocCategory = "product" | "knowledge";
 
@@ -28,6 +30,7 @@ export interface McpDocRow {
   siteSlug?: string | null;
   siteStatus?: string | null;
   siteName?: string | null;
+  frontmatter?: Record<string, unknown> | null;
   createdAt: Date | string | null;
   updatedAt: Date | string | null;
   appName?: string | null;
@@ -123,40 +126,101 @@ export function buildGroupedAppDocumentation(
   options: AppDocGroupOptions = {},
 ) {
   const collapseKnowledge = options.collapseKnowledge ?? true;
-  const items = rows.map(toDocItem);
+  const adrRows = rows.filter((row) => isAdrDoc({ docType: row.docType ?? null }));
+  const nonAdrRows = rows.filter((row) => !isAdrDoc({ docType: row.docType ?? null }));
+  const items = nonAdrRows.map(toDocItem);
   const groups = groupDocsForList(items, view);
 
   return groups.map((group) => ({
     appId: group.key === "__unbound__" ? null : group.key,
     appName: group.label,
-    sections: group.sections.map((section) => {
-      // Only knowledge sections are ever collapsed, and only when the caller
-      // wants the /docs-style compact view. MCP callers pass
-      // collapseKnowledge:false so the model sees every feature.
-      const collapsed = collapseKnowledge && shouldCollapseKnowledgeSection(section);
-      return {
-        kind: section.kind,
-        label:
-          section.label ||
-          (section.kind === "product" ? "Product documentation" : "Knowledge base"),
-        docCount: section.docs.length,
-        collapsed,
-        summary: collapsed
-          ? `${section.docs.length} synced features. Use search_feature_docs to query the knowledge base.`
-          : null,
-        docs: collapsed
-          ? []
-          : section.docs.map((doc) =>
-              formatMcpDoc(
-                {
-                  ...doc,
-                  appName: doc.app?.name ?? null,
-                  version: doc.version?.version ?? null,
-                },
-                { includeContent: false },
+    sections: (() => {
+      const appAdrs = adrRows.filter(
+        (row) => (row.appId || "__unbound__") === group.key && row.status === "published"
+      );
+      const baseSections = group.sections.map((section) => {
+        const collapsed = collapseKnowledge && shouldCollapseKnowledgeSection(section);
+        return {
+          kind: section.kind,
+          label:
+            section.label ||
+            (section.kind === "product" ? "Product documentation" : "Knowledge base"),
+          docCount: section.docs.length,
+          collapsed,
+          summary: collapsed
+            ? `${section.docs.length} synced features. Use search_feature_docs to query the knowledge base.`
+            : null,
+          docs: collapsed
+            ? []
+            : section.docs.map((doc) =>
+                formatMcpDoc(
+                  {
+                    ...doc,
+                    appName: doc.app?.name ?? null,
+                    version: doc.version?.version ?? null,
+                  },
+                  { includeContent: false },
+                ),
               ),
-            ),
+        };
+      });
+
+      if (appAdrs.length === 0) {
+        return baseSections;
+      }
+
+      const adrSection = {
+        kind: "architectural_decisions" as const,
+        label: "Architectural decisions",
+        docCount: appAdrs.length,
+        collapsed: false,
+        summary: null as string | null,
+        docs: appAdrs.map((row) => {
+          const formatted = formatAdrApiItem(
+            {
+              ...row,
+              source: row.source ?? "manual",
+              author: row.author ?? null,
+              tags: row.tags ?? null,
+              externalId: row.externalId ?? null,
+              versionId: row.versionId ?? null,
+              appName: row.appName ?? null,
+              version: row.version ?? null,
+              frontmatter: row.frontmatter ?? {},
+            },
+            { includeContent: false }
+          );
+          return {
+            id: formatted.id,
+            title: formatted.title,
+            displayLabel: formatted.displayLabel,
+            adrStatus: formatted.adrStatus,
+            binding: formatted.binding,
+            scope: formatted.scope,
+            publicPath: formatted.publicPath,
+            publicUrl: formatted.publicUrl,
+            docType: "adr",
+            category: "product" as const,
+          };
+        }),
       };
-    }),
+
+      const productIndex = baseSections.findIndex((section) => section.kind === "product");
+      const knowledgeIndex = baseSections.findIndex((section) => section.kind === "knowledge");
+
+      if (productIndex >= 0 && knowledgeIndex >= 0) {
+        return [
+          ...baseSections.slice(0, knowledgeIndex),
+          adrSection,
+          ...baseSections.slice(knowledgeIndex),
+        ];
+      }
+
+      if (productIndex >= 0) {
+        return [...baseSections.slice(0, productIndex + 1), adrSection, ...baseSections.slice(productIndex + 1)];
+      }
+
+      return [adrSection, ...baseSections];
+    })(),
   }));
 }

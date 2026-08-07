@@ -7,6 +7,7 @@ import {
   docListPrimaryLabel,
   docListSecondaryLabel,
   groupDocsForList,
+  isAdrDoc,
   isFeatureCatalogDoc,
   sectionCollapseKey,
   shouldCollapseKnowledgeSection,
@@ -29,6 +30,8 @@ const { can, canAny } = usePermissions();
 const { docs, isLoading, search, fetchDocs, createDoc, deleteDoc, bulkUpdateStatus } = useDocs();
 
 const canWriteDocs = computed(() => can("docs:write"));
+const canWriteAdrs = computed(() => can("adrs:write"));
+const canReadDraftAdrs = computed(() => can("adrs:read"));
 const canPublishDocs = computed(() => can("docs:publish"));
 const canRunDocGeneration = computed(() => can("doc_generation:run"));
 const canManageDocSites = computed(() => can("doc_sites:write"));
@@ -220,6 +223,11 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+function canManageDoc(doc: DocItem): boolean {
+  if (isAdrDoc(doc)) return canWriteAdrs.value;
+  return canWriteDocs.value;
+}
+
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -240,7 +248,11 @@ const statusLabel: Record<string, string> = {
   archived: "Archived",
 };
 
-const docGroups = computed(() => groupDocsForList(docs.value, docView.value));
+const docGroups = computed(() =>
+  groupDocsForList(docs.value, docView.value, {
+    includeDraftAdrs: canReadDraftAdrs.value,
+  })
+);
 
 const visibleDocCount = computed(() =>
   docGroups.value.reduce(
@@ -255,14 +267,20 @@ const showAppHeaders = computed(
 
 const expandedSections = ref<Set<string>>(new Set());
 
-function isSectionCollapsed(groupKey: string, section: { kind: "product" | "knowledge"; docs: DocItem[] }) {
+function isSectionCollapsed(
+  groupKey: string,
+  section: { kind: "product" | "knowledge" | "architectural_decisions"; docs: DocItem[] }
+) {
   if (section.kind !== "knowledge" || !shouldCollapseKnowledgeSection(section)) {
     return false;
   }
   return !expandedSections.value.has(sectionCollapseKey(groupKey, section.kind));
 }
 
-function toggleSection(groupKey: string, sectionKind: "product" | "knowledge") {
+function toggleSection(
+  groupKey: string,
+  sectionKind: "product" | "knowledge" | "architectural_decisions"
+) {
   const key = sectionCollapseKey(groupKey, sectionKind);
   const next = new Set(expandedSections.value);
   if (next.has(key)) {
@@ -277,12 +295,16 @@ const pageSubtitle = computed(() => {
   if (activeSite.value) return `Pages in ${activeSite.value.name}`;
   if (docView.value === "product") return "SRS, FSD, SDD, and manual docs";
   if (docView.value === "knowledge") return "Synced feature catalog from spreadsheets";
+  if (docView.value === "adrs") return "Published architectural decisions (read-only reference)";
   return "All documentation across apps";
 });
 
 /** Bulk status is for Knowledge base (synced feature) docs only. */
 const bulkSelectionEnabled = computed(
-  () => docView.value !== "product" && canBulkUpdateDocs.value
+  () =>
+    docView.value !== "product" &&
+    docView.value !== "adrs" &&
+    canBulkUpdateDocs.value
 );
 
 const selectedDocIds = ref<Set<string>>(new Set());
@@ -536,6 +558,9 @@ const tableColspan = computed(() => (bulkSelectionEnabled.value ? 6 : 5));
                   <span v-if="section.kind === 'knowledge'" class="subsection-count">
                     {{ section.docs.length }} features
                   </span>
+                  <span v-else-if="section.kind === 'architectural_decisions'" class="subsection-count">
+                    {{ section.docs.length }} decisions
+                  </span>
                   <button
                     v-if="bulkSelectionEnabled && section.kind === 'knowledge' && !isSectionCollapsed(group.key, section)"
                     type="button"
@@ -625,9 +650,9 @@ const tableColspan = computed(() => (bulkSelectionEnabled.value ? 6 : 5));
                     <NuxtLink :to="`/docs/${doc.id}`" class="btn btn-primary btn-sm">
                       Open
                     </NuxtLink>
-                    <div v-if="canWriteDocs || doc.status === 'published'" class="actions-menu">
+                    <div v-if="canManageDoc(doc) || doc.status === 'published'" class="actions-menu">
                       <button
-                        v-if="canWriteDocs"
+                        v-if="canManageDoc(doc)"
                         type="button"
                         class="btn btn-ghost btn-sm actions-toggle"
                         aria-label="More actions"
@@ -646,7 +671,7 @@ const tableColspan = computed(() => (bulkSelectionEnabled.value ? 6 : 5));
                           Public View
                         </NuxtLink>
                         <button
-                          v-if="canWriteDocs"
+                          v-if="canManageDoc(doc)"
                           type="button"
                           class="actions-item actions-danger"
                           @click="doc._showActions = false; confirmDelete(doc)"

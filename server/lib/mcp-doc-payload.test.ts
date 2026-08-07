@@ -23,6 +23,7 @@ function makeRow(overrides: Partial<McpDocRow> & Pick<McpDocRow, "id" | "title">
     updatedAt: overrides.updatedAt ?? null,
     appName: overrides.appName ?? "Order Planning",
     version: overrides.version ?? null,
+    frontmatter: overrides.frontmatter ?? null,
   };
 }
 
@@ -158,5 +159,35 @@ describe("buildGroupedAppDocumentation", () => {
     expect(section.docs.map((doc) => doc.title)).toEqual(
       expect.arrayContaining(Array.from({ length: 10 }, (_, i) => `Feature ${i}`)),
     );
+  });
+
+  it("inserts published ADRs between product and knowledge sections", () => {
+    const rows = [
+      makeRow({ id: "srs", title: "SRS", source: "generated", docType: "srs" }),
+      makeRow({
+        id: "adr-1",
+        title: "Use OAuth 2.0 with PKCE",
+        docType: "adr",
+        status: "published",
+        frontmatter: { adr_number: 7, adr_status: "accepted" },
+      }),
+      makeRow({
+        id: "f-1",
+        title: "Feature 1",
+        source: "op_sync",
+        docType: "feature",
+      }),
+    ];
+
+    const groups = buildGroupedAppDocumentation(rows, "all", { collapseKnowledge: false });
+    const sections = groups[0].sections;
+
+    expect(sections.map((section) => section.kind)).toEqual([
+      "product",
+      "architectural_decisions",
+      "knowledge",
+    ]);
+    expect(sections[1].docs[0].displayLabel).toContain("ADR-007");
+    expect(sections[1].docs[0].binding).toBe(true);
   });
 });

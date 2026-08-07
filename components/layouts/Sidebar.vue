@@ -661,6 +661,7 @@ function toggleCollapse() {
 .sidebar--collapsed .sidebar-header {
   flex-direction: column;
   align-items: center;
+  align-self: center;
   gap: var(--sb-space-2);
   width: var(--sb-rail-track);
   padding: var(--sb-space-3) 0 var(--sb-space-2);
@@ -691,6 +692,7 @@ function toggleCollapse() {
   flex: 1;
   min-height: 0;
   width: var(--sb-rail-track);
+  align-self: center;
   padding: var(--sb-space-1) 0;
   display: flex;
   flex-direction: column;
@@ -735,6 +737,7 @@ function toggleCollapse() {
 
 .sidebar--collapsed .sidebar-footer {
   width: var(--sb-rail-track);
+  align-self: center;
   padding: var(--sb-space-2) 0 var(--sb-space-3);
   box-sizing: border-box;
   flex-shrink: 0;

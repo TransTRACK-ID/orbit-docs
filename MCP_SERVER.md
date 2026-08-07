@@ -8,7 +8,7 @@ The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open p
 
 ## Features
 
-- **14 powerful tools** covering all aspects of the Orbit Docs platform
+- **16 powerful tools** covering all aspects of the Orbit Docs platform
 - **Read-only access** to docs, releases, versions, apps, changelogs, activity, and owners
 - **Full-text search** within documentation content
 - **Deep relationships** - every tool returns connected data (e.g., versions include their releases, docs include their app and version)
@@ -44,6 +44,14 @@ The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open p
 | `list_docs` | List docs with filters (app, status, title search) and pagination |
 | `get_doc` | Get full doc with content, app, version, available versions, and doc version history |
 | `search_docs_content` | Full-text search inside doc content (not just titles) |
+| `list_architectural_decisions` | List ADRs for an app; `bindingOnly=true` returns published + accepted constraints |
+| `get_binding_constraints` | Compact summary of binding ADRs for prompt injection before design tasks |
+
+### Architectural Decisions (ADRs)
+| Tool | Description |
+|------|-------------|
+| `list_architectural_decisions` | List ADRs with optional `bindingOnly`, `adrStatus`, and `scope` filters |
+| `get_binding_constraints` | Returns `constraintSummary` for all binding (published + accepted) ADRs |
 
 ### Releases
 | Tool | Description |

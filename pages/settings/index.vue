@@ -129,7 +129,7 @@ async function acceptMyInvitation() {
   await acceptInvitation(myPendingInvitation.value.id);
 }
 
-const activeTab = ref<"profile" | "general" | "team" | "access" | "integrations" | "mcp" | "sso">("general");
+const activeTab = ref<"profile" | "general" | "team" | "access" | "integrations" | "mcp" | "sso" | "adr">("general");
 const isSettingsRoleLoaded = ref(false);
 
 type SettingsTabId = typeof activeTab.value;
@@ -142,7 +142,8 @@ function isSettingsTabId(value: string): value is SettingsTabId {
     value === "access" ||
     value === "integrations" ||
     value === "sso" ||
-    value === "mcp"
+    value === "mcp" ||
+    value === "adr"
   );
 }
 
@@ -151,24 +152,27 @@ const settingsTabs = computed(() => {
     return [];
   }
 
-  const profileTab = { id: "profile" as const, label: "Profile" };
+  const tabs: { id: SettingsTabId; label: string }[] = [
+    { id: "profile", label: "Profile" },
+  ];
 
   if (isSuperAdmin.value) {
-    return [
-      profileTab,
-      { id: "general" as const, label: "General" },
-      { id: "team" as const, label: "Team Members" },
-      { id: "access" as const, label: "Access" },
-      { id: "integrations" as const, label: "Integrations" },
-      { id: "sso" as const, label: "SSO" },
-      { id: "mcp" as const, label: "MCP Connection" },
-    ];
+    tabs.push(
+      { id: "general", label: "General" },
+      { id: "team", label: "Team Members" },
+      { id: "access", label: "Access" },
+      { id: "integrations", label: "Integrations" },
+      { id: "sso", label: "SSO" },
+    );
   }
 
-  return [
-    profileTab,
-    { id: "mcp" as const, label: "MCP Connection" },
-  ];
+  if (isSuperAdmin.value || role.value === "admin" || can("adrs:read")) {
+    tabs.push({ id: "adr", label: "Architectural Decisions" });
+  }
+
+  tabs.push({ id: "mcp", label: "MCP Connection" });
+
+  return tabs;
 });
 
 function ensureAllowedActiveTab() {
@@ -239,10 +243,11 @@ onMounted(async () => {
 
   const tabQuery = route.query.tab;
   if (typeof tabQuery === "string" && isSettingsTabId(tabQuery)) {
-    if (isSuperAdmin.value || tabQuery === "mcp" || tabQuery === "profile") {
+    const allowedTabs = settingsTabs.value.map((tab) => tab.id);
+    if (allowedTabs.includes(tabQuery)) {
       activeTab.value = tabQuery;
     } else {
-      activeTab.value = "profile";
+      activeTab.value = allowedTabs[0] ?? "profile";
     }
   }
 
@@ -1689,6 +1694,13 @@ function getCallbackUrl(provider: SsoProvider): string {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Architectural Decisions -->
+        <div v-show="activeTab === 'adr' && (isSuperAdmin || role === 'admin' || can('adrs:read'))" class="settings-panel">
+          <div class="setting-section">
+            <SettingsAdrManager />
           </div>
         </div>
 

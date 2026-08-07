@@ -41,9 +41,23 @@ import {
   buildSddCreatePrompt,
   buildSddUpdatePrompt,
   buildSddDiffUpdatePrompt,
+  prependAdrConstraints,
 } from "./doc-prompts";
+import { formatAdrConstraintSummary, listBindingAdrs } from "./adr-queries";
+import { checkAdrCompliance } from "./adr-verification";
 
 const execAsync = promisify(exec);
+
+async function withAdrConstraints(
+  appId: string,
+  prompt: string,
+  options?: { isUpdate?: boolean }
+): Promise<string> {
+  const constraints = await formatAdrConstraintSummary(
+    await listBindingAdrs(getDb(), appId, { includeContent: true })
+  );
+  return prependAdrConstraints(prompt, constraints, options);
+}
 
 async function ensureDir(dir: string): Promise<void> {
   if (!existsSync(dir)) {
@@ -330,7 +344,8 @@ async function persistProductDoc(
   appId: string,
   type: GenerationProductDocType,
   content: string,
-  actor: string
+  actor: string,
+  options?: { checkAdrCompliance?: boolean }
 ): Promise<void> {
   const trimmed = content.trim();
   if (!trimmed) return;
@@ -354,6 +369,21 @@ async function persistProductDoc(
 
   const appDocType = generationDocTypeToAppDocType(type);
   await saveAppProductDoc(appId, appDocType, trimmed, actor);
+
+  if (options?.checkAdrCompliance !== false) {
+    const violations = await checkAdrCompliance(appId, trimmed);
+    if (violations.length > 0) {
+      await db.insert(docGenerationDebugLogs).values({
+        jobId,
+        eventType: "adr_compliance_warning",
+        eventData: JSON.stringify({
+          docType: type,
+          violationCount: violations.length,
+          violations,
+        }),
+      });
+    }
+  }
 }
 
 async function updateJobCompletion(
@@ -858,9 +888,13 @@ export async function generateProductDocs(
       );
       if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
-      const srsPrompt = existingSrs
-        ? buildPrdUpdatePrompt(existingSrs, aggregateContext, baseDir)
-        : buildPrdCreatePrompt(srsTemplate, aggregateContext, baseDir);
+      const srsPrompt = await withAdrConstraints(
+        appId,
+        existingSrs
+          ? buildPrdUpdatePrompt(existingSrs, aggregateContext, baseDir)
+          : buildPrdCreatePrompt(srsTemplate, aggregateContext, baseDir),
+        { isUpdate: !!existingSrs }
+      );
 
       srsContent = await runAgentAnalyze(agent, jobId, srsPrompt, baseDir, {
         partialField: "srs",
@@ -883,19 +917,23 @@ export async function generateProductDocs(
       );
       if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
-      const fsdPrompt = existingFsd
-        ? buildFsdUpdatePrompt(
-            existingFsd,
-            aggregateContext,
-            baseDir,
-            srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)"
-          )
-        : buildFsdCreatePrompt(
-            fsdTemplate,
-            aggregateContext,
-            baseDir,
-            srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)"
-          );
+      const fsdPrompt = await withAdrConstraints(
+        appId,
+        existingFsd
+          ? buildFsdUpdatePrompt(
+              existingFsd,
+              aggregateContext,
+              baseDir,
+              srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)"
+            )
+          : buildFsdCreatePrompt(
+              fsdTemplate,
+              aggregateContext,
+              baseDir,
+              srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)"
+            ),
+        { isUpdate: !!existingFsd }
+      );
 
       fsdContent = await runAgentAnalyze(agent, jobId, fsdPrompt, baseDir, {
         partialField: "fsd",
@@ -936,7 +974,9 @@ Instructions:
       gitSnapshotContent = await runAgentAnalyze(agent, jobId, gitPrompt, baseDir, {
         partialField: "git_snapshot",
       });
-      await persistProductDoc(jobId, appId, "git_snapshot", gitSnapshotContent, actor);
+      await persistProductDoc(jobId, appId, "git_snapshot", gitSnapshotContent, actor, {
+        checkAdrCompliance: false,
+      });
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
     }
 
@@ -955,7 +995,9 @@ Instructions:
         })
         .join("\n");
 
-      const sddIndexPrompt = `You are an expert software architect documenting a multi-repository product under: ${baseDir}
+      const sddIndexPrompt = await withAdrConstraints(
+        appId,
+        `You are an expert software architect documenting a multi-repository product under: ${baseDir}
 
 Produce a product-wide SDD INDEX document (SDD.md) that links to per-repository SDD files.
 
@@ -976,7 +1018,9 @@ ${sddIndexTemplate}
 Instructions:
 - SDD.md is an index only — detailed design lives in per-repo SDD files.
 - Fill in all {{placeholders}} with actual content.
-- Output ONLY the completed markdown document.`;
+- Output ONLY the completed markdown document.`,
+        { isUpdate: false }
+      );
 
       sddIndexContent = await runAgentAnalyze(agent, jobId, sddIndexPrompt, baseDir, {
         partialField: "sdd_index",
@@ -1014,23 +1058,27 @@ Instructions:
             : "(FSD not generated)";
 
           const existingSdd = await readExistingDoc(dir, sddPath, "sdd");
-          const sddPrompt = existingSdd
-            ? buildSddUpdatePrompt(
-                existingSdd,
-                dir,
-                repo.name,
-                repoContext,
-                srsExcerpt,
-                fsdExcerpt
-              )
-            : buildSddCreatePrompt(
-                sddTemplate,
-                dir,
-                repo.name,
-                repoContext,
-                srsExcerpt,
-                fsdExcerpt
-              );
+          const sddPrompt = await withAdrConstraints(
+            appId,
+            existingSdd
+              ? buildSddUpdatePrompt(
+                  existingSdd,
+                  dir,
+                  repo.name,
+                  repoContext,
+                  srsExcerpt,
+                  fsdExcerpt
+                )
+              : buildSddCreatePrompt(
+                  sddTemplate,
+                  dir,
+                  repo.name,
+                  repoContext,
+                  srsExcerpt,
+                  fsdExcerpt
+                ),
+            { isUpdate: !!existingSdd }
+          );
 
           const sddContent = await runAgentAnalyze(agent, jobId, sddPrompt, dir, {
             partialField: "sdd",
@@ -1202,13 +1250,17 @@ export async function generateRepoSdd(
 
     let sddContent: string;
     if (existingSdd && changedFiles.length > 0) {
-      const prompt = buildSddDiffUpdatePrompt(
-        existingSdd,
-        repo.name,
-        dir,
-        newTag,
-        changedFiles,
-        patch
+      const prompt = await withAdrConstraints(
+        repoRow.appId,
+        buildSddDiffUpdatePrompt(
+          existingSdd,
+          repo.name,
+          dir,
+          newTag,
+          changedFiles,
+          patch
+        ),
+        { isUpdate: true }
       );
       sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
         partialField: "sdd",
@@ -1217,13 +1269,17 @@ export async function generateRepoSdd(
       const structure = await getRepoStructure(dir);
       const keyFiles = await getKeyFileNames(dir);
       const repoContext = `Repository: ${repo.name} (${repo.repoUrl})\nType: ${repoType}\nLocal path: ${dir}\nKey files: ${keyFiles.join(", ") || "none"}\nStructure:\n${structure}`;
-      const prompt = buildSddUpdatePrompt(
-        existingSdd,
-        dir,
-        repo.name,
-        repoContext,
-        "(not available for repo-scoped run)",
-        "(not available for repo-scoped run)"
+      const prompt = await withAdrConstraints(
+        repoRow.appId,
+        buildSddUpdatePrompt(
+          existingSdd,
+          dir,
+          repo.name,
+          repoContext,
+          "(not available for repo-scoped run)",
+          "(not available for repo-scoped run)"
+        ),
+        { isUpdate: true }
       );
       sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
         partialField: "sdd",
@@ -1232,13 +1288,17 @@ export async function generateRepoSdd(
       const structure = await getRepoStructure(dir);
       const keyFiles = await getKeyFileNames(dir);
       const repoContext = `Repository: ${repo.name} (${repo.repoUrl})\nType: ${repoType}\nLocal path: ${dir}\nKey files: ${keyFiles.join(", ") || "none"}\nStructure:\n${structure}`;
-      const prompt = buildSddCreatePrompt(
-        sddTemplate,
-        dir,
-        repo.name,
-        repoContext,
-        "(not available for repo-scoped run)",
-        "(not available for repo-scoped run)"
+      const prompt = await withAdrConstraints(
+        repoRow.appId,
+        buildSddCreatePrompt(
+          sddTemplate,
+          dir,
+          repo.name,
+          repoContext,
+          "(not available for repo-scoped run)",
+          "(not available for repo-scoped run)"
+        ),
+        { isUpdate: false }
       );
       sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
         partialField: "sdd",

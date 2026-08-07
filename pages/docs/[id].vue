@@ -3,6 +3,9 @@ import { usePageStore } from "~/store/page";
 import { renderMarkdown, extractHeadings, headingSlug } from "~/composables/useMarkdown";
 import type { DocVersion } from "~/composables/useDocs";
 import { slugify } from "~/utils/nav-client";
+import type { AdrStatus } from "~/types/adr";
+import { ADR_STATUSES } from "~/types/adr";
+import { isAdrDoc as checkIsAdrDoc } from "~/utils/doc-display";
 
 definePageMeta({
   auth: true,
@@ -15,6 +18,12 @@ const { can } = usePermissions();
 
 const canWriteDocs = computed(() => can("docs:write"));
 const canPublishDocs = computed(() => can("docs:publish"));
+const canWriteAdrs = computed(() => can("adrs:write"));
+const canPublishAdrs = computed(() => can("adrs:publish"));
+
+const isAdrDoc = computed(() => checkIsAdrDoc(currentDoc.value || { docType: null }));
+const canEditDoc = computed(() => (isAdrDoc.value ? canWriteAdrs.value : canWriteDocs.value));
+const canPublishDoc = computed(() => (isAdrDoc.value ? canPublishAdrs.value : canPublishDocs.value));
 
 const docId = computed(() => route.params.id as string);
 
@@ -82,6 +91,17 @@ const editorFmSidebarTitle = ref("");
 const editorFmIcon = ref("");
 const editorFmMode = ref<"default" | "wide" | "center">("default");
 const editorFmHidden = ref(false);
+const editorAdrStatus = ref<AdrStatus>("proposed");
+const editorAdrNumber = ref<number | null>(null);
+const editorAdrScope = ref<string[]>([]);
+const editorAdrSupersedes = ref("");
+const editorAdrDate = ref("");
+const editorAdrDeciders = ref<string[]>([]);
+const adrScopeInputVisible = ref(false);
+const adrScopeInputValue = ref("");
+const adrDeciderInputVisible = ref(false);
+const adrDeciderInputValue = ref("");
+const siblingAdrs = ref<Array<{ id: string; displayLabel: string }>>([]);
 const tagInputVisible = ref(false);
 const tagInputValue = ref("");
 const previewOnly = ref(false);
@@ -140,6 +160,16 @@ function buildFrontmatter(): Record<string, unknown> {
   if (editorFmIcon.value.trim()) fm.icon = editorFmIcon.value.trim();
   if (editorFmMode.value !== "default") fm.mode = editorFmMode.value;
   if (editorFmHidden.value) fm.hidden = true;
+
+  if (isAdrDoc.value) {
+    fm.adr_status = editorAdrStatus.value;
+    if (editorAdrNumber.value != null) fm.adr_number = editorAdrNumber.value;
+    if (editorAdrScope.value.length > 0) fm.scope = [...editorAdrScope.value];
+    if (editorAdrSupersedes.value) fm.supersedes = editorAdrSupersedes.value;
+    if (editorAdrDate.value) fm.date = editorAdrDate.value;
+    if (editorAdrDeciders.value.length > 0) fm.deciders = [...editorAdrDeciders.value];
+  }
+
   return fm;
 }
 
@@ -150,6 +180,105 @@ function loadFrontmatter(fm: Record<string, unknown> | null | undefined) {
   editorFmIcon.value = typeof fm?.icon === "string" ? fm.icon : "";
   editorFmMode.value = fm?.mode === "wide" || fm?.mode === "center" ? fm.mode : "default";
   editorFmHidden.value = fm?.hidden === true;
+
+  const adrStatus = fm?.adr_status;
+  editorAdrStatus.value =
+    typeof adrStatus === "string" && ADR_STATUSES.includes(adrStatus as AdrStatus)
+      ? (adrStatus as AdrStatus)
+      : "proposed";
+  editorAdrNumber.value = typeof fm?.adr_number === "number" ? fm.adr_number : null;
+  editorAdrScope.value = Array.isArray(fm?.scope)
+    ? fm.scope.filter((item): item is string => typeof item === "string")
+    : [];
+  editorAdrSupersedes.value = typeof fm?.supersedes === "string" ? fm.supersedes : "";
+  editorAdrDate.value = typeof fm?.date === "string" ? fm.date : "";
+  editorAdrDeciders.value = Array.isArray(fm?.deciders)
+    ? fm.deciders.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+const adrBindingPreview = computed(() => {
+  if (!isAdrDoc.value) return "";
+  if (editorStatus.value === "published" && editorAdrStatus.value === "accepted") {
+    return "This ADR is binding for agents.";
+  }
+  return "This ADR will be binding when published and accepted.";
+});
+
+async function fetchSiblingAdrs(appId: string | null | undefined) {
+  if (!appId) {
+    siblingAdrs.value = [];
+    return;
+  }
+  try {
+    const { data } = await $fetch<{ data: Array<{ id: string; displayLabel: string }> }>(
+      "/api/settings/adrs",
+      { query: { appId, includeContent: "false" } }
+    );
+    siblingAdrs.value = data.filter((adr) => adr.id !== docId.value);
+  } catch {
+    siblingAdrs.value = [];
+  }
+}
+
+function removeAdrScope(index: number) {
+  editorAdrScope.value.splice(index, 1);
+}
+
+function startAddAdrScope() {
+  adrScopeInputVisible.value = true;
+  nextTick(() => {
+    document.getElementById("adrScopeInputField")?.focus();
+  });
+}
+
+function finishAddAdrScope() {
+  const val = adrScopeInputValue.value.trim();
+  if (val && !editorAdrScope.value.includes(val)) {
+    editorAdrScope.value.push(val);
+  }
+  adrScopeInputValue.value = "";
+  adrScopeInputVisible.value = false;
+}
+
+function onAdrScopeKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    finishAddAdrScope();
+  } else if (e.key === "Escape") {
+    adrScopeInputValue.value = "";
+    adrScopeInputVisible.value = false;
+  }
+}
+
+function removeAdrDecider(index: number) {
+  editorAdrDeciders.value.splice(index, 1);
+}
+
+function startAddAdrDecider() {
+  adrDeciderInputVisible.value = true;
+  nextTick(() => {
+    document.getElementById("adrDeciderInputField")?.focus();
+  });
+}
+
+function finishAddAdrDecider() {
+  const val = adrDeciderInputValue.value.trim();
+  if (val && !editorAdrDeciders.value.includes(val)) {
+    editorAdrDeciders.value.push(val);
+  }
+  adrDeciderInputValue.value = "";
+  adrDeciderInputVisible.value = false;
+}
+
+function onAdrDeciderKeydown(e: KeyboardEvent) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    finishAddAdrDecider();
+  } else if (e.key === "Escape") {
+    adrDeciderInputValue.value = "";
+    adrDeciderInputVisible.value = false;
+  }
 }
 
 const autosaveEnabled = computed(
@@ -443,6 +572,13 @@ function resetEditorFields() {
   editorSiteId.value = "";
   editorSlug.value = "";
   prevTitleForSlug = "";
+  editorAdrStatus.value = "proposed";
+  editorAdrNumber.value = null;
+  editorAdrScope.value = [];
+  editorAdrSupersedes.value = "";
+  editorAdrDate.value = "";
+  editorAdrDeciders.value = [];
+  siblingAdrs.value = [];
   loadFrontmatter(null);
   activeHeading.value = "";
 }
@@ -475,6 +611,9 @@ async function loadDoc() {
         syncPageSlugFromTitle(undefined, true);
       }
       loadFrontmatter(currentDoc.value.frontmatter as Record<string, unknown> | null);
+      if (checkIsAdrDoc(currentDoc.value)) {
+        await fetchSiblingAdrs(currentDoc.value.appId);
+      }
     } else {
       docNotFound.value = true;
     }
@@ -567,8 +706,8 @@ const lastModified = computed(() => {
         <button
           type="button"
           class="btn btn-ghost back-btn"
-          title="Back to docs"
-          @click="router.push('/docs')"
+          :title="isAdrDoc ? 'Back to architectural decisions' : 'Back to docs'"
+          @click="router.push(isAdrDoc ? '/settings?tab=adr' : '/docs')"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 12H5M12 19l-7-7 7-7"/>
@@ -607,7 +746,7 @@ const lastModified = computed(() => {
           {{ previewOnly ? "Editor" : "Preview" }}
         </button>
         <button
-          v-if="canWriteDocs"
+          v-if="canEditDoc"
           type="button"
           class="btn btn-secondary"
           :disabled="isSaving || isPublishing"
@@ -617,7 +756,7 @@ const lastModified = computed(() => {
           <span v-else>{{ saveButtonLabel }}</span>
         </button>
         <button
-          v-if="canPublishDocs"
+          v-if="canPublishDoc"
           type="button"
           class="btn btn-primary"
           :disabled="isSaving || isPublishing"
@@ -707,7 +846,7 @@ const lastModified = computed(() => {
               <EditorJs
                 v-if="!previewOnly"
                 v-model="editorContent"
-                :read-only="!canWriteDocs"
+                :read-only="!canEditDoc"
                 placeholder="Write your technical documentation..."
                 style="height:100%;"
               />
@@ -817,6 +956,123 @@ const lastModified = computed(() => {
                       @keydown="onTagKeydown"
                     />
                   </div>
+                </div>
+              </div>
+
+              <div v-if="isAdrDoc" class="props-section">
+                <div class="props-section-label">Architectural decision</div>
+                <div class="adr-binding-preview" :class="{ binding: editorStatus === 'published' && editorAdrStatus === 'accepted' }">
+                  {{ adrBindingPreview }}
+                </div>
+                <div class="field">
+                  <label for="adrNumber">ADR number</label>
+                  <input
+                    id="adrNumber"
+                    :value="editorAdrNumber != null ? `ADR-${String(editorAdrNumber).padStart(3, '0')}` : '—'"
+                    class="input"
+                    readonly
+                  />
+                </div>
+                <div class="field">
+                  <label for="adrStatus">ADR status</label>
+                  <select id="adrStatus" v-model="editorAdrStatus" class="select" :disabled="!canEditDoc">
+                    <option v-for="status in ADR_STATUSES" :key="status" :value="status">
+                      {{ status.charAt(0).toUpperCase() + status.slice(1) }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="adrDate">Decision date</label>
+                  <input
+                    id="adrDate"
+                    v-model="editorAdrDate"
+                    type="date"
+                    class="input"
+                    :disabled="!canEditDoc"
+                  />
+                </div>
+                <div class="field">
+                  <label>Scope</label>
+                  <div class="tag-input" :class="{ 'tag-input-editing': adrScopeInputVisible }">
+                    <span v-for="(scope, idx) in editorAdrScope" :key="scope" class="tag">
+                      {{ scope }}
+                      <span
+                        v-if="canEditDoc"
+                        class="tag-remove"
+                        tabindex="0"
+                        @click="removeAdrScope(idx)"
+                        @keydown.enter.prevent="removeAdrScope(idx)"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </span>
+                    </span>
+                    <button
+                      v-if="canEditDoc && !adrScopeInputVisible"
+                      type="button"
+                      class="tag-add"
+                      @click="startAddAdrScope"
+                    >
+                      Add scope
+                    </button>
+                    <input
+                      v-else-if="canEditDoc"
+                      id="adrScopeInputField"
+                      v-model="adrScopeInputValue"
+                      type="text"
+                      placeholder="e.g. backend"
+                      @blur="finishAddAdrScope"
+                      @keydown="onAdrScopeKeydown"
+                    />
+                  </div>
+                  <span class="field-hint">Leave empty to apply to the entire app.</span>
+                </div>
+                <div class="field">
+                  <label>Deciders</label>
+                  <div class="tag-input" :class="{ 'tag-input-editing': adrDeciderInputVisible }">
+                    <span v-for="(decider, idx) in editorAdrDeciders" :key="decider" class="tag">
+                      {{ decider }}
+                      <span
+                        v-if="canEditDoc"
+                        class="tag-remove"
+                        tabindex="0"
+                        @click="removeAdrDecider(idx)"
+                        @keydown.enter.prevent="removeAdrDecider(idx)"
+                      >
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </span>
+                    </span>
+                    <button
+                      v-if="canEditDoc && !adrDeciderInputVisible"
+                      type="button"
+                      class="tag-add"
+                      @click="startAddAdrDecider"
+                    >
+                      Add decider
+                    </button>
+                    <input
+                      v-else-if="canEditDoc"
+                      id="adrDeciderInputField"
+                      v-model="adrDeciderInputValue"
+                      type="text"
+                      placeholder="Name or email"
+                      @blur="finishAddAdrDecider"
+                      @keydown="onAdrDeciderKeydown"
+                    />
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="adrSupersedes">Supersedes</label>
+                  <select
+                    id="adrSupersedes"
+                    v-model="editorAdrSupersedes"
+                    class="select"
+                    :disabled="!canEditDoc"
+                  >
+                    <option value="">None</option>
+                    <option v-for="adr in siblingAdrs" :key="adr.id" :value="adr.id">
+                      {{ adr.displayLabel }}
+                    </option>
+                  </select>
                 </div>
               </div>
 
@@ -1650,6 +1906,22 @@ const lastModified = computed(() => {
 .field-hint-muted {
   font-family: var(--font-body);
   font-style: italic;
+}
+
+.adr-binding-preview {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.adr-binding-preview.binding {
+  border-color: color-mix(in oklch, oklch(45% 0.12 145) 35%, var(--border));
+  color: oklch(45% 0.12 145);
+  background: oklch(97% 0.03 145);
 }
 
 .field-row {

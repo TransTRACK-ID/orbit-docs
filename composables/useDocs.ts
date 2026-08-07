@@ -19,6 +19,7 @@ export interface DocItem {
   siteId?: string | null;
   slug?: string | null;
   site?: { id: string; name: string; slug: string } | null;
+  frontmatter?: Record<string, unknown> | null;
 }
 
 export interface DocVersionOption {

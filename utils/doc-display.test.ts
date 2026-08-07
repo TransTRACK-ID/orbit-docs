@@ -13,7 +13,7 @@ function makeDoc(overrides: Partial<DocItem> & Pick<DocItem, "id" | "title">): D
     title: overrides.title,
     appId: overrides.appId ?? "app-1",
     content: null,
-    status: "draft",
+    status: overrides.status ?? "draft",
     versionId: null,
     tags: overrides.tags ?? null,
     author: null,
@@ -24,6 +24,7 @@ function makeDoc(overrides: Partial<DocItem> & Pick<DocItem, "id" | "title">): D
     updatedAt: null,
     app: overrides.app ?? { id: "app-1", name: "Order Planning" },
     version: null,
+    frontmatter: overrides.frontmatter ?? null,
   };
 }
 
@@ -60,6 +61,25 @@ describe("groupDocsForList", () => {
       externalId: "UNT-003",
     }),
   ];
+  const adrDocs = [
+    makeDoc({
+      id: "adr-1",
+      title: "OAuth PKCE",
+      source: "manual",
+      docType: "adr",
+      status: "published",
+      frontmatter: { adr_number: 7, adr_status: "accepted" },
+    } as Partial<DocItem> & Pick<DocItem, "id" | "title">),
+  ];
+
+  it("splits product, ADR, and knowledge docs into sections", () => {
+    const groups = groupDocsForList([...productDocs, ...adrDocs, ...knowledgeDocs]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].sections).toHaveLength(3);
+    expect(groups[0].sections[0].kind).toBe("product");
+    expect(groups[0].sections[1].kind).toBe("architectural_decisions");
+    expect(groups[0].sections[2].kind).toBe("knowledge");
+  });
 
   it("splits product and knowledge docs into sections", () => {
     const groups = groupDocsForList([...productDocs, ...knowledgeDocs]);
@@ -80,13 +100,18 @@ describe("groupDocsForList", () => {
   });
 
   it("filters by view", () => {
-    const productOnly = groupDocsForList([...productDocs, ...knowledgeDocs], "product");
+    const allDocs = [...productDocs, ...adrDocs, ...knowledgeDocs];
+    const productOnly = groupDocsForList(allDocs, "product");
     expect(productOnly[0].sections).toHaveLength(1);
     expect(productOnly[0].sections[0].kind).toBe("product");
 
-    const knowledgeOnly = groupDocsForList([...productDocs, ...knowledgeDocs], "knowledge");
+    const knowledgeOnly = groupDocsForList(allDocs, "knowledge");
     expect(knowledgeOnly[0].sections).toHaveLength(1);
     expect(knowledgeOnly[0].sections[0].kind).toBe("knowledge");
+
+    const adrOnly = groupDocsForList(allDocs, "adrs");
+    expect(adrOnly[0].sections).toHaveLength(1);
+    expect(adrOnly[0].sections[0].kind).toBe("architectural_decisions");
   });
 });
 

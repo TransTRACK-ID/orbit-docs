@@ -22,6 +22,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "db:seed": "tsx server/database/seed.ts",
+    "db:migrate-adrs": "tsx scripts/migrate-adr-docs.ts",
     "mcp:start": "tsx mcp-server.ts"
   },
   "dependencies": {

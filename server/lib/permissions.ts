@@ -134,6 +134,15 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "doc_generation:run", label: "Run", description: "Trigger doc generation" },
     ],
   },
+  {
+    id: "adrs",
+    label: "Architectural Decisions",
+    permissions: [
+      { key: "adrs:read", label: "View", description: "Open Settings → Architectural Decisions" },
+      { key: "adrs:write", label: "Manage", description: "Create and edit ADRs, change adr_status" },
+      { key: "adrs:publish", label: "Publish", description: "Publish or archive ADR documents" },
+    ],
+  },
 ];
 
 export const ALL_PERMISSION_KEYS: PermissionKey[] = PERMISSION_GROUPS.flatMap((group) =>
@@ -236,7 +245,10 @@ export const DEFAULT_ROLE_PERMISSION_MATRIX: RolePermissionMatrix = {
     "api_keys:read",
     "api_keys:write",
     "doc_generation:read",
-    "doc_generation:run"
+    "doc_generation:run",
+    "adrs:read",
+    "adrs:write",
+    "adrs:publish"
   ),
 };
 
@@ -284,4 +296,5 @@ export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/api-docs": "api_docs:read",
   "/feedback": "feedback:read",
   "/settings": "settings:read",
+  "/settings/adr": "adrs:read",
 };

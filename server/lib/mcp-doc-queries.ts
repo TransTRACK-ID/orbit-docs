@@ -22,6 +22,7 @@ export const mcpDocSelectFields = {
   externalId: schema.docs.externalId,
   siteId: schema.docs.siteId,
   slug: schema.docs.slug,
+  frontmatter: schema.docs.frontmatter,
   createdAt: schema.docs.createdAt,
   updatedAt: schema.docs.updatedAt,
   appName: schema.apps.name,
