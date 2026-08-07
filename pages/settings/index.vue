@@ -1240,18 +1240,16 @@ function getCallbackUrl(provider: SsoProvider): string {
         </div>
 
         <!-- Access (super admin) -->
-        <div v-show="activeTab === 'access' && isSuperAdmin" class="settings-panel">
-          <div class="setting-section">
-            <SettingsAccessMatrix
-              :matrix="accessMatrix"
-              :groups="accessGroups"
-              :roles="accessRoles"
-              :loading="isLoadingAccess"
-              :saving="isSavingAccess"
-              :editable="isSuperAdmin"
-              @save="handleSaveAccessMatrix"
-            />
-          </div>
+        <div v-show="activeTab === 'access' && isSuperAdmin" class="settings-panel settings-panel-access">
+          <SettingsAccessMatrix
+            :matrix="accessMatrix"
+            :groups="accessGroups"
+            :roles="accessRoles"
+            :loading="isLoadingAccess"
+            :saving="isSavingAccess"
+            :editable="isSuperAdmin"
+            @save="handleSaveAccessMatrix"
+          />
         </div>
 
         <!-- Integrations -->
@@ -1931,6 +1929,10 @@ function getCallbackUrl(provider: SsoProvider): string {
 .settings-panels {
   flex: 1;
   min-width: 0;
+}
+
+.settings-panel-access {
+  padding-top: 4px;
 }
 
 .setting-section {
