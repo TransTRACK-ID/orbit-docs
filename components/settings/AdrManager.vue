@@ -27,6 +27,7 @@ const isCreating = ref(false);
 const selectedAppId = ref("");
 const showCreateModal = ref(false);
 const createTitle = ref("");
+const createAppId = ref("");
 const supersedeTarget = ref<AdrListItem | null>(null);
 const replacementAdrId = ref("");
 const actionLoadingId = ref<string | null>(null);
@@ -180,10 +181,9 @@ async function fetchAdrs() {
 }
 
 function openCreateModal() {
-  if (!selectedAppId.value && apps.value.length === 1) {
-    selectedAppId.value = apps.value[0]!.id;
-  }
   createTitle.value = "";
+  createAppId.value =
+    selectedAppId.value || (apps.value.length === 1 ? apps.value[0]!.id : "");
   showCreateModal.value = true;
 }
 
@@ -192,8 +192,8 @@ async function createAdr() {
     toast.error("Title is required");
     return;
   }
-  if (!selectedAppId.value) {
-    toast.error("Select an app first");
+  if (!createAppId.value) {
+    toast.error("Select an app");
     return;
   }
 
@@ -203,7 +203,7 @@ async function createAdr() {
       method: "POST",
       body: {
         title: createTitle.value.trim(),
-        appId: selectedAppId.value,
+        appId: createAppId.value,
       },
     });
     showCreateModal.value = false;
@@ -326,7 +326,7 @@ onMounted(async () => {
         v-if="canWrite"
         type="button"
         class="btn btn-primary btn-sm"
-        :disabled="!selectedAppId"
+        :disabled="apps.length === 0"
         @click="openCreateModal"
       >
         + New ADR
@@ -398,13 +398,14 @@ onMounted(async () => {
         {{
           selectedAppId
             ? "Create the first ADR for this app to define binding constraints for agents."
-            : "Select an app and create your first ADR."
+            : "Create an ADR and choose which app it applies to."
         }}
       </p>
       <button
-        v-if="canWrite && selectedAppId"
+        v-if="canWrite"
         type="button"
         class="btn btn-primary btn-sm"
+        :disabled="apps.length === 0"
         @click="openCreateModal"
       >
         + New ADR
@@ -528,7 +529,7 @@ onMounted(async () => {
             </div>
             <div class="form-group">
               <label for="adrCreateApp">App</label>
-              <select id="adrCreateApp" v-model="selectedAppId" required>
+              <select id="adrCreateApp" v-model="createAppId" required>
                 <option value="" disabled>Select app</option>
                 <option v-for="app in apps" :key="app.id" :value="app.id">
                   {{ app.name }}
