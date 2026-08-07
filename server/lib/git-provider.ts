@@ -23,6 +23,44 @@ const GIT_ENV = {
 const execGit = (cmd: string, opts?: { timeout?: number; maxBuffer?: number }) =>
   execAsync(cmd, { env: GIT_ENV, ...opts });
 
+function gitCommandError(err: unknown): string {
+  if (err && typeof err === "object") {
+    const withStderr = err as { stderr?: string; message?: string };
+    const detail = withStderr.stderr?.trim() || withStderr.message?.trim();
+    if (detail) return detail;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
+/** Strip unsafe characters from branch/ref names passed to git commands. */
+export function sanitizeGitRef(ref: string): string {
+  return ref.trim().replace(/["\0]/g, "");
+}
+
+/**
+ * Normalize HTTPS/SSH clone URLs to end with `.git`.
+ * Avoids HTTP redirects on self-hosted GitLab that can strip embedded credentials.
+ */
+export function normalizeRepoUrl(repoUrl: string): string {
+  const trimmed = repoUrl.trim();
+  if (!trimmed) return trimmed;
+
+  const sshMatch = trimmed.match(/^(git@[^:]+:.+?)(?:\.git)?\/?$/);
+  if (sshMatch) {
+    return `${sshMatch[1]}.git`;
+  }
+
+  try {
+    const url = new URL(trimmed);
+    if (!url.pathname.endsWith(".git")) {
+      url.pathname = `${url.pathname.replace(/\/$/, "")}.git`;
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return trimmed.endsWith(".git") ? trimmed : `${trimmed.replace(/\/$/, "")}.git`;
+  }
+}
+
 export type GitProvider = "github" | "gitlab";
 
 /**
@@ -107,9 +145,10 @@ function authenticatedUrl(
   token?: string | null,
   hostUrl?: string | null
 ): string {
-  if (!token) return repoUrl;
+  const canonicalUrl = normalizeRepoUrl(repoUrl);
+  if (!token) return canonicalUrl;
 
-  const clean = repoUrl.trim();
+  const clean = canonicalUrl;
   let host = "";
   let path = "";
 
@@ -123,7 +162,7 @@ function authenticatedUrl(
       host = url.host;
       path = url.pathname.replace(/^\//, "");
     } catch {
-      return repoUrl;
+      return canonicalUrl;
     }
   }
 
@@ -146,25 +185,102 @@ function authenticatedUrl(
   return `https://${userInfo}@${host}/${path}`;
 }
 
+async function isShallowClone(cloneDir: string): Promise<boolean> {
+  try {
+    const { stdout } = await execGit(
+      `git -C "${cloneDir}" rev-parse --is-shallow-repository`,
+      { timeout: 10000 }
+    );
+    return stdout.trim() === "true";
+  } catch {
+    return false;
+  }
+}
+
+async function remoteTrackingBranchExists(
+  cloneDir: string,
+  branch: string
+): Promise<boolean> {
+  try {
+    await execGit(
+      `git -C "${cloneDir}" rev-parse --verify "refs/remotes/origin/${branch}"`,
+      { timeout: 10000 }
+    );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function branchCheckoutError(
+  branch: string,
+  cloneDir: string,
+  detail: string,
+  hasToken: boolean
+): Error {
+  const tokenHint = hasToken
+    ? "Verify the access token has read_repository scope and can read protected branches."
+    : "No access token is configured — private or protected branches may not be fetchable.";
+  return new Error(
+    `Failed to check out branch "${branch}" in ${cloneDir}. ${detail} ${tokenHint} ` +
+      `Also confirm the branch exists on the remote and the repository URL uses a .git suffix.`
+  );
+}
+
+export interface CheckoutBranchOptions {
+  hasToken?: boolean;
+}
+
 /** Check out a remote tracking branch (expects origin to exist). */
 export async function checkoutBranch(
   cloneDir: string,
-  branch: string
+  branch: string,
+  opts: CheckoutBranchOptions = {}
 ): Promise<void> {
-  const safeBranch = branch.replace(/"/g, "");
-  await execGit(
-    `git -C "${cloneDir}" fetch origin "${safeBranch}"`,
-    { timeout: 120000 }
-  );
+  const safeBranch = sanitizeGitRef(branch);
+  if (!safeBranch) {
+    throw new Error("Branch name is required for checkout");
+  }
+
+  const shallow = await isShallowClone(cloneDir);
+  const depthFlag = shallow ? "--depth 1 " : "";
+  const refspec = `refs/heads/${safeBranch}:refs/remotes/origin/${safeBranch}`;
+
+  try {
+    await execGit(
+      `git -C "${cloneDir}" fetch ${depthFlag}--no-tags origin "${refspec}"`,
+      { timeout: 120000 }
+    );
+  } catch (err) {
+    throw branchCheckoutError(
+      safeBranch,
+      cloneDir,
+      `Fetch from origin failed: ${gitCommandError(err)}`,
+      !!opts.hasToken
+    );
+  }
+
+  if (!(await remoteTrackingBranchExists(cloneDir, safeBranch))) {
+    throw branchCheckoutError(
+      safeBranch,
+      cloneDir,
+      "The branch was not found on origin after fetch.",
+      !!opts.hasToken
+    );
+  }
+
   try {
     await execGit(
       `git -C "${cloneDir}" checkout -B "${safeBranch}" "origin/${safeBranch}"`,
       { timeout: 60000 }
     );
-  } catch {
-    await execGit(`git -C "${cloneDir}" checkout "${safeBranch}"`, {
-      timeout: 60000,
-    });
+  } catch (err) {
+    throw branchCheckoutError(
+      safeBranch,
+      cloneDir,
+      `Checkout failed: ${gitCommandError(err)}`,
+      !!opts.hasToken
+    );
   }
 }
 
@@ -179,8 +295,10 @@ export async function cloneOrPull(
   branch?: string | null
 ): Promise<void> {
   const { existsSync } = await import("fs");
-  const authUrl = authenticatedUrl(repoUrl, provider, token, hostUrl);
-  const safeBranch = branch?.trim().replace(/"/g, "") || null;
+  const canonicalUrl = normalizeRepoUrl(repoUrl);
+  const authUrl = authenticatedUrl(canonicalUrl, provider, token, hostUrl);
+  const safeBranch = branch ? sanitizeGitRef(branch) || null : null;
+  const hasToken = !!token?.trim();
 
   if (existsSync(join(cloneDir, ".git"))) {
     // Make sure tags are fetched (needed for diffing between tags)
@@ -195,7 +313,7 @@ export async function cloneOrPull(
       { timeout: 180000 }
     );
     if (safeBranch) {
-      await checkoutBranch(cloneDir, safeBranch);
+      await checkoutBranch(cloneDir, safeBranch, { hasToken });
     }
     // Best-effort fast-forward of the current branch
     await execGit(`git -C "${cloneDir}" pull --ff-only`, {
@@ -207,9 +325,24 @@ export async function cloneOrPull(
     if (!fullHistory) cloneArgs.push("--depth", "1");
     if (safeBranch) cloneArgs.push("--branch", safeBranch);
     cloneArgs.push(`"${authUrl}"`, `"${cloneDir}"`);
-    const { stderr } = await execGit(cloneArgs.join(" "), {
-      timeout: 300000,
-    });
+    let stderr = "";
+    try {
+      const result = await execGit(cloneArgs.join(" "), {
+        timeout: 300000,
+      });
+      stderr = result.stderr || "";
+    } catch (err) {
+      const detail = gitCommandError(err);
+      if (safeBranch && /remote branch.*not found|could not find remote branch/i.test(detail)) {
+        throw branchCheckoutError(
+          safeBranch,
+          cloneDir,
+          `Clone failed because the branch does not exist or is not accessible on the remote: ${detail}`,
+          hasToken
+        );
+      }
+      throw new Error(`Git clone failed: ${detail}`);
+    }
     if (stderr && /fatal:/i.test(stderr)) {
       throw new Error(`Git clone failed: ${stderr}`);
     }
