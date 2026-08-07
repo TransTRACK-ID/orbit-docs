@@ -68,6 +68,29 @@ describe("formatMcpDoc", () => {
     );
     expect(withContent).toHaveProperty("content", "secret");
   });
+
+  it("adds public links for published docs in a published site", () => {
+    const formatted = formatMcpDoc(
+      makeRow({
+        id: "doc-1",
+        title: "Getting Started",
+        status: "published",
+        slug: "getting-started",
+        siteId: "site-1",
+        siteSlug: "api-docs",
+        siteStatus: "published",
+        siteName: "API Docs",
+      }),
+    );
+
+    expect(formatted.publicPath).toBe("/s/api-docs/getting-started");
+    expect(formatted.site).toEqual({
+      id: "site-1",
+      name: "API Docs",
+      slug: "api-docs",
+      status: "published",
+    });
+  });
 });
 
 describe("buildGroupedAppDocumentation", () => {

@@ -1,8 +1,87 @@
 import { and, count, eq, ilike, sql } from "drizzle-orm";
 import type { getDb } from "~/server/database";
 import * as schema from "~/server/database/schema";
+import {
+  buildDocSitePublicUrls,
+  getPublicAppBaseUrl,
+} from "~/server/lib/mcp-public-urls";
 
 type Db = ReturnType<typeof getDb>;
+
+export const mcpDocSelectFields = {
+  id: schema.docs.id,
+  appId: schema.docs.appId,
+  title: schema.docs.title,
+  content: schema.docs.content,
+  status: schema.docs.status,
+  versionId: schema.docs.versionId,
+  tags: schema.docs.tags,
+  author: schema.docs.author,
+  source: schema.docs.source,
+  docType: schema.docs.docType,
+  externalId: schema.docs.externalId,
+  siteId: schema.docs.siteId,
+  slug: schema.docs.slug,
+  createdAt: schema.docs.createdAt,
+  updatedAt: schema.docs.updatedAt,
+  appName: schema.apps.name,
+  version: schema.appVersions.version,
+  siteName: schema.docSites.name,
+  siteSlug: schema.docSites.slug,
+  siteStatus: schema.docSites.status,
+} as const;
+
+export function mcpDocSelectQuery(db: Db) {
+  return db
+    .select(mcpDocSelectFields)
+    .from(schema.docs)
+    .leftJoin(schema.apps, eq(schema.docs.appId, schema.apps.id))
+    .leftJoin(schema.appVersions, eq(schema.docs.versionId, schema.appVersions.id))
+    .leftJoin(schema.docSites, eq(schema.docs.siteId, schema.docSites.id));
+}
+
+export function formatMcpPublicContext() {
+  const baseUrl = getPublicAppBaseUrl();
+  return {
+    publicBaseUrl: baseUrl || null,
+    publicUrlNote: baseUrl
+      ? "publicUrl fields are absolute shareable links."
+      : "Set NUXT_PUBLIC_APP_URL to return absolute publicUrl values; publicPath is always available for published content.",
+  };
+}
+
+export function formatMcpDocSite(site: {
+  id: string;
+  appId: string | null;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: string;
+  navConfig?: unknown;
+  createdAt: Date | string | null;
+  updatedAt: Date | string | null;
+  appName?: string | null;
+}) {
+  const publicLinks = buildDocSitePublicUrls({
+    slug: site.slug,
+    status: site.status,
+  });
+
+  return {
+    id: site.id,
+    appId: site.appId,
+    name: site.name,
+    slug: site.slug,
+    description: site.description,
+    status: site.status,
+    navConfig: site.navConfig ?? null,
+    createdAt: site.createdAt,
+    updatedAt: site.updatedAt,
+    app: site.appName && site.appId ? { id: site.appId, name: site.appName } : null,
+    publicPath: publicLinks.path,
+    publicUrl: publicLinks.url,
+  };
+}
 
 export interface ResolvedAppRef {
   id: string | null;

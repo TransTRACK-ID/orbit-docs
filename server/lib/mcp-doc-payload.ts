@@ -7,6 +7,7 @@ import {
   shouldCollapseKnowledgeSection,
   type DocListView,
 } from "~/utils/doc-display";
+import { buildDocPublicUrls } from "~/server/lib/mcp-public-urls";
 
 export type McpDocCategory = "product" | "knowledge";
 
@@ -22,6 +23,11 @@ export interface McpDocRow {
   source?: string | null;
   docType?: string | null;
   externalId?: string | null;
+  siteId?: string | null;
+  slug?: string | null;
+  siteSlug?: string | null;
+  siteStatus?: string | null;
+  siteName?: string | null;
   createdAt: Date | string | null;
   updatedAt: Date | string | null;
   appName?: string | null;
@@ -55,6 +61,14 @@ export function getDocCategory(doc: Pick<DocItem, "source" | "docType">): McpDoc
 export function formatMcpDoc(row: McpDocRow, options?: { includeContent?: boolean }) {
   const item = toDocItem(row);
   const category = getDocCategory(item);
+  const publicLinks = buildDocPublicUrls({
+    id: item.id,
+    status: item.status,
+    slug: row.slug,
+    siteId: row.siteId,
+    siteSlug: row.siteSlug,
+    siteStatus: row.siteStatus,
+  });
   const base = {
     id: item.id,
     appId: item.appId,
@@ -66,9 +80,20 @@ export function formatMcpDoc(row: McpDocRow, options?: { includeContent?: boolea
     source: item.source,
     docType: item.docType,
     externalId: item.externalId,
+    slug: row.slug ?? null,
+    site: row.siteId
+      ? {
+          id: row.siteId,
+          name: row.siteName ?? null,
+          slug: row.siteSlug ?? null,
+          status: row.siteStatus ?? null,
+        }
+      : null,
     category,
     displayLabel: docListPrimaryLabel(item),
     displaySubtitle: docListSecondaryLabel(item),
+    publicPath: publicLinks.path,
+    publicUrl: publicLinks.url,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     app: item.app,

@@ -90,7 +90,7 @@ export async function listFeatureDocIndex(params: {
   module?: string;
   publishedOnly?: boolean;
   limit?: number;
-}): Promise<Array<{ id: string; title: string; externalId: string | null; module: string | null }>> {
+}): Promise<Array<{ id: string; title: string; externalId: string | null; module: string | null; status: string }>> {
   const db = getDb();
   const conditions = [
     eq(docs.appId, params.appId),
@@ -112,6 +112,7 @@ export async function listFeatureDocIndex(params: {
       title: docs.title,
       externalId: docs.externalId,
       tags: docs.tags,
+      status: docs.status,
     })
     .from(docs)
     .where(and(...conditions))
@@ -125,6 +126,7 @@ export async function listFeatureDocIndex(params: {
       title: row.title,
       externalId: row.externalId,
       module: moduleTagValue ? moduleTagValue.slice("module:".length) : null,
+      status: row.status,
     };
   });
 }

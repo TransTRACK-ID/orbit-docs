@@ -21,9 +21,13 @@ import {
   buildListDocsHint,
   countDocsForFilters,
   docCategoryCondition,
+  formatMcpDocSite,
+  formatMcpPublicContext,
   getAppDocCounts,
+  mcpDocSelectFields,
   resolveAppRef,
 } from "~/server/lib/mcp-doc-queries";
+import { buildDocPublicUrls, buildReleasePublicUrls } from "~/server/lib/mcp-public-urls";
 import type { DocListView } from "~/utils/doc-display";
 
 const optionalString = z.preprocess(
@@ -67,6 +71,7 @@ export function createMcpServer() {
         "2. Call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty.",
         "3. To read a doc's full content, call get_doc with the doc id.",
         "4. To find docs by keyword, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
+        "5. To share links with users, use publicUrl/publicPath on docs and doc sites. Call list_doc_sites or get_doc_site for published site URLs (/s/{siteSlug}). Published docs return /p/{id} or /s/{siteSlug}/{pageSlug} when part of a published site.",
         "",
         "Always ground answers in the data returned by these tools and cite doc titles / ids. Never say 'no documentation exists' without first calling list_app_documentation for the app.",
       ].join("\n"),
@@ -229,6 +234,34 @@ const GetOwnerSchema = z.object({
 });
 
 const GetStatsSchema = z.object({});
+
+const ListDocSitesSchema = z
+  .object({
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    status: z.enum(["draft", "published", "archived"]).optional(),
+    search: optionalString,
+    limit: z.coerce.number().min(1).max(100).optional().default(50),
+    offset: z.coerce.number().min(0).optional().default(0),
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    status: data.status,
+    search: data.search,
+    limit: data.limit,
+    offset: data.offset,
+  }));
+
+const GetDocSiteSchema = z
+  .object({
+    id: optionalString,
+    slug: optionalString,
+  })
+  .refine((data) => !!(data.id || data.slug), {
+    message: "Provide id or slug",
+  });
 
 /* ------------------------------------------------------------------ */
 /* 4. Tool Definitions (JSON Schema)                                   */
@@ -448,6 +481,34 @@ const TOOLS: Tool[] = [
     inputSchema: {
       type: "object",
       properties: {},
+    },
+  },
+  {
+    name: "list_doc_sites",
+    description:
+      "List doc sites (public documentation portals) with shareable public URLs. Filter by app, status, or name/slug search.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        appId: { type: "string" },
+        appName: { type: "string" },
+        status: { type: "string", enum: ["draft", "published", "archived"] },
+        search: { type: "string" },
+        limit: { type: "number" },
+        offset: { type: "number" },
+      },
+    },
+  },
+  {
+    name: "get_doc_site",
+    description:
+      "Get a doc site with its published pages and public URLs. Accepts site id or slug. Use this to give users links to /s/{siteSlug} and /s/{siteSlug}/{pageSlug}.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        slug: { type: "string" },
+      },
     },
   },
 ];
@@ -864,26 +925,11 @@ mcpServer.setRequestHandler(
           const docCounts = app.id ? await getAppDocCounts(db, app.id) : undefined;
 
           const rows = await db
-            .select({
-              id: schema.docs.id,
-              appId: schema.docs.appId,
-              title: schema.docs.title,
-              content: schema.docs.content,
-              status: schema.docs.status,
-              versionId: schema.docs.versionId,
-              tags: schema.docs.tags,
-              author: schema.docs.author,
-              source: schema.docs.source,
-              docType: schema.docs.docType,
-              externalId: schema.docs.externalId,
-              createdAt: schema.docs.createdAt,
-              updatedAt: schema.docs.updatedAt,
-              appName: schema.apps.name,
-              version: schema.appVersions.version,
-            })
+            .select(mcpDocSelectFields)
             .from(schema.docs)
             .leftJoin(schema.apps, eq(schema.docs.appId, schema.apps.id))
             .leftJoin(schema.appVersions, eq(schema.docs.versionId, schema.appVersions.id))
+            .leftJoin(schema.docSites, eq(schema.docs.siteId, schema.docSites.id))
             .where(whereClause)
             .orderBy(desc(schema.docs.updatedAt))
             .limit(params.limit)
@@ -959,26 +1005,11 @@ mcpServer.setRequestHandler(
           }
 
           const rows = await db
-            .select({
-              id: schema.docs.id,
-              appId: schema.docs.appId,
-              title: schema.docs.title,
-              content: schema.docs.content,
-              status: schema.docs.status,
-              versionId: schema.docs.versionId,
-              tags: schema.docs.tags,
-              author: schema.docs.author,
-              source: schema.docs.source,
-              docType: schema.docs.docType,
-              externalId: schema.docs.externalId,
-              createdAt: schema.docs.createdAt,
-              updatedAt: schema.docs.updatedAt,
-              appName: schema.apps.name,
-              version: schema.appVersions.version,
-            })
+            .select(mcpDocSelectFields)
             .from(schema.docs)
             .leftJoin(schema.apps, eq(schema.docs.appId, schema.apps.id))
             .leftJoin(schema.appVersions, eq(schema.docs.versionId, schema.appVersions.id))
+            .leftJoin(schema.docSites, eq(schema.docs.siteId, schema.docSites.id))
             .where(eq(schema.docs.appId, app.id))
             .orderBy(desc(schema.docs.updatedAt));
 
@@ -1046,15 +1077,23 @@ mcpServer.setRequestHandler(
             limit: params.limit,
           });
 
-          const data = results.map((row) => ({
-            id: row.id,
-            title: row.title,
-            externalId: row.externalId,
-            status: row.status,
-            tags: row.tags,
-            category: "knowledge" as const,
-            content: row.content,
-          }));
+          const data = results.map((row) => {
+            const publicLinks = buildDocPublicUrls({
+              id: row.id,
+              status: row.status,
+            });
+            return {
+              id: row.id,
+              title: row.title,
+              externalId: row.externalId,
+              status: row.status,
+              tags: row.tags,
+              category: "knowledge" as const,
+              content: row.content,
+              publicPath: publicLinks.path,
+              publicUrl: publicLinks.url,
+            };
+          });
 
           return {
             content: [
@@ -1101,10 +1140,21 @@ mcpServer.setRequestHandler(
             };
           }
 
-          const data = await listFeatureDocIndex({
+          const data = (await listFeatureDocIndex({
             appId: app.id,
             module: params.module,
             limit: params.limit,
+          })).map((row) => {
+            const publicLinks = buildDocPublicUrls({
+              id: row.id,
+              status: row.status,
+            });
+            return {
+              ...row,
+              category: "knowledge" as const,
+              publicPath: publicLinks.path,
+              publicUrl: publicLinks.url,
+            };
           });
           const documentation = await getAppDocCounts(db, app.id);
 
@@ -1133,26 +1183,11 @@ mcpServer.setRequestHandler(
           const id = params.id;
 
           const rows = await db
-            .select({
-              id: schema.docs.id,
-              appId: schema.docs.appId,
-              title: schema.docs.title,
-              content: schema.docs.content,
-              status: schema.docs.status,
-              versionId: schema.docs.versionId,
-              tags: schema.docs.tags,
-              author: schema.docs.author,
-              source: schema.docs.source,
-              docType: schema.docs.docType,
-              externalId: schema.docs.externalId,
-              createdAt: schema.docs.createdAt,
-              updatedAt: schema.docs.updatedAt,
-              appName: schema.apps.name,
-              version: schema.appVersions.version,
-            })
+            .select(mcpDocSelectFields)
             .from(schema.docs)
             .leftJoin(schema.apps, eq(schema.docs.appId, schema.apps.id))
             .leftJoin(schema.appVersions, eq(schema.docs.versionId, schema.appVersions.id))
+            .leftJoin(schema.docSites, eq(schema.docs.siteId, schema.docSites.id))
             .where(eq(schema.docs.id, id))
             .limit(1);
 
@@ -1253,26 +1288,11 @@ mcpServer.setRequestHandler(
           const total = await countDocsForFilters(db, conditions);
 
           const rows = await db
-            .select({
-              id: schema.docs.id,
-              appId: schema.docs.appId,
-              title: schema.docs.title,
-              content: schema.docs.content,
-              status: schema.docs.status,
-              versionId: schema.docs.versionId,
-              tags: schema.docs.tags,
-              author: schema.docs.author,
-              source: schema.docs.source,
-              docType: schema.docs.docType,
-              externalId: schema.docs.externalId,
-              createdAt: schema.docs.createdAt,
-              updatedAt: schema.docs.updatedAt,
-              appName: schema.apps.name,
-              version: schema.appVersions.version,
-            })
+            .select(mcpDocSelectFields)
             .from(schema.docs)
             .leftJoin(schema.apps, eq(schema.docs.appId, schema.apps.id))
             .leftJoin(schema.appVersions, eq(schema.docs.versionId, schema.appVersions.id))
+            .leftJoin(schema.docSites, eq(schema.docs.siteId, schema.docSites.id))
             .where(and(...conditions))
             .limit(limit);
 
@@ -1346,11 +1366,23 @@ mcpServer.setRequestHandler(
             .limit(limit)
             .offset(offset);
 
+          const data = rows.map((row) => {
+            const publicLinks = buildReleasePublicUrls({
+              id: row.id,
+              published: row.published,
+            });
+            return {
+              ...row,
+              publicPath: publicLinks.path,
+              publicUrl: publicLinks.url,
+            };
+          });
+
           return {
             content: [
               {
                 type: "text",
-                text: JSON.stringify({ data: rows, count: rows.length }, null, 2),
+                text: JSON.stringify({ data, count: data.length }, null, 2),
               },
             ],
           };
@@ -1410,6 +1442,11 @@ mcpServer.setRequestHandler(
             .where(eq(schema.changelogs.versionId, release.versionId))
             .orderBy(desc(schema.changelogs.createdAt));
 
+          const publicLinks = buildReleasePublicUrls({
+            id: release.id,
+            published: release.published,
+          });
+
           return {
             content: [
               {
@@ -1418,6 +1455,8 @@ mcpServer.setRequestHandler(
                   {
                     data: {
                       ...release,
+                      publicPath: publicLinks.path,
+                      publicUrl: publicLinks.url,
                       relatedChangelogs,
                     },
                   },
@@ -1601,6 +1640,185 @@ mcpServer.setRequestHandler(
                   },
                   null,
                   2
+                ),
+              },
+            ],
+          };
+        }
+
+        case "list_doc_sites": {
+          const params = ListDocSitesSchema.parse(args);
+          const app = await resolveAppRef(db, {
+            appId: params.appId,
+            appName: params.appName,
+          });
+
+          if ((params.appId || params.appName) && !app.found) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      error: "App not found",
+                      appId: params.appId ?? null,
+                      appName: params.appName ?? null,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          const conditions: any[] = [];
+          if (app.id) {
+            conditions.push(eq(schema.docSites.appId, app.id));
+          }
+          if (params.status) {
+            conditions.push(eq(schema.docSites.status, params.status));
+          }
+          if (params.search) {
+            conditions.push(
+              sql`(${schema.docSites.name} ILIKE ${"%" + params.search + "%"} OR ${schema.docSites.slug} ILIKE ${"%" + params.search + "%"})`,
+            );
+          }
+
+          const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+          const rows = await db
+            .select({
+              id: schema.docSites.id,
+              appId: schema.docSites.appId,
+              name: schema.docSites.name,
+              slug: schema.docSites.slug,
+              description: schema.docSites.description,
+              status: schema.docSites.status,
+              navConfig: schema.docSites.navConfig,
+              createdAt: schema.docSites.createdAt,
+              updatedAt: schema.docSites.updatedAt,
+              appName: schema.apps.name,
+            })
+            .from(schema.docSites)
+            .leftJoin(schema.apps, eq(schema.docSites.appId, schema.apps.id))
+            .where(whereClause)
+            .orderBy(desc(schema.docSites.updatedAt))
+            .limit(params.limit)
+            .offset(params.offset);
+
+          const data = rows.map((row) => formatMcpDocSite(row));
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    ...formatMcpPublicContext(),
+                    app: app.found ? { id: app.id, name: app.name } : null,
+                    count: data.length,
+                    data,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        case "get_doc_site": {
+          const params = GetDocSiteSchema.parse(args);
+
+          const siteRows = await db
+            .select({
+              id: schema.docSites.id,
+              appId: schema.docSites.appId,
+              name: schema.docSites.name,
+              slug: schema.docSites.slug,
+              description: schema.docSites.description,
+              status: schema.docSites.status,
+              navConfig: schema.docSites.navConfig,
+              createdAt: schema.docSites.createdAt,
+              updatedAt: schema.docSites.updatedAt,
+              appName: schema.apps.name,
+            })
+            .from(schema.docSites)
+            .leftJoin(schema.apps, eq(schema.docSites.appId, schema.apps.id))
+            .where(
+              params.id
+                ? eq(schema.docSites.id, params.id)
+                : eq(schema.docSites.slug, params.slug!),
+            )
+            .limit(1);
+
+          const site = siteRows[0];
+          if (!site) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({ error: "Doc site not found" }, null, 2),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          const pageRows = await db
+            .select({
+              id: schema.docs.id,
+              title: schema.docs.title,
+              slug: schema.docs.slug,
+              status: schema.docs.status,
+              sortOrder: schema.docs.sortOrder,
+              updatedAt: schema.docs.updatedAt,
+              siteSlug: schema.docSites.slug,
+              siteStatus: schema.docSites.status,
+            })
+            .from(schema.docs)
+            .innerJoin(schema.docSites, eq(schema.docs.siteId, schema.docSites.id))
+            .where(eq(schema.docs.siteId, site.id))
+            .orderBy(schema.docs.sortOrder, desc(schema.docs.updatedAt));
+
+          const pages = pageRows.map((page) => {
+            const publicLinks = buildDocPublicUrls({
+              id: page.id,
+              status: page.status,
+              slug: page.slug,
+              siteId: site.id,
+              siteSlug: page.siteSlug,
+              siteStatus: page.siteStatus,
+            });
+            return {
+              id: page.id,
+              title: page.title,
+              slug: page.slug,
+              status: page.status,
+              sortOrder: page.sortOrder,
+              updatedAt: page.updatedAt,
+              publicPath: publicLinks.path,
+              publicUrl: publicLinks.url,
+            };
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    ...formatMcpPublicContext(),
+                    data: {
+                      ...formatMcpDocSite(site),
+                      pages,
+                      publishedPageCount: pages.filter((page) => page.status === "published").length,
+                    },
+                  },
+                  null,
+                  2,
                 ),
               },
             ],
