@@ -9,3 +9,4 @@ export * from "./doc-generation-collaboration";
 export * from "./feedback";
 export * from "./internal-feedback";
 export * from "./notion-sync";
+export * from "./permissions";

@@ -3,10 +3,13 @@ import { getDb } from "~/server/database";
 import { teamMembers } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
-import { requireTeamAccess, canInviteRole, formatLastActive, type TeamRole } from "~/server/utils/team-access";
+import { requireTeamAccess, formatLastActive, type TeamRole } from "~/server/utils/team-access";
+import { requireSuperAdmin } from "~/server/utils/rbac";
+
+const VALID_TEAM_ROLES: TeamRole[] = ["admin", "product_manager", "tech_writer", "viewer"];
 
 export default defineEventHandler(async (event) => {
-  await requireTeamAccess(event, "product_manager");
+  await requireAuth(event);
   const db = getDb();
   const id = getRouterParam(event, "id");
 
@@ -36,17 +39,18 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event);
   const { name, email, initials, role, status, lastActive } = body || {};
 
-  // Role-based restriction: check if the updater can assign the target role
-  if (role !== undefined) {
-    const currentMember = await requireTeamAccess(event, "product_manager");
-    const targetRole: TeamRole = role || "viewer";
-    if (!canInviteRole(currentMember.role as TeamRole, targetRole)) {
+  // Role changes are super-admin only
+  if (role !== undefined && role !== existing.role) {
+    if (!VALID_TEAM_ROLES.includes(role as TeamRole)) {
       throw createError({
-        statusCode: 403,
-        statusMessage: "Forbidden",
-        message: `You do not have permission to assign the ${targetRole} role.`,
+        statusCode: 400,
+        statusMessage: "Bad Request",
+        message: "Invalid team role.",
       });
     }
+    await requireSuperAdmin(event);
+  } else {
+    await requireTeamAccess(event, "product_manager");
   }
 
   const updateData: Partial<typeof teamMembers.$inferInsert> = {

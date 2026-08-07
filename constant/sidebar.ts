@@ -19,6 +19,7 @@ export const sidebarMenu: ISidebar[] = [
     route: "/apps",
     icon: markRaw(IconsApps),
     active: false,
+    permission: "apps:read",
   },
   {
     id: "menu__versions",
@@ -26,6 +27,7 @@ export const sidebarMenu: ISidebar[] = [
     route: "/versions",
     icon: markRaw(IconsVersions),
     active: false,
+    permission: "versions:read",
   },
   {
     id: "menu__releases",
@@ -33,6 +35,7 @@ export const sidebarMenu: ISidebar[] = [
     route: "/releases",
     icon: markRaw(IconsReleases),
     active: false,
+    permission: "releases:read",
   },
   {
     id: "menu__changelogs",
@@ -40,6 +43,7 @@ export const sidebarMenu: ISidebar[] = [
     route: "/changelogs",
     icon: markRaw(IconsChangelogs),
     active: false,
+    permission: "changelogs:read",
   },
   {
     id: "menu__docs",
@@ -47,6 +51,7 @@ export const sidebarMenu: ISidebar[] = [
     route: "/docs",
     icon: markRaw(IconsDocEditor),
     active: false,
+    permission: "docs:read",
   },
 
   {
@@ -55,6 +60,7 @@ export const sidebarMenu: ISidebar[] = [
     route: "/sites",
     icon: markRaw(IconsDocSites),
     active: false,
+    permission: "doc_sites:read",
   },
 
   {
@@ -63,6 +69,7 @@ export const sidebarMenu: ISidebar[] = [
     route: "/api-docs",
     icon: markRaw(IconsApiDocs),
     active: false,
+    permission: "api_docs:read",
   },
   {
     id: "menu__feedback",
@@ -70,6 +77,7 @@ export const sidebarMenu: ISidebar[] = [
     route: "/feedback",
     icon: markRaw(IconsFeedback),
     active: false,
+    permission: "feedback:read",
   },
   {
     id: "menu__settings",
@@ -77,5 +85,6 @@ export const sidebarMenu: ISidebar[] = [
     route: "/settings",
     icon: markRaw(IconsSettings),
     active: false,
+    permission: "settings:read",
   },
 ];

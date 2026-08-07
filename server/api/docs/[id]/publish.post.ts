@@ -2,11 +2,12 @@ import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { docs, activityLogs, apps, appVersions } from "~/server/database/schema";
 import { eq, desc } from "drizzle-orm";
-import { requireAuth, getActorName } from "~/server/utils/auth";
+import { requirePermission } from "~/server/utils/rbac";
+import { getActorName } from "~/server/utils/auth";
 import { createDocVersionSnapshot } from "~/server/lib/doc-version-snapshot";
 
 export default defineEventHandler(async (event) => {
-  const user = await requireAuth(event);
+  const { user } = await requirePermission(event, "docs:publish");
   const db = getDb();
   const id = getRouterParam(event, "id");
 

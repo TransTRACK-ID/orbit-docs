@@ -3,9 +3,11 @@ import { getDb } from "~/server/database";
 import { teamMembers } from "~/server/database/schema";
 import { eq, and } from "drizzle-orm";
 import { requireTeamAccess, canInviteRole, getCurrentMember } from "~/server/utils/team-access";
+import { requirePermission } from "~/server/utils/rbac";
 import type { TeamRole } from "~/server/utils/team-access";
 
 export default defineEventHandler(async (event) => {
+  await requirePermission(event, "team:invite");
   const user = await requireTeamAccess(event, "product_manager");
   const db = getDb();
   const body = await readBody(event);

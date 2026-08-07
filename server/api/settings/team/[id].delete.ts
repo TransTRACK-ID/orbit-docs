@@ -1,7 +1,7 @@
 import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { teamMembers } from "~/server/database/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireTeamAccess, getCurrentMember, canManageMembers } from "~/server/utils/team-access";
 import type { TeamRole } from "~/server/utils/team-access";
 
@@ -58,12 +58,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Prevent removing the last admin
-  if (targetMember.role === "admin") {
+  // Prevent removing the last active admin
+  if (targetMember.role === "admin" && targetMember.status === "active") {
     const adminCount = await db
       .select()
       .from(teamMembers)
-      .where(eq(teamMembers.role, "admin"))
+      .where(and(eq(teamMembers.role, "admin"), eq(teamMembers.status, "active")))
       .then((rows) => rows.length);
 
     if (adminCount <= 1) {

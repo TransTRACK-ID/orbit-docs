@@ -26,6 +26,8 @@ export interface TeamMember {
   lastActiveAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  isSuperAdmin?: boolean;
+  permissions?: import("./permissions").PermissionKey[];
 }
 
 export interface IntegrationSettings {

@@ -343,6 +343,19 @@ export default defineNitroPlugin(async () => {
 
   // Migrate existing users table that may lack the password column
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT`);
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT false`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      id TEXT PRIMARY KEY,
+      role TEXT NOT NULL,
+      permission TEXT NOT NULL,
+      allowed BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      CONSTRAINT role_permissions_role_permission_unique UNIQUE(role, permission)
+    )
+  `);
 
   // doc_generation_jobs table (used by Generate Docs feature)
   await pool.query(`
@@ -680,6 +693,10 @@ export default defineNitroPlugin(async () => {
       name: "Preview User",
       email: "preview@example.com",
       password: hashPassword(randomPreviewPassword),
+      isSuperAdmin: true,
     });
   }
+
+  const { seedDefaultRolePermissions } = await import("~/server/utils/rbac");
+  await seedDefaultRolePermissions();
 });

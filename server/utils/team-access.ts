@@ -145,12 +145,16 @@ export function canInviteRole(inviterRole: TeamRole, targetRole: TeamRole): bool
 
 /**
  * Restrict access to internal feedback administration.
- * Uses admin role today; swap to a dedicated super_admin role when added.
+ * Requires users.is_super_admin or internal_feedback:manage permission.
  */
 export async function requireSuperAdminAccess(event: H3Event) {
-  await requireTeamAccess(event, "admin");
+  const { requirePermission, getAuthContext } = await import("./rbac");
+  const context = await getAuthContext(event);
+  if (context.isSuperAdmin) return context;
+
+  await requirePermission(event, "internal_feedback:manage");
   const member = await getCurrentMember(event);
-  if (!member || member.role !== "admin") {
+  if (!member) {
     throw createError({
       statusCode: 403,
       statusMessage: "Forbidden",

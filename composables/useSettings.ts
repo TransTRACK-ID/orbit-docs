@@ -190,7 +190,7 @@ export const useSettings = () => {
       if (idx !== -1) {
         teamMembers.value[idx] = { ...teamMembers.value[idx], ...data.data };
       }
-      toast.success("Member updated");
+      toast.success(payload.role !== undefined ? "Member role updated" : "Member updated");
       return data.data;
     } catch (e: any) {
       const msg = e?.data?.message || e?.message || "Failed to update member";
@@ -205,12 +205,15 @@ export const useSettings = () => {
   }
 
   async function deleteMember(id: string) {
+    const member = teamMembers.value.find((m) => m.id === id);
+    const isPending = member?.status === "pending";
     try {
       await $fetch(`/api/settings/team/${id}`, { method: "DELETE" });
       teamMembers.value = teamMembers.value.filter((m) => m.id !== id);
-      toast.success("Member removed");
+      pendingInvitations.value = pendingInvitations.value.filter((m) => m.id !== id);
+      toast.success(isPending ? "Invitation cancelled" : "Member removed");
     } catch (e: any) {
-      const msg = e?.data?.message || e?.message || "Failed to remove member";
+      const msg = e?.data?.message || e?.message || (isPending ? "Failed to cancel invitation" : "Failed to remove member");
       if (e?.statusCode === 401) {
         toast.error("Session expired. Please sign in again.");
         navigateTo("/login");

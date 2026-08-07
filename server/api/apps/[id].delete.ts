@@ -2,10 +2,11 @@ import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { apps, appVersions, activityLogs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
-import { requireAuth, getActorName } from "~/server/utils/auth";
+import { requirePermission } from "~/server/utils/rbac";
+import { getActorName } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
-  const user = await requireAuth(event);
+  const { user } = await requirePermission(event, "apps:delete");
   const db = getDb();
   const id = getRouterParam(event, "id");
 

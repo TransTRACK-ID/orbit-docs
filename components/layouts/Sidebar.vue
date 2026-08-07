@@ -6,6 +6,29 @@ const route = useRoute();
 const { workspace } = useSettings();
 const $auth = useAuthStore();
 const { data } = useAuth();
+const { can, syncFromCurrentMember, isSuperAdmin, role } = usePermissions();
+
+onMounted(() => {
+  syncFromCurrentMember();
+});
+
+function canViewNavItem(item: (typeof sidebarMenu)[number]) {
+  if (!item.permission) return true;
+  return can(item.permission as any);
+}
+
+const workspaceNavItems = computed(() =>
+  sidebarMenu.filter(
+    (item) =>
+      item.id !== "menu__settings" &&
+      item.id !== "menu__changelogs" &&
+      canViewNavItem(item)
+  )
+);
+
+const accountNavItems = computed(() =>
+  sidebarMenu.filter((item) => item.id === "menu__settings" && canViewNavItem(item))
+);
 
 const isActive = (path: string) => route.path === path || route.path.startsWith(path + "/");
 
@@ -162,7 +185,7 @@ function logout() {
       <div class="nav-group">
         <div class="nav-group-title">Workspace</div>
         <NuxtLink
-          v-for="(item, idx) in sidebarMenu.filter(i => i.id !== 'menu__settings' && i.id !== 'menu__changelogs')"
+          v-for="(item, idx) in workspaceNavItems"
           :key="item.id"
           ref="(el: any) => { if (idx === 0) firstNavLinkRef = el }"
           :to="item.route"
@@ -177,7 +200,7 @@ function logout() {
       <div class="nav-group" style="margin-top: auto;">
         <div class="nav-group-title">Account</div>
         <NuxtLink
-          v-for="item in sidebarMenu.filter(i => i.id === 'menu__settings')"
+          v-for="item in accountNavItems"
           :key="item.id"
           :to="item.route"
           class="nav-item"
@@ -192,6 +215,8 @@ function logout() {
             <general-avatar :src="null" :size="28" :name="userName" />
             <div class="profile-info">
               <div class="profile-name">{{ userName }}</div>
+              <div v-if="isSuperAdmin" class="profile-role">Super Admin</div>
+              <div v-else-if="role" class="profile-role">{{ role.replace("_", " ") }}</div>
               <div v-if="userEmail" class="profile-email">{{ userEmail }}</div>
             </div>
           </div>
@@ -414,6 +439,13 @@ function logout() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.profile-role {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent, oklch(55% 0.16 25));
 }
 .logout-btn {
   display: flex;

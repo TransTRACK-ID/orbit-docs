@@ -15,4 +15,5 @@ export interface ISidebar {
   active?: boolean;
   isOpen?: boolean;
   menu?: IChildSidebar[];
+  permission?: string;
 }

@@ -10,6 +10,7 @@ import type {
 } from "~/types/settings";
 import type { SsoProvider, SsoProviderType } from "~/types/sso";
 import { SSO_PROVIDER_METADATA } from "~/types/sso";
+import type { RolePermissionMatrix } from "~/types/permissions";
 
 definePageMeta({
   auth: true,
@@ -44,6 +45,7 @@ const {
   fetchPendingInvitations,
   inviteMember,
   acceptInvitation,
+  updateMember,
   deleteMember,
   fetchIntegrations,
   updateIntegrations,
@@ -54,6 +56,21 @@ const {
   fetchApiKeys,
   regenerateApiKeys,
 } = useSettings();
+
+const route = useRoute();
+
+const {
+  isSuperAdmin,
+  accessMatrix,
+  accessGroups,
+  accessRoles,
+  isLoadingAccess,
+  isSavingAccess,
+  fetchAccessSettings,
+  saveAccessMatrix,
+  syncFromCurrentMember,
+  can,
+} = usePermissions();
 
 const {
   ssoConfig,
@@ -92,7 +109,50 @@ async function acceptMyInvitation() {
   await acceptInvitation(myPendingInvitation.value.id);
 }
 
-const activeTab = ref<"general" | "team" | "integrations" | "mcp" | "sso">("general");
+const activeTab = ref<"general" | "team" | "access" | "integrations" | "mcp" | "sso">("general");
+
+const settingsTabs = computed(() => {
+  const tabs: Array<{ id: typeof activeTab.value; label: string }> = [
+    { id: "general", label: "General" },
+    { id: "team", label: "Team Members" },
+  ];
+  if (isSuperAdmin.value) {
+    tabs.push({ id: "access", label: "Access" });
+  }
+  tabs.push(
+    { id: "integrations", label: "Integrations" },
+    { id: "sso", label: "SSO" },
+    { id: "mcp", label: "MCP Connection" }
+  );
+  return tabs;
+});
+
+async function handleSaveAccessMatrix(matrix: RolePermissionMatrix) {
+  try {
+    await saveAccessMatrix(matrix);
+    toast.success("Access permissions saved");
+  } catch (e: any) {
+    toast.error(e?.data?.message || "Failed to save access permissions");
+  }
+}
+
+async function ensureAccessTabLoaded() {
+  if (!isSuperAdmin.value) return;
+  if (accessMatrix.value && accessGroups.value.length > 0) return;
+  try {
+    await fetchAccessSettings();
+  } catch (e: any) {
+    toast.error(e?.data?.message || "Failed to load access permissions");
+  }
+}
+
+watch(activeTab, (tab) => {
+  if (tab === "access") void ensureAccessTabLoaded();
+});
+
+watch(isSuperAdmin, (superAdmin) => {
+  if (superAdmin && activeTab.value === "access") void ensureAccessTabLoaded();
+});
 
 onMounted(async () => {
   fetchWorkspace();
@@ -105,7 +165,19 @@ onMounted(async () => {
   fetchApiKeys();
   fetchMcpConfig();
   fetchSsoConfig();
-  if (currentMember.value?.role === "admin") {
+  await syncFromCurrentMember();
+
+  const tabQuery = route.query.tab;
+  if (tabQuery === "access" && isSuperAdmin.value) {
+    activeTab.value = "access";
+    await ensureAccessTabLoaded();
+  }
+
+  if (route.query.denied === "1") {
+    toast.error("You do not have permission to open that page.");
+  }
+
+  if (can("integrations:read")) {
     fetchNotionSettings();
   }
 });
@@ -230,12 +302,12 @@ const notionSyncHint = computed(() => {
   return "";
 });
 
-const isAdmin = computed(() => currentMember.value?.role === "admin");
+const isAdmin = computed(() => can("integrations:write"));
 
 watch(
   () => currentMember.value,
   (member) => {
-    if (member?.role === "admin" && !notionSettings.value && !isLoadingNotion.value) {
+    if (member && can("integrations:read") && !notionSettings.value && !isLoadingNotion.value) {
       fetchNotionSettings();
     }
   }
@@ -437,6 +509,10 @@ async function submitInvite() {
 
 const memberToDelete = ref<TeamMember | null>(null);
 
+const isPendingMemberDelete = computed(
+  () => memberToDelete.value?.status === "pending",
+);
+
 function confirmDeleteMember(member: TeamMember) {
   memberToDelete.value = member;
 }
@@ -473,6 +549,19 @@ const inviteableRoles = computed(() => {
   if (currentMember.value.role === "product_manager") return ["viewer", "tech_writer"];
   return [];
 });
+
+const allTeamRoles: TeamRole[] = ["viewer", "tech_writer", "product_manager", "admin"];
+const changingRoleId = ref<string | null>(null);
+
+async function onMemberRoleChange(member: TeamMember, nextRole: TeamRole) {
+  if (!isSuperAdmin.value || nextRole === member.role) return;
+  changingRoleId.value = member.id;
+  try {
+    await updateMember(member.id, { role: nextRole });
+  } finally {
+    changingRoleId.value = null;
+  }
+}
 
 // ─── Integrations toggles ───────────────────────────────────────
 async function toggleIntegration(key: keyof UpdateIntegrationsPayload) {
@@ -743,13 +832,7 @@ function getCallbackUrl(provider: SsoProvider): string {
       <!-- Settings navigation -->
       <nav class="settings-nav" aria-label="Settings sections">
         <button
-          v-for="tab in [
-            { id: 'general', label: 'General' },
-            { id: 'team', label: 'Team Members' },
-            { id: 'integrations', label: 'Integrations' },
-            { id: 'sso', label: 'SSO' },
-            { id: 'mcp', label: 'MCP Connection' },
-          ] as const"
+          v-for="tab in settingsTabs"
           :key="tab.id"
           class="settings-nav-item"
           :class="{ active: activeTab === tab.id }"
@@ -993,7 +1076,10 @@ function getCallbackUrl(provider: SsoProvider): string {
             <div class="row-between" style="margin-bottom: 20px;">
               <div>
                 <h3>Team Members</h3>
-                <p class="desc">Manage who can publish versions and edit docs.</p>
+                <p class="desc">
+                  Manage who can publish versions and edit docs.
+                  <span v-if="isSuperAdmin"> Super admins can change member roles from this table.</span>
+                </p>
               </div>
               <button
                 v-if="canManageTeam"
@@ -1021,7 +1107,19 @@ function getCallbackUrl(provider: SsoProvider): string {
                     {{ member.name }}
                   </td>
                   <td>
-                    <span class="pill" :class="rolePillClass[member.role]">
+                    <select
+                      v-if="isSuperAdmin"
+                      class="team-role-select"
+                      :value="member.role"
+                      :disabled="changingRoleId === member.id"
+                      :aria-label="`Role for ${member.name}`"
+                      @change="onMemberRoleChange(member, ($event.target as HTMLSelectElement).value as TeamRole)"
+                    >
+                      <option v-for="role in allTeamRoles" :key="role" :value="role">
+                        {{ roleLabel[role] }}
+                      </option>
+                    </select>
+                    <span v-else class="pill" :class="rolePillClass[member.role]">
                       {{ roleLabel[member.role] }}
                     </span>
                   </td>
@@ -1033,12 +1131,12 @@ function getCallbackUrl(provider: SsoProvider): string {
                   <td class="num">{{ member.lastActive }}</td>
                   <td style="text-align: right;">
                     <button
-                      v-if="canManageTeam && member.status === 'active'"
+                      v-if="canManageTeam && (member.status === 'active' || member.status === 'pending')"
                       class="btn btn-ghost btn-sm"
-                      title="Remove member"
+                      :title="member.status === 'pending' ? 'Cancel invitation' : 'Remove member'"
                       @click="confirmDeleteMember(member)"
                     >
-                      ⋯
+                      <IconsTrash size="14" />
                     </button>
                   </td>
                 </tr>
@@ -1049,6 +1147,25 @@ function getCallbackUrl(provider: SsoProvider): string {
                 </tr>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- Access (super admin) -->
+        <div v-show="activeTab === 'access'" class="settings-panel">
+          <div v-if="!isSuperAdmin" class="setting-section">
+            <h3>Access</h3>
+            <p class="desc">Super admin access is required to manage role permissions.</p>
+          </div>
+          <div v-else class="setting-section">
+            <SettingsAccessMatrix
+              :matrix="accessMatrix"
+              :groups="accessGroups"
+              :roles="accessRoles"
+              :loading="isLoadingAccess"
+              :saving="isSavingAccess"
+              :editable="isSuperAdmin"
+              @save="handleSaveAccessMatrix"
+            />
           </div>
         </div>
 
@@ -1520,21 +1637,33 @@ function getCallbackUrl(provider: SsoProvider): string {
       </div>
     </div>
 
-    <!-- Delete Member Confirmation Modal -->
+    <!-- Delete Member / Cancel Invitation Confirmation Modal -->
     <div class="modal-overlay" :class="{ open: !!memberToDelete }" @click.self="memberToDelete = null">
       <div class="modal" style="width: 400px;">
         <div class="modal-header">
-          <h2>Remove Member</h2>
+          <h2>{{ isPendingMemberDelete ? 'Cancel Invitation' : 'Remove Member' }}</h2>
           <button class="modal-close" aria-label="Close modal" @click="memberToDelete = null">✕</button>
         </div>
         <div class="modal-body">
           <p style="margin: 0; color: var(--muted);">
-            Are you sure you want to remove <strong>{{ memberToDelete?.name }}</strong>? This action cannot be undone.
+            <template v-if="isPendingMemberDelete">
+              Are you sure you want to cancel the invitation for
+              <strong>{{ memberToDelete?.name }}</strong>?
+              <template v-if="memberToDelete?.email">
+                ({{ memberToDelete.email }})
+              </template>
+              They will no longer be able to join this workspace.
+            </template>
+            <template v-else>
+              Are you sure you want to remove <strong>{{ memberToDelete?.name }}</strong>? This action cannot be undone.
+            </template>
           </p>
         </div>
         <div class="modal-foot">
           <button type="button" class="btn btn-secondary" @click="memberToDelete = null">Cancel</button>
-          <button type="button" class="btn btn-danger" @click="doDeleteMember">Remove</button>
+          <button type="button" class="btn btn-danger" @click="doDeleteMember">
+            {{ isPendingMemberDelete ? 'Cancel Invitation' : 'Remove' }}
+          </button>
         </div>
       </div>
     </div>
@@ -1752,6 +1881,27 @@ function getCallbackUrl(provider: SsoProvider): string {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.team-role-select {
+  min-width: 148px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  cursor: pointer;
+}
+.team-role-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.team-role-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .form-group textarea {
   min-height: 80px;

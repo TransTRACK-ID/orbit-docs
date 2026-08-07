@@ -1,10 +1,11 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { getDb } from "~/server/database";
 import { apps, activityLogs } from "~/server/database/schema";
-import { requireAuth, getActorName } from "~/server/utils/auth";
+import { requirePermission } from "~/server/utils/rbac";
+import { getActorName } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
-  const user = await requireAuth(event);
+  const { user } = await requirePermission(event, "apps:write");
   const db = getDb();
   const body = await readBody(event);
 

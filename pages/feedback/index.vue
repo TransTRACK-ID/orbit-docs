@@ -19,7 +19,10 @@ const { apps, fetchApps } = useApps();
 const { docs: publishedDocs, fetchDocs } = useDocs();
 const { currentMember, fetchCurrentMember } = useSettings();
 
-const isSuperAdmin = computed(() => currentMember.value?.role === "admin");
+const isSuperAdmin = computed(() => {
+  const member = currentMember.value as (typeof currentMember.value & { isSuperAdmin?: boolean }) | null;
+  return Boolean(member?.isSuperAdmin);
+});
 
 const firstPublishedDoc = computed(() =>
   publishedDocs.value.find((d) => d.status === "published") ?? null

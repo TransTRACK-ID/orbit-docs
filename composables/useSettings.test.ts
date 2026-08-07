@@ -133,6 +133,20 @@ describe("useSettings composable", () => {
     expect(mockToastSuccess).toHaveBeenCalledWith("Member removed");
   });
 
+  it("should cancel a pending team member invitation", async () => {
+    mockFetch.mockResolvedValueOnce(undefined);
+
+    const { teamMembers, pendingInvitations, deleteMember } = useSettings();
+    const pending = { id: "m3", name: "Carol", email: "carol@example.com", initials: "CA", role: "viewer" as const, status: "pending" as const, invitedBy: "Admin", userId: null, lastActive: "invited", lastActiveAt: null, createdAt: null, updatedAt: null };
+    teamMembers.value = [pending];
+    pendingInvitations.value = [pending];
+
+    await deleteMember("m3");
+    expect(teamMembers.value).toHaveLength(0);
+    expect(pendingInvitations.value).toHaveLength(0);
+    expect(mockToastSuccess).toHaveBeenCalledWith("Invitation cancelled");
+  });
+
   it("should fetch integrations", async () => {
     const data = { data: { id: "int1", githubActions: true, gitlabCI: false, jenkins: false, circleCI: false, createdAt: null, updatedAt: null } };
     mockFetch.mockResolvedValueOnce(data);
