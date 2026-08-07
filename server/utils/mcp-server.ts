@@ -62,12 +62,18 @@ export function createMcpServer() {
         tools: {},
       },
       instructions: [
-        "You are connected to the Orbit Docs platform. Every app has two kinds of documentation:",
+        "You are connected to the Orbit Docs platform — a documentation and release management system.",
+        "IMPORTANT: 'Orbit Docs' is the platform name, NOT an application in the database.",
+        "Never pass 'Orbit', 'Orbit Docs', or the MCP server name as list_apps search.",
+        "When the user asks a general or cross-app question, call list_apps with NO search parameter (or use get_stats).",
+        "Only use list_apps search when the user names a specific product/app (e.g. 'Order Planning', 'MDM').",
+        "",
+        "Every app has two kinds of documentation:",
         "- Product documentation: SRS, FSD, SDD, manuals (source = generated or manual).",
         "- Knowledge base: features synced from spreadsheets (source = op_sync, docType = feature). This is the /docs 'Knowledge base' view.",
         "",
         "To answer any question about an app's documentation, follow this workflow:",
-        "1. Call list_apps (optionally with search) to find the app and get its id.",
+        "1. Call list_apps (no search unless user named a specific app) to find the app and get its id.",
         "2. Call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty.",
         "3. To read a doc's full content, call get_doc with the doc id.",
         "4. To find docs by keyword, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
@@ -270,11 +276,16 @@ const GetDocSiteSchema = z
 const TOOLS: Tool[] = [
   {
     name: "list_apps",
-    description: "List all applications with name search, pagination, and latest version info.",
+    description:
+      "List all applications in the workspace. Use with NO search for overview/cross-app questions. The search parameter filters by app/product name substring only — never use 'Orbit' or 'Orbit Docs' (that is the platform name, not an app).",
     inputSchema: {
       type: "object",
       properties: {
-        search: { type: "string" },
+        search: {
+          type: "string",
+          description:
+            "Optional. Filter apps whose name contains this string (e.g. 'Order Planning'). Omit for listing all apps. Do NOT use 'Orbit' or 'Orbit Docs'.",
+        },
         limit: { type: "number" },
         offset: { type: "number" },
       },
