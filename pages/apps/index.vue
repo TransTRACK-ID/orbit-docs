@@ -202,7 +202,6 @@ const editForm = reactive({
   description: "",
   owner: "",
   status: "active",
-  repoUrl: "",
 });
 const editNameError = ref(false);
 const isEditing = ref(false);
@@ -215,7 +214,6 @@ async function openEditModal(app: AppItem) {
     editForm.description = fresh.description || "";
     editForm.owner = fresh.owner || "";
     editForm.status = fresh.status;
-    editForm.repoUrl = fresh.repoUrl || "";
   } catch {
     // Fallback to stale data if fetch fails
     editingApp.value = app;
@@ -223,7 +221,6 @@ async function openEditModal(app: AppItem) {
     editForm.description = app.description || "";
     editForm.owner = app.owner || "";
     editForm.status = app.status;
-    editForm.repoUrl = app.repoUrl || "";
   }
   showEditModal.value = true;
   editNameError.value = false;
@@ -249,7 +246,6 @@ async function submitEdit() {
       description: editForm.description,
       owner: editForm.owner,
       status: editForm.status,
-      repoUrl: editForm.repoUrl,
     });
     closeEditModal();
   } finally {
@@ -279,6 +275,10 @@ function formatDate(dateStr: string | null) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function versionAuthor(app: AppItem): string | null {
+  return app.latestVersion?.createdBy || app.owner || null;
 }
 
 function timeAgo(dateStr: string | null) {
@@ -511,13 +511,12 @@ const statusLabel: Record<string, string> = {
           <div class="app-card-meta">Updated {{ timeAgo(app.updatedAt) }}</div>
         </div>
 
-        <div class="app-card-version">
-          <span v-if="app.latestVersion" class="num pill pill-blue">
+        <div v-if="app.latestVersion" class="app-card-version">
+          <span class="num pill pill-blue">
             v{{ app.latestVersion.version }}
           </span>
-          <span v-else class="num text-xs app-card-no-version">No version</span>
-          <span class="app-card-owner">
-            by {{ app.owner || "Unknown" }}
+          <span v-if="versionAuthor(app)" class="app-card-owner">
+            by {{ versionAuthor(app) }}
           </span>
         </div>
 
@@ -721,12 +720,6 @@ const statusLabel: Record<string, string> = {
                   <option value="maintenance">Maintenance</option>
                 </select>
               </div>
-            </div>
-            <div class="form-group">
-              <label for="editRepo">
-                Repository URL <span class="opt">(optional)</span>
-              </label>
-              <input id="editRepo" v-model="editForm.repoUrl" type="url" placeholder="https://github.com/org/repo" />
             </div>
           </div>
           <div class="modal-foot">

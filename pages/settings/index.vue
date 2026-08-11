@@ -59,6 +59,7 @@ const {
 } = useSettings();
 
 const route = useRoute();
+const router = useRouter();
 
 const {
   isSuperAdmin,
@@ -184,6 +185,13 @@ function ensureAllowedActiveTab() {
   }
 }
 
+function syncTabQuery() {
+  const currentTab = typeof route.query.tab === "string" ? route.query.tab : undefined;
+  if (currentTab === activeTab.value) return;
+
+  router.replace({ query: { ...route.query, tab: activeTab.value } });
+}
+
 async function handleSaveAccessMatrix(matrix: RolePermissionMatrix) {
   try {
     await saveAccessMatrix(matrix);
@@ -205,7 +213,21 @@ async function ensureAccessTabLoaded() {
 
 watch(activeTab, (tab) => {
   if (tab === "access") void ensureAccessTabLoaded();
+  if (isSettingsRoleLoaded.value) syncTabQuery();
 });
+
+watch(
+  () => route.query.tab,
+  (tabQuery) => {
+    if (!isSettingsRoleLoaded.value) return;
+    if (typeof tabQuery !== "string" || !isSettingsTabId(tabQuery)) return;
+
+    const allowedTabs = settingsTabs.value.map((tab) => tab.id);
+    if (!allowedTabs.includes(tabQuery) || activeTab.value === tabQuery) return;
+
+    activeTab.value = tabQuery;
+  },
+);
 
 watch(isSuperAdmin, (superAdmin) => {
   ensureAllowedActiveTab();
@@ -263,6 +285,7 @@ onMounted(async () => {
 
   isSettingsRoleLoaded.value = true;
   ensureAllowedActiveTab();
+  syncTabQuery();
 });
 
 // ─── Notion integration ─────────────────────────────────────────
