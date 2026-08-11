@@ -33,6 +33,7 @@ import {
   formatAdrApiItem,
   formatAdrConstraintSummary,
   formatMcpAdrMetadata,
+  extractDecisionSection,
   listAdrs,
   listBindingAdrs,
 } from "~/server/lib/adr-queries";
@@ -82,7 +83,7 @@ export function createMcpServer() {
         "",
         "To answer any question about an app's documentation, follow this workflow:",
         "1. Call list_apps (no search unless user named a specific app) to find the app and get its id.",
-        "2. Call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty.",
+        "2. Call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty. The response includes bindingConstraints with mandatory ADR rules — follow them in every answer.",
         "3. To read a doc's full content, call get_doc with the doc id.",
         "4. To find docs by keyword, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
         "5. To share links with users, use publicUrl/publicPath on docs and doc sites. Call list_doc_sites or get_doc_site for published site URLs (/s/{siteSlug}). Published docs return /p/{id} or /s/{siteSlug}/{pageSlug} when part of a published site.",
@@ -1133,6 +1134,7 @@ mcpServer.setRequestHandler(
             { collapseKnowledge: false },
           );
           const documentation = await getAppDocCounts(db, app.id);
+          const bindingAdrs = await listBindingAdrs(db, app.id, { includeContent: true });
 
           return {
             content: [
@@ -1144,6 +1146,14 @@ mcpServer.setRequestHandler(
                       app: { id: app.id, name: app.name },
                       view: params.view,
                       documentation,
+                      bindingConstraints: {
+                        bindingCount: bindingAdrs.length,
+                        summary: formatAdrConstraintSummary(bindingAdrs),
+                        adrs: bindingAdrs.map((row) => ({
+                          ...formatAdrApiItem(row, { includeContent: false }),
+                          decision: extractDecisionSection(row.content),
+                        })),
+                      },
                       groups,
                     },
                   },
@@ -2049,6 +2059,10 @@ mcpServer.setRequestHandler(
                     app: { id: app.id, name: app.name },
                     bindingCount: rows.length,
                     constraintSummary: formatAdrConstraintSummary(rows),
+                    adrs: rows.map((row) => ({
+                      ...formatAdrApiItem(row, { includeContent: false }),
+                      decision: extractDecisionSection(row.content),
+                    })),
                   },
                   null,
                   2,

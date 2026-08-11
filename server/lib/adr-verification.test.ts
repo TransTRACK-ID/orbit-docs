@@ -5,10 +5,10 @@ vi.mock("~/server/database", () => ({
   getDb: vi.fn(),
 }));
 
-vi.mock("./adr-queries", () => ({
+vi.mock("~/server/lib/adr-queries", () => ({
   listBindingAdrs: vi.fn(),
-  extractDecisionSnippet: (content: string | null) => {
-    const match = content?.match(/## Decision\s*\n+([^\n#]+)/i);
+  extractDecisionSection: (content: string | null) => {
+    const match = content?.match(/## Decision\s*\n+([\s\S]*?)(?=\n##\s+|$)/i);
     return match?.[1]?.trim() ?? "";
   },
   adrDisplayLabel: (title: string, frontmatter?: Record<string, unknown> | null) => {
@@ -19,7 +19,7 @@ vi.mock("./adr-queries", () => ({
   formatAdrConstraintSummary: vi.fn(() => ""),
 }));
 
-import { listBindingAdrs } from "./adr-queries";
+import { listBindingAdrs } from "~/server/lib/adr-queries";
 
 describe("checkAdrCompliance", () => {
   beforeEach(() => {

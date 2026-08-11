@@ -1,7 +1,7 @@
 import { getDb } from "~/server/database";
 import {
   adrDisplayLabel,
-  extractDecisionSnippet,
+  extractDecisionSection,
   formatAdrConstraintSummary,
   listBindingAdrs,
 } from "~/server/lib/adr-queries";
@@ -19,8 +19,8 @@ function extractKeywords(text: string): string[] {
     .toLowerCase()
     .replace(/[^a-z0-9\s-]/g, " ")
     .split(/\s+/)
-    .filter((word) => word.length >= 5)
-    .slice(0, 8);
+    .filter((word) => word.length >= 4)
+    .slice(0, 12);
 }
 
 /**
@@ -43,7 +43,7 @@ export async function checkAdrCompliance(
   for (const adr of bindingAdrs) {
     const fm = parseAdrFrontmatter(adr.frontmatter ?? undefined);
     const label = adrDisplayLabel(adr.title, adr.frontmatter);
-    const decision = extractDecisionSnippet(adr.content);
+    const decision = extractDecisionSection(adr.content);
     const adrTag = formatAdrNumber(fm.adr_number).toLowerCase();
 
     const mentionsAdr =

@@ -99,7 +99,7 @@ async function buildSystemPrompt(event: H3Event, options: ChatContextOptions): P
       .find((m) => m.role === "user" && m.content.trim())?.content;
 
     const constraints = await formatAdrConstraintSummary(
-      await listBindingAdrs(getDb(), options.appId)
+      await listBindingAdrs(getDb(), options.appId, { includeContent: true })
     );
 
     const query = lastUserMessage?.trim() || "";

@@ -78,20 +78,44 @@ export function isBindingAdrDoc(doc: {
   return fm.adr_status === "accepted";
 }
 
-export function extractDecisionSnippet(content: string | null | undefined): string {
+export const ADR_DECISION_SECTION_MAX_CHARS = 2000;
+
+export function extractDecisionSection(content: string | null | undefined): string {
   if (!content?.trim()) return "";
 
-  const decisionMatch = content.match(
-    /^##\s+Decision\s*\n+([\s\S]*?)(?=\n##\s+|\n#+\s+|$)/im
-  );
-  const section = decisionMatch?.[1]?.trim() || content.trim();
+  const decisionMatch = content.match(/##\s+Decision\s*\n+([\s\S]*?)(?=\n##\s+|$)/i);
+  let section = decisionMatch?.[1]?.trim() || "";
+
+  if (!section) {
+    section = content.trim();
+  }
+
+  section = section
+    .split("\n")
+    .filter((line) => {
+      const trimmed = line.trim();
+      return trimmed.length > 0 && !trimmed.startsWith("|");
+    })
+    .join("\n")
+    .trim();
+
+  if (section.length > ADR_DECISION_SECTION_MAX_CHARS) {
+    return `${section.slice(0, ADR_DECISION_SECTION_MAX_CHARS).trimEnd()}…`;
+  }
+
+  return section;
+}
+
+export function extractDecisionSnippet(content: string | null | undefined): string {
+  const section = extractDecisionSection(content);
+  if (!section) return "";
 
   const firstLine = section
     .split("\n")
     .map((line) => line.trim())
-    .find((line) => line.length > 0 && !line.startsWith("#") && !line.startsWith("|"));
+    .find((line) => line.length > 0 && !line.startsWith("#"));
 
-  if (!firstLine) return "";
+  if (!firstLine) return section.slice(0, 240);
   return firstLine.replace(/^[-*]\s+/, "").slice(0, 240);
 }
 
@@ -108,7 +132,7 @@ export function formatAdrConstraintSummary(rows: AdrDocRow[]): string {
 
   const lines = rows.map((row) => {
     const label = formatAdrNumber(parseAdrFrontmatter(row.frontmatter ?? undefined).adr_number);
-    const decision = extractDecisionSnippet(row.content);
+    const decision = extractDecisionSection(row.content);
     return `- ${label}: ${decision || row.title}`;
   });
 
