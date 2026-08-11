@@ -33,6 +33,8 @@ import {
   formatAdrApiItem,
   formatAdrConstraintSummary,
   formatMcpAdrMetadata,
+  buildMcpWorkspaceBindingContext,
+  formatMcpWorkspaceAdrPreamble,
   extractDecisionSection,
   listAdrs,
   listBindingAdrs,
@@ -56,11 +58,51 @@ function parseAppRefInput(data: {
   };
 }
 
+const MCP_PLATFORM_INSTRUCTIONS = [
+  "You are connected to the Orbit Docs platform — a documentation and release management system.",
+  "IMPORTANT: 'Orbit Docs' is the platform name, NOT an application in the database.",
+  "Never pass 'Orbit', 'Orbit Docs', or the MCP server name as list_apps search.",
+  "When the user asks a general or cross-app question, call list_apps with NO search parameter (or use get_stats).",
+  "Only use list_apps search when the user names a specific product/app (e.g. 'Order Planning', 'MDM').",
+  "",
+  "Every MCP session — ADR bootstrap (do this before other work):",
+  "1. Read the MANDATORY BINDING ADRs block at the top of these instructions (workspace-wide rules).",
+  "2. Call get_workspace_binding_constraints to refresh workspace-wide binding ADRs.",
+  "3. When working on a specific app, call get_binding_constraints with that appId or appName.",
+  "",
+  "Every app has two kinds of documentation:",
+  "- Product documentation: SRS, FSD, SDD, manuals (source = generated or manual).",
+  "- Knowledge base: features synced from spreadsheets (source = op_sync, docType = feature). This is the /docs 'Knowledge base' view.",
+  "",
+  "To answer any question about an app's documentation, follow this workflow:",
+  "1. Call list_apps (no search unless user named a specific app) to find the app and get its id.",
+  "2. Call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty. The response includes bindingConstraints with mandatory ADR rules — follow them in every answer.",
+  "3. To read a doc's full content, call get_doc with the doc id.",
+  "4. To find docs by keyword, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
+  "5. To share links with users, use publicUrl/publicPath on docs and doc sites. Call list_doc_sites or get_doc_site for published site URLs (/s/{siteSlug}). Published docs return /p/{id} or /s/{siteSlug}/{pageSlug} when part of a published site.",
+  "",
+  "ARCHITECTURAL DECISION RECORDS (ADRs):",
+  "- ADRs are binding architectural constraints, not optional background.",
+  "- Published ADRs with adr_status \"accepted\" MUST be followed in every response.",
+  "- If your answer conflicts with a binding ADR, follow the ADR and explain the conflict.",
+  "- Do not recommend alternatives that violate accepted ADRs unless the user explicitly asks to supersede or revisit the decision.",
+  "- ADRs with status \"proposed\", \"deprecated\", or \"superseded\" are informational only.",
+  "- Workspace-wide ADRs (no app) apply to every app and every MCP session.",
+  "",
+  "Always ground answers in the data returned by these tools and cite doc titles / ids. Never say 'no documentation exists' without first calling list_app_documentation for the app.",
+].join("\n");
+
+async function buildMcpServerInstructions(): Promise<string> {
+  const workspaceBinding = await buildMcpWorkspaceBindingContext(db);
+  return [formatMcpWorkspaceAdrPreamble(workspaceBinding.summary), MCP_PLATFORM_INSTRUCTIONS].join("\n");
+}
+
 /* ------------------------------------------------------------------ */
 /* 2. MCP Server Factory                                               */
 /* ------------------------------------------------------------------ */
 
-export function createMcpServer() {
+export async function createMcpServer() {
+  const instructions = await buildMcpServerInstructions();
   const mcpServer = new Server(
     {
       name: "orbit-docs",
@@ -70,35 +112,7 @@ export function createMcpServer() {
       capabilities: {
         tools: {},
       },
-      instructions: [
-        "You are connected to the Orbit Docs platform — a documentation and release management system.",
-        "IMPORTANT: 'Orbit Docs' is the platform name, NOT an application in the database.",
-        "Never pass 'Orbit', 'Orbit Docs', or the MCP server name as list_apps search.",
-        "When the user asks a general or cross-app question, call list_apps with NO search parameter (or use get_stats).",
-        "Only use list_apps search when the user names a specific product/app (e.g. 'Order Planning', 'MDM').",
-        "",
-        "Every app has two kinds of documentation:",
-        "- Product documentation: SRS, FSD, SDD, manuals (source = generated or manual).",
-        "- Knowledge base: features synced from spreadsheets (source = op_sync, docType = feature). This is the /docs 'Knowledge base' view.",
-        "",
-        "To answer any question about an app's documentation, follow this workflow:",
-        "1. Call list_apps (no search unless user named a specific app) to find the app and get its id.",
-        "2. Call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty. The response includes bindingConstraints with mandatory ADR rules — follow them in every answer.",
-        "3. To read a doc's full content, call get_doc with the doc id.",
-        "4. To find docs by keyword, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
-        "5. To share links with users, use publicUrl/publicPath on docs and doc sites. Call list_doc_sites or get_doc_site for published site URLs (/s/{siteSlug}). Published docs return /p/{id} or /s/{siteSlug}/{pageSlug} when part of a published site.",
-        "",
-        "ARCHITECTURAL DECISION RECORDS (ADRs):",
-        "- ADRs are binding architectural constraints, not optional background.",
-        "- Before architecture, API design, or doc recommendations for an app, call list_architectural_decisions with bindingOnly=true (or get_binding_constraints).",
-        "- Published ADRs with adr_status \"accepted\" MUST be followed.",
-        "- If your answer conflicts with a binding ADR, follow the ADR and explain the conflict.",
-        "- Do not recommend alternatives that violate accepted ADRs unless the user explicitly asks to supersede or revisit the decision.",
-        "- ADRs with status \"proposed\", \"deprecated\", or \"superseded\" are informational only.",
-        "- Workspace-wide ADRs (no app) apply to every app and appear in bindingConstraints for all apps.",
-        "",
-        "Always ground answers in the data returned by these tools and cite doc titles / ids. Never say 'no documentation exists' without first calling list_app_documentation for the app.",
-      ].join("\n"),
+      instructions,
     }
   );
 
@@ -332,6 +346,16 @@ const GetBindingConstraintsSchema = z
 /* ------------------------------------------------------------------ */
 
 const TOOLS: Tool[] = [
+  {
+    name: "get_workspace_binding_constraints",
+    description:
+      "SESSION START: Load workspace-wide binding ADRs that apply to EVERY app and EVERY response in this MCP session. " +
+      "Call this first when the session begins, before any other tool, and obey the returned rules in all answers.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
   {
     name: "list_apps",
     description:
@@ -642,6 +666,26 @@ mcpServer.setRequestHandler(
 
     try {
       switch (name) {
+        case "get_workspace_binding_constraints": {
+          const workspaceBindingConstraints = await buildMcpWorkspaceBindingContext(db);
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    ...workspaceBindingConstraints,
+                    reminder:
+                      "These workspace-wide ADRs are mandatory for every response in this MCP session. Follow formatting and content rules exactly.",
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
         case "list_apps": {
           const params = ListAppsSchema.parse(args);
           const search = params.search || "";
@@ -712,11 +756,23 @@ mcpServer.setRequestHandler(
             })
           );
 
+          const workspaceBindingConstraints = await buildMcpWorkspaceBindingContext(db);
+
           return {
             content: [
               {
                 type: "text",
-                text: JSON.stringify({ data: appsWithVersions, count: appsWithVersions.length }, null, 2),
+                text: JSON.stringify(
+                  {
+                    workspaceBindingConstraints,
+                    adrReminder:
+                      "Follow workspaceBindingConstraints in every answer. Call get_workspace_binding_constraints at session start.",
+                    data: appsWithVersions,
+                    count: appsWithVersions.length,
+                  },
+                  null,
+                  2,
+                ),
               },
             ],
           };
@@ -2086,12 +2142,17 @@ mcpServer.setRequestHandler(
               db.select({ count: count() }).from(schema.owners),
             ]);
 
+          const workspaceBindingConstraints = await buildMcpWorkspaceBindingContext(db);
+
           return {
             content: [
               {
                 type: "text",
                 text: JSON.stringify(
                   {
+                    workspaceBindingConstraints,
+                    adrReminder:
+                      "Follow workspaceBindingConstraints in every answer. Call get_workspace_binding_constraints at session start.",
                     data: {
                       activeApps: activeAppsResult[0]?.count ?? 0,
                       totalApps: totalAppsResult[0]?.count ?? 0,
@@ -2104,7 +2165,7 @@ mcpServer.setRequestHandler(
                     },
                   },
                   null,
-                  2
+                  2,
                 ),
               },
             ],
@@ -2133,8 +2194,6 @@ mcpServer.setRequestHandler(
 
   return mcpServer;
 }
-
-export const mcpServer = createMcpServer();
 
 /* ------------------------------------------------------------------ */
 /* 6. Auth helper for Nitro                                           */

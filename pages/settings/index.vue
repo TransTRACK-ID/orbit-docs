@@ -130,10 +130,15 @@ async function acceptMyInvitation() {
   await acceptInvitation(myPendingInvitation.value.id);
 }
 
-const activeTab = ref<"profile" | "general" | "team" | "access" | "integrations" | "mcp" | "sso" | "adr">("general");
-const isSettingsRoleLoaded = ref(false);
-
-type SettingsTabId = typeof activeTab.value;
+type SettingsTabId =
+  | "profile"
+  | "general"
+  | "team"
+  | "access"
+  | "integrations"
+  | "mcp"
+  | "sso"
+  | "adr";
 
 function isSettingsTabId(value: string): value is SettingsTabId {
   return (
@@ -148,16 +153,16 @@ function isSettingsTabId(value: string): value is SettingsTabId {
   );
 }
 
-const settingsTabs = computed(() => {
-  if (!isSettingsRoleLoaded.value) {
-    return [];
-  }
-
+function buildSettingsTabs(
+  superAdmin: boolean,
+  memberRole: TeamRole | null | undefined,
+  canFn: (permission: string) => boolean,
+): { id: SettingsTabId; label: string }[] {
   const tabs: { id: SettingsTabId; label: string }[] = [
     { id: "profile", label: "Profile" },
   ];
 
-  if (isSuperAdmin.value) {
+  if (superAdmin) {
     tabs.push(
       { id: "general", label: "General" },
       { id: "team", label: "Team Members" },
@@ -167,13 +172,50 @@ const settingsTabs = computed(() => {
     );
   }
 
-  if (isSuperAdmin.value || role.value === "admin" || can("adrs:read")) {
+  if (superAdmin || memberRole === "admin" || canFn("adrs:read")) {
     tabs.push({ id: "adr", label: "Architectural Decisions" });
   }
 
   tabs.push({ id: "mcp", label: "MCP Connection" });
 
   return tabs;
+}
+
+function getAllowedTabIds(): SettingsTabId[] {
+  return buildSettingsTabs(isSuperAdmin.value, role.value, can).map((tab) => tab.id);
+}
+
+function resolveActiveTabFromRoute() {
+  const allowedTabs = getAllowedTabIds();
+  const tabQuery = route.query.tab;
+
+  if (typeof tabQuery === "string" && isSettingsTabId(tabQuery) && allowedTabs.includes(tabQuery)) {
+    activeTab.value = tabQuery;
+    return;
+  }
+
+  if (isSuperAdmin.value && allowedTabs.includes("general")) {
+    activeTab.value = "general";
+    return;
+  }
+
+  activeTab.value = allowedTabs[0] ?? "profile";
+}
+
+const initialTabQuery = route.query.tab;
+const activeTab = ref<SettingsTabId>(
+  typeof initialTabQuery === "string" && isSettingsTabId(initialTabQuery)
+    ? initialTabQuery
+    : "profile",
+);
+const isSettingsRoleLoaded = ref(false);
+
+const settingsTabs = computed(() => {
+  if (!isSettingsRoleLoaded.value) {
+    return [];
+  }
+
+  return buildSettingsTabs(isSuperAdmin.value, role.value, can);
 });
 
 function ensureAllowedActiveTab() {
@@ -257,23 +299,11 @@ onMounted(async () => {
   fetchMcpConfig();
   fetchPendingInvitations();
 
+  resolveActiveTabFromRoute();
+
   if (isSuperAdmin.value) {
     await loadSuperAdminSettings();
-  } else {
-    activeTab.value = "profile";
   }
-
-  const tabQuery = route.query.tab;
-  if (typeof tabQuery === "string" && isSettingsTabId(tabQuery)) {
-    const allowedTabs = settingsTabs.value.map((tab) => tab.id);
-    if (allowedTabs.includes(tabQuery)) {
-      activeTab.value = tabQuery;
-    } else {
-      activeTab.value = allowedTabs[0] ?? "profile";
-    }
-  }
-
-  ensureAllowedActiveTab();
 
   if (activeTab.value === "access" && isSuperAdmin.value) {
     await ensureAccessTabLoaded();

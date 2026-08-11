@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
   });
   
   // Create a new MCP server instance for this connection
-  const mcpServer = createMcpServer();
+  const mcpServer = await createMcpServer();
   
   // Connect the MCP server
   await mcpServer.connect(transport);

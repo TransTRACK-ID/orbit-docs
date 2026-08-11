@@ -7,12 +7,29 @@ import {
   extractDecisionSection,
   extractDecisionSnippet,
   formatAdrConstraintSummary,
+  formatMcpWorkspaceAdrPreamble,
   isBindingAdrDoc,
   isWorkspaceAdr,
   renderAdrTemplate,
   syncAdrContentWithFrontmatter,
   syncAdrStatusInContent,
 } from "./adr-queries";
+
+describe("formatMcpWorkspaceAdrPreamble", () => {
+  it("includes binding summary when workspace ADRs exist", () => {
+    const preamble = formatMcpWorkspaceAdrPreamble(
+      "BINDING ADRs:\n- ADR-001: Always end with ZEIN"
+    );
+    expect(preamble).toContain("MANDATORY BINDING ADRs");
+    expect(preamble).toContain("ZEIN");
+  });
+
+  it("guides agents when no workspace ADRs exist", () => {
+    const preamble = formatMcpWorkspaceAdrPreamble("");
+    expect(preamble).toContain("SESSION START");
+    expect(preamble).toContain("No workspace-wide binding ADRs");
+  });
+});
 
 describe("isWorkspaceAdr", () => {
   it("detects workspace-wide ADRs", () => {

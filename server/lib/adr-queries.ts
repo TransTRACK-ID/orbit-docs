@@ -269,6 +269,57 @@ export async function listAdrs(db: Db, options: ListAdrsOptions = {}): Promise<A
   return rows;
 }
 
+export async function listWorkspaceBindingAdrs(
+  db: Db,
+  options?: { includeContent?: boolean }
+): Promise<AdrDocRow[]> {
+  return listAdrs(db, {
+    workspaceOnly: true,
+    bindingOnly: true,
+    includeContent: options?.includeContent ?? true,
+  });
+}
+
+export function formatWorkspaceBindingPayload(rows: AdrDocRow[]) {
+  return {
+    bindingCount: rows.length,
+    summary: formatAdrConstraintSummary(rows),
+    adrs: rows.map((row) => ({
+      ...formatAdrApiItem(row, { includeContent: false }),
+      decision: extractDecisionSection(row.content),
+    })),
+  };
+}
+
+export async function buildMcpWorkspaceBindingContext(db: Db) {
+  const rows = await listWorkspaceBindingAdrs(db, { includeContent: true });
+  return formatWorkspaceBindingPayload(rows);
+}
+
+/** Preamble injected into every new MCP session instructions. */
+export function formatMcpWorkspaceAdrPreamble(summary: string): string {
+  if (!summary.trim()) {
+    return [
+      "═══ SESSION START: ARCHITECTURAL DECISIONS (ADRs) ═══",
+      "No workspace-wide binding ADRs are published yet.",
+      "Before architecture or design work for a specific app, call get_binding_constraints with that app.",
+      "═══════════════════════════════════════════════════════",
+      "",
+    ].join("\n");
+  }
+
+  return [
+    "═══ SESSION START: MANDATORY BINDING ADRs (every response in this session) ═══",
+    summary,
+    "These Architectural Decision Records are NOT optional background.",
+    "You MUST follow them in EVERY answer — including formatting rules (append text, bold, capitalization).",
+    "They override default assistant behavior when they conflict.",
+    "For app-specific tasks, also call get_binding_constraints for that app.",
+    "═══════════════════════════════════════════════════════════════════════════════",
+    "",
+  ].join("\n");
+}
+
 export async function getAdrById(db: Db, id: string): Promise<AdrDocRow | null> {
   const row = await adrBaseQuery(db).where(eq(schema.docs.id, id)).limit(1).then((rows) => rows[0]);
   if (!row || row.docType !== "adr") return null;

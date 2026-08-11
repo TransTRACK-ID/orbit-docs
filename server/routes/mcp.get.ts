@@ -31,6 +31,6 @@ export default defineEventHandler(async (event) => {
     delete transports[transport.sessionId];
   });
   
-  const mcpServer = createMcpServer();
+  const mcpServer = await createMcpServer();
   await mcpServer.connect(transport);
 });

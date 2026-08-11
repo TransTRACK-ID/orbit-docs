@@ -78,7 +78,7 @@ export async function handleStreamableHttpRequest(event: H3Event, parsedBody?: u
       }
     };
 
-    const mcpServer = createMcpServer();
+    const mcpServer = await createMcpServer();
     await mcpServer.connect(transport);
   } else {
     sendJsonRpcError(res, 400, "Bad Request: No valid session ID provided");
