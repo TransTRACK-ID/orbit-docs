@@ -1,6 +1,6 @@
 import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
-import { formatAdrApiItem, getAdrById } from "~/server/lib/adr-queries";
+import { formatAdrApiItem, getAdrById, persistAdrContentSyncIfNeeded } from "~/server/lib/adr-queries";
 import { requirePermission } from "~/server/utils/rbac";
 
 export default defineEventHandler(async (event) => {
@@ -23,6 +23,11 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Not Found",
       message: "ADR not found",
     });
+  }
+
+  const syncedContent = await persistAdrContentSyncIfNeeded(db, row);
+  if (syncedContent !== row.content) {
+    row.content = syncedContent;
   }
 
   return {

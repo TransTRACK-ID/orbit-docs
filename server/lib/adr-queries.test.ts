@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   adrDisplayLabel,
+  adrContentStatusMismatch,
+  extractAdrStatusFromContent,
   extractDecisionSnippet,
   formatAdrConstraintSummary,
   isBindingAdrDoc,
   renderAdrTemplate,
+  syncAdrContentWithFrontmatter,
+  syncAdrStatusInContent,
 } from "./adr-queries";
 
 describe("isBindingAdrDoc", () => {
@@ -96,5 +100,33 @@ describe("renderAdrTemplate", () => {
 
     expect(rendered).toContain("ADR-002: Use Postgres");
     expect(rendered).toContain("Status: proposed");
+  });
+});
+
+describe("syncAdrStatusInContent", () => {
+  const templateContent = `# ADR-001: Auth
+
+| Field | Value |
+|-------|-------|
+| **Status** | proposed |
+| **Date** | 2026-08-11 |
+`;
+
+  it("updates the status row in the ADR metadata table", () => {
+    const synced = syncAdrStatusInContent(templateContent, "accepted");
+    expect(extractAdrStatusFromContent(synced)).toBe("accepted");
+    expect(synced).toContain("| **Status** | accepted |");
+  });
+
+  it("detects mismatches between frontmatter and content", () => {
+    expect(
+      adrContentStatusMismatch(templateContent, { adr_status: "accepted" })
+    ).toBe(true);
+    expect(
+      adrContentStatusMismatch(
+        syncAdrContentWithFrontmatter(templateContent, { adr_status: "accepted" }),
+        { adr_status: "accepted" }
+      )
+    ).toBe(false);
   });
 });

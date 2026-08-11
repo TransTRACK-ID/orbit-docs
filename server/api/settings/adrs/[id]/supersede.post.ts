@@ -2,7 +2,11 @@ import { defineEventHandler, readBody, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { activityLogs, docs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
-import { formatAdrApiItem, getAdrById } from "~/server/lib/adr-queries";
+import {
+  formatAdrApiItem,
+  getAdrById,
+  syncAdrContentWithFrontmatter,
+} from "~/server/lib/adr-queries";
 import { getActorName } from "~/server/utils/auth";
 import { requirePermission } from "~/server/utils/rbac";
 
@@ -56,13 +60,16 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  const supersededFrontmatter = {
+    ...(existing.frontmatter ?? {}),
+    adr_status: "superseded" as const,
+  };
+
   await db
     .update(docs)
     .set({
-      frontmatter: {
-        ...(existing.frontmatter ?? {}),
-        adr_status: "superseded",
-      },
+      frontmatter: supersededFrontmatter,
+      content: syncAdrContentWithFrontmatter(existing.content, supersededFrontmatter),
       updatedAt: new Date(),
     })
     .where(eq(docs.id, id));

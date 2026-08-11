@@ -248,6 +248,65 @@ export async function loadAdrTemplate(): Promise<string> {
   return readFile(templatePath, "utf-8");
 }
 
+const ADR_STATUS_ROW_PATTERNS = [
+  /^(\|\s*\*\*Status\*\*\s*\|\s*)([^|\n]+)(\s*\|)/im,
+  /^(\|\s*Status\s*\|\s*)([^|\n]+)(\s*\|)/im,
+] as const;
+
+export function extractAdrStatusFromContent(content: string): string | null {
+  for (const pattern of ADR_STATUS_ROW_PATTERNS) {
+    const match = content.match(pattern);
+    if (match?.[2]) return match[2].trim();
+  }
+  return null;
+}
+
+export function adrContentStatusMismatch(
+  content: string | null | undefined,
+  frontmatter?: Record<string, unknown> | null
+): boolean {
+  if (!content) return false;
+  const fm = parseAdrFrontmatter(frontmatter ?? undefined);
+  const expected = fm.adr_status ?? "proposed";
+  const actual = extractAdrStatusFromContent(content);
+  if (!actual) return false;
+  return actual.toLowerCase() !== expected.toLowerCase();
+}
+
+export function syncAdrStatusInContent(content: string, adrStatus: AdrStatus): string {
+  for (const pattern of ADR_STATUS_ROW_PATTERNS) {
+    if (!pattern.test(content)) continue;
+    return content.replace(pattern, `$1${adrStatus}$3`);
+  }
+  return content;
+}
+
+export function syncAdrContentWithFrontmatter(
+  content: string | null | undefined,
+  frontmatter?: Record<string, unknown> | null
+): string {
+  if (!content) return content || "";
+  const fm = parseAdrFrontmatter(frontmatter ?? undefined);
+  return syncAdrStatusInContent(content, fm.adr_status ?? "proposed");
+}
+
+export async function persistAdrContentSyncIfNeeded(
+  db: Db,
+  row: { id: string; content: string | null; frontmatter?: Record<string, unknown> | null }
+): Promise<string | null> {
+  if (!adrContentStatusMismatch(row.content, row.frontmatter)) {
+    return row.content;
+  }
+
+  const synced = syncAdrContentWithFrontmatter(row.content, row.frontmatter);
+  await db
+    .update(schema.docs)
+    .set({ content: synced, updatedAt: new Date() })
+    .where(eq(schema.docs.id, row.id));
+
+  return synced;
+}
+
 export function renderAdrTemplate(
   template: string,
   params: {

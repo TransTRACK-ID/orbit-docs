@@ -2,7 +2,7 @@ import { defineEventHandler, readBody, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { activityLogs, docs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
-import { formatAdrApiItem, getAdrById } from "~/server/lib/adr-queries";
+import { formatAdrApiItem, getAdrById, syncAdrContentWithFrontmatter } from "~/server/lib/adr-queries";
 import { createDocVersionSnapshot, isValidDocVersionAction } from "~/server/lib/doc-version-snapshot";
 import { getActorName } from "~/server/utils/auth";
 import { requirePermission } from "~/server/utils/rbac";
@@ -89,6 +89,9 @@ export default defineEventHandler(async (event) => {
   if (title !== undefined) updateData.title = title.trim();
   if (content !== undefined) updateData.content = content || "";
   if (status !== undefined) updateData.status = status;
+
+  const baseContent = updateData.content ?? existing.content ?? "";
+  updateData.content = syncAdrContentWithFrontmatter(baseContent, mergedFrontmatter);
 
   const updated = await db
     .update(docs)

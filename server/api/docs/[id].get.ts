@@ -3,6 +3,7 @@ import { getDb } from "~/server/database";
 import { docs, apps, appVersions, docSites } from "~/server/database/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
+import { persistAdrContentSyncIfNeeded } from "~/server/lib/adr-queries";
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
@@ -55,6 +56,13 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Not Found",
       message: "Doc not found",
     });
+  }
+
+  if (doc.docType === "adr") {
+    const syncedContent = await persistAdrContentSyncIfNeeded(db, doc);
+    if (syncedContent !== doc.content) {
+      doc.content = syncedContent;
+    }
   }
 
   const allVersions = doc.appId

@@ -2,7 +2,11 @@ import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { activityLogs, docs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
-import { formatAdrApiItem, getAdrById } from "~/server/lib/adr-queries";
+import {
+  formatAdrApiItem,
+  getAdrById,
+  syncAdrContentWithFrontmatter,
+} from "~/server/lib/adr-queries";
 import { getActorName } from "~/server/utils/auth";
 import { requirePermission } from "~/server/utils/rbac";
 import { parseAdrFrontmatter } from "~/types/adr";
@@ -40,6 +44,7 @@ export default defineEventHandler(async (event) => {
     .update(docs)
     .set({
       frontmatter: nextFrontmatter,
+      content: syncAdrContentWithFrontmatter(existing.content, nextFrontmatter),
       updatedAt: new Date(),
     })
     .where(eq(docs.id, id))

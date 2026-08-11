@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { requirePermission } from "~/server/utils/rbac";
 import { getActorName } from "~/server/utils/auth";
 import { createDocVersionSnapshot, isValidDocVersionAction } from "~/server/lib/doc-version-snapshot";
+import { syncAdrContentWithFrontmatter } from "~/server/lib/adr-queries";
 import { parseFrontmatter } from "~/composables/useMarkdown";
 
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
@@ -119,6 +120,14 @@ export default defineEventHandler(async (event) => {
   if (siteId !== undefined) updateData.siteId = siteId || null;
   if (slug !== undefined) updateData.slug = slug ? slug.trim() : null;
   if (sortOrder !== undefined) updateData.sortOrder = Number(sortOrder) || 0;
+
+  if (isAdrDoc) {
+    const mergedFrontmatter =
+      updateData.frontmatter ??
+      (existing.frontmatter && typeof existing.frontmatter === "object" ? existing.frontmatter : {});
+    const baseContent = updateData.content ?? existing.content ?? "";
+    updateData.content = syncAdrContentWithFrontmatter(baseContent, mergedFrontmatter);
+  }
 
   const updatedRow = await db
     .update(docs)
