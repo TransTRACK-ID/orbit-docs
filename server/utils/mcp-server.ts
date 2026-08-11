@@ -95,6 +95,7 @@ export function createMcpServer() {
         "- If your answer conflicts with a binding ADR, follow the ADR and explain the conflict.",
         "- Do not recommend alternatives that violate accepted ADRs unless the user explicitly asks to supersede or revisit the decision.",
         "- ADRs with status \"proposed\", \"deprecated\", or \"superseded\" are informational only.",
+        "- Workspace-wide ADRs (no app) apply to every app and appear in bindingConstraints for all apps.",
         "",
         "Always ground answers in the data returned by these tools and cite doc titles / ids. Never say 'no documentation exists' without first calling list_app_documentation for the app.",
       ].join("\n"),

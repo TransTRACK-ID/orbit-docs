@@ -135,9 +135,13 @@ export function buildGroupedAppDocumentation(
     appId: group.key === "__unbound__" ? null : group.key,
     appName: group.label,
     sections: (() => {
-      const appAdrs = adrRows.filter(
-        (row) => (row.appId || "__unbound__") === group.key && row.status === "published"
-      );
+      const workspaceAdrs = adrRows.filter((row) => !row.appId && row.status === "published");
+      const scopedAppAdrs =
+        group.key === "__unbound__"
+          ? []
+          : adrRows.filter((row) => row.appId === group.key && row.status === "published");
+      const appAdrs =
+        group.key === "__unbound__" ? workspaceAdrs : [...workspaceAdrs, ...scopedAppAdrs];
       const baseSections = group.sections.map((section) => {
         const collapsed = collapseKnowledge && shouldCollapseKnowledgeSection(section);
         return {

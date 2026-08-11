@@ -29,13 +29,8 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  if (!appId || typeof appId !== "string") {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "Bad Request",
-      message: "appId is required for ADRs",
-    });
-  }
+  const normalizedAppId =
+    typeof appId === "string" && appId.trim().length > 0 ? appId.trim() : null;
 
   if (status !== undefined && !VALID_STATUSES.includes(status)) {
     throw createError({
@@ -45,7 +40,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const adrNumber = await suggestNextAdrNumber(db, appId);
+  const adrNumber = await suggestNextAdrNumber(db, normalizedAppId);
   const mergedFrontmatter = {
     ...defaultAdrFrontmatter(adrNumber),
     ...(frontmatter && typeof frontmatter === "object" ? frontmatter : {}),
@@ -77,7 +72,7 @@ export default defineEventHandler(async (event) => {
     .insert(docs)
     .values({
       title: title.trim(),
-      appId,
+      appId: normalizedAppId,
       content: docContent,
       frontmatter: mergedFrontmatter,
       status: status || "draft",

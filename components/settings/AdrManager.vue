@@ -2,7 +2,7 @@
 import { toast } from "vue3-toastify";
 import { formatDistanceToNow } from "date-fns";
 import type { AdrStatus } from "~/types/adr";
-import { ADR_STATUSES } from "~/types/adr";
+import { ADR_STATUSES, WORKSPACE_ADR_LABEL } from "~/types/adr";
 
 export interface AdrListItem {
   id: string;
@@ -13,6 +13,7 @@ export interface AdrListItem {
   adrStatus: AdrStatus;
   docStatus: string;
   binding: boolean;
+  workspaceWide?: boolean;
   scope: string[];
   updatedAt: string | null;
   app: { id: string; name: string } | null;
@@ -129,7 +130,9 @@ const summary = computed(() => {
 
 const filteredAdrs = computed(() => {
   if (!selectedAppId.value) return adrs.value;
-  return adrs.value.filter((adr) => adr.appId === selectedAppId.value);
+  return adrs.value.filter(
+    (adr) => !adr.appId || adr.appId === selectedAppId.value
+  );
 });
 
 const replacementOptions = computed(() => {
@@ -182,18 +185,13 @@ async function fetchAdrs() {
 
 function openCreateModal() {
   createTitle.value = "";
-  createAppId.value =
-    selectedAppId.value || (apps.value.length === 1 ? apps.value[0]!.id : "");
+  createAppId.value = selectedAppId.value;
   showCreateModal.value = true;
 }
 
 async function createAdr() {
   if (!createTitle.value.trim()) {
     toast.error("Title is required");
-    return;
-  }
-  if (!createAppId.value) {
-    toast.error("Select an app");
     return;
   }
 
@@ -203,7 +201,7 @@ async function createAdr() {
       method: "POST",
       body: {
         title: createTitle.value.trim(),
-        appId: createAppId.value,
+        ...(createAppId.value ? { appId: createAppId.value } : {}),
       },
     });
     showCreateModal.value = false;
@@ -326,7 +324,6 @@ onMounted(async () => {
         v-if="canWrite"
         type="button"
         class="btn btn-primary btn-sm"
-        :disabled="apps.length === 0"
         @click="openCreateModal"
       >
         + New ADR
@@ -398,14 +395,13 @@ onMounted(async () => {
         {{
           selectedAppId
             ? "Create the first ADR for this app to define binding constraints for agents."
-            : "Create an ADR and choose which app it applies to."
+            : "Create a workspace-wide ADR or choose a specific app."
         }}
       </p>
       <button
         v-if="canWrite"
         type="button"
         class="btn btn-primary btn-sm"
-        :disabled="apps.length === 0"
         @click="openCreateModal"
       >
         + New ADR
@@ -453,7 +449,9 @@ onMounted(async () => {
               {{ adr.displayLabel }}
             </NuxtLink>
           </td>
-          <td v-if="!selectedAppId">{{ adr.app?.name || "—" }}</td>
+          <td v-if="!selectedAppId">
+            {{ adr.workspaceWide ? WORKSPACE_ADR_LABEL : (adr.app?.name || "—") }}
+          </td>
           <td>
             <span class="pill" :class="adrStatusClass[adr.adrStatus]">
               {{ adrStatusLabel[adr.adrStatus] }}
@@ -529,12 +527,15 @@ onMounted(async () => {
             </div>
             <div class="form-group">
               <label for="adrCreateApp">App</label>
-              <select id="adrCreateApp" v-model="createAppId" required>
-                <option value="" disabled>Select app</option>
+              <select id="adrCreateApp" v-model="createAppId">
+                <option value="">{{ WORKSPACE_ADR_LABEL }}</option>
                 <option v-for="app in apps" :key="app.id" :value="app.id">
                   {{ app.name }}
                 </option>
               </select>
+              <p class="field-hint">
+                Workspace-wide ADRs apply to every app and are included in MCP binding constraints.
+              </p>
             </div>
           </div>
           <div class="modal-foot">
@@ -601,6 +602,13 @@ onMounted(async () => {
   margin: 0;
   color: var(--od-muted);
   font-size: 13px;
+}
+
+.field-hint {
+  margin: 6px 0 0;
+  color: var(--od-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .row-between {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  adrAppliesToApp,
   adrDisplayLabel,
   adrContentStatusMismatch,
   extractAdrStatusFromContent,
@@ -7,10 +8,26 @@ import {
   extractDecisionSnippet,
   formatAdrConstraintSummary,
   isBindingAdrDoc,
+  isWorkspaceAdr,
   renderAdrTemplate,
   syncAdrContentWithFrontmatter,
   syncAdrStatusInContent,
 } from "./adr-queries";
+
+describe("isWorkspaceAdr", () => {
+  it("detects workspace-wide ADRs", () => {
+    expect(isWorkspaceAdr({ appId: null })).toBe(true);
+    expect(isWorkspaceAdr({ appId: "app-1" })).toBe(false);
+  });
+});
+
+describe("adrAppliesToApp", () => {
+  it("includes workspace ADRs for any app", () => {
+    expect(adrAppliesToApp(null, "app-1")).toBe(true);
+    expect(adrAppliesToApp("app-1", "app-1")).toBe(true);
+    expect(adrAppliesToApp("app-2", "app-1")).toBe(false);
+  });
+});
 
 describe("isBindingAdrDoc", () => {
   it("is binding only when published and accepted", () => {

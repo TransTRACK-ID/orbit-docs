@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { and, asc, desc, eq, max, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, max, or, sql } from "drizzle-orm";
 import type { getDb } from "~/server/database";
 import * as schema from "~/server/database/schema";
 import type { McpDocRow } from "~/server/lib/mcp-doc-payload";
@@ -25,6 +25,24 @@ export interface ListAdrsOptions {
   scope?: string;
   includeContent?: boolean;
   limit?: number;
+  /** When true, return only workspace-wide ADRs (no app). */
+  workspaceOnly?: boolean;
+}
+
+export function isWorkspaceAdr(row: { appId?: string | null }): boolean {
+  return row.appId == null;
+}
+
+/** @deprecated use WORKSPACE_ADR_LABEL from ~/types/adr in shared code */
+export const WORKSPACE_ADR_LABEL = "Workspace (all apps)";
+
+/** ADRs that apply when querying a specific app (app-scoped + workspace-wide). */
+export function adrAppliesToApp(adrAppId: string | null | undefined, targetAppId: string): boolean {
+  return adrAppId == null || adrAppId === targetAppId;
+}
+
+function adrScopeForAppCondition(appId: string) {
+  return or(eq(schema.docs.appId, appId), isNull(schema.docs.appId));
 }
 
 function adrBaseQuery(db: Db) {
@@ -170,6 +188,7 @@ export function formatAdrApiItem(row: AdrDocRow, options?: { includeContent?: bo
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     app: row.appName && row.appId ? { id: row.appId, name: row.appName } : null,
+    workspaceWide: isWorkspaceAdr(row),
     frontmatter: row.frontmatter ?? {},
   };
 
@@ -186,7 +205,7 @@ export async function listBindingAdrs(
   options?: { scope?: string; includeContent?: boolean }
 ): Promise<AdrDocRow[]> {
   const conditions = [
-    eq(schema.docs.appId, appId),
+    adrScopeForAppCondition(appId),
     eq(schema.docs.docType, "adr"),
     eq(schema.docs.status, "published"),
     sql`${schema.docs.frontmatter}->>'adr_status' = 'accepted'`,
@@ -213,8 +232,10 @@ export async function listBindingAdrs(
 export async function listAdrs(db: Db, options: ListAdrsOptions = {}): Promise<AdrDocRow[]> {
   const conditions = [eq(schema.docs.docType, "adr")];
 
-  if (options.appId) {
-    conditions.push(eq(schema.docs.appId, options.appId));
+  if (options.workspaceOnly) {
+    conditions.push(isNull(schema.docs.appId));
+  } else if (options.appId) {
+    conditions.push(adrScopeForAppCondition(options.appId));
   }
 
   if (options.bindingOnly) {
@@ -254,13 +275,18 @@ export async function getAdrById(db: Db, id: string): Promise<AdrDocRow | null> 
   return row;
 }
 
-export async function suggestNextAdrNumber(db: Db, appId: string): Promise<number> {
+export async function suggestNextAdrNumber(db: Db, appId: string | null): Promise<number> {
+  const scopeCondition =
+    appId == null
+      ? isNull(schema.docs.appId)
+      : eq(schema.docs.appId, appId);
+
   const result = await db
     .select({
       maxNumber: max(sql`(${schema.docs.frontmatter}->>'adr_number')::int`),
     })
     .from(schema.docs)
-    .where(and(eq(schema.docs.appId, appId), eq(schema.docs.docType, "adr")));
+    .where(and(scopeCondition, eq(schema.docs.docType, "adr")));
 
   const currentMax = result[0]?.maxNumber;
   if (currentMax == null) return 1;

@@ -56,7 +56,10 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage: "Bad Request",
-      message: "Replacement ADR must belong to the same app",
+      message:
+        existing.appId == null
+          ? "Replacement ADR must also be workspace-wide"
+          : "Replacement ADR must belong to the same app or scope",
     });
   }
 

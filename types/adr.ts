@@ -7,6 +7,9 @@ export const ADR_STATUSES: AdrStatus[] = [
   "superseded",
 ];
 
+/** Label for ADRs with no app — they apply workspace-wide. */
+export const WORKSPACE_ADR_LABEL = "Workspace (all apps)";
+
 export interface AdrFrontmatter {
   /** ADR lifecycle status. Default: "proposed" */
   adr_status?: AdrStatus;

@@ -1,5 +1,6 @@
 import type { DocItem } from "~/composables/useDocs";
 import { parseAdrFrontmatter } from "~/types/adr";
+import { WORKSPACE_ADR_LABEL } from "~/types/adr";
 
 export const DOC_TYPE_LABELS: Record<string, string> = {
   srs: "SRS",
@@ -254,6 +255,7 @@ export function groupDocsForList(
 ): DocListGroup[] {
   const filtered = filterDocsByView(docs, view, options);
   const byApp = new Map<string, DocItem[]>();
+  const workspaceAdrs = filtered.filter((doc) => isAdrDoc(doc) && !doc.appId);
 
   for (const doc of filtered) {
     const key = doc.app?.id || "__unbound__";
@@ -264,8 +266,15 @@ export function groupDocsForList(
   const groups: DocListGroup[] = [];
 
   for (const [key, items] of byApp) {
-    const label = items[0]?.app?.name || "Other";
-    const sections = buildSections(items, options);
+    const groupItems =
+      key !== "__unbound__" && workspaceAdrs.length > 0
+        ? [...workspaceAdrs, ...items.filter((doc) => !isAdrDoc(doc) || doc.appId)]
+        : items;
+    const label =
+      key === "__unbound__" && workspaceAdrs.length > 0
+        ? WORKSPACE_ADR_LABEL
+        : items[0]?.app?.name || "Other";
+    const sections = buildSections(groupItems, options);
     if (sections.length === 0) continue;
     groups.push({ key, label, sections });
   }

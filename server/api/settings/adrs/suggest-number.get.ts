@@ -9,10 +9,6 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event);
   const appId = typeof query.appId === "string" ? query.appId : "";
 
-  if (!appId) {
-    return { data: { nextNumber: 1 } };
-  }
-
-  const nextNumber = await suggestNextAdrNumber(db, appId);
+  const nextNumber = await suggestNextAdrNumber(db, appId || null);
   return { data: { nextNumber } };
 });
