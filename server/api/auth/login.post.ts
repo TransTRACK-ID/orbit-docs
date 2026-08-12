@@ -124,7 +124,7 @@ export default defineEventHandler(async (event) => {
 
       // Auto-provision admin as workspace member
       try {
-        await ensureTeamMember({ id: email, email, name: 'Admin' });
+        await ensureTeamMember({ id: email, email, name: 'Admin' }, { role: 'admin' });
       } catch (e) {
         console.error("Failed to auto-provision admin team member:", e);
       }
@@ -184,7 +184,7 @@ export default defineEventHandler(async (event) => {
         });
       }
 
-      // Auto-provision the user as workspace admin if they don't have a member record
+      // Auto-provision the user as view-only if they don't have a member record
       if (response.data?.access_token) {
         try {
           const token = response.data.access_token;
@@ -253,7 +253,7 @@ export default defineEventHandler(async (event) => {
       maxAge: COOKIE_MAX_AGE,
     });
 
-    // Auto-provision the user as workspace admin if they don't have a member record
+    // Auto-provision the user as view-only if they don't have a member record
     try {
       await ensureTeamMember({ id: user.id, email: user.email, name: user.name });
     } catch (e) {

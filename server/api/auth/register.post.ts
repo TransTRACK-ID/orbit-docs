@@ -141,7 +141,7 @@ export default defineEventHandler(async (event) => {
         });
       }
 
-      // Auto-provision the new user as a workspace admin
+      // Auto-provision the new user as a view-only workspace member
       try {
         const token = response.data.access_token;
         const sessionResp = await $fetch<{
@@ -208,7 +208,7 @@ export default defineEventHandler(async (event) => {
       maxAge: COOKIE_MAX_AGE,
     });
 
-    // Auto-provision the registering user as workspace admin
+    // Auto-provision the registering user as a view-only workspace member
     try {
       await ensureTeamMember({ id: userId, email, name });
     } catch (e) {

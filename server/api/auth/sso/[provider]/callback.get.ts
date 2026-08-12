@@ -316,7 +316,7 @@ export default defineEventHandler(async (event) => {
   console.log(`[SSO Callback] Cookies set: session_token=${token.substring(0, 20)}..., auth.token=${token.substring(0, 20)}..., user_info=${userInfoCookie.substring(0, 20)}...`);
   console.log(`[SSO Callback] Cookie options: httpOnly=${cookieOptions.httpOnly}, secure=${cookieOptions.secure}, sameSite=${cookieOptions.sameSite}, path=${cookieOptions.path}`);
 
-  // Auto-provision the user as workspace admin if they don't have a member record
+  // Auto-provision the user as view-only if they don't have a member record
   try {
     if (normalizedUserInfo.email) {
       await ensureTeamMember({

@@ -164,13 +164,22 @@ export async function requireSuperAdminAccess(event: H3Event) {
   return member;
 }
 
+export interface EnsureTeamMemberOptions {
+  /** Role assigned when creating a new member without a pending invitation. Defaults to viewer. */
+  role?: TeamRole;
+}
+
 /**
  * Ensure the authenticated user has an active team member record.
- * If a pending invitation exists for their email/userId, it is activated.
- * Otherwise a new admin member is created so the registering user
- * becomes the workspace owner.
+ * If a pending invitation exists for their email/userId, it is activated
+ * (preserving the invited role). Otherwise a new member is created with
+ * the given role (defaults to viewer for self-service sign-up).
  */
-export async function ensureTeamMember(user: SessionUser) {
+export async function ensureTeamMember(
+  user: SessionUser,
+  options: EnsureTeamMemberOptions = {}
+) {
+  const defaultRole = options.role ?? "viewer";
   const db = getDb();
   const name = user.name || user.email || "Unknown";
   const initials = name
@@ -237,7 +246,6 @@ export async function ensureTeamMember(user: SessionUser) {
     return updated;
   }
 
-  // Create new admin — first user to join becomes workspace owner
   const now = new Date();
   const [member] = await db
     .insert(teamMembers)
@@ -246,7 +254,7 @@ export async function ensureTeamMember(user: SessionUser) {
       name,
       email: user.email || null,
       initials,
-      role: "admin",
+      role: defaultRole,
       status: "active",
       userId: user.id || null,
       lastActive: "just now",
