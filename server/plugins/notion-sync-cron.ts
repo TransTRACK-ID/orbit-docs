@@ -1,25 +1,31 @@
 import { getNotionSyncRow, runNotionSync, loadNotionSyncConfig } from "~/server/lib/notion/sync";
-
-const HOURLY_MS = 60 * 60 * 1000;
-const DAILY_MS = 24 * 60 * 60 * 1000;
+import {
+  getWorkspaceSyncSchedule,
+  isSyncIntervalDue,
+} from "~/server/lib/sync-schedule";
+import { runScheduledDocGenerations } from "~/server/lib/doc-generation-schedule";
 
 export default defineNitroPlugin(() => {
   const tick = async () => {
     try {
-      const row = await getNotionSyncRow();
-      if (!row.scheduleEnabled || !row.connected) return;
+      const workspaceSchedule = await getWorkspaceSyncSchedule();
+      if (!workspaceSchedule.enabled) return;
 
-      const config = await loadNotionSyncConfig();
-      if (!config) return;
+      const notionRow = await getNotionSyncRow();
+      if (
+        notionRow.connected &&
+        notionRow.lastSyncStatus !== "running" &&
+        isSyncIntervalDue(notionRow.lastSyncAt, workspaceSchedule.interval)
+      ) {
+        const config = await loadNotionSyncConfig();
+        if (config) {
+          await runNotionSync();
+        }
+      }
 
-      const intervalMs = row.scheduleInterval === "hourly" ? HOURLY_MS : DAILY_MS;
-      const last = row.lastSyncAt ? new Date(row.lastSyncAt).getTime() : 0;
-      if (Date.now() - last < intervalMs) return;
-      if (row.lastSyncStatus === "running") return;
-
-      await runNotionSync();
+      await runScheduledDocGenerations();
     } catch (err: any) {
-      console.warn("[notion-sync-cron]", err?.message || err);
+      console.warn("[sync-cron]", err?.message || err);
     }
   };
 

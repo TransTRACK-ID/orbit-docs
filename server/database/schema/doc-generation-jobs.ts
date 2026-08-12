@@ -18,7 +18,7 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   scope: text("scope", { enum: ["product", "repo"] })
     .notNull()
     .default("product"),
-  trigger: text("trigger", { enum: ["manual", "webhook"] })
+  trigger: text("trigger", { enum: ["manual", "webhook", "scheduled"] })
     .notNull()
     .default("manual"),
   // Set for repo-scoped jobs.

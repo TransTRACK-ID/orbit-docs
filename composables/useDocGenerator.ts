@@ -5,7 +5,7 @@ export interface DocGenerationJob {
   appId: string;
   repoUrl: string | null;
   scope?: "product" | "repo";
-  trigger?: "manual" | "webhook";
+  trigger?: "manual" | "webhook" | "scheduled";
   status: string;
   progressPct: number;
   progressMessage: string;

@@ -387,6 +387,20 @@ export default defineNitroPlugin(async () => {
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS repo_id TEXT`);
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS git_snapshot_content TEXT`);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_generation_schedule (
+      id TEXT PRIMARY KEY,
+      app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
+      schedule_enabled BOOLEAN NOT NULL DEFAULT false,
+      last_run_at TIMESTAMP WITH TIME ZONE,
+      last_run_status TEXT NOT NULL DEFAULT 'idle',
+      last_run_job_id TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS doc_generation_schedule_app_id_unique ON doc_generation_schedule (app_id)`);
+
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS share_token TEXT`);
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS share_enabled BOOLEAN NOT NULL DEFAULT false`);
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS shared_at TIMESTAMP WITH TIME ZONE`);

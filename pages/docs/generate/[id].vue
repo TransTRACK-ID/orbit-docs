@@ -18,6 +18,45 @@ const { can } = usePermissions();
 
 const canRunDocGeneration = computed(() => can("doc_generation:run"));
 
+const {
+  settings: scheduleSettings,
+  isLoading: isLoadingSchedule,
+  isSaving: isSavingSchedule,
+  fetchSchedule,
+  toggleSchedule,
+} = useDocGenerationSchedule(appId);
+
+const scheduleIntervalLabel = computed(() => {
+  const interval = scheduleSettings.value?.workspaceSchedule.interval;
+  return interval === "hourly" ? "every hour" : "once per day";
+});
+
+const scheduleActive = computed(() => {
+  return (
+    !!scheduleSettings.value?.scheduleEnabled &&
+    !!scheduleSettings.value?.workspaceSchedule.enabled
+  );
+});
+
+const scheduleHint = computed(() => {
+  if (!scheduleSettings.value) return "";
+  if (!scheduleSettings.value.workspaceSchedule.enabled) {
+    return "Workspace scheduled sync is off. Enable it in Settings → Integrations → Sync.";
+  }
+  if (!scheduleSettings.value.scheduleEnabled) {
+    return "Scheduled sync is off for this app.";
+  }
+  if (repoCount.value === 0) {
+    return "Add at least one repository before scheduled sync can run.";
+  }
+  return `Runs ${scheduleIntervalLabel.value} using the workspace sync schedule.`;
+});
+
+function formatScheduleTime(iso: string | null | undefined) {
+  if (!iso) return "Never";
+  return new Date(iso).toLocaleString();
+}
+
 // Agent configuration from public runtime config
 const publicConfig = useRuntimeConfig().public;
 const activeAgent = computed(() => (publicConfig.docAgent as string) || "opencode");
@@ -102,6 +141,9 @@ onMounted(() => {
   loadAppInfo();
   fetchRepositories(appId);
   fetchJobs(appId);
+  if (canRunDocGeneration.value) {
+    fetchSchedule();
+  }
 });
 
 onBeforeUnmount(() => {
@@ -500,6 +542,52 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
     </div>
     <p v-else class="text-muted-sm">You do not have permission to run doc generation.</p>
 
+    <!-- Scheduled sync -->
+    <div v-if="canRunDocGeneration" class="form-section schedule-section">
+      <h2>Scheduled Sync</h2>
+      <p class="section-desc">
+        Automatically regenerate docs on the workspace sync schedule configured in
+        <NuxtLink to="/settings?tab=integrations">Settings → Integrations</NuxtLink>.
+      </p>
+
+      <div v-if="isLoadingSchedule" class="skeleton-wrap">
+        <div class="skeleton-line w-full" />
+        <div class="skeleton-line w-2/3" />
+      </div>
+
+      <template v-else-if="scheduleSettings">
+        <div class="toggle" style="margin-bottom: 16px;">
+          <button
+            class="toggle-switch"
+            :class="{ on: scheduleSettings.scheduleEnabled }"
+            aria-label="Toggle scheduled doc generation"
+            :disabled="isSavingSchedule"
+            @click="toggleSchedule"
+          />
+          <div>
+            <div class="toggle-label">Scheduled doc sync</div>
+            <div class="toggle-desc">
+              {{
+                scheduleSettings.scheduleEnabled
+                  ? scheduleActive
+                    ? `Active · runs ${scheduleIntervalLabel}`
+                    : "Enabled for this app, waiting for workspace scheduled sync"
+                  : "Off — generate docs manually only"
+              }}
+            </div>
+          </div>
+        </div>
+
+        <div class="schedule-meta">
+          <span>Last scheduled run: {{ formatScheduleTime(scheduleSettings.lastRunAt) }}</span>
+          <template v-if="scheduleSettings.lastRunStatus && scheduleSettings.lastRunStatus !== 'idle'">
+            · {{ scheduleSettings.lastRunStatus }}
+          </template>
+        </div>
+        <p v-if="scheduleHint" class="schedule-hint">{{ scheduleHint }}</p>
+      </template>
+    </div>
+
     <!-- ─── Progress + Agent Logs panel ─────────────────────────── -->
     <div v-if="showProgress" class="progress-section">
       <h2>Generation Progress</h2>
@@ -768,8 +856,23 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
               {{ job.repoRef || "—" }}
             </td>
             <td>
-              <span class="pill" :class="job.trigger === 'webhook' ? 'pill-muted' : 'pill-blue'">
-                {{ job.trigger === 'webhook' ? 'Webhook' : 'Manual' }}
+              <span
+                class="pill"
+                :class="
+                  job.trigger === 'webhook'
+                    ? 'pill-muted'
+                    : job.trigger === 'scheduled'
+                      ? 'pill-accent'
+                      : 'pill-blue'
+                "
+              >
+                {{
+                  job.trigger === 'webhook'
+                    ? 'Webhook'
+                    : job.trigger === 'scheduled'
+                      ? 'Scheduled'
+                      : 'Manual'
+                }}
               </span>
             </td>
             <td class="col-num col-muted">{{ formatDate(job.createdAt) }}</td>
@@ -836,7 +939,8 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 .form-section,
 .progress-section,
 .result-section,
-.history-section {
+.history-section,
+.schedule-section {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -845,11 +949,114 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 .form-section h2,
 .progress-section h2,
 .result-section h2,
-.history-section h2 {
+.history-section h2,
+.schedule-section h2 {
   margin: 0;
   font-weight: 600;
   font-size: 16px;
   color: var(--fg);
+}
+
+.section-desc {
+  margin: -8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.section-desc a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.section-desc a:hover {
+  text-decoration: underline;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toggle-switch {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--border);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  border: none;
+  padding: 0;
+}
+
+.toggle-switch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toggle-switch.on {
+  background: var(--accent);
+}
+
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch.on::after {
+  transform: translateX(18px);
+}
+
+.toggle-label {
+  font-size: 14px;
+  color: var(--fg);
+}
+
+.toggle-desc {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.schedule-meta {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.schedule-hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.skeleton-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--fg) 8%, transparent);
+}
+
+.skeleton-line.w-full {
+  width: 100%;
+}
+
+.skeleton-line.w-2\/3 {
+  width: 66%;
 }
 
 /* ── Progress card ────────────────────────────────────────────── */
