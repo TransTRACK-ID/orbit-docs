@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
+import { extractHeadings, renderMarkdown } from "~/composables/useMarkdown";
 import { formatDisplayVersion, formatReleaseHeading } from "~/utils/functions";
 import type { ReleaseItem } from "~/composables/useReleases";
 
@@ -21,9 +22,16 @@ const route = useRoute();
 const { apps, fetchApps } = useApps();
 const { releases, isLoading, fetchReleases } = useReleases();
 
-// Filters
 const searchQuery = ref("");
 const appFilter = ref((route.query.app as string) || "");
+const expandedReleaseId = ref<string | null>(null);
+
+watch(
+  () => route.query.app,
+  (app) => {
+    appFilter.value = (app as string) || "";
+  },
+);
 
 onMounted(async () => {
   await fetchApps();
@@ -31,6 +39,11 @@ onMounted(async () => {
     search: searchQuery.value,
     app: appFilter.value,
   });
+  document.addEventListener("keydown", onKeydown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", onKeydown);
 });
 
 watch([searchQuery, appFilter], async () => {
@@ -40,23 +53,36 @@ watch([searchQuery, appFilter], async () => {
   });
 });
 
-const filteredReleases = computed(() => {
-  return [...releases.value].sort((a, b) => {
+const filteredReleases = computed(() =>
+  [...releases.value].sort((a, b) => {
     const dA = new Date(a.releaseDate || a.createdAt || 0).getTime();
     const dB = new Date(b.releaseDate || b.createdAt || 0).getTime();
     return dB - dA;
-  });
+  }),
+);
+
+watch(filteredReleases, (list) => {
+  if (
+    expandedReleaseId.value
+    && !list.some((r) => r.id === expandedReleaseId.value)
+  ) {
+    expandedReleaseId.value = null;
+  }
 });
 
 const appFilterOptions = computed(() => [
-  { id: "", label: "All apps" },
+  { id: "", label: "Semua apps" },
   ...apps.value.map((a) => ({ id: a.name, label: a.name })),
 ]);
 
-function formatDate(dateStr: string | null) {
+function formatTimelineDate(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("id-ID", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 function countCategories(categories: ReleaseItem["categories"]) {
@@ -69,24 +95,12 @@ function countCategories(categories: ReleaseItem["categories"]) {
   };
 }
 
-function renderPill(count: number, label: string, colorClass: string) {
-  if (!count) return "";
-  return `<span class="pill ${colorClass}">${count} ${label}</span>`;
-}
+const publishPillClass = (published: boolean) => (published ? "pill-green" : "pill-blue");
 
-const statusClass: Record<string, string> = {
-  published: "pill-green",
-  draft: "pill-blue",
-  rc: "pill-amber",
-  archived: "pill-muted",
-};
+const publishLabel = (published: boolean) => (published ? "PUBLISHED" : "DRAFT");
 
-const statusLabel: Record<string, string> = {
-  published: "Published",
-  draft: "Draft",
-  rc: "RC",
-  archived: "Archived",
-};
+const typeLabel = (type: ReleaseItem["type"]) =>
+  type === "article" ? "ARTICLE" : "CHANGELOG";
 
 const categoryConfig: Record<string, { label: string; tagClass: string }> = {
   fixed: { label: "Fixed", tagClass: "rl-tag-fixed" },
@@ -96,11 +110,60 @@ const categoryConfig: Record<string, { label: string; tagClass: string }> = {
   security: { label: "Security", tagClass: "rl-tag-security" },
 };
 
-function mediaCount(r: ReleaseItem) {
-  return (r.features || []).reduce((sum, f) => sum + (f.media || []).length, 0);
+function getSummaryBlurb(summary: string | null): string {
+  if (!summary?.trim()) return "";
+  const body = summary.replace(/^---[\s\S]*?---\n?/, "").trim();
+  const intro = body.split(/^#{1,3}\s/m)[0].trim();
+  const text = intro.replace(/\*\*/g, "").replace(/\n+/g, " ").trim();
+  if (!text) return "";
+  return text.length > 260 ? `${text.slice(0, 257)}…` : text;
 }
 
-// ── Share modal state ──────────────────────────────────────────
+function getOutlineItems(summary: string | null) {
+  return extractHeadings(summary || "").filter((h) => h.level <= 3);
+}
+
+function getCollapsedPreview(r: ReleaseItem): string {
+  const blurb = getSummaryBlurb(r.summary);
+  if (blurb) return blurb;
+  if (r.type === "normal" && r.categories) {
+    const cats = countCategories(r.categories);
+    const total = Object.values(cats).reduce((sum, items) => sum + items.length, 0);
+    if (total > 0) {
+      return `${total} perubahan pada rilis ${formatDisplayVersion(r.version)}.`;
+    }
+  }
+  return `Rilis ${formatDisplayVersion(r.version)} untuk ${r.appName}.`;
+}
+
+function isExpanded(id: string) {
+  return expandedReleaseId.value === id;
+}
+
+function expandRelease(id: string) {
+  expandedReleaseId.value = id;
+}
+
+function collapseRelease(id: string) {
+  if (expandedReleaseId.value === id) expandedReleaseId.value = null;
+}
+
+function editReleaseLink(r: ReleaseItem): string | null {
+  if (r.type === "normal" && r.versionId && canWriteChangelogs.value) {
+    return `/changelogs?versionId=${r.versionId}`;
+  }
+  if (canWriteReleases.value) return `/releases/${r.id}?edit=1`;
+  return null;
+}
+
+function editReleaseLabel(r: ReleaseItem): string {
+  if (r.type === "normal" && r.versionId && canWriteChangelogs.value) {
+    return "Edit changelog";
+  }
+  return "Edit release";
+}
+
+// ── Share modal ────────────────────────────────────────────────
 const showShareModal = ref(false);
 const shareApp = ref("");
 const shareEmbed = ref(false);
@@ -115,7 +178,7 @@ const shareUrl = computed(() => {
 });
 
 const shareAppOptions = computed(() => [
-  { id: "", label: "All apps" },
+  { id: "", label: "Semua apps" },
   ...apps.value.map((a) => ({ id: a.name, label: a.name })),
 ]);
 
@@ -132,7 +195,7 @@ function closeShareModal() {
 async function copyShareUrl() {
   try {
     await navigator.clipboard.writeText(shareUrl.value);
-    alert("Public link copied to clipboard");
+    alert("Tautan publik disalin");
     closeShareModal();
   } catch {
     const input = document.createElement("input");
@@ -141,7 +204,7 @@ async function copyShareUrl() {
     input.select();
     document.execCommand("copy");
     document.body.removeChild(input);
-    alert("Public link copied to clipboard");
+    alert("Tautan publik disalin");
     closeShareModal();
   }
 }
@@ -156,188 +219,233 @@ function onKeydown(e: KeyboardEvent) {
     appFilter.value = "";
   }
 }
-
-onMounted(() => document.addEventListener("keydown", onKeydown));
-onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 </script>
 
 <template>
   <div class="releases-page">
-    <!-- Topbar -->
-    <header class="topbar">
-      <div class="flex-gap-md">
+    <header class="page-masthead">
+      <div class="page-masthead__copy">
         <h1>Releases</h1>
-        <span class="text-muted-sm">Release notes, articles, and drafts across all apps</span>
+        <p class="page-subtitle">
+          Catatan rilis, pembaruan, dan draft lintas aplikasi.
+        </p>
       </div>
-      <div class="flex-gap-md">
+      <button type="button" class="btn btn-primary" @click="openShareModal">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+          <polyline points="16 6 12 2 8 6" />
+          <line x1="12" y1="2" x2="12" y2="15" />
+        </svg>
+        Bagikan
+      </button>
+    </header>
+
+    <div class="filter-strip">
+      <div class="search-wrap">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+          <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
         <input
           v-model="searchQuery"
           class="search"
-          placeholder="Search releases…"
-          aria-label="Search releases"
+          placeholder="Cari rilis..."
+          aria-label="Cari rilis"
         />
-        <GeneralSearchableDropdown
-          v-model="appFilter"
-          :options="appFilterOptions"
-          placeholder="Filter by app…"
-          search-placeholder="Search apps…"
-        />
-        <button type="button" class="btn btn-secondary btn-sm" @click="openShareModal">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          Share
-        </button>
       </div>
-    </header>
+      <GeneralSearchableDropdown
+        v-model="appFilter"
+        :options="appFilterOptions"
+        placeholder="Semua apps"
+        search-placeholder="Cari app..."
+      />
+    </div>
 
-    <!-- Release list -->
-    <main class="release-list">
-      <div v-if="isLoading" class="release-item" style="opacity: 0.6;">
-        <div class="release-date">—</div>
-        <div class="release-body">
-          <div class="release-header-row">
-            <span class="release-title">Loading…</span>
-          </div>
+    <main class="release-timeline" aria-live="polite">
+      <article
+        v-if="isLoading"
+        class="release-entry is-loading"
+        aria-busy="true"
+      >
+        <div class="release-rail">
+          <span class="release-rail__date">—</span>
+          <span class="release-rail__label">Rilis</span>
         </div>
-      </div>
+        <div class="release-main">
+          <p class="release-loading">Memuat rilis…</p>
+        </div>
+      </article>
 
       <article
         v-for="r in filteredReleases"
+        v-else
         :key="r.id"
-        class="release-item"
+        class="release-entry"
+        :class="{ 'is-expanded': isExpanded(r.id) }"
         :data-app="r.appName"
         :data-version="r.version"
       >
-        <div class="release-date">{{ formatDate(r.releaseDate || r.createdAt) }}</div>
-        <div class="release-body">
-          <div class="release-header-row">
-            <NuxtLink :to="`/releases/${r.id}`" class="release-title">
-              {{ formatReleaseHeading(r.appName, r.version, r.heroTitle) }}
-            </NuxtLink>
-            <span class="pill" :class="r.type === 'article' ? 'pill-purple' : 'pill-muted'">
-              {{ r.type === 'article' ? 'Article' : 'Normal' }}
-            </span>
-            <span class="pill" :class="r.published ? 'pill-green' : 'pill-amber'">
-              {{ r.published ? 'Published' : 'Draft' }}
-            </span>
-            <span v-if="mediaCount(r) > 0" class="pill pill-muted">{{ mediaCount(r) }} media</span>
-            <span v-if="r.versionStatus" class="release-status">
-              <span class="status-dot" :class="{
-                'status-published': r.versionStatus === 'published',
-                'status-draft': r.versionStatus === 'draft',
-                'status-rc': r.versionStatus === 'rc',
-                'status-archived': r.versionStatus === 'archived'
-              }" />
-              {{ statusLabel[r.versionStatus] || r.versionStatus }}
-            </span>
-          </div>
-          <!-- Normal release: colored category badges like /p/releases -->
-          <template v-if="r.type === 'normal' && r.categories">
-            <div
-              v-for="[key, items] in Object.entries(countCategories(r.categories)).filter(([, v]) => v.length > 0)"
-              :key="key"
-              class="rl-cat-group"
-            >
-              <span class="rl-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
-                {{ categoryConfig[key]?.label || key }}
-              </span>
-              <ul class="rl-cat-list list-disc">
-                <li v-for="item in items" :key="item">{{ item }}</li>
-              </ul>
+        <div class="release-rail">
+          <time class="release-rail__date" :datetime="r.releaseDate || r.createdAt || undefined">
+            {{ formatTimelineDate(r.releaseDate || r.createdAt) }}
+          </time>
+          <span class="release-rail__label">Rilis</span>
+        </div>
+
+        <div class="release-main">
+          <header class="release-head">
+            <div class="release-head__row">
+              <h2 class="release-title">
+                <NuxtLink :to="`/releases/${r.id}`">
+                  {{ formatReleaseHeading(r.appName, r.version, r.heroTitle) }}
+                </NuxtLink>
+              </h2>
+              <div class="release-badges">
+                <span class="pill" :class="publishPillClass(r.published)">
+                  {{ publishLabel(r.published) }}
+                </span>
+                <span class="pill pill-muted">{{ typeLabel(r.type) }}</span>
+              </div>
             </div>
+            <div class="release-chips">
+              <span v-if="r.version" class="meta-chip">Versi {{ formatDisplayVersion(r.version) }}</span>
+              <span class="meta-chip">Produk {{ r.appName }}</span>
+            </div>
+          </header>
+
+          <template v-if="isExpanded(r.id)">
+            <section
+              v-if="getSummaryBlurb(r.summary)"
+              class="release-panel release-panel--summary"
+              aria-label="Ringkasan rilis"
+            >
+              <div class="release-panel__head">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
+                </svg>
+                <span>Ringkasan rilis</span>
+              </div>
+              <p class="release-panel__text">{{ getSummaryBlurb(r.summary) }}</p>
+            </section>
+
+            <section
+              v-if="r.type === 'article' && getOutlineItems(r.summary).length"
+              class="release-panel release-panel--outline"
+              aria-label="Daftar isi"
+            >
+              <div class="release-panel__head">
+                <span class="release-panel__eyebrow">Daftar isi</span>
+              </div>
+              <ul class="release-outline" role="list">
+                <li
+                  v-for="(heading, idx) in getOutlineItems(r.summary)"
+                  :key="`${r.id}-h-${idx}`"
+                  :class="`release-outline__item level-${heading.level}`"
+                >
+                  {{ heading.text }}
+                </li>
+              </ul>
+            </section>
+
+            <div class="release-content">
+              <template v-if="r.type === 'normal' && r.categories">
+                <div
+                  v-for="[key, items] in Object.entries(countCategories(r.categories)).filter(([, v]) => v.length > 0)"
+                  :key="key"
+                  class="rl-cat-group"
+                >
+                  <h3 class="rl-cat-heading">
+                    <span class="rl-cat-badge" :class="categoryConfig[key]?.tagClass || 'rl-tag-muted'">
+                      {{ categoryConfig[key]?.label || key }}
+                    </span>
+                  </h3>
+                  <ul class="rl-cat-list">
+                    <li v-for="item in items" :key="item">{{ item }}</li>
+                  </ul>
+                </div>
+              </template>
+              <MermaidHtml
+                v-else-if="r.summary"
+                class="release-markdown"
+                :html="renderMarkdown(r.summary)"
+              />
+            </div>
+
+            <footer class="release-foot">
+              <span class="release-foot__app">{{ r.appName }}</span>
+              <NuxtLink
+                v-if="editReleaseLink(r)"
+                :to="editReleaseLink(r)!"
+                class="release-foot__edit"
+              >
+                {{ editReleaseLabel(r) }}
+              </NuxtLink>
+            </footer>
+
+            <button
+              type="button"
+              class="release-toggle"
+              @click="collapseRelease(r.id)"
+            >
+              Sembunyikan konten
+            </button>
           </template>
-          <!-- Article or no categories: markdown preview -->
-          <GeneralMarkdownReader
-            v-else
-            mode="compact"
-            :show-outline="false"
-            :content="r.summary || r.heroTitle || ''"
-          />
-          <div class="release-meta-row">
-            <span class="release-app">{{ r.appName }}</span>
-            <span
-              v-if="countCategories(r.categories).added.length"
-              class="pill pill-green"
+
+          <template v-else>
+            <p class="release-preview">{{ getCollapsedPreview(r) }}</p>
+            <button
+              type="button"
+              class="release-toggle"
+              @click="expandRelease(r.id)"
             >
-              {{ countCategories(r.categories).added.length }} added
-            </span>
-            <span
-              v-if="countCategories(r.categories).fixed.length"
-              class="pill pill-blue"
-            >
-              {{ countCategories(r.categories).fixed.length }} fixed
-            </span>
-            <span
-              v-if="countCategories(r.categories).changed.length"
-              class="pill pill-amber"
-            >
-              {{ countCategories(r.categories).changed.length }} changed
-            </span>
-            <span
-              v-if="countCategories(r.categories).deprecated.length"
-              class="pill pill-purple"
-            >
-              {{ countCategories(r.categories).deprecated.length }} deprecated
-            </span>
-            <span
-              v-if="countCategories(r.categories).security.length"
-              class="pill pill-red"
-            >
-              {{ countCategories(r.categories).security.length }} security
-            </span>
-            <NuxtLink
-              v-if="r.type === 'normal' && r.versionId && canWriteChangelogs"
-              :to="`/changelogs?versionId=${r.versionId}`"
-              class="btn btn-ghost btn-sm"
-              style="margin-left: auto;"
-              @click.stop
-            >
-              Edit changelog
-            </NuxtLink>
-            <NuxtLink
-              v-else-if="canWriteReleases"
-              :to="`/releases/${r.id}?edit=1`"
-              class="btn btn-ghost btn-sm"
-              style="margin-left: auto;"
-              @click.stop
-            >
-              Edit release
-            </NuxtLink>
-          </div>
+              Tampilkan konten
+            </button>
+          </template>
         </div>
       </article>
 
       <div v-if="filteredReleases.length === 0 && !isLoading" class="empty-state">
-        <p>No releases found</p>
-        <span class="meta-label">Try adjusting your search or filter</span>
+        <p>Tidak ada rilis ditemukan</p>
+        <span class="empty-hint">Coba ubah pencarian atau filter app</span>
       </div>
     </main>
 
-    <!-- Share public link modal -->
-    <div class="share-modal" :class="{ open: showShareModal }" role="dialog" aria-modal="true" aria-labelledby="shareTitle" tabindex="-1" @click.self="closeShareModal">
+    <div
+      class="share-modal"
+      :class="{ open: showShareModal }"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="shareTitle"
+      tabindex="-1"
+      @click.self="closeShareModal"
+    >
       <div class="share-drawer">
         <div class="share-header">
-          <h3 id="shareTitle">Share public link</h3>
-          <button type="button" class="btn btn-ghost share-close" aria-label="Close share dialog" @click="closeShareModal">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          <h3 id="shareTitle">Bagikan tautan publik</h3>
+          <button type="button" class="btn btn-ghost share-close" aria-label="Tutup" @click="closeShareModal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
           </button>
         </div>
         <div class="share-body">
           <div class="share-field">
-            <label for="shareApp">Scope</label>
+            <label for="shareApp">Cakupan</label>
             <GeneralSearchableDropdown
               id="shareApp"
               v-model="shareApp"
               :options="shareAppOptions"
-              placeholder="All apps"
-              search-placeholder="Search apps…"
+              placeholder="Semua apps"
+              search-placeholder="Cari app..."
             />
           </div>
 
           <div class="share-field">
             <div class="share-toggle-row" @click="shareEmbed = !shareEmbed">
               <div class="share-toggle-info">
-                <span class="share-toggle-label">Embed mode</span>
-                <span class="share-toggle-desc">Strips header and footer for iframe use</span>
+                <span class="share-toggle-label">Mode embed</span>
+                <span class="share-toggle-desc">Menghilangkan header dan footer untuk iframe</span>
               </div>
               <button
                 type="button"
@@ -353,15 +461,18 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
           </div>
 
           <div class="share-preview">
-            <label>URL preview</label>
+            <label>Pratinjau URL</label>
             <code class="share-url">{{ shareUrl }}</code>
           </div>
         </div>
         <div class="share-footer">
-          <button type="button" class="btn btn-secondary" @click="closeShareModal">Cancel</button>
+          <button type="button" class="btn btn-secondary" @click="closeShareModal">Batal</button>
           <button type="button" class="btn btn-primary" @click="copyShareUrl">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            Copy link
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            Salin tautan
           </button>
         </div>
       </div>
@@ -374,34 +485,60 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   /* inherits global tokens */
 }
 
-.topbar {
+.page-masthead {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
-.topbar h1 {
-  margin: 0;
+
+.page-masthead__copy {
+  min-width: 0;
+}
+
+.page-masthead h1 {
+  margin: 0 0 4px;
   font-weight: 600;
   font-size: 20px;
   color: var(--fg);
 }
 
-.flex-gap-md {
-  display: flex;
-  gap: 16px;
-  align-items: center;
+.page-subtitle {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
-.text-muted-sm {
+.filter-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.search-wrap {
+  position: relative;
+  flex: 1 1 240px;
+  min-width: 200px;
+  max-width: 360px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--muted);
-  font-size: 13px;
+  pointer-events: none;
 }
 
 .search {
-  width: 320px;
-  padding: 8px 12px;
+  width: 100%;
+  padding: 8px 12px 8px 36px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
@@ -409,24 +546,331 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   font-size: 14px;
   color: var(--fg);
 }
+
 .search:focus {
   outline: 2px solid var(--accent-soft);
   border-color: var(--accent);
 }
 
-.select {
-  padding: 8px 12px;
+.release-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.release-entry {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 24px;
+  padding: 28px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.release-entry.is-loading {
+  opacity: 0.7;
+}
+
+.release-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.release-rail__date {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  line-height: 1.4;
+}
+
+.release-rail__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.release-main {
+  min-width: 0;
+}
+
+.release-head {
+  margin-bottom: 16px;
+}
+
+.release-head__row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.release-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.release-title a {
+  color: var(--fg);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.release-title a:hover {
+  color: var(--accent);
+}
+
+.release-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.release-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  font: inherit;
-  font-size: 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.release-panel {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--fg) 2%, var(--surface));
+}
+
+.release-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--fg);
 }
-.select:focus {
-  outline: 2px solid var(--accent-soft);
-  outline-offset: 0;
-  border-color: var(--accent);
+
+.release-panel__eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.release-panel__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  max-width: 72ch;
+}
+
+.release-outline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.release-outline__item {
+  font-size: 14px;
+  color: var(--fg);
+  line-height: 1.4;
+}
+
+.release-outline__item.level-2 {
+  padding-left: 12px;
+  color: var(--muted);
+}
+
+.release-outline__item.level-3 {
+  padding-left: 24px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.release-content {
+  margin-bottom: 20px;
+  max-width: 72ch;
+}
+
+.release-markdown :deep(.preview-body) {
+  max-width: none;
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--fg);
+}
+
+.release-markdown :deep(h2),
+.release-markdown :deep(h3) {
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.release-markdown :deep(p) {
+  margin: 0 0 0.75em;
+  color: var(--muted);
+}
+
+.release-markdown :deep(ul) {
+  margin: 0 0 1em;
+  padding-left: 1.25rem;
+}
+
+.release-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+
+.release-foot__app {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.release-foot__edit {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.release-foot__edit:hover {
+  color: var(--accent);
+}
+
+.release-preview {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 68ch;
+}
+
+.release-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.release-toggle::before {
+  content: "›";
+  text-decoration: none;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.release-toggle:hover {
+  color: var(--accent);
+}
+
+.release-loading {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.release-entry:not(.is-expanded) .release-head {
+  margin-bottom: 8px;
+}
+
+.release-entry:not(.is-expanded) .release-title {
+  font-size: 18px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.pill-blue {
+  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
+  color: oklch(55% 0.14 255);
+}
+
+.pill-green {
+  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
+  color: oklch(50% 0.14 145);
+}
+
+.pill-amber {
+  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
+  color: oklch(60% 0.12 85);
+}
+
+.pill-muted {
+  background: var(--fg-soft);
+  color: var(--muted);
+}
+
+.empty-state {
+  padding: 64px 24px;
+  text-align: center;
+}
+
+.empty-state p {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.empty-hint {
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .btn {
@@ -438,228 +882,104 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   border: 1px solid transparent;
   font-size: 14px;
   font-weight: 500;
-  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   background: transparent;
   text-decoration: none;
 }
+
 .btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
 .btn-primary {
   background: var(--accent);
   color: var(--surface);
   border-color: var(--accent);
 }
+
 .btn-primary:hover {
   background: color-mix(in oklch, var(--accent) 88%, black);
 }
+
 .btn-secondary {
   background: transparent;
   color: var(--fg);
   border-color: var(--border);
 }
+
 .btn-secondary:hover {
   border-color: var(--fg);
 }
+
 .btn-ghost {
   background: transparent;
   color: var(--muted);
   border-color: transparent;
 }
+
 .btn-ghost:hover {
   color: var(--fg);
 }
-.btn-sm {
-  padding: 4px 12px;
-  font-size: 13px;
+
+.rl-cat-group {
+  margin-bottom: 16px;
 }
 
-.release-list {
-  width: 100%;
+.rl-cat-heading {
+  margin: 0 0 8px;
 }
 
-.release-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 24px;
-  padding: 24px 0;
-  border-bottom: 1px solid var(--border);
-  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.release-item:hover .release-title {
-  color: var(--accent);
-}
-
-.release-date {
-  width: 120px;
-  flex-shrink: 0;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--muted);
-  padding-top: 2px;
-}
-
-.release-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.release-header-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-
-.release-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--fg);
-  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  text-decoration: none;
-}
-.release-title:hover {
-  color: var(--accent);
-}
-
-.release-body :deep(.markdown-reader--compact) {
-  margin: 4px 0 10px;
-  max-height: 160px;
-  overflow: hidden;
-}
-
-.release-body :deep(.markdown-reader--compact .preview-body) {
-  max-width: none;
-}
-
-.release-meta-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.release-app {
-  font-size: 13px;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.release-app::before {
-  content: "";
+.rl-cat-badge {
   display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  line-height: 1.4;
 }
 
-.pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
+.rl-cat-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
 }
-.pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
-}
-.pill-green {
+
+.rl-tag-added {
   background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
   color: oklch(50% 0.14 145);
 }
-.pill-amber {
+
+.rl-tag-fixed {
+  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
+  color: oklch(55% 0.14 255);
+}
+
+.rl-tag-changed {
   background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
   color: oklch(60% 0.12 85);
 }
-.pill-red {
-  background: color-mix(in oklch, oklch(60% 0.18 25) 12%, transparent);
-  color: oklch(55% 0.14 25);
+
+.rl-tag-deprecated {
+  background: color-mix(in oklch, oklch(55% 0.2 295) 12%, transparent);
+  color: oklch(50% 0.16 295);
 }
-.pill-purple {
-  background: color-mix(in oklch, oklch(60% 0.16 300) 12%, transparent);
-  color: oklch(55% 0.14 300);
+
+.rl-tag-security {
+  background: color-mix(in oklch, oklch(55% 0.18 25) 12%, transparent);
+  color: oklch(50% 0.16 25);
 }
-.pill-muted {
+
+.rl-tag-muted {
   background: var(--fg-soft);
   color: var(--muted);
-}
-
-.empty-state {
-  padding: 64px 24px;
-  text-align: center;
-  color: var(--muted);
-}
-.empty-state p {
-  margin: 0 0 8px;
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--fg);
-}
-
-.meta-label {
-  font-size: 12px;
-  color: var(--muted);
-}
-
-/* Release status indicator */
-.release-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-}
-.status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-.status-published {
-  background: oklch(55% 0.14 145);
-}
-.status-draft {
-  background: oklch(70% 0.14 85);
-}
-.status-rc {
-  background: oklch(70% 0.14 85);
-}
-.status-archived {
-  background: var(--muted);
-}
-
-@media (max-width: 768px) {
-  .search {
-    width: 180px;
-  }
-  .topbar {
-    flex-wrap: wrap;
-  }
-  .release-item {
-    flex-direction: column;
-    gap: 12px;
-  }
-  .release-date {
-    width: auto;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .release-item,
-  .release-title,
-  .btn,
-  .search,
-  .select {
-    transition: none !important;
-  }
 }
 
 /* Share modal */
@@ -673,39 +993,44 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
+
 .share-modal.open {
   opacity: 1;
   pointer-events: auto;
 }
+
 .share-drawer {
   width: 480px;
   max-width: 90vw;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  transform: scale(0.96);
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scale(0.98);
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
+
 .share-modal.open .share-drawer {
   transform: scale(1);
 }
+
 .share-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
 }
+
 .share-header h3 {
   font-size: 16px;
   margin: 0;
   font-weight: 600;
 }
+
 .share-close {
   width: 36px;
   height: 36px;
@@ -715,16 +1040,14 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   padding: 0;
   border-radius: var(--radius);
 }
-.share-close:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+
 .share-body {
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 20px;
 }
+
 .share-field label {
   display: block;
   font-size: 13px;
@@ -732,6 +1055,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   color: var(--fg);
   margin-bottom: 6px;
 }
+
 .share-toggle-row {
   display: flex;
   align-items: center;
@@ -740,20 +1064,24 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   padding: 12px 0;
   cursor: pointer;
 }
+
 .share-toggle-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
+
 .share-toggle-label {
   font-size: 14px;
   font-weight: 500;
   color: var(--fg);
 }
+
 .share-toggle-desc {
   font-size: 12px;
   color: var(--muted);
 }
+
 .share-toggle {
   position: relative;
   width: 40px;
@@ -764,15 +1092,13 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   padding: 0;
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: background 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
+
 .share-toggle.on {
   background: var(--accent);
 }
-.share-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
+
 .share-toggle-thumb {
   position: absolute;
   top: 2px;
@@ -781,15 +1107,14 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   height: 20px;
   border-radius: 50%;
   background: var(--surface);
-  box-shadow: 0 1px 3px oklch(0% 0 0 / 0.15);
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px color-mix(in oklch, var(--fg) 15%, transparent);
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
+
 .share-toggle.on .share-toggle-thumb {
   transform: translateX(16px);
 }
-.share-preview {
-  margin-top: 4px;
-}
+
 .share-preview label {
   display: block;
   font-size: 13px;
@@ -797,18 +1122,20 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   color: var(--fg);
   margin-bottom: 6px;
 }
+
 .share-url {
   display: block;
   padding: 10px 12px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: var(--muted);
   word-break: break-all;
   line-height: 1.5;
 }
+
 .share-footer {
   display: flex;
   align-items: center;
@@ -816,64 +1143,47 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   gap: 10px;
   padding: 12px 20px;
   border-top: 1px solid var(--border);
-  flex-shrink: 0;
 }
 
-/* ── Colored category badges ──────────────────────────────────── */
-.rl-cat-group {
-  margin-bottom: 8px;
+@media (max-width: 768px) {
+  .page-masthead {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-strip {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-wrap {
+    max-width: none;
+    flex-basis: auto;
+  }
+
+  .release-entry {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 20px 0;
+  }
+
+  .release-rail {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .release-title {
+    font-size: 18px;
+  }
 }
 
-.rl-cat-badge {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 8px;
-  border-radius: 4px;
-  line-height: 1.4;
-  margin-bottom: 4px;
-}
-
-.rl-cat-list {
-  margin: 0;
-  padding-left: 22px;
-  list-style-type: disc !important;
-  list-style-position: outside !important;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.rl-cat-list li {
-  margin-bottom: 2px;
-  display: list-item;
-}
-
-/* Category badge colours */
-.rl-tag-added {
-  background: oklch(95% 0.05 145);
-  color: oklch(45% 0.12 145);
-}
-.rl-tag-fixed {
-  background: oklch(95% 0.03 250);
-  color: oklch(45% 0.1 250);
-}
-.rl-tag-changed {
-  background: oklch(96% 0.04 85);
-  color: oklch(45% 0.1 85);
-}
-.rl-tag-deprecated {
-  background: oklch(94% 0.05 300);
-  color: oklch(45% 0.1 300);
-}
-.rl-tag-security {
-  background: oklch(94% 0.05 25);
-  color: oklch(45% 0.1 25);
-}
-.rl-tag-muted {
-  background: var(--surface);
-  color: var(--muted);
+@media (prefers-reduced-motion: reduce) {
+  .share-modal,
+  .share-drawer,
+  .btn,
+  .release-title a {
+    transition: none !important;
+  }
 }
 </style>
