@@ -37,17 +37,36 @@ const {
 } = useApps();
 
 const isDeleting = ref(false);
+const isRefreshingActivities = ref(false);
 
-// Search, filter & sort
 const searchQuery = ref("");
 const statusFilter = ref("");
-const ownerFilter = ref("");
+const sortKey = ref("updatedAt-desc");
+const openAppMenu = ref<string | null>(null);
+
+const statusFilterOptions = [
+  { id: "", label: "Semua status" },
+  { id: "active", label: "Aktif" },
+  { id: "draft", label: "Draft" },
+  { id: "maintenance", label: "Maintenance" },
+];
+
+const sortOptions = [
+  { id: "updatedAt-desc", label: "Terbaru diperbarui" },
+  { id: "updatedAt-asc", label: "Terlama diperbarui" },
+  { id: "name-asc", label: "Nama A–Z" },
+  { id: "name-desc", label: "Nama Z–A" },
+  { id: "status-asc", label: "Status" },
+];
+
 const sortBy = ref<"updatedAt" | "name" | "status">("updatedAt");
 const sortOrder = ref<"asc" | "desc">("desc");
-const showFilterMenu = ref(false);
-const showSortMenu = ref(false);
-const openAppMenu = ref<string | null>(null);
-const ownerList = ref<string[]>([]);
+
+watch(sortKey, (key) => {
+  const [field, order] = key.split("-") as ["updatedAt" | "name" | "status", "asc" | "desc"];
+  sortBy.value = field;
+  sortOrder.value = order;
+});
 
 function toggleAppMenu(appId: string) {
   openAppMenu.value = openAppMenu.value === appId ? null : appId;
@@ -57,39 +76,22 @@ onMounted(() => {
   fetchApps();
   fetchStats();
   fetchActivities();
-  fetchOwnerList();
   document.addEventListener("click", onDocClick);
+  document.addEventListener("keydown", onKeydown);
 });
 onBeforeUnmount(() => {
   document.removeEventListener("click", onDocClick);
+  document.removeEventListener("keydown", onKeydown);
 });
 
-async function fetchOwnerList() {
-  try {
-    const res = await $fetch<{ data: { name: string }[] }>("/api/owners");
-    ownerList.value = res.data.map((o) => o.name).filter(Boolean);
-  } catch {
-    ownerList.value = [];
-  }
-}
+const pageSubtitle = computed(() => {
+  const active = stats.value?.activeApps ?? apps.value.filter((a) => a.status === "active").length;
+  return `${active} aplikasi aktif: pusat dokumentasi dan versi lintas produk Transtrack.`;
+});
 
 const hasActiveFilters = computed(
-  () =>
-    !!searchQuery.value.trim() ||
-    !!statusFilter.value ||
-    !!ownerFilter.value
+  () => !!searchQuery.value.trim() || !!statusFilter.value
 );
-
-const activeSortLabel = computed(() => {
-  const labels: Record<string, string> = {
-    "updatedAt-desc": "Recently updated",
-    "updatedAt-asc": "Oldest first",
-    "name-asc": "Name A–Z",
-    "name-desc": "Name Z–A",
-    "status-asc": "Status",
-  };
-  return labels[`${sortBy.value}-${sortOrder.value}`] || "Sort";
-});
 
 const filteredApps = computed(() => {
   let result = [...apps.value];
@@ -110,16 +112,11 @@ const filteredApps = computed(() => {
     result = result.filter((a) => a.status === statusFilter.value);
   }
 
-  if (ownerFilter.value) {
-    result = result.filter((a) => a.owner === ownerFilter.value);
-  }
-
   result.sort((a, b) => {
     let cmp = 0;
     if (sortBy.value === "name") {
       cmp = a.name.localeCompare(b.name);
     } else if (sortBy.value === "updatedAt") {
-      // Sort by latest version releaseDate when available, fall back to app updatedAt
       const dateA = a.latestVersion?.releaseDate || a.latestVersion?.createdAt || a.updatedAt || 0;
       const dateB = b.latestVersion?.releaseDate || b.latestVersion?.createdAt || b.updatedAt || 0;
       cmp = new Date(dateA).getTime() - new Date(dateB).getTime();
@@ -133,26 +130,52 @@ const filteredApps = computed(() => {
   return result;
 });
 
+const activityContributors = computed(() => {
+  const seen = new Set<string>();
+  const list: string[] = [];
+  for (const log of activities.value) {
+    const actor = log.actor?.trim();
+    if (actor && !seen.has(actor)) {
+      seen.add(actor);
+      list.push(actor);
+    }
+  }
+  return list.slice(0, 7);
+});
+
+const activitySubtitle = computed(() => {
+  const count = activityContributors.value.length;
+  if (count === 0) return "Aktivitas seluruh tim";
+  return `Aktivitas seluruh tim (${count} kontributor minggu ini)`;
+});
+
 function clearFilters() {
   searchQuery.value = "";
   statusFilter.value = "";
-  ownerFilter.value = "";
-}
-
-function setSort(
-  field: "updatedAt" | "name" | "status",
-  order: "asc" | "desc"
-) {
-  sortBy.value = field;
-  sortOrder.value = order;
-  showSortMenu.value = false;
 }
 
 function onDocClick(e: MouseEvent) {
   const t = e.target as HTMLElement;
-  if (!t.closest(".filter-dropdown-wrap")) showFilterMenu.value = false;
-  if (!t.closest(".sort-dropdown-wrap")) showSortMenu.value = false;
-  if (!t.closest(".action-dropdown-wrap")) openAppMenu.value = null;
+  if (!t.closest(".actions-menu")) openAppMenu.value = null;
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape") {
+    openAppMenu.value = null;
+    if (showCreateModal.value) closeCreateModal();
+    if (showEditModal.value) closeEditModal();
+    if (appToDelete.value) appToDelete.value = null;
+  }
+}
+
+async function refreshActivities() {
+  if (isRefreshingActivities.value) return;
+  isRefreshingActivities.value = true;
+  try {
+    await fetchActivities();
+  } finally {
+    isRefreshingActivities.value = false;
+  }
 }
 
 // Create modal
@@ -215,7 +238,6 @@ async function openEditModal(app: AppItem) {
     editForm.owner = fresh.owner || "";
     editForm.status = fresh.status;
   } catch {
-    // Fallback to stale data if fetch fails
     editingApp.value = app;
     editForm.name = app.name;
     editForm.description = app.description || "";
@@ -253,7 +275,6 @@ async function submitEdit() {
   }
 }
 
-// Delete confirmation
 const appToDelete = ref<AppItem | null>(null);
 
 function confirmDelete(app: AppItem) {
@@ -272,28 +293,70 @@ async function doDelete() {
 }
 
 function formatDate(dateStr: string | null) {
-  if (!dateStr) return "";
+  if (!dateStr) return "—";
   const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return d.toLocaleDateString("id-ID", { month: "short", day: "numeric" });
 }
 
 function versionAuthor(app: AppItem): string | null {
   return app.latestVersion?.createdBy || app.owner || null;
 }
 
-function timeAgo(dateStr: string | null) {
+function timeAgoId(dateStr: string | null) {
   if (!dateStr) return "";
   const now = new Date();
   const d = new Date(dateStr);
   const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-  const pluralize = (n: number, singular: string, plural: string) =>
-    n === 1 ? `${n} ${singular}` : `${n} ${plural}`;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${pluralize(Math.floor(diff / 60), "min", "min")} ago`;
-  if (diff < 86400) return `${pluralize(Math.floor(diff / 3600), "hour", "hours")} ago`;
-  if (diff < 604800) return `${pluralize(Math.floor(diff / 86400), "day", "days")} ago`;
-  if (diff < 2419200) return `${pluralize(Math.floor(diff / 604800), "week", "weeks")} ago`;
-  return `${pluralize(Math.floor(diff / 2419200), "month", "months")} ago`;
+  if (diff < 60) return "baru saja";
+  if (diff < 3600) {
+    const m = Math.floor(diff / 60);
+    return `${m} menit lalu`;
+  }
+  if (diff < 86400) {
+    const h = Math.floor(diff / 3600);
+    return `${h} jam lalu`;
+  }
+  if (diff < 604800) {
+    const days = Math.floor(diff / 86400);
+    return `${days} hari lalu`;
+  }
+  if (diff < 2419200) {
+    const weeks = Math.floor(diff / 604800);
+    return `${weeks} minggu lalu`;
+  }
+  const months = Math.floor(diff / 2419200);
+  return `${months} bulan lalu`;
+}
+
+function appUpdatedLabel(app: AppItem) {
+  const date =
+    app.latestVersion?.releaseDate ||
+    app.latestVersion?.createdAt ||
+    app.updatedAt;
+  const ago = timeAgoId(date);
+  return ago ? `Diperbarui ${ago}` : "Belum diperbarui";
+}
+
+function appInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+}
+
+const APP_ICON_HUES = [25, 145, 255, 85, 300, 45, 200, 15];
+
+function appIconStyle(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = APP_ICON_HUES[Math.abs(hash) % APP_ICON_HUES.length];
+  return {
+    background: `color-mix(in oklch, oklch(72% 0.12 ${hue}) 18%, var(--surface))`,
+    color: `oklch(42% 0.12 ${hue})`,
+  };
 }
 
 const statusClass: Record<string, string> = {
@@ -303,248 +366,160 @@ const statusClass: Record<string, string> = {
 };
 
 const statusLabel: Record<string, string> = {
-  active: "Active",
-  draft: "Draft",
-  maintenance: "Maintenance",
+  active: "AKTIF",
+  draft: "DRAFT",
+  maintenance: "MAINTENANCE",
 };
-
 </script>
 
 <template>
   <div class="apps-page">
-    <!-- Topbar -->
-    <header class="topbar">
-      <h1>Apps</h1>
-      <div style="display:flex;align-items:center;gap:16px;">
-        <input
-          v-model="searchQuery"
-          class="search"
-          placeholder="Search apps, versions, docs…"
-          aria-label="Search apps, versions, and docs"
-        />
+    <header class="page-masthead">
+      <div class="page-masthead__copy">
+        <h1>Apps</h1>
+        <p class="page-subtitle">{{ pageSubtitle }}</p>
+      </div>
+      <div class="page-masthead__actions">
         <button v-if="canCreateApp" type="button" class="btn btn-primary" @click="openCreateModal">
-          + New App
+          + App Baru
         </button>
       </div>
     </header>
 
-    <!-- Stats -->
-    <div class="stats-bar">
+    <div class="filter-strip">
+      <div class="search-wrap">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+          <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <input
+          v-model="searchQuery"
+          class="search"
+          placeholder="Cari apps, versi, docs..."
+          aria-label="Cari apps, versi, dan docs"
+        />
+      </div>
+      <GeneralSearchableDropdown
+        v-model="statusFilter"
+        :options="statusFilterOptions"
+        placeholder="Semua status"
+        search-placeholder="Filter status..."
+      />
+      <GeneralSearchableDropdown
+        v-model="sortKey"
+        :options="sortOptions"
+        placeholder="Terbaru diperbarui"
+        search-placeholder="Urutkan..."
+      />
+    </div>
+
+    <div class="stats-bar" aria-label="Ringkasan aplikasi">
       <div class="stat">
-        <span class="stat-num">{{ stats?.activeApps ?? 0 }}</span>
-        <span class="stat-label">Active Apps</span>
+        <span class="stat-num num">{{ stats?.activeApps ?? 0 }}</span>
+        <span class="stat-label">Aplikasi aktif</span>
       </div>
       <div class="stat">
-        <span class="stat-num">{{ stats?.totalVersions ?? 0 }}</span>
-        <span class="stat-label">Total Versions</span>
+        <span class="stat-num num">{{ stats?.totalVersions ?? 0 }}</span>
+        <span class="stat-label">Total versi</span>
       </div>
       <div class="stat">
-        <span class="stat-num">{{ stats?.publishedDocs ?? 0 }}</span>
-        <span class="stat-label">Published Docs</span>
+        <span class="stat-num num">{{ stats?.publishedDocs ?? 0 }}</span>
+        <span class="stat-label">Docs terbit</span>
       </div>
       <div class="stat">
-        <span class="stat-num">{{ stats?.draftVersions ?? 0 }}</span>
-        <span class="stat-label">Draft Versions</span>
+        <span class="stat-num num">{{ stats?.draftVersions ?? 0 }}</span>
+        <span class="stat-label">Versi draft</span>
       </div>
     </div>
 
-    <!-- App cards -->
-    <div class="row-between" style="margin-bottom:20px;">
-      <div style="display:flex;align-items:center;gap:12px;">
-        <h2>Your apps</h2>
+    <div class="section-head">
+      <div class="section-head__copy">
+        <h2>Aplikasi Anda</h2>
         <span v-if="hasActiveFilters" class="result-count">
-          {{ filteredApps.length }} result{{ filteredApps.length === 1 ? '' : 's' }}
+          {{ filteredApps.length }} hasil
         </span>
-      </div>
-      <div style="display:flex;gap:8px;">
-        <div class="filter-dropdown-wrap" style="position:relative;">
-          <button
-            class="btn btn-ghost"
-            :class="{ active: hasActiveFilters }"
-            @click.stop="showFilterMenu = !showFilterMenu"
-          >
-            Filter
-            <span v-if="hasActiveFilters" class="filter-dot" />
-          </button>
-          <div v-if="showFilterMenu" class="dropdown-menu">
-            <div class="dropdown-header">Status</div>
-            <div
-              class="dropdown-item"
-              :class="{ active: !statusFilter }"
-              @click="statusFilter = ''"
-            >
-              <span v-if="!statusFilter" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              All statuses
-            </div>
-            <div
-              v-for="s in ['active','draft','maintenance']"
-              :key="s"
-              class="dropdown-item"
-              :class="{ active: statusFilter === s }"
-              @click="statusFilter = s"
-            >
-              <span v-if="statusFilter === s" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              {{ statusLabel[s] }}
-            </div>
-
-            <div class="dropdown-divider" />
-            <div class="dropdown-header">Owner</div>
-            <div
-              class="dropdown-item"
-              :class="{ active: !ownerFilter }"
-              @click="ownerFilter = ''"
-            >
-              <span v-if="!ownerFilter" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              All owners
-            </div>
-            <div
-              v-for="o in ownerList"
-              :key="o"
-              class="dropdown-item"
-              :class="{ active: ownerFilter === o }"
-              @click="ownerFilter = o"
-            >
-              <span v-if="ownerFilter === o" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              {{ o }}
-            </div>
-
-            <div class="dropdown-divider" />
-            <div
-              class="dropdown-item"
-              style="color:var(--accent);justify-content:center;"
-              @click="clearFilters"
-            >
-              Clear all filters
-            </div>
-          </div>
-        </div>
-
-        <div class="sort-dropdown-wrap" style="position:relative;">
-          <button
-            class="btn btn-ghost"
-            :class="{ active: sortBy !== 'updatedAt' || sortOrder !== 'desc' }"
-            @click.stop="showSortMenu = !showSortMenu"
-          >
-            {{ activeSortLabel }}
-          </button>
-          <div v-if="showSortMenu" class="dropdown-menu">
-            <div
-              class="dropdown-item"
-              :class="{ active: sortBy === 'updatedAt' && sortOrder === 'desc' }"
-              @click="setSort('updatedAt', 'desc')"
-            >
-              <span v-if="sortBy === 'updatedAt' && sortOrder === 'desc'" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              Recently updated
-            </div>
-            <div
-              class="dropdown-item"
-              :class="{ active: sortBy === 'updatedAt' && sortOrder === 'asc' }"
-              @click="setSort('updatedAt', 'asc')"
-            >
-              <span v-if="sortBy === 'updatedAt' && sortOrder === 'asc'" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              Oldest first
-            </div>
-            <div
-              class="dropdown-item"
-              :class="{ active: sortBy === 'name' && sortOrder === 'asc' }"
-              @click="setSort('name', 'asc')"
-            >
-              <span v-if="sortBy === 'name' && sortOrder === 'asc'" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              Name A–Z
-            </div>
-            <div
-              class="dropdown-item"
-              :class="{ active: sortBy === 'name' && sortOrder === 'desc' }"
-              @click="setSort('name', 'desc')"
-            >
-              <span v-if="sortBy === 'name' && sortOrder === 'desc'" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              Name Z–A
-            </div>
-            <div
-              class="dropdown-item"
-              :class="{ active: sortBy === 'status' }"
-              @click="setSort('status', 'asc')"
-            >
-              <span v-if="sortBy === 'status'" class="check">✓</span>
-              <span v-else class="check-placeholder" />
-              Status
-            </div>
-          </div>
-        </div>
       </div>
     </div>
 
     <div v-if="isLoading" class="app-grid">
-      <div v-for="n in 4" :key="n" class="app-card" style="height: 160px">
-        <div class="animate-pulse space-y-3">
-          <div class="h-4 bg-gray-200 rounded w-3/4"></div>
-          <div class="h-3 bg-gray-200 rounded w-1/2"></div>
-          <div class="h-3 bg-gray-200 rounded w-1/3"></div>
-        </div>
+      <div v-for="n in 8" :key="n" class="app-card skeleton-card">
+        <div class="skeleton-bar w-third" />
+        <div class="skeleton-bar w-half" />
+        <div class="skeleton-bar w-quarter" />
       </div>
     </div>
 
     <div v-else-if="filteredApps.length === 0" class="empty-state">
-      <p>No apps match your filters.</p>
-      <button v-if="hasActiveFilters" class="btn btn-ghost" @click="clearFilters">
-        Clear filters
+      <p>Tidak ada aplikasi yang cocok.</p>
+      <button v-if="hasActiveFilters" type="button" class="btn btn-ghost" @click="clearFilters">
+        Hapus filter
+      </button>
+      <button
+        v-else-if="canCreateApp"
+        type="button"
+        class="btn btn-primary"
+        style="margin-top: 12px;"
+        @click="openCreateModal"
+      >
+        Buat aplikasi pertama
       </button>
     </div>
 
     <div v-else class="app-grid">
-      <div v-for="app in filteredApps" :key="app.id" class="app-card">
-        <div class="app-card-header">
-          <div class="app-card-title-row">
-            <h3 class="app-card-title">{{ app.name }}</h3>
-            <span class="pill" :class="statusClass[app.status] || 'pill-blue'">
-              {{ statusLabel[app.status] || app.status }}
-            </span>
+      <article v-for="app in filteredApps" :key="app.id" class="app-card">
+        <div class="app-card__top">
+          <div class="app-card__identity">
+            <div class="app-icon" :style="appIconStyle(app.name)" aria-hidden="true">
+              {{ appInitials(app.name) }}
+            </div>
+            <div class="app-card__titles">
+              <h3 class="app-card__name">{{ app.name }}</h3>
+              <p class="app-card__meta">{{ appUpdatedLabel(app) }}</p>
+            </div>
           </div>
-          <div class="app-card-meta">Updated {{ timeAgo(app.updatedAt) }}</div>
-        </div>
-
-        <div v-if="app.latestVersion" class="app-card-version">
-          <span class="num pill pill-blue">
-            v{{ app.latestVersion.version }}
-          </span>
-          <span v-if="versionAuthor(app)" class="app-card-owner">
-            by {{ versionAuthor(app) }}
+          <span class="pill" :class="statusClass[app.status] || 'pill-blue'">
+            {{ statusLabel[app.status] || app.status.toUpperCase() }}
           </span>
         </div>
 
-        <div class="app-card-foot">
-          <div class="app-card-links">
-            <NuxtLink :to="`/docs?app=${app.id}`" class="btn btn-ghost btn-sm">
-              Docs &rarr;
-            </NuxtLink>
-            <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm">
-              Versions &rarr;
-            </NuxtLink>
-          </div>
-          <div v-if="canOpenAppMenu" class="app-card-actions">
-            <div class="action-dropdown-wrap" style="position: relative;">
+        <div v-if="app.latestVersion" class="app-version-strip">
+          <span class="num">v{{ app.latestVersion.version }}</span>
+          <span v-if="versionAuthor(app)" class="app-version-strip__by">
+            oleh {{ versionAuthor(app) }}
+          </span>
+        </div>
+
+        <footer class="app-card__foot">
+          <div class="cell-actions">
+            <div class="app-card__links">
+              <NuxtLink :to="`/docs?app=${app.id}`" class="btn btn-ghost btn-sm row-action">
+                Docs &rarr;
+              </NuxtLink>
+              <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm row-action">
+                Versi &rarr;
+              </NuxtLink>
+            </div>
+            <div v-if="canOpenAppMenu" class="action-dropdown-wrap actions-menu">
               <button
-                class="btn btn-ghost btn-sm action-btn"
-                title="More actions"
+                type="button"
+                class="btn btn-ghost btn-sm row-action row-action--icon"
+                aria-label="Aksi lainnya"
+                aria-haspopup="menu"
+                :aria-expanded="openAppMenu === app.id"
                 @click.stop="toggleAppMenu(app.id)"
               >
                 <IconsDotsVertical size="14" />
               </button>
               <div
                 v-if="openAppMenu === app.id"
-                class="dropdown-menu app-card-dropdown"
+                class="dropdown-menu actions-dropdown"
+                role="menu"
+                @click.stop
               >
                 <NuxtLink
                   :to="`/releases?app=${app.name}`"
                   class="dropdown-item"
+                  role="menuitem"
                   @click="openAppMenu = null"
                 >
                   Releases
@@ -553,14 +528,16 @@ const statusLabel: Record<string, string> = {
                   v-if="canGenerateDocs"
                   :to="`/docs/generate/${app.id}`"
                   class="dropdown-item"
+                  role="menuitem"
                   @click="openAppMenu = null"
                 >
                   Generate Docs
                 </NuxtLink>
-                <div v-if="canGenerateDocs && (canEditApp || canDeleteApp)" class="dropdown-divider" />
                 <button
                   v-if="canEditApp"
+                  type="button"
                   class="dropdown-item"
+                  role="menuitem"
                   @click="openEditModal(app); openAppMenu = null"
                 >
                   <IconsPencil size="14" />
@@ -568,84 +545,121 @@ const statusLabel: Record<string, string> = {
                 </button>
                 <button
                   v-if="canDeleteApp"
-                  class="dropdown-item"
+                  type="button"
+                  class="dropdown-item dropdown-item--danger"
+                  role="menuitem"
                   @click="confirmDelete(app); openAppMenu = null"
                 >
                   <IconsTrash size="14" />
-                  Delete
+                  Hapus
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        </footer>
+      </article>
     </div>
 
-    <!-- Recent activity -->
-    <div style="margin-top:var(--gap-xl, 32px);">
-      <div class="row-between" style="margin-bottom:16px;">
-        <h2>Recent activity</h2>
-        <button class="btn btn-ghost" @click="fetchActivities">
-          Refresh
+    <section class="activity-section" aria-labelledby="activity-heading">
+      <div class="activity-head">
+        <div class="activity-head__copy">
+          <h2 id="activity-heading">Aktivitas terbaru</h2>
+          <p class="activity-subtitle">{{ activitySubtitle }}</p>
+        </div>
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          :disabled="isRefreshingActivities"
+          @click="refreshActivities"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            aria-hidden="true"
+            :class="{ 'is-spinning': isRefreshingActivities }"
+          >
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <polyline points="21 3 21 9 15 9" />
+          </svg>
+          Segarkan
         </button>
       </div>
-      <table class="ds-table">
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>App</th>
-            <th>Action</th>
-            <th>User</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="log in activities" :key="log.id">
-            <td class="num">{{ formatDate(log.createdAt) }}</td>
-            <td>{{ log.appName || "—" }}</td>
-            <td>{{ log.action }}</td>
-            <td>{{ log.actor }}</td>
-          </tr>
-          <tr v-if="activities.length === 0">
-            <td colspan="4" class="text-center py-4" style="color: var(--muted);">
-              No recent activity
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+
+      <div v-if="activityContributors.length" class="contributor-row" aria-label="Kontributor aktif">
+        <GeneralAvatar
+          v-for="actor in activityContributors"
+          :key="actor"
+          :name="actor"
+          :size="28"
+        />
+      </div>
+
+      <div class="activity-panel">
+        <GeneralDataTable :scrollable="true">
+          <thead>
+            <tr>
+              <th>Tanggal</th>
+              <th>Aplikasi</th>
+              <th>Aksi</th>
+              <th>Pengguna</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="log in activities" :key="log.id">
+              <td class="col-num col-muted">{{ formatDate(log.createdAt) }}</td>
+              <td>{{ log.appName || "—" }}</td>
+              <td>{{ log.action }}</td>
+              <td>
+                <span class="actor-cell">
+                  <GeneralAvatar :name="log.actor" :size="24" />
+                  <span>{{ log.actor }}</span>
+                </span>
+              </td>
+            </tr>
+            <tr v-if="activities.length === 0">
+              <td colspan="4" class="empty-row">Belum ada aktivitas</td>
+            </tr>
+          </tbody>
+        </GeneralDataTable>
+      </div>
+    </section>
 
     <!-- Create Modal -->
     <div class="modal-overlay" :class="{ open: showCreateModal }" @click.self="closeCreateModal">
       <div class="modal">
         <div class="modal-header">
-          <h2>Create New App</h2>
-          <button type="button" class="modal-close" aria-label="Close modal" @click="closeCreateModal">
+          <h2>Buat App Baru</h2>
+          <button type="button" class="modal-close" aria-label="Tutup" @click="closeCreateModal">
             ✕
           </button>
         </div>
         <form novalidate @submit.prevent="submitCreate">
           <div class="modal-body">
             <div class="form-group">
-              <label for="appName">App Name</label>
+              <label for="appName">Nama App</label>
               <input
                 id="appName"
                 v-model="createForm.name"
                 type="text"
-                placeholder="e.g. Payment Gateway"
+                placeholder="mis. Payment Gateway"
                 required
                 :class="{ 'input-error': createNameError }"
                 aria-describedby="appNameError"
                 @input="createNameError = false"
               />
               <span id="appNameError" class="error-msg" :class="{ show: createNameError }">
-                App name is required
+                Nama app wajib diisi
               </span>
             </div>
             <div class="form-group">
               <label for="appDesc">
-                Description <span class="opt">(optional)</span>
+                Deskripsi <span class="opt">(opsional)</span>
               </label>
-              <textarea id="appDesc" v-model="createForm.description" placeholder="What does this app do?" />
+              <textarea id="appDesc" v-model="createForm.description" placeholder="Apa fungsi app ini?" />
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -653,9 +667,9 @@ const statusLabel: Record<string, string> = {
                 <AppOwnerSelect id="appOwner" v-model="createForm.owner" />
               </div>
               <div class="form-group">
-                <label for="appStatus">Initial Status</label>
+                <label for="appStatus">Status awal</label>
                 <select id="appStatus" v-model="createForm.status">
-                  <option value="active">Active</option>
+                  <option value="active">Aktif</option>
                   <option value="draft">Draft</option>
                   <option value="maintenance">Maintenance</option>
                 </select>
@@ -664,11 +678,11 @@ const statusLabel: Record<string, string> = {
           </div>
           <div class="modal-foot">
             <button type="button" class="btn btn-secondary" @click="closeCreateModal">
-              Cancel
+              Batal
             </button>
             <button type="submit" class="btn btn-primary" :disabled="isCreating">
-              <span v-if="isCreating">Creating…</span>
-              <span v-else>Create App</span>
+              <span v-if="isCreating">Membuat…</span>
+              <span v-else>Buat App</span>
             </button>
           </div>
         </form>
@@ -680,14 +694,14 @@ const statusLabel: Record<string, string> = {
       <div class="modal">
         <div class="modal-header">
           <h2>Edit App</h2>
-          <button type="button" class="modal-close" aria-label="Close modal" @click="closeEditModal">
+          <button type="button" class="modal-close" aria-label="Tutup" @click="closeEditModal">
             ✕
           </button>
         </div>
         <form novalidate @submit.prevent="submitEdit">
           <div class="modal-body">
             <div class="form-group">
-              <label for="editName">App Name</label>
+              <label for="editName">Nama App</label>
               <input
                 id="editName"
                 v-model="editForm.name"
@@ -698,14 +712,14 @@ const statusLabel: Record<string, string> = {
                 @input="editNameError = false"
               />
               <span id="editNameError" class="error-msg" :class="{ show: editNameError }">
-                App name is required
+                Nama app wajib diisi
               </span>
             </div>
             <div class="form-group">
               <label for="editDesc">
-                Description <span class="opt">(optional)</span>
+                Deskripsi <span class="opt">(opsional)</span>
               </label>
-              <textarea id="editDesc" v-model="editForm.description" placeholder="What does this app do?" />
+              <textarea id="editDesc" v-model="editForm.description" placeholder="Apa fungsi app ini?" />
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -715,7 +729,7 @@ const statusLabel: Record<string, string> = {
               <div class="form-group">
                 <label for="editStatus">Status</label>
                 <select id="editStatus" v-model="editForm.status">
-                  <option value="active">Active</option>
+                  <option value="active">Aktif</option>
                   <option value="draft">Draft</option>
                   <option value="maintenance">Maintenance</option>
                 </select>
@@ -724,11 +738,11 @@ const statusLabel: Record<string, string> = {
           </div>
           <div class="modal-foot">
             <button type="button" class="btn btn-secondary" @click="closeEditModal">
-              Cancel
+              Batal
             </button>
             <button type="submit" class="btn btn-primary" :disabled="isEditing">
-              <span v-if="isEditing">Saving…</span>
-              <span v-else>Save Changes</span>
+              <span v-if="isEditing">Menyimpan…</span>
+              <span v-else>Simpan</span>
             </button>
           </div>
         </form>
@@ -737,25 +751,25 @@ const statusLabel: Record<string, string> = {
 
     <!-- Delete Confirmation Modal -->
     <div class="modal-overlay" :class="{ open: !!appToDelete }" @click.self="appToDelete = null">
-      <div class="modal" style="width: 400px;">
+      <div class="modal modal--narrow">
         <div class="modal-header">
-          <h2>Delete App</h2>
-          <button type="button" class="modal-close" aria-label="Close modal" @click="appToDelete = null">
+          <h2>Hapus App</h2>
+          <button type="button" class="modal-close" aria-label="Tutup" @click="appToDelete = null">
             ✕
           </button>
         </div>
         <div class="modal-body">
-          <p style="margin:0;color:var(--muted);">
-            Are you sure you want to delete <strong>{{ appToDelete?.name }}</strong>? This action cannot be undone.
+          <p class="modal-text">
+            Yakin ingin menghapus <strong>{{ appToDelete?.name }}</strong>? Tindakan ini tidak dapat dibatalkan.
           </p>
         </div>
         <div class="modal-foot">
           <button type="button" class="btn btn-secondary" @click="appToDelete = null">
-            Cancel
+            Batal
           </button>
           <button type="button" class="btn btn-danger" :disabled="isDeleting" @click="doDelete">
-            <span v-if="isDeleting">Deleting…</span>
-            <span v-else>Delete</span>
+            <span v-if="isDeleting">Menghapus…</span>
+            <span v-else>Hapus</span>
           </button>
         </div>
       </div>
@@ -765,177 +779,381 @@ const statusLabel: Record<string, string> = {
 
 <style scoped>
 .apps-page {
-  /* Inherits global semantic tokens from :root — no local overrides so dark mode works */
+  /* Inherits global semantic tokens from :root */
 }
 
-.topbar {
+.page-masthead {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
-.topbar h1 {
-  margin: 0;
+
+.page-masthead__copy {
+  min-width: 0;
+}
+
+.page-masthead h1 {
+  margin: 0 0 4px;
   font-weight: 600;
   font-size: 20px;
   color: var(--fg);
 }
 
-h2 {
+.page-subtitle {
   margin: 0;
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--fg);
+  max-width: 52ch;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
-.row-between {
+.page-masthead__actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.filter-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.search-wrap {
+  position: relative;
+  flex: 1 1 240px;
+  min-width: 200px;
+  max-width: 360px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
 }
 
 .search {
-  width: 320px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  font: inherit;
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+}
+
+.stats-bar {
+  display: flex;
+  gap: 24px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.stat-num {
   font-size: 14px;
+  font-weight: 600;
   color: var(--fg);
 }
-.search:focus {
-  outline: 2px solid var(--accent-soft);
-  border-color: var(--accent);
+
+.stat-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.section-head__copy {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.section-head h2,
+.activity-head h2 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--fg);
+}
+
+.result-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
 }
 
 .app-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-}
-@media (max-width: 720px) {
-  .app-grid {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 36px;
 }
 
 .app-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 24px;
-  transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-}
-.app-card:hover {
-  border-color: color-mix(in oklch, var(--fg) 20%, var(--border));
-  box-shadow: 0 2px 8px color-mix(in oklch, var(--fg) 6%, transparent);
-}
-.app-card:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  gap: 14px;
+  min-height: 168px;
+  transition: border-color 0.15s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
-.app-card-header {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.app-card:hover {
+  border-color: color-mix(in oklch, var(--fg) 18%, var(--border));
 }
-.app-card-title-row {
+
+.app-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.app-card__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
 }
-.app-card-title {
+
+.app-card__titles {
+  min-width: 0;
+}
+
+.app-card__name {
   margin: 0;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--fg);
   line-height: 1.3;
-}
-.app-card-meta {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.app-card-version {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.app-card-owner {
-  color: var(--muted);
-  font-size: 12px;
-}
-.app-card-no-version {
-  color: var(--muted);
-  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.app-card-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-  margin-top: auto;
+.app-card__meta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
 }
-.app-card-links {
+
+.app-version-strip {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: color-mix(in oklch, oklch(60% 0.16 255) 10%, var(--surface));
+  font-size: 12px;
+  color: oklch(45% 0.12 255);
 }
-.app-card-links .btn {
+
+.app-version-strip__by {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.app-card-actions {
+
+.app-card__foot {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.cell-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.app-card__links {
   display: flex;
   align-items: center;
   gap: 2px;
-  flex-shrink: 0;
-  opacity: 0.7;
-  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.app-card:hover .app-card-actions {
-  opacity: 1;
+  min-width: 0;
 }
 
-.app-card-dropdown {
-  top: calc(100% + 6px);
+.row-action {
+  min-height: 32px;
+  padding: 6px 10px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.row-action:hover {
+  color: var(--fg);
+  background: var(--fg-soft);
+}
+
+.row-action--icon {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+}
+
+.action-dropdown-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.actions-menu {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
   right: 0;
-  min-width: 180px;
+  min-width: 168px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px color-mix(in oklch, var(--fg) 10%, transparent);
+  z-index: 20;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dropdown-item:hover {
+  background: var(--fg-soft);
+}
+
+.dropdown-item--danger {
+  color: oklch(50% 0.16 25);
+}
+
+.dropdown-item--danger:hover {
+  background: color-mix(in oklch, oklch(55% 0.16 25) 10%, transparent);
+}
+
+.activity-section {
+  margin-top: 8px;
+}
+
+.activity-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.activity-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.contributor-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.activity-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.actor-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.col-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.col-muted {
+  color: var(--muted);
+}
+
+.empty-row {
+  text-align: center;
+  padding: 28px 16px !important;
+  color: var(--muted);
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 3px 8px;
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
 }
-.pill-accent {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
+
 .pill-green {
   background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
   color: oklch(50% 0.14 145);
 }
+
 .pill-amber {
   background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
   color: oklch(60% 0.12 85);
 }
+
 .pill-blue {
   background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
   color: oklch(55% 0.14 255);
@@ -946,134 +1164,39 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
-.stats-bar {
-  display: flex;
-  gap: 24px;
-  align-items: baseline;
-  margin-bottom: 32px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border);
-}
-.stat {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.stat-num {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-}
-.stat-label {
-  font-size: 14px;
-  color: var(--muted);
-}
-@media (max-width: 720px) {
-  .stats-bar {
-    flex-wrap: wrap;
-    gap: 16px;
-  }
-}
-
-.ds-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-.ds-table th,
-.ds-table td {
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-}
-.ds-table th {
-  color: var(--muted);
-  font-weight: 500;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-.ds-table tbody tr:hover {
-  background: var(--fg-soft);
-}
-
 .empty-state {
   text-align: center;
   padding: 48px 0;
   color: var(--muted);
+  margin-bottom: 32px;
 }
 
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  font-size: 14px;
-  font-weight: 500;
-  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  cursor: pointer;
-  background: transparent;
+.skeleton-card {
+  gap: 10px;
 }
-.btn:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.btn-primary {
-  background: var(--accent);
-  color: var(--surface);
-  border-color: var(--accent);
-}
-.btn-primary:hover {
-  background: color-mix(in oklch, var(--accent) 88%, black);
-}
-.btn-secondary {
-  background: transparent;
-  color: var(--fg);
-  border-color: var(--border);
-}
-.btn-secondary:hover {
-  border-color: var(--fg);
-}
-.btn-ghost {
-  background: transparent;
-  color: var(--muted);
-  border-color: transparent;
-}
-.btn-ghost:hover {
-  color: var(--fg);
-  background: color-mix(in oklch, var(--fg) 4%, transparent);
-}
-.btn-ghost:active {
+
+.skeleton-bar {
+  height: 12px;
+  border-radius: 6px;
   background: color-mix(in oklch, var(--fg) 8%, transparent);
+  animation: pulse 1.4s ease-in-out infinite;
 }
-.btn-sm {
-  padding: 6px 12px;
-  font-size: 13px;
+
+.skeleton-bar.w-third { width: 33%; }
+.skeleton-bar.w-half { width: 55%; }
+.skeleton-bar.w-quarter { width: 28%; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.85; }
 }
-.btn-danger {
-  background: oklch(55% 0.16 25);
-  color: var(--surface);
-  border-color: oklch(55% 0.16 25);
+
+.is-spinning {
+  animation: spin 0.8s linear infinite;
 }
-.btn-danger:hover {
-  background: oklch(50% 0.18 25);
-}
-.action-btn {
-  padding: 9px;
-  border-radius: 8px;
-  min-width: 32px;
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.action-btn:active {
-  background: color-mix(in oklch, var(--fg) 10%, transparent);
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .modal-overlay {
@@ -1086,12 +1209,14 @@ h2 {
   justify-content: center;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
+
 .modal-overlay.open {
   opacity: 1;
   pointer-events: auto;
 }
+
 .modal {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1102,11 +1227,17 @@ h2 {
   overflow: auto;
   box-shadow: 0 20px 60px color-mix(in oklch, var(--fg) 15%, transparent);
   transform: translateY(12px) scale(0.98);
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
 }
+
+.modal--narrow {
+  width: 400px;
+}
+
 .modal-overlay.open .modal {
   transform: translateY(0) scale(1);
 }
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -1114,10 +1245,12 @@ h2 {
   padding: 20px 24px;
   border-bottom: 1px solid var(--border);
 }
+
 .modal-header h2 {
   font-size: 18px;
   margin: 0;
 }
+
 .modal-close {
   width: 32px;
   height: 32px;
@@ -1132,16 +1265,33 @@ h2 {
   transition: color 0.15s, border-color 0.15s;
   font-size: 16px;
 }
+
 .modal-close:hover {
   color: var(--fg);
   border-color: var(--fg);
 }
+
 .modal-body {
   padding: 20px 24px;
 }
+
+.modal-text {
+  margin: 0;
+  color: var(--muted);
+}
+
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+}
+
 .form-group {
   margin-bottom: 16px;
 }
+
 .form-group label {
   display: block;
   font-size: 13px;
@@ -1149,19 +1299,23 @@ h2 {
   margin-bottom: 6px;
   color: var(--fg);
 }
+
 .form-group label .opt {
   color: var(--muted);
   font-weight: 400;
 }
+
 .error-msg {
   display: none;
   color: oklch(50% 0.16 25);
   font-size: 12px;
   margin-top: 4px;
 }
+
 .error-msg.show {
   display: block;
 }
+
 .form-group input,
 .form-group textarea,
 .form-group select {
@@ -1175,6 +1329,7 @@ h2 {
   color: var(--fg);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
+
 .form-group input:focus,
 .form-group textarea:focus,
 .form-group select:focus {
@@ -1182,110 +1337,85 @@ h2 {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+
 .form-group textarea {
   resize: vertical;
   min-height: 80px;
 }
+
 .input-error {
   border-color: oklch(55% 0.18 25) !important;
   box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
 }
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
-.modal-foot {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 16px 24px;
-  border-top: 1px solid var(--border);
+
+@media (max-width: 1100px) {
+  .app-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
-.result-count {
-  font-size: 13px;
-  color: var(--muted);
-  font-family: var(--font-mono);
+@media (max-width: 900px) {
+  .app-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
-.dropdown-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px color-mix(in oklch, var(--fg) 10%, transparent);
-  min-width: 200px;
-  padding: 6px 0;
-  z-index: 50;
-}
-.dropdown-header {
-  padding: 6px 16px;
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  font-weight: 500;
-}
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  font-size: 14px;
-  color: var(--fg);
-  cursor: pointer;
-  transition: background .1s;
-  user-select: none;
-  width: 100%;
-  box-sizing: border-box;
-}
-.dropdown-item:hover {
-  background: var(--fg-soft);
-}
-.dropdown-item.active {
-  color: var(--accent);
-  font-weight: 500;
-}
-.check {
-  width: 16px;
-  text-align: center;
-  font-size: 13px;
-}
-.check-placeholder {
-  width: 16px;
-  display: inline-block;
-}
-.dropdown-divider {
-  height: 1px;
-  background: var(--border);
-  margin: 6px 0;
-}
-.btn-ghost.active {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-.filter-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent);
-  display: inline-block;
+
+@media (max-width: 768px) {
+  .page-masthead {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-masthead__actions {
+    width: 100%;
+  }
+
+  .page-masthead__actions .btn-primary {
+    width: 100%;
+  }
+
+  .filter-strip {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-wrap {
+    max-width: none;
+    flex-basis: auto;
+  }
+
+  .section-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats-bar {
+    gap: 16px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card,
+  .app-card,
   .modal-overlay,
   .modal,
-  .btn,
-  .search {
+  .is-spinning,
+  .skeleton-bar {
     transition: none !important;
-  }
-}
-@media (max-width: 768px) {
-  .search {
-    width: 180px;
+    animation: none !important;
   }
 }
 </style>

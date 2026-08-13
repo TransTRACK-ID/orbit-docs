@@ -2,6 +2,7 @@
 import { usePageStore } from "~/store/page";
 import { renderMarkdown } from "~/composables/useMarkdown";
 import { copyChangelogToClipboard } from "~/composables/useClipboard";
+import ChevronDown from "~/components/icons/ChevronDown/index.vue";
 import type { AppItem } from "~/composables/useApps";
 import type { AppVersion } from "~/composables/useApps";
 import type { ReleaseItem } from "~/composables/useReleases";
@@ -70,6 +71,11 @@ onMounted(async () => {
   if (appFilter.value) {
     $page.setSelectedAppId(appFilter.value);
   }
+  document.addEventListener("keydown", onKeydown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener("keydown", onKeydown);
 });
 
 watch(appFilter, async (id) => {
@@ -86,9 +92,61 @@ const selectedApp = computed(() =>
 );
 
 const appFilterOptions = computed(() => [
-  { id: "", label: "All apps" },
+  { id: "", label: "Semua apps" },
   ...apps.value.map((a) => ({ id: a.id, label: a.name })),
 ]);
+
+interface VersionAppGroup {
+  key: string;
+  label: string;
+  versions: AppVersion[];
+}
+
+const versionAppGroups = computed((): VersionAppGroup[] => {
+  const byApp = new Map<string, AppVersion[]>();
+  for (const version of filteredVersions.value) {
+    if (!byApp.has(version.appId)) byApp.set(version.appId, []);
+    byApp.get(version.appId)!.push(version);
+  }
+  const groups: VersionAppGroup[] = [];
+  for (const [key, items] of byApp) {
+    const label =
+      items[0]?.appName || apps.value.find((a) => a.id === key)?.name || "Lainnya";
+    groups.push({ key, label, versions: items });
+  }
+  return groups.sort((a, b) => a.label.localeCompare(b.label));
+});
+
+const expandedAppIds = ref<Set<string>>(new Set());
+
+function isAppExpanded(appId: string) {
+  return expandedAppIds.value.has(appId);
+}
+
+function toggleAppGroup(appId: string) {
+  const next = new Set(expandedAppIds.value);
+  if (next.has(appId)) next.delete(appId);
+  else next.add(appId);
+  expandedAppIds.value = next;
+}
+
+const pageStats = computed(() => {
+  const list = filteredVersions.value;
+  return {
+    total: list.length,
+    drafts: list.filter((v) => v.status === "draft").length,
+    apps: new Set(list.map((v) => v.appId)).size,
+  };
+});
+
+const pageSubtitle = computed(() => {
+  const total = pageStats.value.total;
+  if (showAllApps.value) {
+    return `Semua apps · ${total} versi — lacak rilis lintas aplikasi dari satu tempat.`;
+  }
+  const name = selectedApp.value?.name ?? "App";
+  return `${name} · ${total} versi — lacak rilis lintas aplikasi dari satu tempat.`;
+});
 
 function appNameForVersion(version: AppVersion) {
   return version.appName || apps.value.find((a) => a.id === version.appId)?.name || "Release";
@@ -141,9 +199,9 @@ const compareBtnText = computed(() => {
   if (selectedVersions.value.length === 2) {
     const v1 = versions.value.find((v) => v.id === selectedVersions.value[0]);
     const v2 = versions.value.find((v) => v.id === selectedVersions.value[1]);
-    return `Compare ${v1?.version ?? ""} vs ${v2?.version ?? ""}`;
+    return `Bandingkan v${v1?.version} vs v${v2?.version}`;
   }
-  return "Compare versions";
+  return "Bandingkan";
 });
 
 // Bulk archive selected versions
@@ -473,7 +531,31 @@ async function submitArticle() {
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+}
+
+function statusDisplay(status: string) {
+  const labels: Record<string, string> = {
+    published: "PUBLISHED",
+    draft: "DRAFT",
+    rc: "RC",
+    archived: "ARCHIVED",
+  };
+  return labels[status] || status.toUpperCase();
+}
+
+function ciDisplay(status: string) {
+  const labels: Record<string, string> = {
+    passed: "PASSED",
+    failed: "FAILED",
+    pending: "PENDING",
+    unknown: "UNKNOWN",
+  };
+  return labels[status] || status.toUpperCase();
+}
+
+function isActiveRow(version: AppVersion) {
+  return activeDetailVersion.value?.id === version.id;
 }
 
 const statusClass: Record<string, string> = {
@@ -562,84 +644,44 @@ function onKeydown(e: KeyboardEvent) {
     closeNewVersionModal();
     closeEditVersionModal();
     versionToDelete.value = null;
+    activeDetailVersion.value = null;
   }
 }
-
-onMounted(() => document.addEventListener("keydown", onKeydown));
-onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
 </script>
 
 <template>
   <div class="versions-page">
-    <!-- Topbar -->
-    <header class="topbar">
-      <h1>Versions</h1>
-      <div class="flex-gap-md">
-        <input
-          v-model="searchQuery"
-          class="search"
-          placeholder="Search versions…"
-          aria-label="Search versions"
-        />
-        <GeneralSearchableDropdown
-          v-model="appFilter"
-          :options="appFilterOptions"
-          placeholder="Filter by app…"
-          search-placeholder="Search apps…"
-        />
-        <button
-          v-if="canWriteVersions"
-          type="button"
-          class="btn btn-primary"
-          :disabled="!appFilter"
-          :title="!appFilter ? 'Select an app to create a version' : undefined"
-          @click="openNewVersionModal"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          New Version
-        </button>
+    <header class="page-masthead">
+      <div class="page-masthead__copy">
+        <h1>Versions</h1>
+        <p class="page-subtitle">{{ pageSubtitle }}</p>
       </div>
     </header>
 
-    <!-- App info -->
-    <div class="row-between" style="margin-bottom: 16px;">
-      <div>
-        <template v-if="isLoading">
-          <h2 class="section-title">
-            <span class="loading-spinner" /> Loading…
-          </h2>
-          <p class="text-muted-sm" style="margin: 4px 0 0;">Fetching versions</p>
-        </template>
-        <template v-else>
-          <h2 class="section-title">
-            <template v-if="showAllApps">
-              All apps · {{ versions.length }} version{{ versions.length === 1 ? "" : "s" }}
-            </template>
-            <template v-else>
-              {{ selectedApp?.name ?? "—" }} · {{ versions.length }} version{{ versions.length === 1 ? "" : "s" }}
-            </template>
-          </h2>
-          <p class="text-muted-sm" style="margin: 4px 0 0;">
-            <template v-if="showAllApps">
-              Versions across every application
-            </template>
-            <template v-else>
-              Current:
-              <span v-if="selectedApp?.latestVersion" class="num pill pill-blue">v{{ selectedApp.latestVersion.version }}</span>
-              <span v-else class="text-muted-sm">No version</span>
-              <span v-if="selectedApp?.latestVersion?.createdAt">
-                · Published {{ formatDate(selectedApp.latestVersion.createdAt) }}
-              </span>
-            </template>
-          </p>
-        </template>
+    <div class="filter-strip">
+      <div class="search-wrap">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+          <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <input
+          v-model="searchQuery"
+          class="search"
+          placeholder="Cari versi atau aplikasi..."
+          aria-label="Cari versi atau aplikasi"
+        />
       </div>
-      <div v-if="canManageVersions" class="flex-gap-sm">
+      <GeneralSearchableDropdown
+        v-model="appFilter"
+        :options="appFilterOptions"
+        placeholder="Semua apps"
+        search-placeholder="Cari app..."
+      />
+      <div v-if="canManageVersions" class="toolbar-actions">
         <button
           v-if="canWriteVersions"
-          class="btn btn-secondary"
+          type="button"
+          class="btn btn-secondary btn-sm"
           :disabled="selectedVersions.length !== 2 || isArchiving"
           @click="openCompare"
         >
@@ -647,183 +689,244 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         </button>
         <button
           v-if="canPublishVersions"
-          class="btn btn-ghost"
+          type="button"
+          class="btn btn-ghost btn-sm"
           :disabled="selectedVersions.length === 0 || isArchiving"
           @click="archiveSelectedVersions"
         >
-          <span v-if="isArchiving">Archiving…</span>
-          <span v-else>Archive</span>
+          <span v-if="isArchiving">Mengarsipkan…</span>
+          <span v-else>Arsipkan</span>
+        </button>
+        <button
+          v-if="canWriteVersions"
+          type="button"
+          class="btn btn-primary btn-sm"
+          :disabled="!appFilter"
+          :title="!appFilter ? 'Pilih app untuk membuat versi' : undefined"
+          @click="openNewVersionModal"
+        >
+          + Versi Baru
         </button>
       </div>
     </div>
 
-    <!-- Selection bar -->
+    <div class="stats-bar">
+      <div class="stat">
+        <span class="stat-num num">{{ pageStats.total }}</span>
+        <span class="stat-label">Total versi</span>
+      </div>
+      <div class="stat">
+        <span class="stat-num num">{{ pageStats.drafts }}</span>
+        <span class="stat-label">Draft</span>
+      </div>
+      <div class="stat">
+        <span class="stat-num num">{{ pageStats.apps }}</span>
+        <span class="stat-label">Aplikasi</span>
+      </div>
+    </div>
+
     <div class="selection-bar" :class="{ active: selectedVersions.length > 0 }">
       <span>
-        <span class="num">{{ selectedVersions.length }}</span> version{{ selectedVersions.length === 1 ? "" : "s" }} selected
+        <span class="num">{{ selectedVersions.length }}</span>
+        versi dipilih
       </span>
-      <span class="text-muted-sm">Select 2 to compare</span>
+      <span class="text-muted-sm">Pilih 2 untuk membandingkan</span>
       <button type="button" class="btn btn-ghost btn-sm" style="margin-left: auto;" @click="clearSelection">
-        Clear
+        Batal
       </button>
     </div>
 
-    <!-- Versions table -->
-    <GeneralDataTable>
-      <thead>
-        <tr>
-          <th class="check-col"></th>
-          <th v-if="showAllApps">App</th>
-          <th>Version</th>
-          <th>Branch</th>
-          <th>Date</th>
-          <th>Author</th>
-          <th>Status</th>
-          <th>CI</th>
-          <th>Release</th>
-          <th>Changelog</th>
-          <th class="col-actions">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          v-for="v in filteredVersions"
-          :key="v.id"
-          :class="{ 'is-selected': selectedVersions.includes(v.id), 'is-clickable': true }"
-          @click="selectRow(v)"
-        >
-          <td class="check-col" @click.stop>
-            <input
-              type="checkbox"
-              :checked="selectedVersions.includes(v.id)"
-              @change="toggleVersionCheck(v.id, ($event.target as HTMLInputElement).checked)"
-              :aria-label="`Select version ${v.version}`"
-            />
-          </td>
-          <td v-if="showAllApps" class="col-muted">
-            <NuxtLink
-              :to="`/versions?app=${v.appId}`"
-              class="app-filter-link"
-              @click.stop
-            >
-              {{ v.appName || "—" }}
-            </NuxtLink>
-          </td>
-          <td class="col-num col-strong">v{{ v.version }}</td>
-          <td class="col-muted col-truncate" :title="v.branch || undefined">{{ v.branch || "—" }}</td>
-          <td class="col-num col-muted">{{ formatDate(v.releaseDate || v.createdAt) }}</td>
-          <td class="col-muted">{{ v.createdBy || "—" }}</td>
-          <td>
-            <span class="pill" :class="statusClass[v.status] || 'pill-blue'">
-              {{ statusLabel[v.status] || v.status }}
-            </span>
-          </td>
-          <td>
-            <span class="pill" :class="ciStatusClass[v.ciStatus] || 'pill-muted'">
-              {{ ciStatusLabel[v.ciStatus] || v.ciStatus }}
-            </span>
-          </td>
-            <td>
-              <div class="release-cell">
-                <template v-if="v.releases && v.releases.length > 0">
-                  <NuxtLink
-                    v-for="r in v.releases"
-                    :key="r.id"
-                    :to="`/releases/${r.id}`"
-                    class="release-pill-link"
-                    @click.stop
-                  >
-                    <span class="pill" :class="r.type === 'article' ? 'pill-purple' : 'pill-muted'">
-                      {{ r.type === 'article' ? 'Article' : 'Normal' }}
-                    </span>
-                  </NuxtLink>
-                </template>
-                <button
-                  v-if="canPublishReleases && !v.releases?.find((r) => r.type === 'article')"
-                  type="button"
-                  class="release-action-link"
-                  @click.stop="openArticleModal(v)"
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
-                    <path d="M12 5v14M5 12h14" />
-                  </svg>
-                  Article
-                </button>
-              </div>
-            </td>
-            <td>
-              <NuxtLink
-                v-if="canWriteChangelogs"
-                :to="`/changelogs?app=${v.appId}&versionId=${v.id}`"
-                class="btn btn-ghost btn-sm"
-                @click.stop
-              >
-                Edit
-              </NuxtLink>
-              <span v-else class="col-muted">—</span>
-            </td>
-            <td v-if="canWriteVersions" class="col-actions" @click.stop>
-              <div class="cell-actions">
-                <button class="btn btn-ghost btn-sm" title="Edit version" @click="openEditVersionModal(v)">
-                  <IconsPencil size="14" />
-                </button>
-                <button class="btn btn-ghost btn-sm" title="Delete version" @click="confirmDeleteVersion(v)">
-                  <IconsTrash size="14" />
-                </button>
-              </div>
-            </td>
-          </tr>
-          <tr v-if="isLoading">
-            <td :colspan="showAllApps ? 11 : 10" class="empty-cell">
-              <span class="loading-spinner" /> Loading versions…
-            </td>
-          </tr>
-          <tr v-else-if="filteredVersions.length === 0">
-            <td :colspan="showAllApps ? 11 : 10" class="empty-cell">No versions found.</td>
-          </tr>
-        </tbody>
-    </GeneralDataTable>
-
-    <!-- Version detail panel -->
-    <div v-if="activeDetailVersion" class="version-detail">
-      <div class="card detail-card">
-        <div class="detail-card-header">
-          <div class="detail-card-title">
-            <h3>Changelog</h3>
-            <span class="detail-card-version">v{{ activeDetailVersion.version }}</span>
+    <div
+      class="versions-workspace"
+      :class="{ 'has-panel': !!activeDetailVersion }"
+    >
+      <div class="versions-main">
+        <div v-if="isLoading" class="accordion-list">
+          <div v-for="n in 3" :key="n" class="system-accordion skeleton-accordion">
+            <div class="skeleton-bar w-half" />
           </div>
-          <div class="detail-card-actions">
+        </div>
+
+        <div v-else-if="filteredVersions.length === 0" class="empty-state">
+          <p>Tidak ada versi ditemukan.</p>
+          <button
+            v-if="canWriteVersions && appFilter"
+            type="button"
+            class="btn btn-primary"
+            style="margin-top: 12px;"
+            @click="openNewVersionModal"
+          >
+            Buat versi pertama
+          </button>
+        </div>
+
+        <div v-else class="accordion-list">
+          <section
+            v-for="group in versionAppGroups"
+            :key="group.key"
+            class="system-accordion"
+          >
+            <button
+              type="button"
+              class="accordion-header"
+              :aria-expanded="isAppExpanded(group.key)"
+              @click="toggleAppGroup(group.key)"
+            >
+              <ChevronDown
+                size="18"
+                class="accordion-chevron"
+                :class="{ 'is-expanded': isAppExpanded(group.key) }"
+              />
+              <span class="accordion-title">{{ group.label }}</span>
+              <span class="accordion-count">
+                {{ group.versions.length }} versi
+              </span>
+            </button>
+
+            <div v-show="isAppExpanded(group.key)" class="accordion-body">
+              <GeneralDataTable :scrollable="true">
+                <thead>
+                  <tr>
+                    <th class="check-col" />
+                    <th>Versi</th>
+                    <th>Author</th>
+                    <th>Tanggal</th>
+                    <th>Status</th>
+                    <th>CI</th>
+                    <th>Rilis</th>
+                    <th v-if="canWriteVersions" class="col-actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="v in group.versions"
+                    :key="v.id"
+                    :class="{
+                      'is-selected': selectedVersions.includes(v.id),
+                      'is-detail-active': isActiveRow(v),
+                      'is-clickable': true,
+                    }"
+                    @click="selectRow(v)"
+                  >
+                    <td class="check-col" @click.stop>
+                      <input
+                        type="checkbox"
+                        :checked="selectedVersions.includes(v.id)"
+                        :aria-label="`Pilih versi ${v.version}`"
+                        @change="toggleVersionCheck(v.id, ($event.target as HTMLInputElement).checked)"
+                      />
+                    </td>
+                    <td class="col-num col-strong">v{{ v.version }}</td>
+                    <td class="col-muted">{{ v.createdBy || "—" }}</td>
+                    <td class="col-num col-muted">{{ formatDate(v.releaseDate || v.createdAt) }}</td>
+                    <td>
+                      <span class="pill" :class="statusClass[v.status] || 'pill-blue'">
+                        {{ statusDisplay(v.status) }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="pill" :class="ciStatusClass[v.ciStatus] || 'pill-muted'">
+                        {{ ciDisplay(v.ciStatus) }}
+                      </span>
+                    </td>
+                    <td>
+                      <div class="release-cell">
+                        <template v-if="v.releases && v.releases.length > 0">
+                          <NuxtLink
+                            v-for="r in v.releases"
+                            :key="r.id"
+                            :to="`/releases/${r.id}`"
+                            class="release-pill-link"
+                            @click.stop
+                          >
+                            <span class="pill" :class="r.type === 'article' ? 'pill-purple' : 'pill-muted'">
+                              {{ r.type === "article" ? "ARTICLE" : "CHANGELOG" }}
+                            </span>
+                          </NuxtLink>
+                        </template>
+                        <button
+                          v-if="canPublishReleases && !v.releases?.find((r) => r.type === 'article')"
+                          type="button"
+                          class="release-action-link"
+                          @click.stop="openArticleModal(v)"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+                            <path d="M12 5v14M5 12h14" />
+                          </svg>
+                          Article
+                        </button>
+                      </div>
+                    </td>
+                    <td v-if="canWriteVersions" class="col-actions" @click.stop>
+                      <div class="cell-actions">
+                        <button class="btn btn-ghost btn-sm" title="Edit versi" @click="openEditVersionModal(v)">
+                          <IconsPencil size="14" />
+                        </button>
+                        <button class="btn btn-ghost btn-sm" title="Hapus versi" @click="confirmDeleteVersion(v)">
+                          <IconsTrash size="14" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </GeneralDataTable>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <aside v-if="activeDetailVersion" class="changelog-panel">
+        <div class="changelog-panel__eyebrow">Changelog</div>
+        <div class="changelog-panel__head">
+          <div class="changelog-panel__identity">
+            <h2 class="changelog-panel__version">v{{ activeDetailVersion.version }}</h2>
+            <p class="changelog-panel__app">{{ appNameForVersion(activeDetailVersion) }}</p>
+          </div>
+          <div class="changelog-panel__actions">
             <button
               v-if="activeReleaseDetail?.categories"
               type="button"
               class="btn btn-ghost btn-sm"
+              title="Salin changelog"
               @click="copyChangelogToClipboard(
                 activeReleaseDetail.categories,
                 { version: activeDetailVersion.version, appName: appNameForVersion(activeDetailVersion), releaseDate: activeDetailVersion.releaseDate }
               )"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
               </svg>
-              Copy
             </button>
             <NuxtLink
               v-if="canWriteChangelogs"
               :to="`/changelogs?app=${activeDetailVersion.appId}&versionId=${activeDetailVersion.id}`"
               class="btn btn-ghost btn-sm"
+              title="Edit changelog"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
               </svg>
-              Edit
             </NuxtLink>
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm"
+              title="Tutup panel"
+              aria-label="Tutup panel changelog"
+              @click="activeDetailVersion = null"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         </div>
+
         <div v-if="isLoadingReleaseDetail" class="detail-loading">
           <span class="loading-spinner" />
-          <span class="text-muted-sm">Loading changelog…</span>
+          <span class="text-muted-sm">Memuat changelog…</span>
         </div>
         <template v-else-if="activeReleaseDetail?.categories">
           <div class="detail-changelog-content">
@@ -837,7 +940,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
                 <span class="detail-cat-badge">
                   {{ categoryConfig[key]?.label || key }}
                 </span>
-                <span class="detail-cat-count">{{ items.length }} item{{ items.length === 1 ? '' : 's' }}</span>
+                <span class="detail-cat-count">{{ items.length }} item{{ items.length === 1 ? "" : "s" }}</span>
               </div>
               <ul class="detail-cat-list">
                 <li v-for="item in items" :key="item">{{ item }}</li>
@@ -852,18 +955,18 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
         />
         <div v-else class="detail-empty">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-            <line x1="16" y1="13" x2="8" y2="13"/>
-            <line x1="16" y1="17" x2="8" y2="17"/>
-            <polyline points="10 9 9 9 8 9"/>
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <polyline points="10 9 9 9 8 9" />
           </svg>
-          <p class="text-muted-sm">No changelog for this version</p>
+          <p class="text-muted-sm">Belum ada changelog untuk versi ini</p>
         </div>
         <div v-if="activeDetailVersion.commitHash" class="detail-commit">
           <span class="num">Commit {{ activeDetailVersion.commitHash }}</span>
         </div>
-      </div>
+      </aside>
     </div>
 
     <!-- Compare overlay -->
@@ -1205,18 +1308,275 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKeydown));
   /* inherits global tokens */
 }
 
-.topbar {
+.page-masthead {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
-.topbar h1 {
-  margin: 0;
+
+.page-masthead__copy {
+  min-width: 0;
+}
+
+.page-masthead h1 {
+  margin: 0 0 4px;
   font-weight: 600;
   font-size: 20px;
   color: var(--fg);
+}
+
+.page-subtitle {
+  margin: 0;
+  max-width: 56ch;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.filter-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.search-wrap {
+  position: relative;
+  flex: 1 1 240px;
+  min-width: 200px;
+  max-width: 360px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.stats-bar {
+  display: flex;
+  gap: 24px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.stat-num {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.stat-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.versions-workspace {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.versions-workspace.has-panel .versions-main {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.versions-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.accordion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.system-accordion {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.accordion-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--fg);
+  transition: background 0.15s ease;
+}
+
+.accordion-header:hover {
+  background: var(--fg-soft);
+}
+
+.accordion-chevron {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.accordion-chevron :deep(path) {
+  stroke: currentColor;
+}
+
+.accordion-chevron.is-expanded {
+  transform: rotate(180deg);
+}
+
+.accordion-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.accordion-count {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.accordion-body {
+  border-top: 1px solid var(--border);
+}
+
+.accordion-body :deep(.table-panel) {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.skeleton-accordion {
+  padding: 16px;
+}
+
+.skeleton-bar {
+  height: 12px;
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--fg) 8%, transparent);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeleton-bar.w-half {
+  width: 50%;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.empty-state {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.changelog-panel {
+  flex: 0 0 min(360px, 34%);
+  min-width: 280px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  position: sticky;
+  top: 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.changelog-panel__eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.changelog-panel__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.changelog-panel__version {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.changelog-panel__app {
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.changelog-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+:deep(.ds-table tbody tr.is-detail-active) {
+  background: color-mix(in oklch, var(--accent) 14%, transparent);
+}
+
+:deep(.ds-table tbody tr.is-detail-active:hover) {
+  background: color-mix(in oklch, var(--accent) 18%, transparent);
 }
 
 h2 {
@@ -1224,11 +1584,6 @@ h2 {
   font-weight: 600;
   font-size: 20px;
   color: var(--fg);
-}
-
-.section-title {
-  font-size: 20px;
-  font-weight: 600;
 }
 
 .row-between {
@@ -1249,8 +1604,8 @@ h2 {
 }
 
 .search {
-  width: 320px;
-  padding: 8px 12px;
+  width: 100%;
+  padding: 8px 12px 8px 36px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
@@ -1468,50 +1823,6 @@ h2 {
   color: var(--accent);
 }
 
-.version-detail {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 24px;
-  margin-top: 32px;
-  max-width: 800px;
-}
-.detail-card {
-  padding: 32px;
-}
-.detail-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-.detail-card-title {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.detail-card-title h3 {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--muted);
-  margin: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.detail-card-version {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.detail-card-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 .detail-loading {
   display: flex;
   align-items: center;
@@ -2040,16 +2351,40 @@ h2 {
     transition: none !important;
   }
 }
+@media (max-width: 960px) {
+  .versions-workspace {
+    flex-direction: column;
+  }
+
+  .changelog-panel {
+    flex: 1 1 auto;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    max-height: none;
+    position: static;
+  }
+}
+
 @media (max-width: 768px) {
-  .search {
-    width: 180px;
+  .filter-strip {
+    flex-direction: column;
+    align-items: stretch;
   }
-  .topbar {
-    flex-wrap: wrap;
+
+  .search-wrap {
+    max-width: none;
   }
-  .version-detail {
-    grid-template-columns: 1fr;
+
+  .toolbar-actions {
+    margin-left: 0;
+    justify-content: flex-end;
   }
+
+  .stats-bar {
+    gap: 16px;
+  }
+
   .compare-overlay {
     padding: 16px;
   }
