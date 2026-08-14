@@ -741,11 +741,7 @@ function onKeydown(e: KeyboardEvent) {
       :class="{ 'has-panel': !!activeDetailVersion }"
     >
       <div class="versions-main">
-        <div v-if="isLoading" class="accordion-list">
-          <div v-for="n in 3" :key="n" class="system-accordion skeleton-accordion">
-            <div class="skeleton-bar w-half" />
-          </div>
-        </div>
+        <GeneralSkeletonAccordionList v-if="isLoading" :rows-per-accordion="5" />
 
         <div v-else-if="filteredVersions.length === 0" class="empty-state">
           <p>Tidak ada versi ditemukan.</p>
@@ -1480,26 +1476,6 @@ function onKeydown(e: KeyboardEvent) {
   border: none;
   border-radius: 0;
   background: transparent;
-}
-
-.skeleton-accordion {
-  padding: 16px;
-}
-
-.skeleton-bar {
-  height: 12px;
-  border-radius: 4px;
-  background: color-mix(in oklch, var(--fg) 8%, transparent);
-  animation: skeleton-pulse 1.4s ease-in-out infinite;
-}
-
-.skeleton-bar.w-half {
-  width: 50%;
-}
-
-@keyframes skeleton-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
 }
 
 .empty-state {

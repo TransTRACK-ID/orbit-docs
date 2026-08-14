@@ -262,19 +262,7 @@ function onKeydown(e: KeyboardEvent) {
     </div>
 
     <main class="release-timeline" aria-live="polite">
-      <article
-        v-if="isLoading"
-        class="release-entry is-loading"
-        aria-busy="true"
-      >
-        <div class="release-rail">
-          <span class="release-rail__date">—</span>
-          <span class="release-rail__label">Rilis</span>
-        </div>
-        <div class="release-main">
-          <p class="release-loading">Memuat rilis…</p>
-        </div>
-      </article>
+      <GeneralSkeletonReleaseTimeline v-if="isLoading" />
 
       <article
         v-for="r in filteredReleases"
@@ -566,10 +554,6 @@ function onKeydown(e: KeyboardEvent) {
   border-bottom: 1px solid var(--border);
 }
 
-.release-entry.is-loading {
-  opacity: 0.7;
-}
-
 .release-rail {
   display: flex;
   flex-direction: column;
@@ -810,12 +794,6 @@ function onKeydown(e: KeyboardEvent) {
 
 .release-toggle:hover {
   color: var(--accent);
-}
-
-.release-loading {
-  margin: 0;
-  color: var(--muted);
-  font-size: 14px;
 }
 
 .release-entry:not(.is-expanded) .release-head {

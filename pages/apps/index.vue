@@ -441,13 +441,7 @@ const statusLabel: Record<string, string> = {
       </div>
     </div>
 
-    <div v-if="isLoading" class="app-grid">
-      <div v-for="n in 8" :key="n" class="app-card skeleton-card">
-        <div class="skeleton-bar w-third" />
-        <div class="skeleton-bar w-half" />
-        <div class="skeleton-bar w-quarter" />
-      </div>
-    </div>
+    <GeneralSkeletonAppGrid v-if="isLoading" />
 
     <div v-else-if="filteredApps.length === 0" class="empty-state">
       <p>Tidak ada aplikasi yang cocok.</p>
@@ -1171,26 +1165,6 @@ const statusLabel: Record<string, string> = {
   margin-bottom: 32px;
 }
 
-.skeleton-card {
-  gap: 10px;
-}
-
-.skeleton-bar {
-  height: 12px;
-  border-radius: 6px;
-  background: color-mix(in oklch, var(--fg) 8%, transparent);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-.skeleton-bar.w-third { width: 33%; }
-.skeleton-bar.w-half { width: 55%; }
-.skeleton-bar.w-quarter { width: 28%; }
-
-@keyframes pulse {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 0.85; }
-}
-
 .is-spinning {
   animation: spin 0.8s linear infinite;
 }
@@ -1412,8 +1386,7 @@ const statusLabel: Record<string, string> = {
   .app-card,
   .modal-overlay,
   .modal,
-  .is-spinning,
-  .skeleton-bar {
+  .is-spinning {
     transition: none !important;
     animation: none !important;
   }

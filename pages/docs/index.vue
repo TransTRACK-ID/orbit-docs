@@ -594,11 +594,7 @@ watch(docs, () => {
       </button>
     </div>
 
-    <div v-if="isLoading" class="accordion-list">
-      <div v-for="n in 3" :key="n" class="system-accordion skeleton-accordion">
-        <div class="skeleton-bar w-half" />
-      </div>
-    </div>
+    <GeneralSkeletonAccordionList v-if="isLoading" />
 
     <div v-else-if="visibleDocCount === 0 && !showKnowledgeCard" class="empty-state">
       <p>Tidak ada dokumen ditemukan.</p>
@@ -1160,13 +1156,6 @@ watch(docs, () => {
   border: none;
   border-radius: 0;
   background: transparent;
-}
-
-.skeleton-accordion {
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
 }
 
 .knowledge-row {

@@ -39,6 +39,7 @@ export default defineNuxtConfig({
   css: [
     "@/assets/css/global.css",
     "@/assets/css/ui-primitives.css",
+    "@/assets/css/skeleton.css",
     "@/assets/css/site-pages.css",
     "@/assets/css/public-site.css",
     "@/assets/css/doc-reader.css",

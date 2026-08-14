@@ -5,6 +5,7 @@ import DocResultViewer from "~/components/docs/DocResultViewer.vue";
 import DocGenerationShareDrawer from "~/components/docs/DocGenerationShareDrawer.vue";
 import RepositoryManager from "~/components/docs/RepositoryManager.vue";
 import type { DocGenerationJob } from "~/composables/useDocGenerator";
+import { isWikiGenerationJob, wikiOverviewPathFromJob } from "~/utils/wiki-generation";
 
 definePageMeta({
   auth: true,
@@ -171,7 +172,19 @@ async function handleRemove(jobId: string) {
   await removeJob(appId, jobId);
 }
 
+function canOpenJobResult(job: DocGenerationJob) {
+  if (job.scope === "wiki") return wikiOverviewPathFromJob(job) !== null;
+  return true;
+}
+
 async function handleViewResult(jobId: string) {
+  const job = jobs.value.find((j) => j.id === jobId);
+  const wikiPath = wikiOverviewPathFromJob(job);
+  if (wikiPath) {
+    currentResult.value = null;
+    await navigateTo(wikiPath);
+    return;
+  }
   await fetchResult(appId, jobId);
 }
 
@@ -239,6 +252,7 @@ function formatDate(dateStr: string | null) {
 }
 
 function jobScopeLabel(job: DocGenerationJob) {
+  if (job.scope === "wiki") return "Wiki site";
   if (job.scope === "repo") {
     if (job.repoUrl) {
       const slug = job.repoUrl.replace(/\.git$/, "").replace(/\/$/, "");
@@ -311,12 +325,8 @@ const hasPendingJob = computed(() => {
 
 const isCompleted = computed(() => currentJob.value?.status === "completed");
 const isFailed = computed(() => currentJob.value?.status === "failed");
-const isWikiJob = computed(() => currentJob.value?.scope === "wiki");
-const wikiOpenPath = computed(() => {
-  const msg = currentJob.value?.progressMessage || "";
-  const match = msg.match(/\/wiki\/([a-z0-9-]+)\//);
-  return match ? `/wiki/${match[1]}/1-overview` : null;
-});
+const isWikiJob = computed(() => isWikiGenerationJob(currentJob.value));
+const wikiOpenPath = computed(() => wikiOverviewPathFromJob(currentJob.value));
 
 // Show progress panel if: submitting, actively generating, OR just completed/failed
 const showProgress = computed(() => isSubmitting.value || !!currentJob.value);
@@ -846,8 +856,11 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
           <tr
             v-for="job in jobs"
             :key="job.id"
-            :class="{ 'is-selected': currentJob?.id === job.id, 'is-clickable': job.status === 'completed' }"
-            @click="job.status === 'completed' && handleViewResult(job.id)"
+            :class="{
+              'is-selected': currentJob?.id === job.id,
+              'is-clickable': job.status === 'completed' && canOpenJobResult(job),
+            }"
+            @click="job.status === 'completed' && canOpenJobResult(job) && handleViewResult(job.id)"
           >
             <td>
               <div class="cell-stack">
@@ -901,8 +914,15 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
             <td class="col-num col-muted">{{ formatDate(job.createdAt) }}</td>
             <td class="col-actions" @click.stop>
               <div class="cell-actions">
+                <NuxtLink
+                  v-if="job.status === 'completed' && wikiOverviewPathFromJob(job)"
+                  :to="wikiOverviewPathFromJob(job)!"
+                  class="btn btn-primary btn-sm"
+                >
+                  Open wiki
+                </NuxtLink>
                 <button
-                  v-if="job.status === 'completed'"
+                  v-else-if="job.status === 'completed'"
                   class="btn btn-primary btn-sm"
                   @click="handleViewResult(job.id)"
                 >

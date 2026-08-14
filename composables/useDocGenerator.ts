@@ -179,6 +179,7 @@ export const useDocGenerator = () => {
           ...(currentJob.value || {}),
           id: jobId,
           appId,
+          scope: currentJob.value?.scope ?? jobs.value.find((j) => j.id === jobId)?.scope,
           status: data.status,
           progressPct: data.progressPct,
           progressMessage: data.progressMessage,
@@ -197,7 +198,10 @@ export const useDocGenerator = () => {
           eventSource.value = null;
 
           if (data.status === "completed") {
-            toast.success("Document generation completed!");
+            const scope = currentJob.value?.scope;
+            toast.success(
+              scope === "wiki" ? "Wiki site generation completed!" : "Document generation completed!",
+            );
           } else {
             toast.error(data.errorMessage || "Generation failed");
           }
