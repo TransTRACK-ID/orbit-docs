@@ -4,6 +4,7 @@ import type { EditorJsData } from "~/composables/useEditorJsConverter";
 import { isBareUrl, prepareLinkUrl } from "~/components/editorjs/linkUtils";
 import { armPasteLink } from "~/components/editorjs/InlineLinkTool";
 import TextColorTool from "~/components/editorjs/TextColorTool";
+import { setEditorImageUploadByFile } from "~/components/editorjs/imageUploadBridge";
 
 interface Props {
   modelValue?: string; // markdown string
@@ -11,6 +12,7 @@ interface Props {
   readOnly?: boolean;
   autofocus?: boolean;
   minHeight?: string;
+  uploadImage?: (file: File) => Promise<string>;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -38,11 +40,11 @@ let linkHoverCleanup: (() => void) | null = null;
 // Guards against the v-model feedback loop:
 //   user types → onChange emits update:modelValue → parent updates
 //   modelValue → watch fires → render() → cursor/scroll reset.
-// isInternalUpdate skips the watcher for changes that originated inside
+// suppressExternalRender skips the watcher for changes that originated inside
 // this component. isRendering suppresses onChange while we ourselves call
 // render() (e.g. on external modelValue updates) so we don't re-emit and
 // re-trigger the loop.
-let isInternalUpdate = false;
+let suppressExternalRender = 0;
 let isRendering = false;
 
 async function insertPastedBlocks(blocks: Array<{ type: string; data: Record<string, any> }>) {
@@ -78,6 +80,14 @@ function createImageBlock(url: string, caption = "") {
       stretched: false,
     },
   };
+}
+
+async function resolvePastedImageUrl(file: File): Promise<string> {
+  if (props.uploadImage) {
+    return props.uploadImage(file);
+  }
+  const { readFileAsDataUrl } = await import("~/composables/useEditorJsConverter");
+  return readFileAsDataUrl(file);
 }
 
 function isBlockLevelHtmlPaste(html: string): boolean {
@@ -167,10 +177,13 @@ function setupNotionPasteHandler(editor: any) {
     if (imageFiles.length === 1 && (!html?.trim() || !isBlockLevelHtmlPaste(html))) {
       e.preventDefault();
       e.stopImmediatePropagation();
-      const { readFileAsDataUrl } = await import("~/composables/useEditorJsConverter");
-      const url = await readFileAsDataUrl(imageFiles[0]);
-      const caption = imageFiles[0].name.replace(/\.[^.]+$/, "");
-      await insertPastedBlocks([createImageBlock(url, caption)]);
+      try {
+        const url = await resolvePastedImageUrl(imageFiles[0]);
+        const caption = imageFiles[0].name.replace(/\.[^.]+$/, "");
+        await insertPastedBlocks([createImageBlock(url, caption)]);
+      } catch {
+        // uploadImage handler surfaces errors (e.g. toast); do not fall back to data URLs.
+      }
       return;
     }
 
@@ -183,7 +196,12 @@ function setupNotionPasteHandler(editor: any) {
     e.stopImmediatePropagation();
 
     const { mergeNotionPasteBlocks } = await import("~/composables/useEditorJsConverter");
-    const blocks = await mergeNotionPasteBlocks(html, plainText, imageFiles);
+    const blocks = await mergeNotionPasteBlocks(
+      html,
+      plainText,
+      imageFiles,
+      props.uploadImage || undefined
+    );
     if (blocks.length === 0) return;
 
     await insertPastedBlocks(blocks);
@@ -350,6 +368,9 @@ async function initEditor() {
       table: { class: Table },
       image: {
         class: SimpleImageTool,
+        config: {
+          uploadByFile: props.uploadImage,
+        },
       },
       link: { class: InlineLinkTool },
       linkTool: { class: LinkTool },
@@ -422,14 +443,11 @@ async function initEditor() {
       // Mark this as an internal update so the props.modelValue watcher
       // (which fires after the parent round-trips our emit) does not
       // re-render the editor for a change that originated here.
-      isInternalUpdate = true;
+      suppressExternalRender += 1;
       emit("update:modelValue", markdown);
       emit("change", sanitized, markdown);
-      // Safety net: if the parent doesn't round-trip the value (e.g. it
-      // guards against identical updates), clear the flag on the next tick
-      // so a subsequent external change isn't incorrectly skipped.
       await nextTick();
-      isInternalUpdate = false;
+      suppressExternalRender = Math.max(0, suppressExternalRender - 1);
     },
   });
 
@@ -443,10 +461,7 @@ async function initEditor() {
 // trigger editor.render() on every keystroke, resetting scroll and caret.
 watch(() => props.modelValue, async (newVal) => {
   if (!editorInstance.value || !isReady.value) return;
-  if (isInternalUpdate) {
-    isInternalUpdate = false;
-    return;
-  }
+  if (suppressExternalRender > 0) return;
 
   const current = await editorInstance.value.save();
   const { editorJsToMarkdown } = await import("~/composables/useEditorJsConverter");
@@ -467,12 +482,19 @@ watch(() => props.modelValue, async (newVal) => {
   }
 });
 
+watch(
+  () => props.uploadImage,
+  (fn) => setEditorImageUploadByFile(fn ?? null),
+  { immediate: true }
+);
+
 // ── Lifecycle ─────────────────────────────────────────────────
 onMounted(() => {
   nextTick(() => initEditor());
 });
 
 onBeforeUnmount(() => {
+  setEditorImageUploadByFile(null);
   pasteCleanup?.();
   pasteCleanup = null;
   linkHoverCleanup?.();
@@ -534,6 +556,7 @@ defineExpose({
 .editor-js-container .codex-editor {
   background: transparent;
   height: 100%;
+  min-height: 200px;
   overflow: visible;
   flex: 1;
   min-height: 0;
@@ -552,6 +575,7 @@ defineExpose({
   min-height: 0;
   overflow-y: auto;
   overflow-x: visible;
+  -webkit-overflow-scrolling: touch;
 }
 
 .editor-js-container .ce-block__content {
@@ -846,6 +870,46 @@ defineExpose({
 
 .editor-js-container .cdx-simple-image__picture--broken {
   display: none;
+}
+
+.editor-js-container .cdx-simple-image__upload {
+  padding: 20px 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  text-align: center;
+}
+
+.editor-js-container .cdx-simple-image__upload-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.editor-js-container .cdx-simple-image__upload-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.editor-js-container .cdx-simple-image__upload-input {
+  display: none;
+}
+
+.editor-js-container .cdx-simple-image__upload-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .editor-js-container .cdx-simple-image__caption {

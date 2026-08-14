@@ -103,3 +103,69 @@ export function isRuntimePreviewMode(): boolean {
   const config = useRuntimeConfig();
   return config.isPreview === true || config.isPreview === "true";
 }
+
+export interface S3Config {
+  bucket: string;
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  endpoint?: string;
+  forcePathStyle: boolean;
+  uploadMaxBytes: number;
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value || "", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function getS3Config(): S3Config | null {
+  const config = useRuntimeConfig();
+  const bucket = envOrConfig(config.s3Bucket as string, "NUXT_S3_BUCKET", "S3_BUCKET");
+  const region = envOrConfig(config.s3Region as string, "NUXT_S3_REGION", "S3_REGION");
+  const accessKeyId = envOrConfig(
+    config.s3AccessKeyId as string,
+    "NUXT_S3_ACCESS_KEY_ID",
+    "S3_ACCESS_KEY_ID"
+  );
+  const secretAccessKey = envOrConfig(
+    config.s3SecretAccessKey as string,
+    "NUXT_S3_SECRET_ACCESS_KEY",
+    "S3_SECRET_ACCESS_KEY"
+  );
+
+  if (!bucket || !region || !accessKeyId || !secretAccessKey) {
+    return null;
+  }
+
+  const endpoint = envOrConfig(
+    config.s3Endpoint as string,
+    "NUXT_S3_ENDPOINT",
+    "S3_ENDPOINT"
+  );
+  const forcePathStyle =
+    envOrConfig(config.s3ForcePathStyle as string, "NUXT_S3_FORCE_PATH_STYLE", "S3_FORCE_PATH_STYLE") ===
+    "true";
+  const uploadMaxBytes = parsePositiveInt(
+    envOrConfig(
+      String(config.s3UploadMaxBytes || ""),
+      "NUXT_S3_UPLOAD_MAX_BYTES",
+      "S3_UPLOAD_MAX_BYTES"
+    ),
+    10 * 1024 * 1024
+  );
+
+  return {
+    bucket,
+    region,
+    accessKeyId,
+    secretAccessKey,
+    endpoint: endpoint || undefined,
+    forcePathStyle,
+    uploadMaxBytes,
+  };
+}
+
+export function isS3Configured(): boolean {
+  return getS3Config() !== null;
+}

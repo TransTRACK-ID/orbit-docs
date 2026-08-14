@@ -19,6 +19,7 @@ const canPublishReleases = computed(() => can("releases:publish"));
 const canWriteChangelogs = computed(() => can("changelogs:write"));
 
 const { release, isLoading, isUpdating, isDeleting, fetchRelease, updateRelease, deleteRelease } = useReleases();
+const { uploadReleaseImage } = useReleaseMediaUpload();
 
 const releaseId = computed(() => route.params.id as string);
 
@@ -160,6 +161,13 @@ function enterEditMode() {
   isEditing.value = true;
 }
 
+function uploadReleaseEditorImage(file: File) {
+  if (!releaseId.value) {
+    throw new Error("Release ID is missing");
+  }
+  return uploadReleaseImage(releaseId.value, file);
+}
+
 function cancelEdit() {
   isEditing.value = false;
   editError.value = '';
@@ -284,7 +292,6 @@ function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
     showDeleteModal.value = false;
     if (showHistoryPanel.value) closeReleaseHistory();
-    if (isEditing.value) cancelEdit();
   }
 }
 
@@ -471,11 +478,16 @@ onBeforeUnmount(() => {
               </div>
 
               <!-- Editor.js -->
+              <p v-if="canWriteReleases" class="edit-image-hint">
+                Type <kbd>/</kbd> and choose <strong>Upload image</strong>, click the
+                <strong>Upload image</strong> button on an image block, or paste from your clipboard.
+              </p>
               <div class="editor-js-release-editor">
                 <ClientOnly>
                   <EditorJs
                     v-model="editContent"
                     :read-only="!canWriteReleases"
+                    :upload-image="uploadReleaseEditorImage"
                     placeholder="Write your release article content..."
                     style="min-height:400px;"
                   />
@@ -958,6 +970,22 @@ onBeforeUnmount(() => {
   overflow: visible;
   background: var(--surface);
   min-height: 400px;
+}
+
+.edit-image-hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.edit-image-hint kbd {
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 .form-footer {
   display: flex;

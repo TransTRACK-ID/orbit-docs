@@ -5,6 +5,7 @@ import {
   decodeHtmlEntities,
   editorJsToMarkdown,
   htmlToEditorJsBlocks,
+  isLoadableImageUrl,
   isNotionImageReference,
   markdownToEditorJs,
   mergeNotionPasteBlocks,
@@ -309,6 +310,23 @@ describe("alignBlocksWithPlainImages", () => {
     expect(merged[1].type).toBe("list");
     expect(merged[2].type).toBe("image");
     expect(merged[3].type).toBe("list");
+  });
+});
+
+describe("isLoadableImageUrl", () => {
+  it("accepts release media proxy paths", () => {
+    expect(
+      isLoadableImageUrl("/api/public/releases/a1b2c3d4-e5f6-4789-a012-3456789abcde/media/b2c3d4e5-f6a7-4890-b123-456789abcdef")
+    ).toBe(true);
+    expect(
+      isLoadableImageUrl("/api/releases/a1b2c3d4-e5f6-4789-a012-3456789abcde/media/b2c3d4e5-f6a7-4890-b123-456789abcdef")
+    ).toBe(true);
+  });
+
+  it("accepts http(s), data, and blob URLs", () => {
+    expect(isLoadableImageUrl("https://example.com/image.png")).toBe(true);
+    expect(isLoadableImageUrl("data:image/png;base64,abc")).toBe(true);
+    expect(isLoadableImageUrl("blob:http://localhost/123")).toBe(true);
   });
 });
 

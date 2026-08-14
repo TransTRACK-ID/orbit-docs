@@ -1617,11 +1617,16 @@ const lastModified = computed(() => {
   height: 100%;
 }
 
-.editor-pane:has(.editor-js-wrapper) {
-  overflow: visible;
+.editor-pane:has(.editor-js-wrapper) .pane-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.editor-pane:has(.editor-js-wrapper) .pane-body {
+.editor-pane:has(.editor-js-wrapper) .pane-body :deep(.editor-js-wrapper) {
+  flex: 1;
+  min-height: 0;
   overflow: visible;
 }
 .pane-header {

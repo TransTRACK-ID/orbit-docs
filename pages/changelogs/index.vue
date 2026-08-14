@@ -914,7 +914,7 @@ function canViewHistoryDiff(): boolean {
             <button type="button" class="format-hint-tag tag-security" @click="insertCategoryHeader('Security')">## Security</button>
           </div>
         </div>
-        <div class="pane-body" style="padding:0;overflow:visible;">
+        <div class="pane-body" style="padding:0;">
           <ClientOnly>
             <EditorJs
               v-model="content"
@@ -1259,7 +1259,16 @@ function canViewHistoryDiff(): boolean {
   overflow: hidden;
 }
 
-.editor-pane:has(.editor-js-wrapper) {
+.editor-pane:has(.editor-js-wrapper) .pane-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-pane:has(.editor-js-wrapper) .pane-body :deep(.editor-js-wrapper) {
+  flex: 1;
+  min-height: 0;
   overflow: visible;
 }
 .pane-header {

@@ -25,7 +25,20 @@ const NOTION_IMAGE_EXT_RE = /\.(?:gif|jpe?g|png|webp|tiff|svg|bmp)$/i;
 
 export function isLoadableImageUrl(url: string): boolean {
   const value = url.trim();
+  if (/^\/api\/(public\/)?releases\/[^/]+\/media\/[^/]+$/i.test(value)) {
+    return true;
+  }
   return /^(https?:|data:image\/|blob:)/i.test(value);
+}
+
+export type ImageFileResolver = (file: File) => Promise<string>;
+
+async function resolveImageFile(
+  file: File,
+  resolver?: ImageFileResolver
+): Promise<string> {
+  if (resolver) return resolver(file);
+  return readFileAsDataUrl(file);
 }
 
 export function isNotionImageReference(text: string): { filename: string } | null {
@@ -78,7 +91,8 @@ function resolveFileForReference(
 
 async function flattenListImageItems(
   block: EditorJsData["blocks"][number],
-  filesByName: Map<string, File>
+  filesByName: Map<string, File>,
+  imageFileResolver?: ImageFileResolver
 ): Promise<EditorJsData["blocks"]> {
   const items = block.data.items || [];
   const chunks: EditorJsData["blocks"] = [];
@@ -112,7 +126,7 @@ async function flattenListImageItems(
         chunks.push({
           type: "image",
           data: createImageBlockData(
-            file ? await readFileAsDataUrl(file) : url,
+            file ? await resolveImageFile(file, imageFileResolver) : url,
             caption
           ),
         });
@@ -126,7 +140,7 @@ async function flattenListImageItems(
         chunks.push({
           type: "image",
           data: createImageBlockData(
-            file ? await readFileAsDataUrl(file) : ref.filename,
+            file ? await resolveImageFile(file, imageFileResolver) : ref.filename,
             ref.filename.replace(/\.[^.]+$/, "")
           ),
         });
@@ -144,7 +158,8 @@ async function flattenListImageItems(
 /** Match Notion attachment placeholders to clipboard image files and normalize image blocks. */
 export async function reconcileNotionImageBlocks(
   blocks: EditorJsData["blocks"],
-  files: File[] = []
+  files: File[] = [],
+  imageFileResolver?: ImageFileResolver
 ): Promise<EditorJsData["blocks"]> {
   const filesByName = new Map<string, File>();
   for (const file of files) {
@@ -155,7 +170,7 @@ export async function reconcileNotionImageBlocks(
 
   for (const block of blocks) {
     if (block.type === "list") {
-      output.push(...await flattenListImageItems(block, filesByName));
+      output.push(...await flattenListImageItems(block, filesByName, imageFileResolver));
       continue;
     }
 
@@ -166,7 +181,7 @@ export async function reconcileNotionImageBlocks(
         output.push({
           type: "image",
           data: createImageBlockData(
-            file ? await readFileAsDataUrl(file) : ref.filename,
+            file ? await resolveImageFile(file, imageFileResolver) : ref.filename,
             ref.filename.replace(/\.[^.]+$/, "")
           ),
         });
@@ -184,7 +199,7 @@ export async function reconcileNotionImageBlocks(
             type: "image",
             data: {
               ...block.data,
-              url: await readFileAsDataUrl(file),
+              url: await resolveImageFile(file, imageFileResolver),
             },
           });
           continue;
@@ -347,10 +362,11 @@ export function alignBlocksWithPlainImages(
 export async function mergeNotionPasteBlocks(
   html: string,
   plainText: string,
-  files: File[] = []
+  files: File[] = [],
+  imageFileResolver?: ImageFileResolver
 ): Promise<EditorJsData["blocks"]> {
   let htmlBlocks = htmlToEditorJsBlocks(html);
-  htmlBlocks = await reconcileNotionImageBlocks(htmlBlocks, files);
+  htmlBlocks = await reconcileNotionImageBlocks(htmlBlocks, files, imageFileResolver);
 
   if (!plainText.trim()) {
     return htmlBlocks;
@@ -358,7 +374,8 @@ export async function mergeNotionPasteBlocks(
 
   const plainBlocks = await reconcileNotionImageBlocks(
     markdownToEditorJs(plainText).blocks,
-    files
+    files,
+    imageFileResolver
   );
 
   return alignBlocksWithPlainImages(htmlBlocks, plainBlocks);

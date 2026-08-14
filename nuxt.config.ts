@@ -140,6 +140,14 @@ export default defineNuxtConfig({
     // Document generation agent selection
     docAgent: process.env.DOC_AGENT || 'cursor',
     cursorModel: process.env.CURSOR_MODEL || 'auto',
+    // S3 object storage (server-side only)
+    s3Bucket: process.env.S3_BUCKET || '',
+    s3Region: process.env.S3_REGION || '',
+    s3AccessKeyId: process.env.S3_ACCESS_KEY_ID || '',
+    s3SecretAccessKey: process.env.S3_SECRET_ACCESS_KEY || '',
+    s3Endpoint: process.env.S3_ENDPOINT || '',
+    s3ForcePathStyle: process.env.S3_FORCE_PATH_STYLE || '',
+    s3UploadMaxBytes: process.env.S3_UPLOAD_MAX_BYTES || '',
   },
 
   compatibilityDate: "2025-01-31",
