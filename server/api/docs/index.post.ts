@@ -4,7 +4,7 @@ import { docs, activityLogs, docVersions } from "~/server/database/schema";
 import { eq, and, desc } from "drizzle-orm";
 import { getActorName } from "~/server/utils/auth";
 import { requirePermission } from "~/server/utils/rbac";
-import { parseFrontmatter } from "~/composables/useMarkdown";
+import { isForbiddenWikiDocStatus, isWikiDoc, WIKI_PUBLISH_BLOCKED_MESSAGE } from "~/utils/wiki-content";
 
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
@@ -33,6 +33,14 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: "Bad Request",
       message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`,
+    });
+  }
+
+  if (docTypeValue === "wiki" && status && isForbiddenWikiDocStatus(status)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: WIKI_PUBLISH_BLOCKED_MESSAGE,
     });
   }
 

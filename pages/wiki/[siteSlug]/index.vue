@@ -117,7 +117,7 @@ function firstPageSlug(
       <article class="doc-body">
         <h1 class="doc-body-title">{{ site.name }}</h1>
         <p v-if="site.description" class="ps-landing-desc">{{ site.description }}</p>
-        <p v-else class="ps-landing-desc ps-landing-desc--muted">Internal wiki — drafts and unpublished pages are visible here.</p>
+        <p v-else class="ps-landing-desc ps-landing-desc--muted">Internal wiki — all pages are available to your team here.</p>
 
         <section v-if="docPages.length" class="ps-section">
           <h2 class="ps-section-title">Pages</h2>
@@ -125,7 +125,6 @@ function firstPageSlug(
             <li v-for="p in docPages" :key="p.id">
               <NuxtLink v-if="p.slug" :to="`${pathPrefix}/${p.slug}`" class="ps-link">
                 {{ p.title }}
-                <span v-if="p.status !== 'published'" class="wiki-page-status">{{ p.status }}</span>
               </NuxtLink>
               <span v-else class="ps-muted">{{ p.title }} (no slug)</span>
             </li>

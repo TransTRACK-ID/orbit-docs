@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { requirePermission } from "~/server/utils/rbac";
 import { getActorName } from "~/server/utils/auth";
 import { createDocVersionSnapshot } from "~/server/lib/doc-version-snapshot";
+import { isWikiDoc, WIKI_PUBLISH_BLOCKED_MESSAGE } from "~/utils/wiki-content";
 
 export default defineEventHandler(async (event) => {
   const { user } = await requirePermission(event, "docs:publish");
@@ -31,6 +32,14 @@ export default defineEventHandler(async (event) => {
       statusCode: 404,
       statusMessage: "Not Found",
       message: "Doc not found",
+    });
+  }
+
+  if (isWikiDoc(existing)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: WIKI_PUBLISH_BLOCKED_MESSAGE,
     });
   }
 

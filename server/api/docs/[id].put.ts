@@ -7,6 +7,12 @@ import { getActorName } from "~/server/utils/auth";
 import { createDocVersionSnapshot, isValidDocVersionAction } from "~/server/lib/doc-version-snapshot";
 import { syncAdrContentWithFrontmatter } from "~/server/lib/adr-queries";
 import { parseFrontmatter } from "~/composables/useMarkdown";
+import {
+  isForbiddenWikiDocStatus,
+  isWikiDoc,
+  WIKI_PUBLISH_BLOCKED_MESSAGE,
+  WIKI_SITE_PUBLISH_BLOCKED_MESSAGE,
+} from "~/utils/wiki-content";
 
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
@@ -49,6 +55,15 @@ export default defineEventHandler(async (event) => {
   if (status !== undefined) {
     const nextStatus = status;
     const statusChanging = nextStatus !== existing.status;
+
+    if (isWikiDoc(existing) && statusChanging && isForbiddenWikiDocStatus(nextStatus)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Bad Request",
+        message: WIKI_PUBLISH_BLOCKED_MESSAGE,
+      });
+    }
+
     const publishingOrArchiving =
       statusChanging && (nextStatus === "published" || nextStatus === "archived");
 

@@ -3,6 +3,7 @@ import { getDb } from "~/server/database";
 import { docSites, apps, docs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
+import { deriveWikiOnlySiteIds } from "~/utils/wiki-content";
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
@@ -45,12 +46,17 @@ export default defineEventHandler(async (event) => {
       title: docs.title,
       slug: docs.slug,
       status: docs.status,
+      docType: docs.docType,
       sortOrder: docs.sortOrder,
       updatedAt: docs.updatedAt,
     })
     .from(docs)
     .where(eq(docs.siteId, id))
     .orderBy(docs.sortOrder, docs.updatedAt);
+
+  const isWikiSite = deriveWikiOnlySiteIds(
+    pageRows.map((p) => ({ siteId: id, docType: p.docType })),
+  ).has(id);
 
   return {
     data: {
@@ -66,6 +72,7 @@ export default defineEventHandler(async (event) => {
       openapiNormalized: row.openapiNormalized,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
+      isWikiSite,
       app: row.appName ? { id: row.appId, name: row.appName } : null,
       pages: pageRows,
     },

@@ -108,7 +108,6 @@ watch(siteSlug, loadSite);
               :active-page-slug="activePageSlug"
               :active-operation-slug="activeOperationSlug"
               :path-prefix="pathPrefix"
-              show-status
               wiki-mode
             />
           </div>

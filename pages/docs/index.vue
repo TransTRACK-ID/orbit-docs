@@ -9,6 +9,7 @@ import {
   groupDocsForList,
   isAdrDoc,
   isFeatureCatalogDoc,
+  isWikiDoc,
   type DocListGroup,
   type DocListSection,
   type DocListView,
@@ -101,20 +102,11 @@ onMounted(async () => {
     status: statusFilter.value || undefined,
   });
   document.addEventListener("keydown", onKeydown);
-  document.addEventListener("click", onClickOutside);
 });
 
 onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKeydown);
-  document.removeEventListener("click", onClickOutside);
 });
-
-function onClickOutside(e: MouseEvent) {
-  const target = e.target as HTMLElement;
-  if (!target.closest(".actions-menu")) {
-    docs.value.forEach((d: any) => (d._showActions = false));
-  }
-}
 
 watch([search, appFilter, siteFilter, statusFilter], async () => {
   await fetchDocs({
@@ -253,10 +245,6 @@ function onKeydown(e: KeyboardEvent) {
 function canManageDoc(doc: DocItem): boolean {
   if (isAdrDoc(doc)) return canWriteAdrs.value;
   return canWriteDocs.value;
-}
-
-function hasDocMenuActions(doc: DocItem): boolean {
-  return canManageDoc(doc) || doc.status === "published";
 }
 
 function formatDate(dateStr: string | null) {
@@ -673,7 +661,8 @@ watch(docs, () => {
                       </div>
                     </td>
                     <td>
-                      <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
+                      <span v-if="isWikiDoc(doc)" class="pill pill-accent">Wiki</span>
+                      <span v-else class="pill" :class="statusClass[doc.status] || 'pill-blue'">
                         {{ statusLabel[doc.status] || doc.status }}
                       </span>
                     </td>
@@ -685,50 +674,17 @@ watch(docs, () => {
                           :to="`/docs/${doc.id}`"
                           class="btn btn-ghost btn-sm row-action"
                         >
-                          Buka &rarr;
+                          Buka
                         </NuxtLink>
-                        <div
-                          v-if="hasDocMenuActions(doc)"
-                          class="action-dropdown-wrap actions-menu"
+                        <button
+                          v-if="canManageDoc(doc)"
+                          type="button"
+                          class="btn btn-ghost btn-sm"
+                          title="Hapus"
+                          @click="confirmDelete(doc)"
                         >
-                          <button
-                            type="button"
-                            class="btn btn-ghost btn-sm row-action row-action--icon"
-                            aria-label="Aksi lainnya"
-                            aria-haspopup="menu"
-                            :aria-expanded="!!doc._showActions"
-                            @click="doc._showActions = !doc._showActions"
-                          >
-                            <IconsDotsVertical size="14" />
-                          </button>
-                          <div
-                            v-if="doc._showActions"
-                            class="dropdown-menu actions-dropdown"
-                            role="menu"
-                            @click.stop
-                          >
-                            <NuxtLink
-                              v-if="doc.status === 'published'"
-                              :to="`/p/${doc.id}`"
-                              target="_blank"
-                              class="dropdown-item"
-                              role="menuitem"
-                              @click="doc._showActions = false"
-                            >
-                              Public view
-                            </NuxtLink>
-                            <button
-                              v-if="canManageDoc(doc)"
-                              type="button"
-                              class="dropdown-item dropdown-item--danger"
-                              role="menuitem"
-                              @click="doc._showActions = false; confirmDelete(doc)"
-                            >
-                              <IconsTrash size="14" />
-                              Hapus
-                            </button>
-                          </div>
-                        </div>
+                          <IconsTrash size="14" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -806,7 +762,8 @@ watch(docs, () => {
                 </div>
               </td>
               <td>
-                <span class="pill" :class="statusClass[doc.status] || 'pill-blue'">
+                <span v-if="isWikiDoc(doc)" class="pill pill-accent">Wiki</span>
+                <span v-else class="pill" :class="statusClass[doc.status] || 'pill-blue'">
                   {{ statusLabel[doc.status] || doc.status }}
                 </span>
               </td>
@@ -818,40 +775,17 @@ watch(docs, () => {
                     :to="`/docs/${doc.id}`"
                     class="btn btn-ghost btn-sm row-action"
                   >
-                    Buka &rarr;
+                    Buka
                   </NuxtLink>
-                  <div
-                    v-if="hasDocMenuActions(doc)"
-                    class="action-dropdown-wrap actions-menu"
+                  <button
+                    v-if="canManageDoc(doc)"
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    title="Hapus"
+                    @click="confirmDelete(doc)"
                   >
-                    <button
-                      type="button"
-                      class="btn btn-ghost btn-sm row-action row-action--icon"
-                      aria-label="Aksi lainnya"
-                      aria-haspopup="menu"
-                      :aria-expanded="!!doc._showActions"
-                      @click="doc._showActions = !doc._showActions"
-                    >
-                      <IconsDotsVertical size="14" />
-                    </button>
-                    <div
-                      v-if="doc._showActions"
-                      class="dropdown-menu actions-dropdown"
-                      role="menu"
-                      @click.stop
-                    >
-                      <button
-                        v-if="canManageDoc(doc)"
-                        type="button"
-                        class="dropdown-item dropdown-item--danger"
-                        role="menuitem"
-                        @click="doc._showActions = false; confirmDelete(doc)"
-                      >
-                        <IconsTrash size="14" />
-                        Hapus
-                      </button>
-                    </div>
-                  </div>
+                    <IconsTrash size="14" />
+                  </button>
                 </div>
               </td>
             </tr>
@@ -1229,7 +1163,7 @@ watch(docs, () => {
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 2px;
+  gap: 6px;
 }
 
 .row-action {
@@ -1242,62 +1176,6 @@ watch(docs, () => {
 .row-action:hover {
   color: var(--fg);
   background: var(--fg-soft);
-}
-
-.row-action--icon {
-  width: 32px;
-  padding: 0;
-  justify-content: center;
-}
-
-.action-dropdown-wrap {
-  position: relative;
-}
-
-.actions-menu {
-  position: relative;
-}
-
-.dropdown-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 168px;
-  padding: 4px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 8px 24px color-mix(in oklch, var(--fg) 10%, transparent);
-  z-index: 20;
-}
-
-.dropdown-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  border-radius: var(--radius);
-  background: none;
-  font: inherit;
-  font-size: 13px;
-  color: var(--fg);
-  text-decoration: none;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.dropdown-item:hover {
-  background: var(--fg-soft);
-}
-
-.dropdown-item--danger {
-  color: oklch(50% 0.16 25);
-}
-
-.dropdown-item--danger:hover {
-  background: color-mix(in oklch, oklch(55% 0.16 25) 10%, transparent);
 }
 
 .doc-site-badge {

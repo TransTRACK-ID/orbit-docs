@@ -7,6 +7,7 @@ export interface DocSitePage {
   title: string;
   slug: string | null;
   status: string;
+  docType?: string | null;
   sortOrder: number;
   frontmatter?: Record<string, unknown> | null;
   updatedAt: string | null;
@@ -20,6 +21,7 @@ export interface DocSiteItem {
   description: string | null;
   status: "draft" | "published" | "archived";
   navConfig: NavConfig | null;
+  isWikiSite?: boolean;
   openapiSpec?: string | null;
   openapiFormat?: "json" | "yaml" | null;
   openapiNormalized?: NormalizedOpenApi | null;

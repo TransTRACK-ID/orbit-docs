@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
       title: docs.title,
       slug: docs.slug,
       status: docs.status,
+      docType: docs.docType,
       sortOrder: docs.sortOrder,
       frontmatter: docs.frontmatter,
       updatedAt: docs.updatedAt,

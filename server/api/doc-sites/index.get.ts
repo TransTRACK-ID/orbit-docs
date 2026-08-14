@@ -1,8 +1,9 @@
 import { defineEventHandler, getQuery, createError } from "h3";
 import { getDb } from "~/server/database";
-import { docSites, apps } from "~/server/database/schema";
+import { docSites, apps, docs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
+import { deriveWikiOnlySiteIds } from "~/utils/wiki-content";
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
@@ -28,6 +29,10 @@ export default defineEventHandler(async (event) => {
     .where(appId ? eq(docSites.appId, appId) : undefined)
     .orderBy(docSites.createdAt);
 
+  const wikiOnlySiteIds = deriveWikiOnlySiteIds(
+    await db.select({ siteId: docs.siteId, docType: docs.docType }).from(docs),
+  );
+
   const data = rows.map((row) => ({
     id: row.id,
     appId: row.appId,
@@ -38,6 +43,7 @@ export default defineEventHandler(async (event) => {
     navConfig: row.navConfig,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    isWikiSite: wikiOnlySiteIds.has(row.id),
     app: row.appName ? { id: row.appId, name: row.appName } : null,
   }));
 

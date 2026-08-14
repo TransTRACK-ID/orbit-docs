@@ -10,16 +10,6 @@ const props = defineProps<{
 
 const wikiPageMeta = useWikiPageMeta();
 const pageId = computed(() => wikiPageMeta.value.pageId);
-const pageStatus = computed(() => wikiPageMeta.value.pageStatus);
-
-const siteStatusLabel = computed(() => {
-  const map: Record<string, string> = {
-    draft: "Draft",
-    published: "Published",
-    archived: "Archived",
-  };
-  return map[props.siteStatus] || props.siteStatus;
-});
 </script>
 
 <template>
@@ -28,13 +18,7 @@ const siteStatusLabel = computed(() => {
       <NuxtLink to="/docs" class="wiki-internal-back">← Docs</NuxtLink>
       <span class="wiki-internal-divider" aria-hidden="true">/</span>
       <NuxtLink :to="`/sites/${siteId}`" class="wiki-internal-site">{{ siteName }}</NuxtLink>
-      <span class="wiki-internal-badge wiki-internal-badge--site">{{ siteStatusLabel }}</span>
-      <span
-        v-if="pageStatus && pageStatus !== 'published'"
-        class="wiki-internal-badge wiki-internal-badge--page"
-      >
-        {{ pageStatus === "in_review" ? "In review" : pageStatus }}
-      </span>
+      <span class="wiki-internal-label">Internal wiki</span>
     </div>
     <div class="wiki-internal-header-right">
       <NuxtLink
@@ -104,22 +88,14 @@ const siteStatusLabel = computed(() => {
   opacity: 0.5;
 }
 
-.wiki-internal-badge {
+.wiki-internal-label {
   font-size: 10px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
   letter-spacing: 0.02em;
-}
-
-.wiki-internal-badge--site {
-  background: color-mix(in oklch, var(--fg) 8%, transparent);
-  color: var(--muted);
-}
-
-.wiki-internal-badge--page {
-  background: color-mix(in oklch, oklch(65% 0.14 85) 20%, transparent);
-  color: oklch(48% 0.12 85);
+  background: color-mix(in oklch, var(--accent) 12%, transparent);
+  color: var(--accent);
 }
 
 .wiki-internal-edit {

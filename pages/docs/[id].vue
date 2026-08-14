@@ -5,7 +5,8 @@ import type { DocVersion } from "~/composables/useDocs";
 import { slugify } from "~/utils/nav-client";
 import type { AdrStatus } from "~/types/adr";
 import { ADR_STATUSES } from "~/types/adr";
-import { isAdrDoc as checkIsAdrDoc } from "~/utils/doc-display";
+import { isAdrDoc as checkIsAdrDoc, isWikiDoc as checkIsWikiDoc } from "~/utils/doc-display";
+import { isForbiddenWikiDocStatus } from "~/utils/wiki-content";
 
 definePageMeta({
   auth: true,
@@ -22,8 +23,12 @@ const canWriteAdrs = computed(() => can("adrs:write"));
 const canPublishAdrs = computed(() => can("adrs:publish"));
 
 const isAdrDoc = computed(() => checkIsAdrDoc(currentDoc.value || { docType: null }));
+const isWikiDoc = computed(() => checkIsWikiDoc(currentDoc.value || { docType: null }));
 const canEditDoc = computed(() => (isAdrDoc.value ? canWriteAdrs.value : canWriteDocs.value));
-const canPublishDoc = computed(() => (isAdrDoc.value ? canPublishAdrs.value : canPublishDocs.value));
+const canPublishDoc = computed(() => {
+  if (isWikiDoc.value) return false;
+  return isAdrDoc.value ? canPublishAdrs.value : canPublishDocs.value;
+});
 
 const docId = computed(() => route.params.id as string);
 
@@ -140,10 +145,14 @@ const hasEditorChanges = computed(() => {
 });
 
 function getEditorPayload() {
+  let status = editorStatus.value;
+  if (isWikiDoc.value && isForbiddenWikiDocStatus(status)) {
+    status = "draft";
+  }
   return {
     title: editorTitle.value,
     content: editorContent.value,
-    status: editorStatus.value,
+    status,
     versionId: editorVersionId.value ?? null,
     tags: editorTags.value,
     siteId: editorSiteId.value || null,
@@ -730,7 +739,7 @@ const lastModified = computed(() => {
           {{ saveStatusLabel }}
         </p>
         <NuxtLink
-          v-if="editorStatus === 'published'"
+          v-if="editorStatus === 'published' && !isWikiDoc"
           :to="`/p/${docId}`"
           target="_blank"
           class="btn btn-ghost"
@@ -907,12 +916,28 @@ const lastModified = computed(() => {
                 </div>
                 <div class="field">
                   <label for="docStatus">Status</label>
-                  <select id="docStatus" v-model="editorStatus" class="select">
+                  <select
+                    v-if="!isWikiDoc"
+                    id="docStatus"
+                    v-model="editorStatus"
+                    class="select"
+                  >
                     <option value="draft">Draft</option>
                     <option value="in_review">In Review</option>
                     <option value="published">Published</option>
                     <option value="archived">Archived</option>
                   </select>
+                  <p v-else class="field-hint wiki-doc-status-hint">
+                    Internal wiki page — not published to <span class="num">/s/</span> or
+                    <span class="num">/p/</span>. Edits are visible in
+                    <NuxtLink
+                      v-if="editorSiteId && editorSlug"
+                      :to="`/wiki/${docSites.find((s) => s.id === editorSiteId)?.slug || ''}/${editorSlug}`"
+                    >
+                      wiki
+                    </NuxtLink>
+                    <span v-else>wiki</span>.
+                  </p>
                 </div>
                 <div class="field">
                   <label>Tags</label>

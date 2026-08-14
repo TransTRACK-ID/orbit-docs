@@ -3,6 +3,7 @@ import { toast } from "vue3-toastify";
 import { usePageStore } from "~/store/page";
 import type { NavConfig } from "~/server/database/schema";
 import { slugify } from "~/utils/nav-client";
+import { isWikiOnlySiteFromPages } from "~/utils/wiki-content";
 
 definePageMeta({
   auth: true,
@@ -299,7 +300,7 @@ async function save() {
     slug: form.slug.trim(),
     description: form.description.trim() || null,
     appId: form.appId || null,
-    status: form.status,
+    status: isWikiSite.value ? "draft" : form.status,
     navConfig: navConfig.value,
   };
   try {
@@ -320,6 +321,11 @@ const hasApiReference = computed(
     || !!(navConfig.value.openapi && navConfig.value.openapi.length)
     || !!openapiSpec.value.trim(),
 );
+
+const isWikiSite = computed(() => {
+  if (currentSite.value?.isWikiSite) return true;
+  return isWikiOnlySiteFromPages(sitePages.value);
+});
 
 async function generateOpenApiSite() {
   if (!openapiSpec.value.trim()) {
@@ -382,7 +388,7 @@ function onSpecFile(e: Event) {
           Open wiki
         </NuxtLink>
         <NuxtLink
-          v-if="currentSite && currentSite.status === 'published' && form.slug"
+          v-if="currentSite && currentSite.status === 'published' && form.slug && !isWikiSite"
           :to="publicUrl"
           target="_blank"
           class="btn btn-ghost"
@@ -432,9 +438,18 @@ function onSpecFile(e: Event) {
             </div>
             <div class="form-group">
               <label for="status">Status</label>
-              <select id="status" v-model="form.status" class="select">
+              <select
+                v-if="!isWikiSite"
+                id="status"
+                v-model="form.status"
+                class="select"
+              >
                 <option v-for="o in statusOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
               </select>
+              <p v-else class="field-hint wiki-site-status-hint">
+                Internal wiki — not published to <span class="num">/s/</span>. Open at
+                <NuxtLink :to="wikiUrl" class="wiki-status-link">{{ wikiUrl }}</NuxtLink>.
+              </p>
             </div>
           </div>
         </section>
@@ -541,9 +556,14 @@ function onSpecFile(e: Event) {
                 <span class="page-title">{{ p.title }}</span>
                 <span class="page-slug num">{{ p.slug || "no slug" }}</span>
               </NuxtLink>
-              <span class="pill" :class="p.status === 'published' ? 'pill-green' : 'pill-blue'">
+              <span
+                v-if="!isWikiSite && p.docType !== 'wiki'"
+                class="pill"
+                :class="p.status === 'published' ? 'pill-green' : 'pill-blue'"
+              >
                 {{ p.status }}
               </span>
+              <span v-else-if="p.docType === 'wiki'" class="pill pill-accent">Wiki</span>
             </li>
           </ul>
         </section>

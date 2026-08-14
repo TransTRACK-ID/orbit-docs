@@ -4,6 +4,11 @@ import { docSites, activityLogs, docs } from "~/server/database/schema";
 import { eq, ne, and } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
 import { isValidSiteSlug, slugify, normaliseNavConfig, collectReferencedSlugs } from "~/server/lib/nav-config";
+import {
+  deriveWikiOnlySiteIds,
+  isForbiddenWikiSiteStatus,
+  WIKI_SITE_PUBLISH_BLOCKED_MESSAGE,
+} from "~/utils/wiki-content";
 
 const VALID_STATUSES = ["draft", "published", "archived"] as const;
 
@@ -63,6 +68,20 @@ export default defineEventHandler(async (event) => {
   if (status !== undefined) {
     if (!VALID_STATUSES.includes(status)) {
       throw createError({ statusCode: 400, statusMessage: "Bad Request", message: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}` });
+    }
+    if (status !== existing.status && isForbiddenWikiSiteStatus(status)) {
+      const sitePageTypes = await db
+        .select({ siteId: docs.siteId, docType: docs.docType })
+        .from(docs)
+        .where(eq(docs.siteId, id));
+      const wikiSiteIds = deriveWikiOnlySiteIds(sitePageTypes);
+      if (wikiSiteIds.has(id)) {
+        throw createError({
+          statusCode: 400,
+          statusMessage: "Bad Request",
+          message: WIKI_SITE_PUBLISH_BLOCKED_MESSAGE,
+        });
+      }
     }
     updateData.status = status;
   }

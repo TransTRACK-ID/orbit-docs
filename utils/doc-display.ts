@@ -10,6 +10,7 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   git_snapshot: "Git Snapshot",
   feature: "Feature",
   adr: "ADR",
+  wiki: "Wiki",
 };
 
 /** Canonical titles written by product doc generation. */
@@ -53,6 +54,10 @@ export function isFeatureCatalogDoc(doc: DocItem): boolean {
 
 export function isAdrDoc(doc: Pick<DocItem, "docType">): boolean {
   return doc.docType === "adr";
+}
+
+export function isWikiDoc(doc: Pick<DocItem, "docType">): boolean {
+  return doc.docType === "wiki";
 }
 
 export function isBindingAdr(

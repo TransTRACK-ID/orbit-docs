@@ -171,7 +171,12 @@ function timeAgo(dateStr: string | null) {
       >
         <div class="site-card-header">
           <div class="site-card-title">{{ site.name }}</div>
-          <span class="pill" :class="statusClass[site.status] || 'pill-blue'">
+          <span v-if="site.isWikiSite" class="pill pill-accent">Wiki</span>
+          <span
+            v-else
+            class="pill"
+            :class="statusClass[site.status] || 'pill-blue'"
+          >
             {{ statusLabel[site.status] || site.status }}
           </span>
         </div>
