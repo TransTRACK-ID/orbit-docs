@@ -233,3 +233,168 @@ Instructions:
 - Do NOT use placeholder text.
 - Output ONLY the markdown document.`;
 }
+
+// ── Wiki (internal multi-page sites) ───────────────────────────
+
+export interface WikiOutlinePagePlan {
+  slug: string;
+  title: string;
+  group?: string;
+  sourceFiles?: string[];
+}
+
+export interface WikiSitePlan {
+  siteName: string;
+  siteSlug: string;
+  pages: WikiOutlinePagePlan[];
+}
+
+export function buildWikiOutlinePrompt(
+  aggregateContext: string,
+  baseDir: string,
+  appName: string
+): string {
+  return `You are an expert software architect. Analyze the codebase under ${baseDir} and design an internal wiki site plan for the product "${appName}".
+
+${aggregateContext}
+
+Output ONLY valid JSON (no markdown fences) matching this schema:
+{
+  "siteName": "Human-readable site title",
+  "siteSlug": "lowercase-hyphen-slug",
+  "pages": [
+    {
+      "slug": "1-overview",
+      "title": "Overview",
+      "group": "Core",
+      "sourceFiles": ["README.md", "src/main.ts"]
+    }
+  ]
+}
+
+Rules:
+- The first page MUST be slug "1-overview" titled "Overview".
+- Use numbered slugs: 1-overview, 2-subsystem-name, 3-another-topic (lowercase, hyphens).
+- Group related pages (e.g. Components, Guides, Core). Use 4–12 pages total.
+- sourceFiles: repo-relative paths that anchor each page (README, key modules).
+- siteSlug: lowercase letters, numbers, hyphens only.
+- Cover major subsystems, architecture, and setup—not every file.
+- Output ONLY the JSON object.`;
+}
+
+export function buildWikiPagePrompt(
+  template: string,
+  page: WikiOutlinePagePlan,
+  siteSlug: string,
+  allPages: WikiOutlinePagePlan[],
+  aggregateContext: string,
+  baseDir: string,
+  isOverview: boolean
+): string {
+  const siblingLinks = allPages
+    .filter((p) => p.slug !== page.slug)
+    .map((p) => `- [${p.title}](/wiki/${siteSlug}/${p.slug})`)
+    .join("\n");
+
+  const sourceList =
+    page.sourceFiles?.length
+      ? page.sourceFiles.map((f) => `- ${f}`).join("\n")
+      : "- (infer from codebase)";
+
+  return `You are writing one page of an internal wiki for a codebase under ${baseDir}.
+
+${aggregateContext}
+
+Page slug: ${page.slug}
+Page title: ${page.title}
+Site slug: ${siteSlug}
+Is overview page: ${isOverview ? "yes" : "no"}
+
+Sibling pages (use these exact markdown links in "Related pages" or cross-references):
+${siblingLinks}
+
+Relevant source files for this page:
+${sourceList}
+
+Template structure:
+${template}
+
+Instructions:
+- Fill ALL template sections with real content from the codebase.
+- Include a "## Relevant source files" section with a bullet list of repo-relative paths.
+- Link to sibling wiki pages using markdown: /wiki/${siteSlug}/{page-slug}
+- On the overview page, include a Mermaid architecture diagram in a fenced \`\`\`mermaid code block.
+- Use tables where helpful. No placeholder text.
+- Output ONLY the completed markdown document.`;
+}
+
+/** Pull a JSON object out of agent output that may include prose or markdown fences. */
+export function extractJsonObject(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error("Wiki outline response was empty");
+  }
+
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    return fenceMatch[1].trim();
+  }
+
+  const start = trimmed.indexOf("{");
+  if (start === -1) {
+    const preview = trimmed.slice(0, 120).replace(/\s+/g, " ");
+    throw new Error(
+      `Wiki outline response did not contain JSON (got: "${preview}${trimmed.length > 120 ? "…" : ""}")`
+    );
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+
+    if (inString) {
+      if (escape) {
+        escape = false;
+      } else if (ch === "\\") {
+        escape = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === "{") depth++;
+    if (ch === "}") {
+      depth--;
+      if (depth === 0) {
+        return trimmed.slice(start, i + 1);
+      }
+    }
+  }
+
+  throw new Error("Wiki outline response contained incomplete JSON");
+}
+
+export function parseWikiOutlineJson(raw: string): WikiSitePlan {
+  const jsonText = extractJsonObject(raw);
+  let parsed: WikiSitePlan;
+  try {
+    parsed = JSON.parse(jsonText) as WikiSitePlan;
+  } catch (err) {
+    const preview = jsonText.slice(0, 120).replace(/\s+/g, " ");
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`Wiki outline JSON is invalid (${detail}). Extracted: "${preview}…"`);
+  }
+  if (!parsed.siteName || !parsed.siteSlug || !Array.isArray(parsed.pages) || parsed.pages.length === 0) {
+    throw new Error("Wiki outline JSON is missing siteName, siteSlug, or pages");
+  }
+  return parsed;
+}

@@ -17,6 +17,8 @@ const statusLabel = computed(() => {
     generating_git_snapshot: "Generating Git Snapshot",
     generating_sdd_index: "Generating SDD Index",
     generating_sdd: "Generating SDD",
+    generating_wiki_outline: "Planning wiki",
+    generating_wiki_pages: "Generating wiki pages",
     writing_back: "Writing Back to Repository",
     completed: "Completed",
     failed: "Failed",

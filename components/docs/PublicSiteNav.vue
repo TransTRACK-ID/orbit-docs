@@ -12,16 +12,29 @@ import {
  */
 const navScrollBySite = new Map<string, number>();
 
-const props = defineProps<{
-  navConfig: NavConfig | null;
-  siteSlug: string;
-  pages: Array<{ slug: string | null; title: string }>;
-  activePageSlug: string;
-  activeOperationSlug?: string;
-  openapiOperations?: NavOpenApiOperation[];
-}>();
+const props = withDefaults(
+  defineProps<{
+    navConfig: NavConfig | null;
+    siteSlug: string;
+    pages: Array<{ slug: string | null; title: string; status?: string }>;
+    activePageSlug: string;
+    activeOperationSlug?: string;
+    openapiOperations?: NavOpenApiOperation[];
+    pathPrefix?: string;
+    showStatus?: boolean;
+    wikiMode?: boolean;
+  }>(),
+  {
+    pathPrefix: undefined,
+    showStatus: false,
+    wikiMode: false,
+  },
+);
+
+const basePath = computed(() => props.pathPrefix || `/s/${props.siteSlug}`);
 
 const { prefetchPage, prefetchSite } = usePublicSite();
+const { prefetchPage: prefetchWikiPage, prefetchSite: prefetchWikiSite } = useInternalWiki();
 
 const navListRef = ref<HTMLElement | null>(null);
 
@@ -75,12 +88,27 @@ function pageTitle(slug: string): string {
   return pageTitles.value.get(slug) || slug;
 }
 
+const pageStatuses = computed(() => {
+  const map = new Map<string, string>();
+  for (const p of props.pages) {
+    if (p.slug && p.status) map.set(p.slug, p.status);
+  }
+  return map;
+});
+
+function pageStatusLabel(slug: string): string {
+  const status = pageStatuses.value.get(slug);
+  if (!status || status === "published") return "";
+  if (status === "in_review") return "In review";
+  return status;
+}
+
 function href(slug: string): string {
-  return `/s/${props.siteSlug}/${slug}`;
+  return `${basePath.value}/${slug}`;
 }
 
 function operationHref(slug: string): string {
-  return `/s/${props.siteSlug}/api/${slug}`;
+  return `${basePath.value}/api/${slug}`;
 }
 
 function isActive(slug: string): boolean {
@@ -229,16 +257,25 @@ function handleNavPrefetch(event: MouseEvent) {
   const path = link.getAttribute("href");
   if (!path) return;
 
-  const pageMatch = path.match(new RegExp(`^/s/${escapeRegExp(props.siteSlug)}/([^/]+)$`));
+  const escapedBase = escapeRegExp(basePath.value);
+  const pageMatch = path.match(new RegExp(`^${escapedBase}/([^/]+)$`));
   if (pageMatch?.[1]) {
-    prefetchPage(props.siteSlug, pageMatch[1]);
+    if (props.wikiMode) {
+      prefetchWikiPage(props.siteSlug, pageMatch[1]);
+    } else {
+      prefetchPage(props.siteSlug, pageMatch[1]);
+    }
     return;
   }
 
-  const apiMatch = path.match(
-    new RegExp(`^/s/${escapeRegExp(props.siteSlug)}/api/([^/]+)$`),
-  );
-  if (apiMatch?.[1]) prefetchSite(props.siteSlug);
+  const apiMatch = path.match(new RegExp(`^${escapedBase}/api/([^/]+)$`));
+  if (apiMatch?.[1]) {
+    if (props.wikiMode) {
+      prefetchWikiSite(props.siteSlug);
+    } else {
+      prefetchSite(props.siteSlug);
+    }
+  }
 }
 
 function escapeRegExp(value: string): string {
@@ -264,6 +301,10 @@ function escapeRegExp(value: string): string {
             <li v-for="slug in publishedSlugs(group.pages)" :key="`${group.id}-${slug}`">
               <NuxtLink :to="href(slug)" :class="{ active: isActive(slug) }">
                 {{ pageTitle(slug) }}
+                <span
+                  v-if="showStatus && pageStatusLabel(slug)"
+                  class="site-nav-status"
+                >{{ pageStatusLabel(slug) }}</span>
               </NuxtLink>
             </li>
             <template v-for="sub in group.groups || []" :key="sub.id">
@@ -273,6 +314,10 @@ function escapeRegExp(value: string): string {
                   <li v-for="slug in publishedSlugs(sub.pages)" :key="`${sub.id}-${slug}`">
                     <NuxtLink :to="href(slug)" :class="{ active: isActive(slug) }">
                       {{ pageTitle(slug) }}
+                      <span
+                        v-if="showStatus && pageStatusLabel(slug)"
+                        class="site-nav-status"
+                      >{{ pageStatusLabel(slug) }}</span>
                     </NuxtLink>
                   </li>
                 </ul>
@@ -288,6 +333,10 @@ function escapeRegExp(value: string): string {
           <li v-for="slug in pagesSectionSlugs" :key="`page-${slug}`">
             <NuxtLink :to="href(slug)" :class="{ active: isActive(slug) }">
               {{ pageTitle(slug) }}
+              <span
+                v-if="showStatus && pageStatusLabel(slug)"
+                class="site-nav-status"
+              >{{ pageStatusLabel(slug) }}</span>
             </NuxtLink>
           </li>
         </ul>
@@ -297,6 +346,10 @@ function escapeRegExp(value: string): string {
         <li v-for="slug in fallbackPageSlugs" :key="`fallback-${slug}`">
           <NuxtLink :to="href(slug)" :class="{ active: isActive(slug) }">
             {{ pageTitle(slug) }}
+            <span
+              v-if="showStatus && pageStatusLabel(slug)"
+              class="site-nav-status"
+            >{{ pageStatusLabel(slug) }}</span>
           </NuxtLink>
         </li>
       </template>
@@ -628,6 +681,17 @@ function escapeRegExp(value: string): string {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.site-nav-status {
+  margin-left: 6px;
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 999px;
+  vertical-align: middle;
+  background: color-mix(in oklch, oklch(65% 0.14 85) 20%, transparent);
+  color: oklch(48% 0.12 85);
 }
 
 .method-badge {

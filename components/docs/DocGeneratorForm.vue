@@ -8,7 +8,7 @@ interface Props {
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
-  (e: "generate", payload?: { cursorModel?: string }): void;
+  (e: "generate", payload?: { cursorModel?: string; scope?: "product" | "wiki" }): void;
 }>();
 
 const hasRepos = computed(() => (props.repoCount ?? 0) > 0);
@@ -19,38 +19,51 @@ const isCursor = computed(() => config.docAgent === "cursor");
 
 const selectedModel = ref<string>((config.cursorModel as string) || "auto");
 
-function submit() {
+function submit(scope: "product" | "wiki") {
   if (!hasRepos.value) return;
+  const payload: { cursorModel?: string; scope: "product" | "wiki" } = { scope };
   if (isCursor.value) {
-    emit("generate", { cursorModel: selectedModel.value });
-  } else {
-    emit("generate");
+    payload.cursorModel = selectedModel.value;
   }
+  emit("generate", payload);
 }
 </script>
 
 <template>
   <div class="doc-gen-form">
     <p class="form-hint">
-      Generates product-level SRS, FSD, Git Snapshot, and SDD index across all
-      repositories, plus a layer-specific SDD for each repo (written back via
-      Pull Request when an access token is set). Enable or disable document
-      types in Settings → Document Generation.
+      <strong>Product docs</strong> — Generates SRS, FSD, Git Snapshot, and SDD across
+      repositories (written back via Pull Request when an access token is set).
+    </p>
+    <p class="form-hint">
+      <strong>Wiki site</strong> — Generates a multi-page internal wiki (overview + subsystem
+      pages with source file links) as a draft doc site. Browse at <code>/wiki/{site-slug}</code>.
     </p>
 
     <p v-if="!hasRepos" class="empty-hint">
       Add at least one repository above before generating.
     </p>
 
-    <button
-      type="button"
-      class="btn btn-primary"
-      :disabled="disabled || !hasRepos"
-      @click="submit"
-    >
-      <span v-if="disabled">Generating...</span>
-      <span v-else>Generate Docs</span>
-    </button>
+    <div class="doc-gen-actions">
+      <button
+        type="button"
+        class="btn btn-primary"
+        :disabled="disabled || !hasRepos"
+        @click="submit('product')"
+      >
+        <span v-if="disabled">Generating...</span>
+        <span v-else>Generate product docs</span>
+      </button>
+      <button
+        type="button"
+        class="btn btn-secondary"
+        :disabled="disabled || !hasRepos"
+        @click="submit('wiki')"
+      >
+        <span v-if="disabled">Generating...</span>
+        <span v-else>Generate wiki site</span>
+      </button>
+    </div>
   </div>
 </template>
 
@@ -62,11 +75,22 @@ function submit() {
   align-items: flex-start;
 }
 
+.doc-gen-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .form-hint {
   margin: 0;
   font-size: 13px;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.form-hint code {
+  font-size: 12px;
+  font-family: var(--font-mono);
 }
 
 .empty-hint {
@@ -79,109 +103,17 @@ function submit() {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
+  max-width: 320px;
 }
 
-.form-group label {
+.form-label {
   font-size: 13px;
   font-weight: 500;
   color: var(--fg);
 }
 
-.form-group input {
+.select {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  font: inherit;
-  font-size: 14px;
-  color: var(--fg);
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.form-group input:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.form-group select {
-  width: 100%;
-  max-width: 280px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  font: inherit;
-  font-size: 14px;
-  color: var(--fg);
-  transition: border-color 0.15s, box-shadow 0.15s;
-  cursor: pointer;
-}
-
-.form-group select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-.form-group select:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.form-help {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.input-error {
-  border-color: oklch(55% 0.18 25) !important;
-  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
-}
-
-.error-msg {
-  display: none;
-  color: oklch(50% 0.16 25);
-  font-size: 12px;
-}
-
-.error-msg.show {
-  display: block;
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background: var(--accent);
-  color: var(--surface);
-  border-color: var(--accent);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: color-mix(in oklch, var(--accent) 88%, black);
 }
 </style>

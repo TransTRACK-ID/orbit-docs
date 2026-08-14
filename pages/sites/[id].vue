@@ -32,6 +32,7 @@ const {
 } = useDocSites();
 const { apps, fetchApps } = useApps();
 const { docs: allDocs, fetchDocs, createDoc, updateDoc } = useDocs();
+const { preferInternalWiki, fetchMcpConfig } = useMcpConfig();
 
 const form = reactive({
   name: "",
@@ -250,7 +251,7 @@ const statusOptions = [
 
 onMounted(async () => {
   $page.setTitle("Doc Site");
-  await fetchApps();
+  await Promise.all([fetchApps(), fetchMcpConfig()]);
   await loadSite();
 });
 
@@ -311,6 +312,7 @@ async function save() {
 }
 
 const publicUrl = computed(() => `/s/${form.slug}`);
+const wikiUrl = computed(() => `/wiki/${form.slug}`);
 
 const hasApiReference = computed(
   () =>
@@ -373,6 +375,13 @@ function onSpecFile(e: Event) {
       </div>
       <div class="flex-gap-sm">
         <NuxtLink
+          v-if="currentSite && form.slug"
+          :to="wikiUrl"
+          class="btn btn-secondary"
+        >
+          Open wiki
+        </NuxtLink>
+        <NuxtLink
           v-if="currentSite && currentSite.status === 'published' && form.slug"
           :to="publicUrl"
           target="_blank"
@@ -402,7 +411,13 @@ function onSpecFile(e: Event) {
             <label for="slug">Slug</label>
             <input id="slug" v-model="form.slug" class="input" />
             <span v-if="slugError" class="field-error">{{ slugError }}</span>
-            <span v-else class="field-hint">Public URL: /s/{{ form.slug || '…' }}</span>
+            <span v-else class="field-hint">
+              {{
+                preferInternalWiki
+                  ? `Wiki URL: /wiki/${form.slug || "…"}`
+                  : `Public URL: /s/${form.slug || "…"}`
+              }}
+            </span>
           </div>
           <div class="form-group">
             <label for="desc">Description</label>

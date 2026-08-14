@@ -4,7 +4,7 @@ export interface DocGenerationJob {
   id: string;
   appId: string;
   repoUrl: string | null;
-  scope?: "product" | "repo";
+  scope?: "product" | "repo" | "wiki";
   trigger?: "manual" | "webhook" | "scheduled";
   status: string;
   progressPct: number;
@@ -49,7 +49,7 @@ export interface DocGenerationResult {
   appName?: string;
   repoUrl: string | null;
   repoRef: string | null;
-  scope?: "product" | "repo";
+  scope?: "product" | "repo" | "wiki";
   status: string;
   srs: string | null;
   fsd: string | null;
@@ -71,6 +71,7 @@ export interface DocGenerationVersion {
 export interface DocGenerationPayload {
   repoUrl?: string;
   cursorModel?: string;
+  scope?: "product" | "wiki";
 }
 
 export const useDocGenerator = () => {
@@ -128,7 +129,7 @@ export const useDocGenerator = () => {
         id: data.data.jobId,
         appId,
         repoUrl: payload.repoUrl || null,
-        scope: "product",
+        scope: payload.scope || "product",
         status: data.data.status,
         progressPct: data.data.progressPct,
         progressMessage: data.data.progressMessage,
@@ -140,7 +141,11 @@ export const useDocGenerator = () => {
       currentJob.value = job;
       jobs.value.unshift(job);
 
-      toast.success("Document generation started");
+      toast.success(
+        payload.scope === "wiki"
+          ? "Wiki site generation started"
+          : "Document generation started",
+      );
       return job;
     } catch (e: any) {
       const msg = e?.data?.message || e?.message || "Failed to start generation";

@@ -153,7 +153,7 @@ onBeforeUnmount(() => {
 // ── Submitting state shown before API returns ──────────────────
 const isSubmitting = ref(false);
 
-async function handleGenerate(payload?: { cursorModel?: string }) {
+async function handleGenerate(payload?: { cursorModel?: string; scope?: "product" | "wiki" }) {
   isSubmitting.value = true;
   try {
     const job = await generateDocs(appId, payload || {});
@@ -259,6 +259,8 @@ const statusClass: Record<string, string> = {
   generating_git_snapshot: "pill-accent",
   generating_sdd_index: "pill-accent",
   generating_sdd: "pill-accent",
+  generating_wiki_outline: "pill-accent",
+  generating_wiki_pages: "pill-accent",
   writing_back: "pill-accent",
   completed: "pill-green",
   failed: "pill-danger",
@@ -273,6 +275,8 @@ const statusLabel: Record<string, string> = {
   generating_git_snapshot: "Git Snapshot",
   generating_sdd_index: "SDD Index",
   generating_sdd: "Generating SDD",
+  generating_wiki_outline: "Wiki outline",
+  generating_wiki_pages: "Wiki pages",
   writing_back: "Writing back",
   completed: "Done",
   failed: "Failed",
@@ -288,6 +292,8 @@ const statusFull: Record<string, string> = {
   generating_git_snapshot: "Writing Git Snapshot reference…",
   generating_sdd_index: "Writing SDD index document…",
   generating_sdd: "Writing System Design Documents…",
+  generating_wiki_outline: "Planning wiki structure…",
+  generating_wiki_pages: "Writing wiki pages…",
   writing_back: "Opening pull requests…",
   completed: "All documents generated!",
   failed: "Generation failed",
@@ -305,6 +311,12 @@ const hasPendingJob = computed(() => {
 
 const isCompleted = computed(() => currentJob.value?.status === "completed");
 const isFailed = computed(() => currentJob.value?.status === "failed");
+const isWikiJob = computed(() => currentJob.value?.scope === "wiki");
+const wikiOpenPath = computed(() => {
+  const msg = currentJob.value?.progressMessage || "";
+  const match = msg.match(/\/wiki\/([a-z0-9-]+)\//);
+  return match ? `/wiki/${match[1]}/1-overview` : null;
+});
 
 // Show progress panel if: submitting, actively generating, OR just completed/failed
 const showProgress = computed(() => isSubmitting.value || !!currentJob.value);
@@ -676,7 +688,18 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 
         <!-- View Results button right under bar when done -->
         <div v-if="isCompleted" class="progress-actions">
-          <button class="btn btn-primary btn-sm" @click="handleViewResult(currentJob!.id)">
+          <NuxtLink
+            v-if="isWikiJob && wikiOpenPath"
+            :to="wikiOpenPath"
+            class="btn btn-primary btn-sm"
+          >
+            Open wiki →
+          </NuxtLink>
+          <button
+            v-if="!isWikiJob"
+            class="btn btn-primary btn-sm"
+            @click="handleViewResult(currentJob!.id)"
+          >
             View Generated Documents
           </button>
         </div>

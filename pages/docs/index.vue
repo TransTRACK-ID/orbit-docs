@@ -38,6 +38,7 @@ const canManageDocSites = computed(() => can("doc_sites:write"));
 const canBulkUpdateDocs = computed(() => canAny("docs:write", "docs:publish"));
 const { apps, fetchApps } = useApps();
 const { docSites, fetchDocSites } = useDocSites();
+const { preferInternalWiki, fetchMcpConfig } = useMcpConfig();
 
 const appFilter = ref((route.query.app as string) || "");
 const siteFilter = ref((route.query.siteId as string) || "");
@@ -93,7 +94,7 @@ const appOptions = computed(() => [
 ]);
 
 onMounted(async () => {
-  await Promise.all([fetchApps(), fetchDocSites()]);
+  await Promise.all([fetchApps(), fetchDocSites(), fetchMcpConfig()]);
   await fetchDocs({
     appId: appFilter.value,
     siteId: siteFilter.value || undefined,
@@ -515,9 +516,14 @@ watch(docs, () => {
       <div class="site-context-text">
         <span class="site-context-label">Doc site</span>
         <strong>{{ activeSite.name }}</strong>
-        <span class="site-context-slug num">/s/{{ activeSite.slug }}</span>
+        <span class="site-context-slug num">
+          {{ preferInternalWiki ? `/wiki/${activeSite.slug}` : `/s/${activeSite.slug}` }}
+        </span>
       </div>
       <div class="site-context-actions">
+        <NuxtLink :to="`/wiki/${activeSite.slug}`" class="btn btn-primary btn-sm">
+          Browse wiki
+        </NuxtLink>
         <NuxtLink v-if="canManageDocSites" :to="`/sites/${activeSite.id}`" class="btn btn-secondary btn-sm">
           Manage site
         </NuxtLink>
@@ -660,7 +666,13 @@ watch(docs, () => {
                           <NuxtLink :to="`/sites/${doc.site.id}`" class="doc-site-link">
                             {{ doc.site.name }}
                           </NuxtLink>
-                          <span v-if="doc.slug" class="doc-site-slug num">/s/{{ doc.site.slug }}/{{ doc.slug }}</span>
+                          <span v-if="doc.slug" class="doc-site-slug num">
+                            {{
+                              preferInternalWiki
+                                ? `/wiki/${doc.site.slug}/${doc.slug}`
+                                : `/s/${doc.site.slug}/${doc.slug}`
+                            }}
+                          </span>
                         </span>
                       </div>
                     </td>
@@ -908,7 +920,11 @@ watch(docs, () => {
                 placeholder="Auto-generated from title"
               />
               <span class="field-hint">
-                /s/{{ docSites.find((s) => s.id === createForm.siteId)?.slug || "…" }}/{{ createForm.slug || "…" }}
+                {{
+                  preferInternalWiki
+                    ? `/wiki/${docSites.find((s) => s.id === createForm.siteId)?.slug || "…"}/${createForm.slug || "…"}`
+                    : `/s/${docSites.find((s) => s.id === createForm.siteId)?.slug || "…"}/${createForm.slug || "…"}`
+                }}
                 <span class="field-hint-muted"> · you can edit this</span>
               </span>
             </div>

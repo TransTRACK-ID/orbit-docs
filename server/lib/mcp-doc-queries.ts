@@ -3,7 +3,11 @@ import type { getDb } from "~/server/database";
 import * as schema from "~/server/database/schema";
 import {
   buildDocSitePublicUrls,
+  buildDocSiteWikiUrls,
+  buildMcpDocLinkFields,
+  buildMcpDocSiteLinkFields,
   getPublicAppBaseUrl,
+  isMcpInternalLinkMode,
 } from "~/server/lib/mcp-public-urls";
 
 type Db = ReturnType<typeof getDb>;
@@ -43,11 +47,19 @@ export function mcpDocSelectQuery(db: Db) {
 
 export function formatMcpPublicContext() {
   const baseUrl = getPublicAppBaseUrl();
+  const internalWiki = isMcpInternalLinkMode();
   return {
     publicBaseUrl: baseUrl || null,
+    mcpInternalWiki: internalWiki,
     publicUrlNote: baseUrl
-      ? "publicUrl fields are absolute shareable links."
+      ? "publicUrl fields are absolute shareable links for published public pages (/s/, /p/)."
       : "Set NUXT_PUBLIC_APP_URL to return absolute publicUrl values; publicPath is always available for published content.",
+    wikiUrlNote: internalWiki
+      ? "MCP_API_KEY is set: prefer sharePath/shareUrl (internal wiki at /wiki/) for doc site pages. wikiPath is available for all non-archived site pages including drafts."
+      : "wikiPath points to the authenticated internal wiki (/wiki/) when the doc belongs to a doc site.",
+    shareUrlNote: internalWiki
+      ? "sharePath/shareUrl prefer internal wiki links for doc site content when MCP is secured."
+      : "sharePath/shareUrl match publicPath/publicUrl unless wiki is the only available link.",
   };
 }
 
@@ -63,7 +75,7 @@ export function formatMcpDocSite(site: {
   updatedAt: Date | string | null;
   appName?: string | null;
 }) {
-  const publicLinks = buildDocSitePublicUrls({
+  const links = buildMcpDocSiteLinkFields({
     slug: site.slug,
     status: site.status,
   });
@@ -79,9 +91,32 @@ export function formatMcpDocSite(site: {
     createdAt: site.createdAt,
     updatedAt: site.updatedAt,
     app: site.appName && site.appId ? { id: site.appId, name: site.appName } : null,
-    publicPath: publicLinks.path,
-    publicUrl: publicLinks.url,
+    publicPath: links.publicPath,
+    publicUrl: links.publicUrl,
+    wikiPath: links.wikiPath,
+    wikiUrl: links.wikiUrl,
+    sharePath: links.sharePath,
+    shareUrl: links.shareUrl,
   };
+}
+
+/** Link fields for a page row inside get_doc_site (includes site context). */
+export function formatMcpDocSitePageLinks(page: {
+  id: string;
+  status: string;
+  slug: string | null;
+  siteId: string;
+  siteSlug: string;
+  siteStatus: string;
+}) {
+  return buildMcpDocLinkFields({
+    id: page.id,
+    status: page.status,
+    slug: page.slug,
+    siteId: page.siteId,
+    siteSlug: page.siteSlug,
+    siteStatus: page.siteStatus,
+  });
 }
 
 export interface ResolvedAppRef {

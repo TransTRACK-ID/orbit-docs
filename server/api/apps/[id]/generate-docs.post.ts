@@ -3,7 +3,7 @@ import { getDb } from "~/server/database";
 import { docGenerationJobs, apps, appRepositories } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
-import { generateProductDocs, updateJobProgress } from "~/server/lib/doc-generator";
+import { generateProductDocs, generateWikiDocs, updateJobProgress } from "~/server/lib/doc-generator";
 import { assertDocAgentReady } from "~/server/lib/agent-readiness";
 
 export default defineEventHandler(async (event) => {
@@ -51,14 +51,18 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Create the product-scoped job record
+  // Parse optional body: cursor model override, generation scope
+  const body = await readBody(event).catch(() => ({}));
+  const cursorModel = body?.cursorModel;
+  const scope = body?.scope === "wiki" ? "wiki" : "product";
+
   const job = await db
     .insert(docGenerationJobs)
     .values({
       appId,
       userId: user.id,
       repoUrl: app.repoUrl ?? null,
-      scope: "product",
+      scope,
       trigger: "manual",
       status: "cloning",
       progressPct: 0,
@@ -67,14 +71,16 @@ export default defineEventHandler(async (event) => {
     .returning()
     .then((rows) => rows[0]);
 
-  // Parse optional cursor model override from the request body
-  const body = await readBody(event).catch(() => ({}));
-  const cursorModel = body?.cursorModel;
+  const runGeneration =
+    scope === "wiki"
+      ? (onProgress: Parameters<typeof generateWikiDocs>[2]) =>
+          generateWikiDocs(job.id, appId, onProgress, { cursorModel })
+      : (onProgress: Parameters<typeof generateProductDocs>[2]) =>
+          generateProductDocs(job.id, appId, onProgress, { cursorModel });
 
-  // Start generation in background (fire-and-forget)
-  generateProductDocs(job.id, appId, async (update) => {
+  runGeneration(async (update) => {
     await updateJobProgress(job.id, update);
-  }, { cursorModel }).catch((error) => {
+  }).catch((error) => {
     console.error(`Doc generation failed for job ${job.id}:`, error);
   });
 

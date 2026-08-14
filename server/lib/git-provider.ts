@@ -227,6 +227,51 @@ function branchCheckoutError(
   );
 }
 
+function providerMismatchHint(provider: GitProvider, repoUrl: string): string {
+  try {
+    const host = new URL(normalizeRepoUrl(repoUrl)).host;
+    if (provider === "github" && host !== "github.com") {
+      return (
+        " This host is not github.com — confirm the repository provider is set to GitLab " +
+        "(not GitHub) under App → Repositories."
+      );
+    }
+    if (provider === "gitlab" && host === "github.com") {
+      return " github.com repositories should use provider GitHub under App → Repositories.";
+    }
+  } catch {
+    /* noop */
+  }
+  return "";
+}
+
+function cloneAuthError(
+  detail: string,
+  hasToken: boolean,
+  provider: GitProvider,
+  repoUrl: string
+): Error {
+  const hostHint = providerMismatchHint(provider, repoUrl);
+
+  if (/authentication failed|access denied|401|403|invalid credentials/i.test(detail)) {
+    if (!hasToken) {
+      return new Error(
+        `Git clone failed: repository requires authentication but no access token is configured.` +
+          ` Add a ${provider === "gitlab" ? "GitLab" : "GitHub"} personal access token with read_repository scope` +
+          ` in App → Repositories.${hostHint} Original error: ${detail}`
+      );
+    }
+    return new Error(
+      `Git clone failed: authentication rejected. Verify the access token is valid, not expired,` +
+        ` and has read_repository scope` +
+        (provider === "gitlab" ? " (GitLab tokens need at least Reporter access)." : ".") +
+        `${hostHint} Original error: ${detail}`
+    );
+  }
+
+  return new Error(`Git clone failed: ${detail}`);
+}
+
 export interface CheckoutBranchOptions {
   hasToken?: boolean;
 }
@@ -341,10 +386,10 @@ export async function cloneOrPull(
           hasToken
         );
       }
-      throw new Error(`Git clone failed: ${detail}`);
+      throw cloneAuthError(detail, hasToken, provider, canonicalUrl);
     }
     if (stderr && /fatal:/i.test(stderr)) {
-      throw new Error(`Git clone failed: ${stderr}`);
+      throw cloneAuthError(stderr, hasToken, provider, canonicalUrl);
     }
     // Ensure tags available for diffing
     await execGit(`git -C "${cloneDir}" fetch --tags --force`, {

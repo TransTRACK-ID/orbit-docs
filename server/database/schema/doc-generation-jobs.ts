@@ -15,7 +15,7 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
   // Nullable: product-scoped jobs span many repos and have no single URL.
   repoUrl: text("repo_url"),
   // 'product' = PRD + FSD aggregate + per-repo SDD; 'repo' = single repo SDD (webhook).
-  scope: text("scope", { enum: ["product", "repo"] })
+  scope: text("scope", { enum: ["product", "repo", "wiki"] })
     .notNull()
     .default("product"),
   trigger: text("trigger", { enum: ["manual", "webhook", "scheduled"] })
@@ -34,6 +34,8 @@ export const docGenerationJobs = pgTable("doc_generation_jobs", {
       "generating_git_snapshot",
       "generating_sdd_index",
       "generating_sdd",
+      "generating_wiki_outline",
+      "generating_wiki_pages",
       "writing_back",
       "completed",
       "failed",

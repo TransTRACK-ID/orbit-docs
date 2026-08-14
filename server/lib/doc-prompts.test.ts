@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { prependAdrConstraints } from "./doc-prompts";
+import { extractJsonObject, parseWikiOutlineJson, prependAdrConstraints } from "./doc-prompts";
 
 describe("prependAdrConstraints", () => {
   it("returns prompt unchanged when no constraints", () => {
@@ -20,5 +20,40 @@ describe("prependAdrConstraints", () => {
       isUpdate: true,
     });
     expect(result).toContain("Deviations");
+  });
+});
+
+describe("parseWikiOutlineJson", () => {
+  const samplePlan = {
+    siteName: "Adaptive Gateway",
+    siteSlug: "adaptive-gateway",
+    pages: [{ slug: "1-overview", title: "Overview" }],
+  };
+
+  it("parses bare JSON", () => {
+    expect(parseWikiOutlineJson(JSON.stringify(samplePlan))).toEqual(samplePlan);
+  });
+
+  it("extracts JSON from markdown fences", () => {
+    const raw = "```json\n" + JSON.stringify(samplePlan) + "\n```";
+    expect(parseWikiOutlineJson(raw)).toEqual(samplePlan);
+  });
+
+  it("extracts JSON when the agent adds prose before the object", () => {
+    const raw = `Analyzing repositories for wiki outline...\n\n${JSON.stringify(samplePlan)}`;
+    expect(parseWikiOutlineJson(raw)).toEqual(samplePlan);
+  });
+
+  it("throws a helpful error when no JSON is present", () => {
+    expect(() => parseWikiOutlineJson("Analyzing repositories for wiki outline...")).toThrow(
+      /did not contain JSON/i
+    );
+  });
+});
+
+describe("extractJsonObject", () => {
+  it("returns the outermost balanced object", () => {
+    const json = extractJsonObject('prefix {"siteName":"x","nested":{"a":1}} suffix');
+    expect(JSON.parse(json)).toEqual({ siteName: "x", nested: { a: 1 } });
   });
 });

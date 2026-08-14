@@ -15,6 +15,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     "/docs": "docs:read",
     "/sites": "doc_sites:read",
     "/doc-sites": "doc_sites:read",
+    "/wiki": "doc_sites:read",
     "/api-docs": "api_docs:read",
     "/feedback": "feedback:read",
     "/settings": "settings:read",

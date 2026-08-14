@@ -8,7 +8,11 @@ import {
   shouldCollapseKnowledgeSection,
   type DocListView,
 } from "~/utils/doc-display";
-import { buildDocPublicUrls } from "~/server/lib/mcp-public-urls";
+import {
+  buildMcpDocLinkFields,
+  buildMcpDocSiteLinkFields,
+  isMcpInternalLinkMode,
+} from "~/server/lib/mcp-public-urls";
 import { formatAdrApiItem } from "~/server/lib/adr-queries";
 
 export type McpDocCategory = "product" | "knowledge";
@@ -64,7 +68,7 @@ export function getDocCategory(doc: Pick<DocItem, "source" | "docType">): McpDoc
 export function formatMcpDoc(row: McpDocRow, options?: { includeContent?: boolean }) {
   const item = toDocItem(row);
   const category = getDocCategory(item);
-  const publicLinks = buildDocPublicUrls({
+  const links = buildMcpDocLinkFields({
     id: item.id,
     status: item.status,
     slug: row.slug,
@@ -95,8 +99,12 @@ export function formatMcpDoc(row: McpDocRow, options?: { includeContent?: boolea
     category,
     displayLabel: docListPrimaryLabel(item),
     displaySubtitle: docListSecondaryLabel(item),
-    publicPath: publicLinks.path,
-    publicUrl: publicLinks.url,
+    publicPath: links.publicPath,
+    publicUrl: links.publicUrl,
+    wikiPath: links.wikiPath,
+    wikiUrl: links.wikiUrl,
+    sharePath: links.sharePath,
+    shareUrl: links.shareUrl,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
     app: item.app,

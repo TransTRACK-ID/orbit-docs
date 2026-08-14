@@ -3,6 +3,11 @@ import {
   buildDocPublicPath,
   buildDocPublicUrls,
   buildDocSitePublicPath,
+  buildDocWikiPath,
+  buildDocWikiUrls,
+  buildMcpDocLinkFields,
+  buildMcpShareLinks,
+  isMcpInternalLinkMode,
   buildReleasePublicPath,
   toAbsolutePublicUrl,
 } from "./mcp-public-urls";
@@ -122,5 +127,116 @@ describe("buildDocPublicUrls", () => {
       path: "/p/doc-1",
       url: "https://docs.example.com/p/doc-1",
     });
+  });
+});
+
+describe("buildDocWikiPath", () => {
+  it("returns wiki path for draft docs in a site", () => {
+    expect(
+      buildDocWikiPath({
+        id: "doc-1",
+        status: "draft",
+        slug: "1-overview",
+        siteId: "site-1",
+        siteSlug: "api-docs",
+        siteStatus: "draft",
+      }),
+    ).toBe("/wiki/api-docs/1-overview");
+  });
+});
+
+describe("buildMcpShareLinks", () => {
+  const originalKey = process.env.MCP_API_KEY;
+
+  afterEach(() => {
+    if (originalKey === undefined) {
+      delete process.env.MCP_API_KEY;
+    } else {
+      process.env.MCP_API_KEY = originalKey;
+    }
+  });
+
+  it("uses public links when MCP_API_KEY is not set", () => {
+    delete process.env.MCP_API_KEY;
+    const publicLinks = { path: "/s/api-docs/guide", url: "https://example.com/s/api-docs/guide" };
+    const wikiLinks = { path: "/wiki/api-docs/guide", url: "https://example.com/wiki/api-docs/guide" };
+    expect(buildMcpShareLinks(publicLinks, wikiLinks)).toEqual(publicLinks);
+  });
+
+  it("prefers wiki links when MCP_API_KEY is set", () => {
+    process.env.MCP_API_KEY = "test-key";
+    const publicLinks = { path: "/s/api-docs/guide", url: "https://example.com/s/api-docs/guide" };
+    const wikiLinks = { path: "/wiki/api-docs/guide", url: "https://example.com/wiki/api-docs/guide" };
+    expect(buildMcpShareLinks(publicLinks, wikiLinks)).toEqual(wikiLinks);
+  });
+
+  it("falls back to public links when wiki path is unavailable", () => {
+    process.env.MCP_API_KEY = "test-key";
+    const publicLinks = { path: "/p/doc-1", url: "https://example.com/p/doc-1" };
+    const wikiLinks = { path: null, url: null };
+    expect(buildMcpShareLinks(publicLinks, wikiLinks)).toEqual(publicLinks);
+  });
+});
+
+describe("buildMcpDocLinkFields", () => {
+  const originalKey = process.env.MCP_API_KEY;
+
+  afterEach(() => {
+    if (originalKey === undefined) {
+      delete process.env.MCP_API_KEY;
+    } else {
+      process.env.MCP_API_KEY = originalKey;
+    }
+  });
+
+  it("sets sharePath to wiki when MCP_API_KEY is set", () => {
+    process.env.MCP_API_KEY = "test-key";
+    const fields = buildMcpDocLinkFields({
+      id: "doc-1",
+      status: "draft",
+      slug: "1-overview",
+      siteId: "site-1",
+      siteSlug: "api-docs",
+      siteStatus: "draft",
+    });
+    expect(fields.publicPath).toBeNull();
+    expect(fields.wikiPath).toBe("/wiki/api-docs/1-overview");
+    expect(fields.sharePath).toBe("/wiki/api-docs/1-overview");
+  });
+
+  it("sets sharePath to public when MCP_API_KEY is not set", () => {
+    delete process.env.MCP_API_KEY;
+    const fields = buildMcpDocLinkFields({
+      id: "doc-1",
+      status: "published",
+      slug: "getting-started",
+      siteId: "site-1",
+      siteSlug: "api-docs",
+      siteStatus: "published",
+    });
+    expect(fields.sharePath).toBe("/s/api-docs/getting-started");
+    expect(fields.wikiPath).toBe("/wiki/api-docs/getting-started");
+  });
+});
+
+describe("isMcpInternalLinkMode", () => {
+  const originalKey = process.env.MCP_API_KEY;
+
+  afterEach(() => {
+    if (originalKey === undefined) {
+      delete process.env.MCP_API_KEY;
+    } else {
+      process.env.MCP_API_KEY = originalKey;
+    }
+  });
+
+  it("returns true when MCP_API_KEY is set", () => {
+    process.env.MCP_API_KEY = "secret";
+    expect(isMcpInternalLinkMode()).toBe(true);
+  });
+
+  it("returns false when MCP_API_KEY is unset", () => {
+    delete process.env.MCP_API_KEY;
+    expect(isMcpInternalLinkMode()).toBe(false);
   });
 });

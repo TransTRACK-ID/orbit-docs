@@ -42,9 +42,18 @@ import {
   buildSddUpdatePrompt,
   buildSddDiffUpdatePrompt,
   prependAdrConstraints,
+  buildWikiOutlinePrompt,
+  buildWikiPagePrompt,
+  parseWikiOutlineJson,
 } from "./doc-prompts";
 import { formatAdrConstraintSummary, listBindingAdrs } from "./adr-queries";
 import { checkAdrCompliance } from "./adr-verification";
+import {
+  createOrUpdateWikiSite,
+  planPageTitle,
+  wikiPageSortOrder,
+  type WikiPageContent,
+} from "./wiki-site-builder";
 
 const execAsync = promisify(exec);
 
@@ -75,6 +84,8 @@ export type GenerationStatus =
   | "generating_git_snapshot"
   | "generating_sdd_index"
   | "generating_sdd"
+  | "generating_wiki_outline"
+  | "generating_wiki_pages"
   | "writing_back"
   | "completed"
   | "failed"
@@ -87,6 +98,11 @@ interface ProgressUpdate {
 }
 
 type ProgressCallback = (update: ProgressUpdate) => void | Promise<void>;
+
+async function loadWikiTemplate(kind: "overview" | "page"): Promise<string> {
+  const file = kind === "overview" ? "wiki_overview_template.md" : "wiki_page_template.md";
+  return readFile(join(process.cwd(), "templates", file), "utf-8");
+}
 
 async function loadTemplate(type: DocType | SddRepoType): Promise<string> {
   const file =
@@ -1358,6 +1374,162 @@ export async function generateRepoSdd(
       progressPct: 0,
       progressMessage: errorMessage,
     });
+    throw error;
+  }
+}
+
+/**
+ * Wiki-scoped run: analyze repo(s), plan multi-page wiki, generate each page,
+ * and persist as a doc site in Orbit Docs (draft). No git write-back.
+ */
+export async function generateWikiDocs(
+  jobId: string,
+  appId: string,
+  onProgress: ProgressCallback,
+  opts: { cursorModel?: string } = {},
+): Promise<void> {
+  const agent = createAgent({ model: opts.cursorModel });
+  const baseDir = join(getRepoDir(), appId);
+  const db = getDb();
+
+  try {
+    const repos = await loadAppRepos(appId);
+    if (repos.length === 0) {
+      throw new Error("No repositories configured for this app");
+    }
+
+    const appRow = await db
+      .select({ name: apps.name })
+      .from(apps)
+      .where(eq(apps.id, appId))
+      .limit(1)
+      .then((r) => r[0]);
+    const appName = appRow?.name || "Product";
+
+    const actor = await resolveJobActor(jobId);
+
+    await onProgress({
+      status: "cloning",
+      progressPct: 5,
+      progressMessage: `Cloning ${repos.length} repositor${repos.length === 1 ? "y" : "ies"}...`,
+    });
+    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+
+    await ensureDir(baseDir);
+    const cloneDirs: Record<string, string> = {};
+    for (const repo of repos) {
+      const dir = join(baseDir, getRepoName(repo.repoUrl));
+      await cloneOrPull(
+        repo.repoUrl,
+        dir,
+        repo.provider,
+        repo.accessToken,
+        false,
+        repo.hostUrl,
+        repo.defaultBranch,
+      );
+      cloneDirs[repo.repoUrl] = dir;
+    }
+
+    await onProgress({
+      status: "analyzing",
+      progressPct: 15,
+      progressMessage: "Analyzing repositories for wiki outline...",
+    });
+    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+
+    const repoSummaries: string[] = [];
+    for (const repo of repos) {
+      const dir = cloneDirs[repo.repoUrl];
+      const structure = await getRepoStructure(dir);
+      const keyFiles = await getKeyFileNames(dir);
+      repoSummaries.push(
+        `### Repository: ${repo.name} (${repo.repoUrl})\nLocal path: ${dir}\nKey files: ${keyFiles.join(", ") || "none"}\nStructure:\n${structure}`,
+      );
+    }
+    const aggregateContext = `This product is composed of ${repos.length} repositories. Analyze ALL of them.\n\n${repoSummaries.join("\n\n")}`;
+
+    await onProgress({
+      status: "generating_wiki_outline",
+      progressPct: 25,
+      progressMessage: "Planning wiki pages...",
+    });
+    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+
+    const outlinePrompt = await withAdrConstraints(
+      appId,
+      buildWikiOutlinePrompt(aggregateContext, baseDir, appName),
+    );
+    const outlineRaw = await runAgentAnalyze(agent, jobId, outlinePrompt, baseDir, {
+      partialField: "sdd",
+    });
+    const plan = parseWikiOutlineJson(outlineRaw);
+    await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
+
+    const overviewTemplate = await loadWikiTemplate("overview");
+    const pageTemplate = await loadWikiTemplate("page");
+    const wikiPages: WikiPageContent[] = [];
+    const pageCount = plan.pages.length;
+
+    for (let i = 0; i < plan.pages.length; i++) {
+      const pagePlan = plan.pages[i];
+      const isOverview = pagePlan.slug === "1-overview";
+      const pct = 30 + Math.round(((i + 1) / pageCount) * 60);
+
+      await onProgress({
+        status: "generating_wiki_pages",
+        progressPct: pct,
+        progressMessage: `Generating wiki page: ${pagePlan.title} (${i + 1}/${pageCount})...`,
+      });
+      if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+
+      const template = isOverview ? overviewTemplate : pageTemplate;
+      const pagePrompt = await withAdrConstraints(
+        appId,
+        buildWikiPagePrompt(
+          template,
+          pagePlan,
+          plan.siteSlug,
+          plan.pages,
+          aggregateContext,
+          baseDir,
+          isOverview,
+        ),
+      );
+
+      const content = await runAgentAnalyze(agent, jobId, pagePrompt, baseDir, {
+        partialField: "sdd",
+      });
+      wikiPages.push({
+        slug: pagePlan.slug,
+        title: planPageTitle(pagePlan),
+        content: content.trim(),
+        sortOrder: wikiPageSortOrder(pagePlan.slug, i),
+      });
+      await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
+    }
+
+    const result = await createOrUpdateWikiSite(appId, plan, wikiPages, actor);
+
+    if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+    await updateJobCompletion(jobId, true);
+    await onProgress({
+      status: "completed",
+      progressPct: 100,
+      progressMessage: `Wiki site ready at /wiki/${result.siteSlug}/1-overview`,
+    });
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error during wiki generation";
+    const wasCancelled = errorMessage === "Generation cancelled";
+    if (!wasCancelled) {
+      await updateJobCompletion(jobId, false, errorMessage);
+      await onProgress({
+        status: "failed",
+        progressPct: 0,
+        progressMessage: errorMessage,
+      });
+    }
     throw error;
   }
 }

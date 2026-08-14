@@ -22,12 +22,18 @@ import {
   countDocsForFilters,
   docCategoryCondition,
   formatMcpDocSite,
+  formatMcpDocSitePageLinks,
   formatMcpPublicContext,
   getAppDocCounts,
   mcpDocSelectFields,
   resolveAppRef,
 } from "~/server/lib/mcp-doc-queries";
-import { buildDocPublicUrls, buildReleasePublicUrls } from "~/server/lib/mcp-public-urls";
+import {
+  buildDocPublicUrls,
+  buildMcpShareLinks,
+  buildReleasePublicUrls,
+  isMcpInternalLinkMode,
+} from "~/server/lib/mcp-public-urls";
 import type { DocListView } from "~/utils/doc-display";
 import {
   formatAdrApiItem,
@@ -79,7 +85,9 @@ const MCP_PLATFORM_INSTRUCTIONS = [
   "2. Call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty. The response includes bindingConstraints with mandatory ADR rules — follow them in every answer.",
   "3. To read a doc's full content, call get_doc with the doc id.",
   "4. To find docs by keyword, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
-  "5. To share links with users, use publicUrl/publicPath on docs and doc sites. Call list_doc_sites or get_doc_site for published site URLs (/s/{siteSlug}). Published docs return /p/{id} or /s/{siteSlug}/{pageSlug} when part of a published site.",
+  isMcpInternalLinkMode()
+    ? "5. To share links with users, prefer sharePath/shareUrl on docs and doc sites (internal wiki at /wiki/{siteSlug}/{pageSlug}). MCP_API_KEY is set — doc site pages include wikiPath for drafts. Use publicPath/publicUrl only for externally published pages (/s/, /p/). Call list_doc_sites or get_doc_site for site navigation."
+    : "5. To share links with users, use publicUrl/publicPath on docs and doc sites. Call list_doc_sites or get_doc_site for published site URLs (/s/{siteSlug}). Published docs return /p/{id} or /s/{siteSlug}/{pageSlug} when part of a published site.",
   "",
   "ARCHITECTURAL DECISION RECORDS (ADRs):",
   "- ADRs are binding architectural constraints, not optional background.",
@@ -1261,6 +1269,7 @@ mcpServer.setRequestHandler(
               id: row.id,
               status: row.status,
             });
+            const shareLinks = buildMcpShareLinks(publicLinks, { path: null, url: null });
             return {
               id: row.id,
               title: row.title,
@@ -1271,6 +1280,8 @@ mcpServer.setRequestHandler(
               content: row.content,
               publicPath: publicLinks.path,
               publicUrl: publicLinks.url,
+              sharePath: shareLinks.path,
+              shareUrl: shareLinks.url,
             };
           });
 
@@ -1328,11 +1339,14 @@ mcpServer.setRequestHandler(
               id: row.id,
               status: row.status,
             });
+            const shareLinks = buildMcpShareLinks(publicLinks, { path: null, url: null });
             return {
               ...row,
               category: "knowledge" as const,
               publicPath: publicLinks.path,
               publicUrl: publicLinks.url,
+              sharePath: shareLinks.path,
+              shareUrl: shareLinks.url,
             };
           });
           const documentation = await getAppDocCounts(db, app.id);
@@ -1973,7 +1987,7 @@ mcpServer.setRequestHandler(
             .orderBy(schema.docs.sortOrder, desc(schema.docs.updatedAt));
 
           const pages = pageRows.map((page) => {
-            const publicLinks = buildDocPublicUrls({
+            const links = formatMcpDocSitePageLinks({
               id: page.id,
               status: page.status,
               slug: page.slug,
@@ -1988,8 +2002,12 @@ mcpServer.setRequestHandler(
               status: page.status,
               sortOrder: page.sortOrder,
               updatedAt: page.updatedAt,
-              publicPath: publicLinks.path,
-              publicUrl: publicLinks.url,
+              publicPath: links.publicPath,
+              publicUrl: links.publicUrl,
+              wikiPath: links.wikiPath,
+              wikiUrl: links.wikiUrl,
+              sharePath: links.sharePath,
+              shareUrl: links.shareUrl,
             };
           });
 

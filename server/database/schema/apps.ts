@@ -106,7 +106,7 @@ export const docs = pgTable("docs", {
     .notNull()
     .default("manual"),
   docType: text("doc_type", {
-    enum: ["srs", "fsd", "sdd", "git_snapshot", "feature", "adr"],
+    enum: ["srs", "fsd", "sdd", "git_snapshot", "feature", "adr", "wiki"],
   }),
   externalId: text("external_id"),
   notionPageId: text("notion_page_id"),

@@ -16,6 +16,7 @@ onBeforeMount(() => {
 const router = useRouter();
 const { can } = usePermissions();
 const { docSites, isLoading, fetchDocSites, createDocSite, deleteDocSite } = useDocSites();
+const { preferInternalWiki, fetchMcpConfig } = useMcpConfig();
 
 const canWriteDocSites = computed(() => can("doc_sites:write"));
 
@@ -39,6 +40,7 @@ const siteToDelete = ref<DocSiteItem | null>(null);
 
 onMounted(() => {
   fetchDocSites();
+  fetchMcpConfig();
 });
 
 const filteredSites = computed(() => {
@@ -173,7 +175,9 @@ function timeAgo(dateStr: string | null) {
             {{ statusLabel[site.status] || site.status }}
           </span>
         </div>
-        <div class="site-card-slug num">/s/{{ site.slug }}</div>
+        <div class="site-card-slug num">
+          {{ preferInternalWiki ? `/wiki/${site.slug}` : `/s/${site.slug}` }}
+        </div>
         <div v-if="site.description" class="site-card-desc">{{ site.description }}</div>
         <div class="site-card-meta">
           <span v-if="site.app">{{ site.app.name }}</span>
@@ -181,6 +185,9 @@ function timeAgo(dateStr: string | null) {
           <span>· Updated {{ timeAgo(site.updatedAt) }}</span>
         </div>
         <div class="site-card-actions" @click.stop>
+          <NuxtLink :to="`/wiki/${site.slug}`" class="site-card-action">
+            Open wiki →
+          </NuxtLink>
           <NuxtLink :to="`/docs?siteId=${site.id}`" class="site-card-action">
             View docs →
           </NuxtLink>

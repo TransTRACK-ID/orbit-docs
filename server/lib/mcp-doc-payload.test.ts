@@ -24,6 +24,11 @@ function makeRow(overrides: Partial<McpDocRow> & Pick<McpDocRow, "id" | "title">
     appName: overrides.appName ?? "Order Planning",
     version: overrides.version ?? null,
     frontmatter: overrides.frontmatter ?? null,
+    siteId: overrides.siteId ?? null,
+    siteSlug: overrides.siteSlug ?? null,
+    siteStatus: overrides.siteStatus ?? null,
+    siteName: overrides.siteName ?? null,
+    slug: overrides.slug ?? null,
   };
 }
 
@@ -85,12 +90,41 @@ describe("formatMcpDoc", () => {
     );
 
     expect(formatted.publicPath).toBe("/s/api-docs/getting-started");
+    expect(formatted.wikiPath).toBe("/wiki/api-docs/getting-started");
+    expect(formatted.sharePath).toBe("/s/api-docs/getting-started");
     expect(formatted.site).toEqual({
       id: "site-1",
       name: "API Docs",
       slug: "api-docs",
       status: "published",
     });
+  });
+
+  it("prefers wiki sharePath when MCP_API_KEY is set", () => {
+    const originalKey = process.env.MCP_API_KEY;
+    process.env.MCP_API_KEY = "test-key";
+    try {
+      const formatted = formatMcpDoc(
+        makeRow({
+          id: "doc-1",
+          title: "Getting Started",
+          status: "published",
+          slug: "getting-started",
+          siteId: "site-1",
+          siteSlug: "api-docs",
+          siteStatus: "published",
+          siteName: "API Docs",
+        }),
+      );
+      expect(formatted.sharePath).toBe("/wiki/api-docs/getting-started");
+      expect(formatted.shareUrl).toContain("/wiki/api-docs/getting-started");
+    } finally {
+      if (originalKey === undefined) {
+        delete process.env.MCP_API_KEY;
+      } else {
+        process.env.MCP_API_KEY = originalKey;
+      }
+    }
   });
 });
 
