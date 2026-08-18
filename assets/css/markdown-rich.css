@@ -338,13 +338,156 @@
    ═══════════════════════════════════════════════════════════════════ */
 
 pre.mermaid[data-mermaid-rendered="true"],
-.mermaid[data-mermaid-rendered="true"] {
+.mermaid[data-mermaid-rendered="true"],
+.mermaid-stage {
   /* Once mermaid has rendered, remove the code-block styling */
   font-family: inherit;
   white-space: normal;
-  background: color-mix(in oklch, var(--od-fg, var(--fg)) 3%, transparent);
+  background: color-mix(in oklch, var(--od-fg, var(--fg)) 3%, var(--od-bg, var(--bg)));
   border: 1px solid var(--od-border, var(--border));
   border-radius: var(--od-radius, 8px);
+  color: var(--od-fg, var(--fg));
+}
+
+.mermaid-stage {
+  position: relative;
+  margin: 1rem 0;
+  overflow: hidden;
+}
+
+.mermaid-stage__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--od-border, var(--border));
+  background: color-mix(in oklch, var(--od-fg, var(--fg)) 2%, var(--od-bg, var(--bg)));
+}
+
+.mermaid-stage__toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mermaid-stage__toolbar-spacer {
+  flex: 1;
+  min-width: 8px;
+}
+
+.mermaid-stage__btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--od-border, var(--border));
+  border-radius: calc(var(--od-radius, 8px) - 2px);
+  background: var(--od-bg, var(--bg));
+  color: var(--od-fg, var(--fg));
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mermaid-stage__btn:hover {
+  background: color-mix(in oklch, var(--od-fg, var(--fg)) 6%, var(--od-bg, var(--bg)));
+}
+
+.mermaid-stage__btn--label {
+  min-width: 52px;
+  font-size: 12px;
+}
+
+.mermaid-stage__btn--active {
+  background: color-mix(in oklch, var(--od-fg, var(--fg)) 10%, var(--od-bg, var(--bg)));
+}
+
+.mermaid-stage__hint {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--od-muted, var(--muted));
+  border-bottom: 1px solid var(--od-border, var(--border));
+}
+
+.mermaid-stage__viewport {
+  position: relative;
+  min-height: 220px;
+  max-height: min(70vh, 720px);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  background-color: var(--od-bg, var(--bg));
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    color-mix(in oklch, var(--od-fg, var(--fg)) 8%, transparent) 1px,
+    transparent 0
+  );
+  background-size: 16px 16px;
+}
+
+.mermaid-stage__viewport.is-panning {
+  cursor: grabbing;
+}
+
+.mermaid-stage__content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 220px;
+  padding: 24px;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.mermaid-stage__content svg {
+  display: block;
+  max-width: none;
+  height: auto;
+}
+
+.mermaid-stage.is-fullscreen .mermaid-stage__hint,
+.mermaid-stage:fullscreen .mermaid-stage__hint {
+  display: none;
+}
+
+.mermaid-stage:fullscreen,
+.mermaid-stage--overlay {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-radius: 0;
+  width: 100vw;
+  height: 100vh;
+  max-width: none;
+  z-index: 10000;
+  background: color-mix(in oklch, var(--od-fg, var(--fg)) 3%, var(--od-bg, var(--bg)));
+  border-color: var(--od-border, var(--border));
+  color: var(--od-fg, var(--fg));
+}
+
+.mermaid-stage:fullscreen::backdrop {
+  background: var(--od-bg, var(--bg));
+}
+
+.mermaid-stage--overlay {
+  position: fixed;
+  inset: 0;
+}
+
+.mermaid-stage:fullscreen .mermaid-stage__viewport,
+.mermaid-stage--overlay .mermaid-stage__viewport {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.mermaid-stage:fullscreen .mermaid-stage__content,
+.mermaid-stage--overlay .mermaid-stage__content {
+  min-height: 100%;
+}
+
+body.mermaid-stage-overlay-open {
+  overflow: hidden;
 }
 
 /* Pre-render state: show the source code nicely */

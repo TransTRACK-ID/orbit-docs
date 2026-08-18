@@ -1,5 +1,9 @@
 import type { ComputedRef, Ref } from "vue";
 import {
+  attachMermaidPanZoom,
+  wrapRenderedMermaidNode,
+} from "~/utils/mermaid-pan-zoom";
+import {
   isMermaidErrorSvg,
   readMermaidSourceFromNode,
 } from "~/utils/mermaid-source";
@@ -105,7 +109,8 @@ async function renderMermaidNode(
       }
 
       node.innerHTML = svg;
-      node.setAttribute("data-mermaid-rendered", "true");
+      const stage = wrapRenderedMermaidNode(node);
+      attachMermaidPanZoom(stage);
     } catch {
       cleanupMermaidRenderArtifacts(id);
       if (isLiveNode(node, container)) {
