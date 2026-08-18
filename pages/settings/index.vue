@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { toast } from "vue3-toastify";
 import { usePageStore } from "~/store/page";
+import GeneralLogoUploadField from "~/components/general/LogoUploadField.vue";
 import type {
   TeamMember,
   TeamRole,
@@ -557,7 +558,9 @@ watch(() => generalForm.logoUrl, (url) => {
   if (workspace.value) {
     workspace.value.logoUrl = url || null;
   }
-  appearanceDirty.value = true;
+  if (hasPopulatedGeneral.value) {
+    workspaceDirty.value = true;
+  }
 });
 
 async function saveGeneral() {
@@ -1093,6 +1096,22 @@ function getCallbackUrl(provider: SsoProvider): string {
                   @input="markWorkspaceDirty"
                 />
               </div>
+              <div class="form-group">
+                <GeneralLogoUploadField
+                  v-model="generalForm.logoUrl"
+                  input-id="workspaceLogo"
+                  label="Logo"
+                  optional-label="(optional)"
+                  url-placeholder="https://cdn.example.com/logo.svg"
+                  drop-hint="Drop an image here, or"
+                  browse-label="browse"
+                  remove-label="Remove"
+                  url-label="Or paste a URL"
+                />
+                <p v-if="!generalForm.logoUrl" class="logo-upload-hint">
+                  No logo set. The default orbit icon will be used in the sidebar.
+                </p>
+              </div>
               <div class="form-actions">
                 <button class="btn btn-secondary" :disabled="isSaving || !workspaceDirty" @click="resetGeneral">
                   Reset
@@ -1115,39 +1134,13 @@ function getCallbackUrl(provider: SsoProvider): string {
             </div>
 
             <template v-else>
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="theme">Default Theme</label>
-                  <select id="theme" v-model="generalForm.theme">
-                    <option value="light">Light</option>
-                    <option value="dark">Dark</option>
-                    <option value="system">System</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label for="logo">Logo URL</label>
-                  <input
-                    id="logo"
-                    v-model="generalForm.logoUrl"
-                    type="url"
-                    placeholder="https://cdn.example.com/logo.svg"
-                  />
-                </div>
-              </div>
-              <div class="form-group" style="margin-top: 8px;">
-                <label>Logo Preview</label>
-                <div class="logo-preview">
-                  <img
-                    v-if="generalForm.logoUrl"
-                    :src="generalForm.logoUrl"
-                    alt="Logo preview"
-                    class="logo-preview-img"
-                    @error="(e) => { const t = e.target as HTMLImageElement | null; if (t) t.style.display = 'none'; }"
-                  />
-                  <span v-if="!generalForm.logoUrl" class="logo-preview-placeholder">
-                    No logo set — default orbit icon will be used in the sidebar.
-                  </span>
-                </div>
+              <div class="form-group">
+                <label for="theme">Default Theme</label>
+                <select id="theme" v-model="generalForm.theme">
+                  <option value="light">Light</option>
+                  <option value="dark">Dark</option>
+                  <option value="system">System</option>
+                </select>
               </div>
               <div class="toggle" style="margin-top: 8px;">
                 <button
@@ -2484,23 +2477,8 @@ function getCallbackUrl(provider: SsoProvider): string {
   border-top: 1px solid var(--border);
 }
 
-.logo-preview {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  min-height: 56px;
-}
-.logo-preview-img {
-  max-height: 40px;
-  max-width: 160px;
-  object-fit: contain;
-  border-radius: 4px;
-}
-.logo-preview-placeholder {
+.logo-upload-hint {
+  margin: 8px 0 0;
   color: var(--muted);
   font-size: 13px;
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
 import type { AppItem } from "~/composables/useApps";
+import GeneralLogoUploadField from "~/components/general/LogoUploadField.vue";
 
 definePageMeta({
   auth: true,
@@ -344,28 +345,6 @@ function appUpdatedLabel(app: AppItem) {
   return ago ? `Diperbarui ${ago}` : "Belum diperbarui";
 }
 
-function appInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-  return name.slice(0, 2).toUpperCase();
-}
-
-const APP_ICON_HUES = [25, 145, 255, 85, 300, 45, 200, 15];
-
-function appIconStyle(name: string) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const hue = APP_ICON_HUES[Math.abs(hash) % APP_ICON_HUES.length];
-  return {
-    background: `color-mix(in oklch, oklch(72% 0.12 ${hue}) 18%, var(--surface))`,
-    color: `oklch(42% 0.12 ${hue})`,
-  };
-}
-
 const statusClass: Record<string, string> = {
   active: "pill-green",
   draft: "pill-blue",
@@ -470,9 +449,7 @@ const statusLabel: Record<string, string> = {
       <article v-for="app in filteredApps" :key="app.id" class="app-card">
         <div class="app-card__top">
           <div class="app-card__identity">
-            <div class="app-icon" :style="appIconStyle(app.name)" aria-hidden="true">
-              {{ appInitials(app.name) }}
-            </div>
+            <AppLogo :name="app.name" :logo-url="app.logoUrl" />
             <div class="app-card__titles">
               <h3 class="app-card__name">{{ app.name }}</h3>
               <p class="app-card__meta">{{ appUpdatedLabel(app) }}</p>
@@ -677,14 +654,16 @@ const statusLabel: Record<string, string> = {
               </div>
             </div>
             <div class="form-group">
-              <label for="appLogo">
-                Logo URL <span class="opt">(opsional)</span>
-              </label>
-              <input
-                id="appLogo"
+              <GeneralLogoUploadField
                 v-model="createForm.logoUrl"
-                type="url"
-                placeholder="https://cdn.example.com/product-logo.svg"
+                input-id="appLogo"
+                label="Logo"
+                optional-label="(opsional)"
+                url-placeholder="https://cdn.example.com/product-logo.svg"
+                drop-hint="Letakkan gambar di sini, atau"
+                browse-label="pilih file"
+                remove-label="Hapus"
+                url-label="Atau tempel URL"
               />
             </div>
           </div>
@@ -748,14 +727,16 @@ const statusLabel: Record<string, string> = {
               </div>
             </div>
             <div class="form-group">
-              <label for="editLogo">
-                Logo URL <span class="opt">(opsional)</span>
-              </label>
-              <input
-                id="editLogo"
+              <GeneralLogoUploadField
                 v-model="editForm.logoUrl"
-                type="url"
-                placeholder="https://cdn.example.com/product-logo.svg"
+                input-id="editLogo"
+                label="Logo"
+                optional-label="(opsional)"
+                url-placeholder="https://cdn.example.com/product-logo.svg"
+                drop-hint="Letakkan gambar di sini, atau"
+                browse-label="pilih file"
+                remove-label="Hapus"
+                url-label="Atau tempel URL"
               />
             </div>
           </div>
@@ -958,19 +939,6 @@ const statusLabel: Record<string, string> = {
   align-items: flex-start;
   gap: 10px;
   min-width: 0;
-}
-
-.app-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 600;
-  flex-shrink: 0;
-  font-family: var(--font-mono);
 }
 
 .app-card__titles {

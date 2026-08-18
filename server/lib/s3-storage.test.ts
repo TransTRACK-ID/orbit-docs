@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   assertAllowedImageType,
+  assertAllowedLogoType,
+  buildLogoAssetKey,
+  buildLogoProxyPath,
   buildReleaseAssetKey,
   buildReleaseMediaProxyPath,
   isValidUuid,
@@ -25,6 +28,13 @@ describe("s3-storage helpers", () => {
     expect(buildReleaseMediaProxyPath(RELEASE_ID, ASSET_ID)).toBe(
       `/api/public/releases/${RELEASE_ID}/media/${ASSET_ID}`
     );
+    expect(buildLogoProxyPath(ASSET_ID)).toBe(
+      `/api/public/brand/logos/${ASSET_ID}`
+    );
+  });
+
+  it("builds logo asset keys", () => {
+    expect(buildLogoAssetKey(ASSET_ID)).toBe(`brand/logos/${ASSET_ID}`);
   });
 
   it("accepts allowed image types with matching signatures", () => {
@@ -40,5 +50,10 @@ describe("s3-storage helpers", () => {
   it("rejects mismatched declared type and bytes", () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
     expect(() => assertAllowedImageType("image/jpeg", png)).toThrow();
+  });
+
+  it("accepts valid svg logos", () => {
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+    expect(assertAllowedLogoType("image/svg+xml", svg)).toBe("image/svg+xml");
   });
 });

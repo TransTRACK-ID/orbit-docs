@@ -18,6 +18,11 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/webp",
 ]);
 
+const ALLOWED_LOGO_TYPES = new Set([
+  ...ALLOWED_IMAGE_TYPES,
+  "image/svg+xml",
+]);
+
 const IMAGE_SIGNATURES: Array<{ mime: string; bytes: number[] }> = [
   { mime: "image/jpeg", bytes: [0xff, 0xd8, 0xff] },
   { mime: "image/png", bytes: [0x89, 0x50, 0x4e, 0x47] },
@@ -230,4 +235,125 @@ export function buildReleaseMediaProxyPath(releaseId: string, assetId: string): 
   assertValidReleaseId(releaseId);
   assertValidAssetId(assetId);
   return `/api/public/releases/${releaseId}/media/${assetId}`;
+}
+
+export function buildLogoAssetKey(assetId: string): string {
+  assertValidAssetId(assetId);
+  return `brand/logos/${assetId}`;
+}
+
+function detectSvgMime(buffer: Buffer): boolean {
+  const sample = buffer.subarray(0, Math.min(buffer.length, 512)).toString("utf8").trim();
+  if (sample.startsWith("<svg")) return true;
+  if (sample.startsWith("<?xml")) {
+    return sample.includes("<svg");
+  }
+  return false;
+}
+
+export function assertAllowedLogoType(
+  declaredMime: string,
+  buffer: Buffer
+): string {
+  const normalized = declaredMime.split(";")[0].trim().toLowerCase();
+  if (!ALLOWED_LOGO_TYPES.has(normalized)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: `Unsupported logo type: ${normalized || "unknown"}`,
+    });
+  }
+
+  if (normalized === "image/svg+xml") {
+    if (!detectSvgMime(buffer)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "Bad Request",
+        message: "File does not match a supported SVG format",
+      });
+    }
+    return normalized;
+  }
+
+  return assertAllowedImageType(normalized, buffer);
+}
+
+export async function uploadLogoAsset(
+  buffer: Buffer,
+  contentType: string
+): Promise<{ assetId: string; key: string }> {
+  const safeContentType = assertAllowedLogoType(contentType, buffer);
+
+  const { client, config } = getS3Client();
+  if (buffer.byteLength > config.uploadMaxBytes) {
+    throw createError({
+      statusCode: 413,
+      statusMessage: "Payload Too Large",
+      message: `Logo exceeds maximum size of ${config.uploadMaxBytes} bytes`,
+    });
+  }
+
+  const assetId = crypto.randomUUID();
+  const key = buildLogoAssetKey(assetId);
+
+  await client.send(
+    new PutObjectCommand({
+      Bucket: config.bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: safeContentType,
+      ContentLength: buffer.byteLength,
+    })
+  );
+
+  return { assetId, key };
+}
+
+export interface LogoAssetStream {
+  body: Readable;
+  contentType: string;
+  contentLength?: number;
+}
+
+export async function getLogoAsset(assetId: string): Promise<LogoAssetStream> {
+  const key = buildLogoAssetKey(assetId);
+  const { client, config } = getS3Client();
+
+  try {
+    const response = await client.send(
+      new GetObjectCommand({
+        Bucket: config.bucket,
+        Key: key,
+      })
+    );
+
+    if (!response.Body) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: "Not Found",
+        message: "Logo not found",
+      });
+    }
+
+    return {
+      body: response.Body as Readable,
+      contentType: response.ContentType || "application/octet-stream",
+      contentLength: response.ContentLength,
+    };
+  } catch (error: unknown) {
+    const err = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (err.name === "NoSuchKey" || err.$metadata?.httpStatusCode === 404) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: "Not Found",
+        message: "Logo not found",
+      });
+    }
+    throw error;
+  }
+}
+
+export function buildLogoProxyPath(assetId: string): string {
+  assertValidAssetId(assetId);
+  return `/api/public/brand/logos/${assetId}`;
 }
