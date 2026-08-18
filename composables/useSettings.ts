@@ -1,4 +1,5 @@
 import { toast } from "vue3-toastify";
+import { isPublicRoute } from "~/utils/public-routes";
 import type {
   WorkspaceSettings,
   TeamMember,
@@ -106,8 +107,13 @@ export const useSettings = () => {
       currentMember.value = data.data;
     } catch (e: any) {
       if (e?.statusCode === 401) {
-        toast.error("Session expired. Please sign in again.");
-        navigateTo("/login");
+        currentMember.value = null;
+        const route = useRoute();
+        if (!isPublicRoute(route.path)) {
+          toast.error("Session expired. Please sign in again.");
+          navigateTo("/login");
+        }
+        return;
       }
       console.error(e);
     } finally {

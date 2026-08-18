@@ -1,19 +1,7 @@
-export default defineNuxtRouteMiddleware(async (to) => {
-  const publicPaths = ["/"];
-  const publicPrefixes = [
-    "/login",
-    "/register",
-    "/forgot-password",
-    "/create-new-password",
-    "/p/",
-    "/s/",
-    "/support",
-  ];
+import { isPublicRoute } from "~/utils/public-routes";
 
-  if (
-    publicPaths.includes(to.path)
-    || publicPrefixes.some((prefix) => to.path.startsWith(prefix))
-  ) {
+export default defineNuxtRouteMiddleware(async (to) => {
+  if (isPublicRoute(to.path)) {
     return;
   }
 

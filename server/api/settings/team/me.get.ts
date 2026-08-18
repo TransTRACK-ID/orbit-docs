@@ -1,8 +1,13 @@
 import { defineEventHandler } from "h3";
 import { getCurrentMember, formatLastActive } from "~/server/utils/team-access";
 import { getAuthContext } from "~/server/utils/rbac";
+import { getSessionToken } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
+  if (!getSessionToken(event)) {
+    return { data: null };
+  }
+
   const member = await getCurrentMember(event);
   const access = await getAuthContext(event);
 
