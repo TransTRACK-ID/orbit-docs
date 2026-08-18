@@ -7,6 +7,7 @@ export interface AppItem {
   owner: string | null;
   status: "active" | "draft" | "maintenance";
   repoUrl: string | null;
+  logoUrl: string | null;
   createdAt: string | null;
   updatedAt: string | null;
   latestVersion: {
@@ -61,6 +62,7 @@ export interface CreateAppPayload {
   owner?: string;
   status?: string;
   repoUrl?: string;
+  logoUrl?: string | null;
 }
 
 export const useApps = () => {

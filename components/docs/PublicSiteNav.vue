@@ -2,8 +2,8 @@
 import type { NavConfig, NavGroup, NavOpenApiOperation } from "~/server/database/schema";
 import {
   resolveFallbackPageSlugs,
+  resolvePagesSectionSlugs,
   slugify,
-  unlistedPublishedSlugs,
 } from "~/utils/nav-client";
 
 /**
@@ -129,29 +129,14 @@ function groupHasPages(group: NavGroup): boolean {
   return (group.groups || []).some((sub) => groupHasPages(sub));
 }
 
-const navListedPageSlugs = computed(() => publishedSlugs(props.navConfig?.pages));
-
 const fallbackPageSlugs = computed(() =>
   resolveFallbackPageSlugs(props.navConfig, props.pages),
 );
 
-const unlistedPageSlugs = computed(() => {
-  if (fallbackPageSlugs.value.length > 0) return [];
-  return unlistedPublishedSlugs(props.navConfig, props.pages);
-});
-
-/** Top-level nav pages + any published pages not elsewhere in the nav tree. */
-const pagesSectionSlugs = computed(() => {
-  if (fallbackPageSlugs.value.length > 0) return [];
-  const slugs: string[] = [];
-  const seen = new Set<string>();
-  for (const slug of [...navListedPageSlugs.value, ...unlistedPageSlugs.value]) {
-    if (seen.has(slug)) continue;
-    seen.add(slug);
-    slugs.push(slug);
-  }
-  return slugs;
-});
+/** Top-level nav pages not already listed in a group. */
+const pagesSectionSlugs = computed(() =>
+  resolvePagesSectionSlugs(props.navConfig, props.pages),
+);
 
 const showPagesSection = computed(() => pagesSectionSlugs.value.length > 0);
 

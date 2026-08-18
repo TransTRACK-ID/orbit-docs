@@ -1,7 +1,3 @@
-# {{PAGE_TITLE}}
-
-## Overview
-
 {{OVERVIEW_INTRO}}
 
 ## Relevant source files

@@ -55,3 +55,39 @@ export function unlistedPublishedSlugs(
   const refSet = new Set(collectReferencedSlugs(navConfig || {}));
   return published.filter((s) => !refSet.has(s));
 }
+
+/** Page slugs listed in nav groups (not the top-level `pages` array). */
+export function collectGroupedSlugs(cfg: NavConfig | null | undefined): Set<string> {
+  const slugs = new Set<string>();
+  const visit = (g: NavGroup) => {
+    g.pages?.forEach((p) => slugs.add(p));
+    g.groups?.forEach(visit);
+  };
+  cfg?.groups?.forEach(visit);
+  return slugs;
+}
+
+/**
+ * Top-level "Pages" section slugs, excluding anything already shown in a group.
+ * Empty when the fallback (all pages, ungrouped) should be used instead.
+ */
+export function resolvePagesSectionSlugs(
+  navConfig: NavConfig | null,
+  pages: Array<{ slug: string | null }>,
+): string[] {
+  if (resolveFallbackPageSlugs(navConfig, pages).length > 0) return [];
+
+  const published = new Set(publishedPageSlugs(pages));
+  const grouped = collectGroupedSlugs(navConfig);
+  const listed = (navConfig?.pages || []).filter((slug) => published.has(slug));
+  const unlisted = unlistedPublishedSlugs(navConfig, pages);
+
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const slug of [...listed, ...unlisted]) {
+    if (seen.has(slug) || grouped.has(slug)) continue;
+    seen.add(slug);
+    result.push(slug);
+  }
+  return result;
+}

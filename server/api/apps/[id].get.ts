@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
       owner: apps.owner,
       status: apps.status,
       repoUrl: apps.repoUrl,
+      logoUrl: apps.logoUrl,
       createdAt: apps.createdAt,
       updatedAt: apps.updatedAt,
     })

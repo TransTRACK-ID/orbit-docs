@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
   const db = getDb();
   const body = await readBody(event);
 
-  const { name, description, owner, status, repoUrl } = body || {};
+  const { name, description, owner, status, repoUrl, logoUrl } = body || {};
 
   if (!name || typeof name !== "string" || name.trim().length === 0) {
     throw createError({
@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
       owner: owner || null,
       status: status || "active",
       repoUrl: repoUrl || null,
+      logoUrl: logoUrl || null,
     })
     .returning()
     .then((rows) => rows[0]);

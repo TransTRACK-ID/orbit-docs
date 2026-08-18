@@ -1,5 +1,3 @@
-# {{PAGE_TITLE}}
-
 {{INTRO_PARAGRAPH}}
 
 ## Relevant source files

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { extractJsonObject, parseWikiOutlineJson, prependAdrConstraints } from "./doc-prompts";
+import {
+  buildWikiOutlinePrompt,
+  buildWikiPagePrompt,
+  extractJsonObject,
+  parseWikiOutlineJson,
+  prependAdrConstraints,
+} from "./doc-prompts";
 
 describe("prependAdrConstraints", () => {
   it("returns prompt unchanged when no constraints", () => {
@@ -48,6 +54,45 @@ describe("parseWikiOutlineJson", () => {
     expect(() => parseWikiOutlineJson("Analyzing repositories for wiki outline...")).toThrow(
       /did not contain JSON/i
     );
+  });
+
+  it("keeps the first page when the same slug appears twice", () => {
+    const raw = JSON.stringify({
+      siteName: "Platform Integrator",
+      siteSlug: "platform-integrator",
+      pages: [
+        { slug: "1-overview", title: "Overview", group: "Core" },
+        { slug: "1-overview", title: "Overview", group: "Pages" },
+        { slug: "2-api", title: "API", group: "Core" },
+      ],
+    });
+
+    expect(parseWikiOutlineJson(raw).pages).toEqual([
+      { slug: "1-overview", title: "Overview", group: "Core" },
+      { slug: "2-api", title: "API", group: "Core" },
+    ]);
+  });
+});
+
+describe("wiki prompts", () => {
+  it("requires unique outline slugs", () => {
+    const prompt = buildWikiOutlinePrompt("ctx", "/repos", "App");
+    expect(prompt).toMatch(/slug must be unique/i);
+  });
+
+  it("forbids preamble and a second copy of the page", () => {
+    const prompt = buildWikiPagePrompt(
+      "{{INTRO}}",
+      { slug: "1-overview", title: "Overview" },
+      "app",
+      [{ slug: "1-overview", title: "Overview" }],
+      "ctx",
+      "/repos",
+      true,
+    );
+    expect(prompt).toMatch(/Do not add a second document or duplicate headings/);
+    expect(prompt).toMatch(/Do not include analysis, planning, or thinking sentences/);
+    expect(prompt).toMatch(/Do not repeat the page title as a markdown heading/);
   });
 });
 

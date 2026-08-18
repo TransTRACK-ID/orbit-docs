@@ -1,9 +1,9 @@
 import { getDb } from "~/server/database";
 import { docSites, docs, activityLogs } from "~/server/database/schema";
 import { eq, and } from "drizzle-orm";
-import type { NavConfig, NavGroup } from "~/server/database/schema";
-import { slugify, isValidSiteSlug } from "~/server/lib/nav-config";
+import { isValidSiteSlug, slugify } from "~/server/lib/nav-config";
 import type { WikiOutlinePagePlan, WikiSitePlan } from "~/server/lib/doc-prompts";
+import { buildNavConfigFromPlan } from "~/utils/wiki-nav";
 
 export interface WikiPageContent {
   slug: string;
@@ -16,30 +16,6 @@ export interface WikiSiteBuildResult {
   siteId: string;
   siteSlug: string;
   pageIds: string[];
-}
-
-function buildNavConfigFromPlan(plan: WikiSitePlan): NavConfig {
-  const groupMap = new Map<string, string[]>();
-  for (const page of plan.pages) {
-    const groupLabel = page.group?.trim() || "Pages";
-    if (!groupMap.has(groupLabel)) groupMap.set(groupLabel, []);
-    groupMap.get(groupLabel)!.push(page.slug);
-  }
-
-  const groups: NavGroup[] = [...groupMap.entries()].map(([label, pages], index) => ({
-    id: slugify(label) || `group-${index + 1}`,
-    label,
-    pages,
-  }));
-
-  const overview = plan.pages.find((p) => p.slug === "1-overview");
-  const navPages = overview ? ["1-overview"] : plan.pages[0] ? [plan.pages[0].slug] : [];
-
-  return {
-    groups,
-    pages: navPages,
-    external: [],
-  };
 }
 
 async function findWikiSiteForApp(appId: string, siteSlug: string) {

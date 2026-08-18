@@ -1,5 +1,5 @@
 export default defineNuxtRouteMiddleware(async (to) => {
-  const publicPrefixes = ["/login", "/register", "/forgot-password", "/create-new-password", "/p/", "/s/"];
+  const publicPrefixes = ["/login", "/register", "/forgot-password", "/create-new-password", "/p/", "/s/", "/support"];
   if (publicPrefixes.some((prefix) => to.path.startsWith(prefix))) {
     return;
   }

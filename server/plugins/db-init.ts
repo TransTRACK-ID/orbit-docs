@@ -27,6 +27,8 @@ export default defineNitroPlugin(async () => {
     )
   `);
 
+  await pool.query(`ALTER TABLE apps ADD COLUMN IF NOT EXISTS logo_url TEXT`);
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_versions (
       id TEXT PRIMARY KEY,

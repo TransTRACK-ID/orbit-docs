@@ -54,6 +54,7 @@ import {
   wikiPageSortOrder,
   type WikiPageContent,
 } from "./wiki-site-builder";
+import { sanitizeWikiMarkdown } from "~/utils/wiki-markdown";
 
 const execAsync = promisify(exec);
 
@@ -1500,10 +1501,11 @@ export async function generateWikiDocs(
       const content = await runAgentAnalyze(agent, jobId, pagePrompt, baseDir, {
         partialField: "sdd",
       });
+      const title = planPageTitle(pagePlan);
       wikiPages.push({
         slug: pagePlan.slug,
-        title: planPageTitle(pagePlan),
-        content: content.trim(),
+        title,
+        content: sanitizeWikiMarkdown(content, title),
         sortOrder: wikiPageSortOrder(pagePlan.slug, i),
       });
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });

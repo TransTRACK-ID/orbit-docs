@@ -7,6 +7,7 @@ import {
   useMarkdownCopyHandler,
 } from "~/composables/useDocOutline";
 import { useWikiPageMeta } from "~/composables/useWikiPageMeta";
+import { sanitizeWikiMarkdown } from "~/utils/wiki-markdown";
 
 definePageMeta({
   layout: false,
@@ -54,13 +55,18 @@ useSeoMeta(() => ({
     : undefined,
 }));
 
-const renderedHtml = computed(() => {
+const wikiBody = computed(() => {
   if (!page.value?.content) return "";
-  return renderMarkdown(page.value.content);
+  return sanitizeWikiMarkdown(page.value.content, displayTitle.value);
+});
+
+const renderedHtml = computed(() => {
+  if (!wikiBody.value) return "";
+  return renderMarkdown(wikiBody.value);
 });
 
 const outlineItems = computed(() =>
-  page.value?.content ? buildOutlineFromMarkdown(page.value.content) : [],
+  wikiBody.value ? buildOutlineFromMarkdown(wikiBody.value) : [],
 );
 
 const { activeSlug, scrollToSection, refreshScrollSpy, teardownScrollSpy } =

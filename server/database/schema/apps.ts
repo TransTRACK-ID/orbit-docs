@@ -11,6 +11,7 @@ export const apps = pgTable("apps", {
     .notNull()
     .default("active"),
   repoUrl: text("repo_url"),
+  logoUrl: text("logo_url"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

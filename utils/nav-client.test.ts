@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   collectReferencedSlugs,
   resolveFallbackPageSlugs,
+  resolvePagesSectionSlugs,
   unlistedPublishedSlugs,
 } from "./nav-client";
 
@@ -54,6 +55,40 @@ describe("nav-client", () => {
           groups: [{ id: "g1", label: "G", pages: ["a"], groups: [{ id: "g2", label: "S", pages: ["b"] }] }],
         }).sort(),
       ).toEqual(["a", "b"]);
+    });
+  });
+
+  describe("resolvePagesSectionSlugs", () => {
+    it("hides Overview from Pages when it is already in a group", () => {
+      const wikiPages = [
+        { slug: "1-overview", title: "Overview" },
+        { slug: "2-api", title: "API" },
+      ];
+      expect(
+        resolvePagesSectionSlugs(
+          {
+            pages: ["1-overview"],
+            groups: [{ id: "core", label: "Core", pages: ["1-overview", "2-api"] }],
+          },
+          wikiPages,
+        ),
+      ).toEqual([]);
+    });
+
+    it("keeps ungrouped top-level pages in the Pages section", () => {
+      const wikiPages = [
+        { slug: "1-overview", title: "Overview" },
+        { slug: "9-notes", title: "Notes" },
+      ];
+      expect(
+        resolvePagesSectionSlugs(
+          {
+            pages: ["9-notes"],
+            groups: [{ id: "core", label: "Core", pages: ["1-overview"] }],
+          },
+          wikiPages,
+        ),
+      ).toEqual(["9-notes"]);
     });
   });
 });

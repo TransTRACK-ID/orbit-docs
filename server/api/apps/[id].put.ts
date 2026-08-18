@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event);
-  const { name, description, owner, status, repoUrl } = body || {};
+  const { name, description, owner, status, repoUrl, logoUrl } = body || {};
 
   const updateData: Partial<typeof apps.$inferInsert> = {};
   if (name !== undefined) updateData.name = name.trim();
@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
   if (owner !== undefined) updateData.owner = owner || null;
   if (status !== undefined) updateData.status = status;
   if (repoUrl !== undefined) updateData.repoUrl = repoUrl || null;
+  if (logoUrl !== undefined) updateData.logoUrl = logoUrl || null;
   updateData.updatedAt = new Date();
 
   const app = await db

@@ -185,6 +185,7 @@ const createForm = reactive({
   description: "",
   owner: "",
   status: "active",
+  logoUrl: "",
 });
 const createNameError = ref(false);
 
@@ -195,6 +196,7 @@ function openCreateModal() {
   createForm.description = "";
   createForm.owner = "";
   createForm.status = "active";
+  createForm.logoUrl = "";
 }
 
 function closeCreateModal() {
@@ -213,6 +215,7 @@ async function submitCreate() {
     description: createForm.description,
     owner: createForm.owner,
     status: createForm.status,
+    logoUrl: createForm.logoUrl || null,
   });
   closeCreateModal();
 }
@@ -225,6 +228,7 @@ const editForm = reactive({
   description: "",
   owner: "",
   status: "active",
+  logoUrl: "",
 });
 const editNameError = ref(false);
 const isEditing = ref(false);
@@ -237,12 +241,14 @@ async function openEditModal(app: AppItem) {
     editForm.description = fresh.description || "";
     editForm.owner = fresh.owner || "";
     editForm.status = fresh.status;
+    editForm.logoUrl = fresh.logoUrl || "";
   } catch {
     editingApp.value = app;
     editForm.name = app.name;
     editForm.description = app.description || "";
     editForm.owner = app.owner || "";
     editForm.status = app.status;
+    editForm.logoUrl = app.logoUrl || "";
   }
   showEditModal.value = true;
   editNameError.value = false;
@@ -268,6 +274,7 @@ async function submitEdit() {
       description: editForm.description,
       owner: editForm.owner,
       status: editForm.status,
+      logoUrl: editForm.logoUrl || null,
     });
     closeEditModal();
   } finally {
@@ -669,6 +676,17 @@ const statusLabel: Record<string, string> = {
                 </select>
               </div>
             </div>
+            <div class="form-group">
+              <label for="appLogo">
+                Logo URL <span class="opt">(opsional)</span>
+              </label>
+              <input
+                id="appLogo"
+                v-model="createForm.logoUrl"
+                type="url"
+                placeholder="https://cdn.example.com/product-logo.svg"
+              />
+            </div>
           </div>
           <div class="modal-foot">
             <button type="button" class="btn btn-secondary" @click="closeCreateModal">
@@ -728,6 +746,17 @@ const statusLabel: Record<string, string> = {
                   <option value="maintenance">Maintenance</option>
                 </select>
               </div>
+            </div>
+            <div class="form-group">
+              <label for="editLogo">
+                Logo URL <span class="opt">(opsional)</span>
+              </label>
+              <input
+                id="editLogo"
+                v-model="editForm.logoUrl"
+                type="url"
+                placeholder="https://cdn.example.com/product-logo.svg"
+              />
             </div>
           </div>
           <div class="modal-foot">

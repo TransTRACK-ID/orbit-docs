@@ -274,6 +274,7 @@ Output ONLY valid JSON (no markdown fences) matching this schema:
 
 Rules:
 - The first page MUST be slug "1-overview" titled "Overview".
+- Each slug must be unique. Do not list Overview (or any page) more than once.
 - Use numbered slugs: 1-overview, 2-subsystem-name, 3-another-topic (lowercase, hyphens).
 - Group related pages (e.g. Components, Guides, Core). Use 4–12 pages total.
 - sourceFiles: repo-relative paths that anchor each page (README, key modules).
@@ -325,7 +326,10 @@ Instructions:
 - Link to sibling wiki pages using markdown: /wiki/${siteSlug}/{page-slug}
 - On the overview page, include a Mermaid architecture diagram in a fenced \`\`\`mermaid code block.
 - Use tables where helpful. No placeholder text.
-- Output ONLY the completed markdown document.`;
+- Do not repeat the page title as a markdown heading — the reader already shows it.
+- Do not include analysis, planning, or thinking sentences.
+- Do not add a second document or duplicate headings.
+- Output ONLY the completed markdown document. No preamble.`;
 }
 
 /** Pull a JSON object out of agent output that may include prose or markdown fences. */
@@ -396,5 +400,38 @@ export function parseWikiOutlineJson(raw: string): WikiSitePlan {
   if (!parsed.siteName || !parsed.siteSlug || !Array.isArray(parsed.pages) || parsed.pages.length === 0) {
     throw new Error("Wiki outline JSON is missing siteName, siteSlug, or pages");
   }
-  return parsed;
+
+  const seen = new Set<string>();
+  const pages: WikiOutlinePagePlan[] = [];
+  for (const page of parsed.pages) {
+    if (!page || typeof page.slug !== "string") continue;
+    const slug = page.slug.trim();
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+
+    const next: WikiOutlinePagePlan = {
+      slug,
+      title: typeof page.title === "string" && page.title.trim() ? page.title.trim() : slug,
+    };
+    if (typeof page.group === "string" && page.group.trim()) {
+      next.group = page.group.trim();
+    }
+    if (Array.isArray(page.sourceFiles)) {
+      const sourceFiles = page.sourceFiles.filter(
+        (file): file is string => typeof file === "string" && file.trim().length > 0,
+      );
+      if (sourceFiles.length) next.sourceFiles = sourceFiles;
+    }
+    pages.push(next);
+  }
+
+  if (pages.length === 0) {
+    throw new Error("Wiki outline JSON is missing siteName, siteSlug, or pages");
+  }
+
+  return {
+    siteName: String(parsed.siteName),
+    siteSlug: String(parsed.siteSlug),
+    pages,
+  };
 }
