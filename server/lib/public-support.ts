@@ -36,6 +36,21 @@ export interface PublicProduct {
   publishedDocCount: number;
 }
 
+/** Apps visible on the public help center root (active = published in /apps). */
+export function isPublicHelpApp(status: string): boolean {
+  return status === "active";
+}
+
+/** Whether a doc site should appear under an app's help hub. */
+export function shouldIncludeDocSiteInCatalog(
+  isWikiSite: boolean,
+  siteStatus: string,
+  publishedPageCount: number,
+): boolean {
+  const hasPublicSite = !isWikiSite && siteStatus === "published";
+  return hasPublicSite || publishedPageCount > 0;
+}
+
 function assignUniqueSlugs<T extends { id: string; name: string }>(
   items: T[],
 ): Array<T & { slug: string }> {
@@ -65,6 +80,73 @@ async function countPublishedReleases(
   return rows[0]?.count ?? 0;
 }
 
+type SiteRow = {
+  id: string;
+  appId: string | null;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: string;
+  appName: string | null;
+  logoUrl: string | null;
+};
+
+type DocRow = {
+  id: string;
+  siteId: string | null;
+  appId: string | null;
+  title: string;
+  slug: string | null;
+  status: string;
+  docType: string | null;
+};
+
+function buildDocSitesForApp(
+  appId: string,
+  siteRows: SiteRow[],
+  docRows: DocRow[],
+  wikiOnlySiteIds: Set<string>,
+): { docSites: PublicProductDocSite[]; pages: PublicProductPage[] } {
+  const docSitesForApp: PublicProductDocSite[] = [];
+  const pages: PublicProductPage[] = [];
+
+  for (const site of siteRows.filter((row) => row.appId === appId)) {
+    const isWikiSite = wikiOnlySiteIds.has(site.id);
+    const publishedPages = docRows.filter(
+      (doc) => doc.siteId === site.id && doc.status === "published" && doc.slug,
+    );
+
+    if (!shouldIncludeDocSiteInCatalog(isWikiSite, site.status, publishedPages.length)) {
+      continue;
+    }
+
+    const homePath = isWikiSite ? `/wiki/${site.slug}` : `/s/${site.slug}`;
+    docSitesForApp.push({
+      id: site.id,
+      name: site.name,
+      slug: site.slug,
+      description: site.description,
+      pageCount: publishedPages.length,
+      homePath,
+      isWikiSite,
+    });
+
+    for (const page of publishedPages) {
+      pages.push({
+        id: page.id,
+        title: page.title,
+        slug: page.slug!,
+        path: `${homePath}/${page.slug}`,
+      });
+    }
+  }
+
+  docSitesForApp.sort((a, b) => a.name.localeCompare(b.name));
+  pages.sort((a, b) => a.title.localeCompare(b.title));
+
+  return { docSites: docSitesForApp, pages };
+}
+
 export async function listPublicProducts(
   db: ReturnType<typeof import("~/server/database").getDb>,
   search = "",
@@ -89,6 +171,7 @@ export async function listPublicProducts(
     .select({
       id: docs.id,
       siteId: docs.siteId,
+      appId: docs.appId,
       title: docs.title,
       slug: docs.slug,
       status: docs.status,
@@ -99,58 +182,6 @@ export async function listPublicProducts(
 
   const wikiOnlySiteIds = deriveWikiOnlySiteIds(
     docRows.map((row) => ({ siteId: row.siteId, docType: row.docType })),
-  );
-
-  const siteProducts: PublicProduct[] = [];
-
-  for (const site of siteRows) {
-    const isWikiSite = wikiOnlySiteIds.has(site.id);
-    const publishedPages = docRows.filter(
-      (doc) => doc.siteId === site.id && doc.status === "published" && doc.slug,
-    );
-
-    const hasPublicSite = !isWikiSite && site.status === "published";
-    if (!hasPublicSite && publishedPages.length === 0) continue;
-
-    const homePath = isWikiSite ? `/wiki/${site.slug}` : `/s/${site.slug}`;
-    const pages: PublicProductPage[] = publishedPages.map((page) => ({
-      id: page.id,
-      title: page.title,
-      slug: page.slug!,
-      path: `${homePath}/${page.slug}`,
-    }));
-
-    const docSiteEntry: PublicProductDocSite = {
-      id: site.id,
-      name: site.name,
-      slug: site.slug,
-      description: site.description,
-      pageCount: publishedPages.length,
-      homePath,
-      isWikiSite,
-    };
-
-    siteProducts.push({
-      id: site.id,
-      name: site.name,
-      slug: site.slug,
-      description: site.description,
-      status: site.status,
-      logoUrl: site.logoUrl,
-      isWikiSite,
-      homePath,
-      kind: "site",
-      docSites: [docSiteEntry],
-      pages,
-      releaseCount: await countPublishedReleases(db, site.appId),
-      publishedDocCount: publishedPages.length,
-    });
-  }
-
-  const coveredAppIds = new Set(
-    siteRows
-      .map((site) => site.appId)
-      .filter((appId): appId is string => !!appId),
   );
 
   const appRows = await db
@@ -164,14 +195,32 @@ export async function listPublicProducts(
     .from(apps)
     .orderBy(apps.name);
 
-  const orphanApps = assignUniqueSlugs(appRows.filter((app) => !coveredAppIds.has(app.id)));
+  const publicApps = assignUniqueSlugs(
+    appRows.filter((app) => isPublicHelpApp(app.status)),
+  );
 
-  const appProducts: PublicProduct[] = await Promise.all(
-    orphanApps.map(async (app) => {
-      const publishedDocCountRows = await db
+  const products: PublicProduct[] = await Promise.all(
+    publicApps.map(async (app) => {
+      const { docSites: docSitesForApp, pages } = buildDocSitesForApp(
+        app.id,
+        siteRows,
+        docRows,
+        wikiOnlySiteIds,
+      );
+
+      const standalonePublishedDocs = await db
         .select({ count: sql<number>`count(*)::int` })
         .from(docs)
-        .where(and(eq(docs.appId, app.id), eq(docs.status, "published")));
+        .where(
+          and(
+            eq(docs.appId, app.id),
+            eq(docs.status, "published"),
+            sql`${docs.siteId} IS NULL`,
+          ),
+        );
+
+      const sitePageCount = pages.length;
+      const standaloneCount = standalonePublishedDocs[0]?.count ?? 0;
 
       return {
         id: app.id,
@@ -183,22 +232,20 @@ export async function listPublicProducts(
         isWikiSite: false,
         homePath: `/support/${app.slug}`,
         kind: "app" as const,
-        docSites: [],
-        pages: [],
+        docSites: docSitesForApp,
+        pages,
         releaseCount: await countPublishedReleases(db, app.id),
-        publishedDocCount: publishedDocCountRows[0]?.count ?? 0,
+        publishedDocCount: sitePageCount + standaloneCount,
       };
     }),
   );
 
-  const products = [...siteProducts, ...appProducts].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const sorted = products.sort((a, b) => a.name.localeCompare(b.name));
 
-  if (!search.trim()) return products;
+  if (!search.trim()) return sorted;
 
   const q = search.trim().toLowerCase();
-  return products.filter((product) => {
+  return sorted.filter((product) => {
     const haystack = [
       product.name,
       product.description,
@@ -217,7 +264,11 @@ export async function getPublicProductBySlug(
   slug: string,
 ): Promise<PublicProduct | null> {
   const products = await listPublicProducts(db);
+  const byApp = products.find((product) => product.slug === slug || product.id === slug);
+  if (byApp) return byApp;
+
+  // Legacy: doc-site slugs that used to appear as top-level products.
   return (
-    products.find((product) => product.slug === slug || product.id === slug) ?? null
+    products.find((product) => product.docSites.some((site) => site.slug === slug)) ?? null
   );
 }

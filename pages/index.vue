@@ -86,7 +86,7 @@ onMounted(load);
         :empty-message="
           search.trim()
             ? 'No products match your search.'
-            : 'No doc sites with published pages yet. Publish docs on a site to list it here.'
+            : 'No active products yet. Set an app to Aktif in Apps to list it here.'
         "
       />
     </section>
