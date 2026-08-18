@@ -5,6 +5,7 @@ import {
   serializeColoredFont,
   serializeColoredSpan,
 } from "~/composables/inlineColorHtml";
+import { mermaidPreHtml } from "~/utils/mermaid-source";
 
 export interface EditorJsData {
   time?: number;
@@ -1352,8 +1353,7 @@ export function editorJsToHtml(data: EditorJsData): string {
         break;
       }
       case "mermaid": {
-        const code = escapeHtml(block.data.code || "");
-        out.push(`<pre class="mermaid">${code}</pre>`);
+        out.push(mermaidPreHtml(block.data.code || ""));
         break;
       }
       default:

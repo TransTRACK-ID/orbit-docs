@@ -1,6 +1,7 @@
 import { marked } from "marked";
 import { parse as parseYaml } from "yaml";
 import { allowColorHtmlInMarkdown } from "~/composables/inlineColorHtml";
+import { mermaidPreHtml } from "~/utils/mermaid-source";
 
 export interface DocFrontmatter {
   title?: string;
@@ -206,7 +207,7 @@ export function renderMarkdown(md: string): string {
     // ─── Code blocks: mermaid → pre.mermaid; others → highlighted ─
     renderer.code = ({ text, lang }: { text: string; lang?: string }) => {
       if (lang === "mermaid") {
-        return `<pre class="mermaid">${escapeHtml(text)}</pre>\n`;
+        return mermaidPreHtml(text);
       }
       const highlighted = highlightCode(text, lang);
       if (lang) {

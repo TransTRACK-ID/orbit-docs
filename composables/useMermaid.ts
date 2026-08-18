@@ -1,10 +1,16 @@
 import type { ComputedRef, Ref } from "vue";
-import { isMermaidErrorSvg, normalizeMermaidSource } from "~/utils/mermaid-source";
+import {
+  isMermaidErrorSvg,
+  readMermaidSourceFromNode,
+} from "~/utils/mermaid-source";
 
 type MermaidModule = typeof import("mermaid").default;
 
 let mermaidModule: MermaidModule | null = null;
 let initPromise: Promise<MermaidModule> | null = null;
+let renderQueue = Promise.resolve();
+
+const MERMAID_RENDER_DEBOUNCE_MS = 200;
 
 async function getMermaid(): Promise<MermaidModule> {
   if (mermaidModule) return mermaidModule;
@@ -13,9 +19,7 @@ async function getMermaid(): Promise<MermaidModule> {
       const mermaid = mod.default;
       mermaid.initialize({
         startOnLoad: false,
-        theme: "default",
         securityLevel: "strict",
-        fontFamily: "Inter, system-ui, sans-serif",
         suppressErrorRendering: true,
       });
       mermaidModule = mermaid;
@@ -25,7 +29,30 @@ async function getMermaid(): Promise<MermaidModule> {
   return initPromise;
 }
 
-let _mermaidIdCounter = 0;
+function enqueueMermaidRender<T>(task: () => Promise<T>): Promise<T> {
+  const run = renderQueue.then(task, task);
+  renderQueue = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
+function isLiveNode(node: HTMLElement, container: HTMLElement): boolean {
+  return node.isConnected && container.contains(node);
+}
+
+function cleanupMermaidRenderArtifacts(id: string): void {
+  document.getElementById(`d${id}`)?.remove();
+  document.getElementById(id)?.remove();
+}
+
+function createMermaidRenderId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `mermaid-${crypto.randomUUID()}`;
+  }
+  return `mermaid-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 function showMermaidFallback(node: HTMLPreElement, source: string): void {
   const doc = node.ownerDocument;
@@ -47,46 +74,59 @@ function showMermaidFallback(node: HTMLPreElement, source: string): void {
   node.replaceWith(wrap);
 }
 
-export async function renderMermaidInContainer(
-  container: HTMLElement | null | undefined,
+async function renderMermaidNode(
+  mermaid: MermaidModule,
+  node: HTMLPreElement,
+  container: HTMLElement
 ): Promise<void> {
-  if (!container || !import.meta.client) return;
+  if (node.getAttribute("data-mermaid-rendered") === "true") return;
+  if (!isLiveNode(node, container)) return;
 
-  const nodes = container.querySelectorAll<HTMLPreElement>("pre.mermaid");
-  if (nodes.length === 0) return;
+  const source = readMermaidSourceFromNode(node);
+  if (!source) {
+    node.setAttribute("data-mermaid-rendered", "true");
+    return;
+  }
 
-  const mermaid = await getMermaid();
+  const id = createMermaidRenderId();
 
-  for (const node of nodes) {
-    if (node.getAttribute("data-mermaid-rendered") === "true") continue;
-
-    const raw = node.textContent || "";
-    const source = normalizeMermaidSource(raw);
-    if (!source) {
-      node.setAttribute("data-mermaid-rendered", "true");
-      continue;
-    }
-
-    const id = `mermaid-${++_mermaidIdCounter}`;
+  await enqueueMermaidRender(async () => {
+    if (!isLiveNode(node, container)) return;
 
     try {
-      const parsed = await mermaid.parse(source, { suppressErrors: true });
-      if (!parsed) {
-        showMermaidFallback(node, source);
-        continue;
-      }
-
       const { svg } = await mermaid.render(id, source);
-      if (isMermaidErrorSvg(svg)) {
+      cleanupMermaidRenderArtifacts(id);
+
+      if (!isLiveNode(node, container)) return;
+
+      if (!svg.trim() || isMermaidErrorSvg(svg)) {
         showMermaidFallback(node, source);
-        continue;
+        return;
       }
 
       node.innerHTML = svg;
       node.setAttribute("data-mermaid-rendered", "true");
     } catch {
-      showMermaidFallback(node, source);
+      cleanupMermaidRenderArtifacts(id);
+      if (isLiveNode(node, container)) {
+        showMermaidFallback(node, source);
+      }
     }
+  });
+}
+
+export async function renderMermaidInContainer(
+  container: HTMLElement | null | undefined,
+): Promise<void> {
+  if (!container || typeof window === "undefined") return;
+
+  const nodes = Array.from(container.querySelectorAll<HTMLPreElement>("pre.mermaid"));
+  if (nodes.length === 0) return;
+
+  const mermaid = await getMermaid();
+
+  for (const node of nodes) {
+    await renderMermaidNode(mermaid, node, container);
   }
 }
 
@@ -94,14 +134,37 @@ export function useMermaidRenderer(
   containerRef: Ref<HTMLElement | null | undefined>,
   contentSource: Ref<string> | ComputedRef<string>,
 ): void {
-  const render = async () => {
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let renderGeneration = 0;
+
+  const render = async (generation: number) => {
     await nextTick();
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    if (generation !== renderGeneration) return;
     await renderMermaidInContainer(containerRef.value);
   };
 
-  watch(contentSource, render, { flush: "post" });
+  const scheduleRender = () => {
+    renderGeneration += 1;
+    const generation = renderGeneration;
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      void render(generation);
+    }, MERMAID_RENDER_DEBOUNCE_MS);
+  };
+
+  watch(contentSource, scheduleRender, { flush: "post" });
 
   onMounted(() => {
-    void render();
+    renderGeneration += 1;
+    void render(renderGeneration);
+  });
+
+  onBeforeUnmount(() => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    renderGeneration += 1;
   });
 }
