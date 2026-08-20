@@ -60,8 +60,9 @@ import { sanitizeWikiMarkdown } from "~/utils/wiki-markdown";
 import {
   resolveAgentDocOutput,
   assertValidGeneratedDoc,
+  preferDiskDocOutput,
+  validateGeneratedDocContent,
 } from "./agent-doc-output";
-import { validateGeneratedDocContent } from "./generated-doc-validation";
 import type { GeneratedDocType } from "./generated-doc";
 
 const execAsync = promisify(exec);
@@ -808,6 +809,9 @@ interface WriteBackResult {
   mergeErrorMessage: string | null;
 }
 
+const MISSING_REPO_TOKEN_MESSAGE =
+  "No repository access token — add one under App → Repositories to open a PR with this SDD.";
+
 async function writeDocBack(
   repo: RepoRow,
   cloneDir: string,
@@ -817,53 +821,78 @@ async function writeDocBack(
   docLabel: string
 ): Promise<WriteBackResult> {
   if (!repo.accessToken) {
-    return { prUrl: null, prStatus: null, mergeErrorMessage: null };
+    return {
+      prUrl: null,
+      prStatus: null,
+      mergeErrorMessage: MISSING_REPO_TOKEN_MESSAGE,
+    };
   }
 
+  const contentForRepo = await preferDiskDocOutput(cloneDir, filePath, fileContent, "sdd");
   const suffix = (ref || Date.now().toString()).replace(/[^a-zA-Z0-9._-]/g, "-");
   const slug = docLabel.toLowerCase().replace(/\s+/g, "-");
   const branchName = `orbit-docs/${slug}-update-${suffix}`;
   const refLabel = ref ? ` for ${ref}` : "";
 
-  const prUrl = await openPullRequest({
-    provider: repo.provider,
-    hostUrl: repo.hostUrl,
-    repoUrl: repo.repoUrl,
-    token: repo.accessToken,
-    cloneDir,
-    baseBranch: repo.defaultBranch,
-    filePath,
-    fileContent,
-    branchName,
-    commitMessage: `docs: update ${docLabel}${refLabel}`,
-    prTitle: `Update ${docLabel}${refLabel}`,
-    prBody:
-      `This PR updates the ${docLabel} at \`${filePath}\`.\n\n` +
-      `Generated automatically by Orbit Docs.`,
-  });
+  try {
+    const prUrl = await openPullRequest({
+      provider: repo.provider,
+      hostUrl: repo.hostUrl,
+      repoUrl: repo.repoUrl,
+      token: repo.accessToken,
+      cloneDir,
+      baseBranch: repo.defaultBranch,
+      filePath,
+      fileContent: contentForRepo,
+      branchName,
+      commitMessage: `docs: update ${docLabel}${refLabel}`,
+      prTitle: `Update ${docLabel}${refLabel}`,
+      prBody:
+        `This PR updates the ${docLabel} at \`${filePath}\`.\n\n` +
+        `Generated automatically by Orbit Docs.`,
+    });
 
-  if (!prUrl) {
-    return { prUrl: null, prStatus: null, mergeErrorMessage: null };
+    if (!prUrl) {
+      return {
+        prUrl: null,
+        prStatus: null,
+        mergeErrorMessage: "Pull request was created but no URL was returned.",
+      };
+    }
+
+    if (!repo.autoMergeDocs) {
+      return { prUrl, prStatus: "open", mergeErrorMessage: null };
+    }
+
+    const mergeResult = await autoMergePullRequest({
+      provider: repo.provider,
+      hostUrl: repo.hostUrl,
+      repoUrl: repo.repoUrl,
+      token: repo.accessToken,
+      prUrl,
+      baseBranch: repo.defaultBranch,
+    });
+
+    return {
+      prUrl,
+      prStatus: mergeResult.status,
+      mergeErrorMessage: mergeResult.errorMessage ?? null,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/no changes to commit/i.test(msg)) {
+      return {
+        prUrl: null,
+        prStatus: null,
+        mergeErrorMessage: "Repository SDD already matches the generated content — no PR needed.",
+      };
+    }
+    return {
+      prUrl: null,
+      prStatus: null,
+      mergeErrorMessage: msg,
+    };
   }
-
-  if (!repo.autoMergeDocs) {
-    return { prUrl, prStatus: "open", mergeErrorMessage: null };
-  }
-
-  const mergeResult = await autoMergePullRequest({
-    provider: repo.provider,
-    hostUrl: repo.hostUrl,
-    repoUrl: repo.repoUrl,
-    token: repo.accessToken,
-    prUrl,
-    baseBranch: repo.defaultBranch,
-  });
-
-  return {
-    prUrl,
-    prStatus: mergeResult.status,
-    mergeErrorMessage: mergeResult.errorMessage ?? null,
-  };
 }
 
 /**
@@ -1148,7 +1177,6 @@ Instructions:
         "generating_sdd"
       );
 
-      let lastSdd = sddIndexContent;
       for (const repo of repos) {
         if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
@@ -1194,13 +1222,13 @@ Instructions:
             { isUpdate: !!existingSdd }
           );
 
-          const sddContent = await runAgentForDoc(agent, jobId, sddPrompt, dir, {
+          const agentSddContent = await runAgentForDoc(agent, jobId, sddPrompt, dir, {
             partialField: "sdd",
             outputRelativePath: sddPath,
             existingContent: existingSdd,
             docType: "sdd",
           });
-          lastSdd = sddContent;
+          const sddContent = await preferDiskDocOutput(dir, sddPath, agentSddContent, "sdd");
           const ref = await getRepoRef(dir);
           await updateRepoResult(resultId, {
             sddContent,
@@ -1208,28 +1236,23 @@ Instructions:
             status: "writing_back",
           });
 
-          let writeBack: WriteBackResult = {
-            prUrl: null,
-            prStatus: null,
-            mergeErrorMessage: null,
-          };
-          if (repo.accessToken) {
-            await onProgress({
-              status: "writing_back",
-              progressPct: 92,
-              progressMessage: repo.autoMergeDocs
+          await onProgress({
+            status: "writing_back",
+            progressPct: 92,
+            progressMessage: repo.accessToken
+              ? repo.autoMergeDocs
                 ? `Opening and merging PR for ${repo.name}...`
-                : `Opening PR for ${repo.name}...`,
-            });
-            writeBack = await writeDocBack(
-              repo,
-              dir,
-              sddPath,
-              sddContent,
-              ref,
-              "System Design Document"
-            );
-          }
+                : `Opening PR for ${repo.name}...`
+              : `Saving SDD preview for ${repo.name} (no repo token)...`,
+          });
+          const writeBack = await writeDocBack(
+            repo,
+            dir,
+            sddPath,
+            sddContent,
+            ref,
+            "System Design Document"
+          );
 
           await updateRepoResult(resultId, {
             status: "completed",
@@ -1238,7 +1261,7 @@ Instructions:
             mergeErrorMessage: writeBack.mergeErrorMessage,
           });
 
-          if (repo.id && ref) {
+          if (repo.id && ref && writeBack.prUrl) {
             await updateRepoLastProcessedRef(repo.id, ref);
           }
         } catch (repoErr) {
@@ -1249,10 +1272,6 @@ Instructions:
             errorMessage: msg,
           });
         }
-      }
-
-      if (lastSdd && !sddIndexContent) {
-        await updateJobResult(jobId, "sdd", lastSdd);
       }
     }
 
@@ -1432,35 +1451,30 @@ export async function generateRepoSdd(
       });
     }
 
+    sddContent = await preferDiskDocOutput(dir, sddPath, sddContent, "sdd");
     await updateRepoResult(resultId, {
       sddContent,
       status: "writing_back",
     });
     await updateJobResult(jobId, "sdd", sddContent);
 
-    // Step 4: Write back via PR
-    let writeBack: WriteBackResult = {
-      prUrl: null,
-      prStatus: null,
-      mergeErrorMessage: null,
-    };
-    if (repo.accessToken) {
-      await onProgress({
-        status: "writing_back",
-        progressPct: 85,
-        progressMessage: repo.autoMergeDocs
+    await onProgress({
+      status: "writing_back",
+      progressPct: 85,
+      progressMessage: repo.accessToken
+        ? repo.autoMergeDocs
           ? `Opening and merging PR for ${repo.name}...`
-          : `Opening PR for ${repo.name}...`,
-      });
-      writeBack = await writeDocBack(
-        repo,
-        dir,
-        sddPath,
-        sddContent,
-        newTag,
-        "System Design Document"
-      );
-    }
+          : `Opening PR for ${repo.name}...`
+        : `SDD ready for ${repo.name} (no repo token)...`,
+    });
+    const writeBack = await writeDocBack(
+      repo,
+      dir,
+      sddPath,
+      sddContent,
+      newTag,
+      "System Design Document"
+    );
 
     await updateRepoResult(resultId, {
       status: "completed",
@@ -1468,7 +1482,9 @@ export async function generateRepoSdd(
       prStatus: writeBack.prStatus || undefined,
       mergeErrorMessage: writeBack.mergeErrorMessage,
     });
-    await updateRepoLastProcessedRef(repoId, newTag);
+    if (writeBack.prUrl) {
+      await updateRepoLastProcessedRef(repoId, newTag);
+    }
 
     await updateJobCompletion(jobId, true);
     await onProgress({

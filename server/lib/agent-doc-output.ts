@@ -5,6 +5,8 @@ import {
   validateGeneratedDocContent,
 } from "./generated-doc-validation";
 
+export { validateGeneratedDocContent };
+
 const DOC_WRITTEN_RE = /^DOC_WRITTEN:\s*(.+)$/m;
 
 export interface ResolveAgentDocOutputOptions {
@@ -69,4 +71,25 @@ export function assertValidGeneratedDoc(
   if (!result.valid) {
     throw new Error(`Document generation produced incomplete output (${result.reason})`);
   }
+}
+
+/**
+ * Prefer the on-disk file the agent wrote when opening a repo PR / write-back.
+ */
+export async function preferDiskDocOutput(
+  workdir: string,
+  relativePath: string,
+  agentContent: string,
+  docType?: GeneratedDocType
+): Promise<string> {
+  const fromDisk = await readExistingDoc(workdir, relativePath, docType);
+  if (!fromDisk?.trim()) return agentContent;
+
+  const agentTrimmed = agentContent.trim();
+  if (!agentTrimmed) return fromDisk;
+
+  if (looksTruncatedDocOutput(agentTrimmed)) return fromDisk;
+  if (fromDisk.length > agentTrimmed.length) return fromDisk;
+
+  return agentTrimmed;
 }

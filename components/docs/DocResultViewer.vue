@@ -426,7 +426,10 @@ async function handleReopenComment(commentId: string) {
           <span v-else-if="activeRepoResult.status === 'failed'" class="repo-meta-error">
             {{ activeRepoResult.errorMessage || "SDD generation failed" }}
           </span>
-          <span v-else class="repo-meta-muted">No PR opened (token not configured)</span>
+          <span v-else-if="activeRepoResult.mergeErrorMessage" class="repo-meta-warn">
+            {{ activeRepoResult.mergeErrorMessage }}
+          </span>
+          <span v-else class="repo-meta-muted">No PR opened</span>
         </div>
       </div>
     </template>
@@ -641,6 +644,14 @@ async function handleReopenComment(commentId: string) {
 
 .repo-meta-muted {
   color: var(--muted);
+}
+
+.repo-meta-warn {
+  color: oklch(52% 0.12 75);
+  max-width: 320px;
+  text-align: right;
+  line-height: 1.4;
+  font-size: 12px;
 }
 
 .repo-meta-error {

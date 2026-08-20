@@ -168,6 +168,8 @@ export function buildSddCreatePrompt(
 
 Your task is to deeply analyze this repository using your available tools (read files, run bash commands like find, cat, grep, etc.) and then generate a complete System Design Document (SDD) for THIS repository specifically.
 
+This SDD is repository-scoped. It will be committed back to the Git repository via pull request — it is NOT stored in the Orbit Docs product library (only the SDD index lives there).
+
 Structural overview:
 ${repoContext}
 
@@ -200,6 +202,8 @@ export function buildSddUpdatePrompt(
   return `You are an expert software architect maintaining the System Design Document (SDD) for the repository "${repoName}" located at ${cloneDir}.
 
 An existing SDD was found at \`${outputRelativePath}\`. Read it first, then update it so it accurately reflects the current state of the repository. Keep sections that are unaffected unchanged.
+
+This SDD is repository-scoped. It will be committed back to the Git repository via pull request — it is NOT stored in the Orbit Docs product library (only the SDD index lives there).
 
 Structural overview:
 ${repoContext}
