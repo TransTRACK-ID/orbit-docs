@@ -11,6 +11,26 @@ export const ADR_UPDATE_ALIGNMENT_NOTE = `When updating this document, preserve 
 If the codebase has drifted from an ADR, note the drift in a "Deviations" section
 rather than silently overwriting the ADR's intent.`;
 
+export const DOC_REVISION_HISTORY_NOTE = `If the document has a "## Riwayat Revisi" or "Revision History" section, preserve it and append a new row for this update (version, date, brief change summary, author "Orbit Docs Agent").`;
+
+export function buildDocFileOutputInstructions(relativePath: string): string {
+  return `IMPORTANT — HOW TO DELIVER THE DOCUMENT (required for large documents):
+1. Write the COMPLETE document to \`${relativePath}\` using the write tool (create or replace the entire file).
+2. Include EVERY section with full content. Never truncate, summarize, or use placeholders like "[...]", "[truncated]", or "full N-line document in ...".
+3. ${DOC_REVISION_HISTORY_NOTE}
+4. Your final chat message must be exactly one line: DOC_WRITTEN: ${relativePath}
+5. Do NOT paste the full document in chat — the file on disk is the authoritative output.`;
+}
+
+export function buildDocFileRetryPrompt(relativePath: string, reason: string): string {
+  return `Your previous attempt failed: ${reason}.
+
+You MUST write the COMPLETE document to \`${relativePath}\` using the write tool.
+Read the existing file at that path, update it in full, and write the entire file back.
+Do not truncate or use ellipsis placeholders. ${DOC_REVISION_HISTORY_NOTE}
+Reply with only one line: DOC_WRITTEN: ${relativePath}`;
+}
+
 export function prependAdrConstraints(
   prompt: string,
   constraintSummary: string,
@@ -38,7 +58,8 @@ ${prompt}`;
 export function buildPrdCreatePrompt(
   template: string,
   aggregateContext: string,
-  baseDir: string
+  baseDir: string,
+  outputRelativePath: string
 ): string {
   return `You are an expert software architect. You have been given access to multiple cloned Git repositories that together make up a single product. The repositories live under: ${baseDir}
 
@@ -50,33 +71,32 @@ Use the following template structure and fill in ALL sections with real content 
 
 ${template}
 
+${buildDocFileOutputInstructions(outputRelativePath)}
+
 Instructions:
 - Treat the repositories as one product; describe product-level requirements, not per-repo internals.
-- Fill in all {{placeholders}} with actual content. Do NOT use placeholder text.
-- Output ONLY the completed markdown document.`;
+- Fill in all {{placeholders}} with actual content. Do NOT use placeholder text.`;
 }
 
 export function buildPrdUpdatePrompt(
-  existingPrd: string,
   aggregateContext: string,
-  baseDir: string
+  baseDir: string,
+  outputRelativePath: string
 ): string {
   return `You are an expert software architect. You have been given access to multiple cloned Git repositories that together make up a single product. The repositories live under: ${baseDir}
 
-An existing Product Requirements Document (PRD) was found. Update it so it accurately reflects the current state of the product across ALL repositories. Keep sections that are unaffected unchanged.
+An existing Product Requirements Document (PRD) was found at \`${outputRelativePath}\`. Read it first, then update it so it accurately reflects the current state of the product across ALL repositories. Keep sections that are unaffected unchanged.
 
 ${aggregateContext}
 
-EXISTING PRD:
-${existingPrd}
+${buildDocFileOutputInstructions(outputRelativePath)}
 
 Instructions:
-- Output the COMPLETE updated PRD markdown document (not just the changed parts).
+- Output the COMPLETE updated PRD (not just the changed parts).
 - Preserve the existing structure and headings.
 - Keep unchanged sections as-is.
 - Do not add a second document or duplicate headings.
-- Do NOT use placeholder text.
-- Output ONLY the markdown document.`;
+- Do NOT use placeholder text.`;
 }
 
 // ── FSD ─────────────────────────────────────────────────────────
@@ -85,7 +105,8 @@ export function buildFsdCreatePrompt(
   template: string,
   aggregateContext: string,
   baseDir: string,
-  prdExcerpt: string
+  prdExcerpt: string,
+  outputRelativePath: string
 ): string {
   return `You are an expert software architect with access to multiple cloned repositories that form one product under: ${baseDir}
 
@@ -100,37 +121,36 @@ Use the following template structure and fill in ALL sections with real content:
 
 ${template}
 
+${buildDocFileOutputInstructions(outputRelativePath)}
+
 Instructions:
 - Focus on cross-repository user workflows, UI behavior, and functional requirements at the product level.
-- Fill in all {{placeholders}} with actual content. Do NOT use placeholder text.
-- Output ONLY the completed markdown document.`;
+- Fill in all {{placeholders}} with actual content. Do NOT use placeholder text.`;
 }
 
 export function buildFsdUpdatePrompt(
-  existingFsd: string,
   aggregateContext: string,
   baseDir: string,
-  prdExcerpt: string
+  prdExcerpt: string,
+  outputRelativePath: string
 ): string {
   return `You are an expert software architect with access to multiple cloned repositories that form one product under: ${baseDir}
 
-An existing Functional Specification Document (FSD) was found. Update it so it accurately reflects the current state of the product. Keep sections that are unaffected unchanged.
+An existing Functional Specification Document (FSD) was found at \`${outputRelativePath}\`. Read it first, then update it so it accurately reflects the current state of the product. Keep sections that are unaffected unchanged.
 
 ${aggregateContext}
 
 Product PRD (for reference):
 ${prdExcerpt}
 
-EXISTING FSD:
-${existingFsd}
+${buildDocFileOutputInstructions(outputRelativePath)}
 
 Instructions:
-- Output the COMPLETE updated FSD markdown document (not just the changed parts).
+- Output the COMPLETE updated FSD (not just the changed parts).
 - Preserve the existing structure and headings.
 - Keep unchanged sections as-is.
 - Do not add a second document or duplicate headings.
-- Do NOT use placeholder text.
-- Output ONLY the markdown document.`;
+- Do NOT use placeholder text.`;
 }
 
 // ── SDD ─────────────────────────────────────────────────────────
@@ -141,7 +161,8 @@ export function buildSddCreatePrompt(
   repoName: string,
   repoContext: string,
   prdExcerpt: string,
-  fsdExcerpt: string
+  fsdExcerpt: string,
+  outputRelativePath: string
 ): string {
   return `You are an expert software architect. You have been given access to a cloned Git repository "${repoName}" at the path: ${cloneDir}
 
@@ -160,24 +181,25 @@ Use the following SDD template structure and fill in ALL sections with real cont
 
 ${template}
 
+${buildDocFileOutputInstructions(outputRelativePath)}
+
 Instructions:
 - Explore the repository thoroughly (architecture, data models, infra files, deployment configs) before writing.
 - Fill in all {{placeholders}} with actual content derived from the codebase.
-- Be thorough, specific, and accurate. Do NOT use placeholder text.
-- Output ONLY the completed SDD markdown document.`;
+- Be thorough, specific, and accurate. Do NOT use placeholder text.`;
 }
 
 export function buildSddUpdatePrompt(
-  existingSdd: string,
   cloneDir: string,
   repoName: string,
   repoContext: string,
   prdExcerpt: string,
-  fsdExcerpt: string
+  fsdExcerpt: string,
+  outputRelativePath: string
 ): string {
   return `You are an expert software architect maintaining the System Design Document (SDD) for the repository "${repoName}" located at ${cloneDir}.
 
-An existing SDD was found. Update it so it accurately reflects the current state of the repository. Keep sections that are unaffected unchanged.
+An existing SDD was found at \`${outputRelativePath}\`. Read it first, then update it so it accurately reflects the current state of the repository. Keep sections that are unaffected unchanged.
 
 Structural overview:
 ${repoContext}
@@ -188,16 +210,14 @@ ${prdExcerpt}
 Product-level FSD (for reference):
 ${fsdExcerpt}
 
-EXISTING SDD:
-${existingSdd}
+${buildDocFileOutputInstructions(outputRelativePath)}
 
 Instructions:
-- Output the COMPLETE updated SDD markdown document (not just the changed parts).
+- Output the COMPLETE updated SDD (not just the changed parts).
 - Preserve the existing structure and headings.
 - Keep unchanged sections as-is.
 - Do not add a second document or duplicate headings.
-- Do NOT use placeholder text.
-- Output ONLY the markdown document.`;
+- Do NOT use placeholder text.`;
 }
 
 /**
@@ -205,16 +225,16 @@ Instructions:
  * Used when we have both an existing SDD and a code diff.
  */
 export function buildSddDiffUpdatePrompt(
-  existingSdd: string,
   repoName: string,
   cloneDir: string,
   newTag: string,
   changedFiles: string[],
-  patch: string
+  patch: string,
+  outputRelativePath: string
 ): string {
   return `You are an expert software architect maintaining the System Design Document (SDD) for the repository "${repoName}" located at ${cloneDir}.
 
-A new release "${newTag}" was created. Below is the EXISTING SDD followed by the code changes since the last documented version. Update the SDD so it accurately reflects the changes. Keep sections that are unaffected unchanged. Only read additional files from ${cloneDir} if strictly necessary to understand a change.
+A new release "${newTag}" was created. Read the existing SDD at \`${outputRelativePath}\`, then update it to reflect the code changes below. Keep sections that are unaffected unchanged. Only read additional files from ${cloneDir} if strictly necessary to understand a change.
 
 Changed files (${changedFiles.length}):
 ${changedFiles.slice(0, 100).join("\n")}
@@ -224,14 +244,12 @@ Code diff:
 ${patch}
 \`\`\`
 
-EXISTING SDD:
-${existingSdd}
+${buildDocFileOutputInstructions(outputRelativePath)}
 
 Instructions:
-- Output the COMPLETE updated SDD markdown document (not just the changed parts).
+- Output the COMPLETE updated SDD (not just the changed parts).
 - Preserve the existing structure and headings.
-- Do NOT use placeholder text.
-- Output ONLY the markdown document.`;
+- Do NOT use placeholder text.`;
 }
 
 // ── Wiki (internal multi-page sites) ───────────────────────────

@@ -41,6 +41,8 @@ import {
   buildSddCreatePrompt,
   buildSddUpdatePrompt,
   buildSddDiffUpdatePrompt,
+  buildDocFileOutputInstructions,
+  buildDocFileRetryPrompt,
   prependAdrConstraints,
   buildWikiOutlinePrompt,
   buildWikiPagePrompt,
@@ -55,8 +57,17 @@ import {
   type WikiPageContent,
 } from "./wiki-site-builder";
 import { sanitizeWikiMarkdown } from "~/utils/wiki-markdown";
+import {
+  resolveAgentDocOutput,
+  assertValidGeneratedDoc,
+} from "./agent-doc-output";
+import { validateGeneratedDocContent } from "./generated-doc-validation";
+import type { GeneratedDocType } from "./generated-doc";
 
 const execAsync = promisify(exec);
+
+const GIT_SNAPSHOT_DOC_PATH = "docs/GIT-SNAPSHOT.md";
+const SDD_INDEX_DOC_PATH = "docs/SDD.md";
 
 async function withAdrConstraints(
   appId: string,
@@ -602,6 +613,62 @@ async function runAgentAnalyze(
   }
 }
 
+interface RunAgentForDocOptions {
+  partialField?: DocType;
+  outputRelativePath: string;
+  existingContent?: string | null;
+  docType?: GeneratedDocType;
+}
+
+/**
+ * Run the agent for document generation, prefer on-disk file output over chat text,
+ * validate completeness, and retry once when output looks truncated.
+ */
+async function runAgentForDoc(
+  agent: Agent,
+  jobId: string,
+  prompt: string,
+  workdir: string,
+  opts: RunAgentForDocOptions
+): Promise<string> {
+  const fileBefore = await readExistingDoc(workdir, opts.outputRelativePath, opts.docType);
+  let lastPrompt = prompt;
+  let lastContent = "";
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const chatOutput = await runAgentAnalyze(agent, jobId, lastPrompt, workdir, {
+      partialField: opts.partialField,
+    });
+
+    lastContent = await resolveAgentDocOutput(chatOutput, workdir, {
+      outputRelativePath: opts.outputRelativePath,
+      existingContent: opts.existingContent,
+      fileContentBefore: fileBefore,
+      docType: opts.docType,
+    });
+
+    const validation = validateGeneratedDocContent(lastContent, opts.existingContent);
+    if (validation.valid) {
+      return lastContent;
+    }
+
+    if (attempt === 0) {
+      lastPrompt = buildDocFileRetryPrompt(
+        opts.outputRelativePath,
+        validation.reason ?? "incomplete output"
+      );
+      await updateJobLiveProgress(jobId, {
+        progressMessage: "Retrying — previous output was incomplete…",
+      });
+      continue;
+    }
+
+    assertValidGeneratedDoc(lastContent, opts.existingContent);
+  }
+
+  return lastContent;
+}
+
 // ── Repo result helpers ────────────────────────────────────────
 async function createRepoResult(
   jobId: string,
@@ -908,13 +975,16 @@ export async function generateProductDocs(
       const srsPrompt = await withAdrConstraints(
         appId,
         existingSrs
-          ? buildPrdUpdatePrompt(existingSrs, aggregateContext, baseDir)
-          : buildPrdCreatePrompt(srsTemplate, aggregateContext, baseDir),
+          ? buildPrdUpdatePrompt(aggregateContext, baseDir, srsDocPath)
+          : buildPrdCreatePrompt(srsTemplate, aggregateContext, baseDir, srsDocPath),
         { isUpdate: !!existingSrs }
       );
 
-      srsContent = await runAgentAnalyze(agent, jobId, srsPrompt, baseDir, {
+      srsContent = await runAgentForDoc(agent, jobId, srsPrompt, productDir, {
         partialField: "srs",
+        outputRelativePath: srsDocPath,
+        existingContent: existingSrs,
+        docType: "srs",
       });
       await persistProductDoc(jobId, appId, "srs", srsContent, actor);
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
@@ -938,22 +1008,26 @@ export async function generateProductDocs(
         appId,
         existingFsd
           ? buildFsdUpdatePrompt(
-              existingFsd,
               aggregateContext,
               baseDir,
-              srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)"
+              srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)",
+              fsdDocPath
             )
           : buildFsdCreatePrompt(
               fsdTemplate,
               aggregateContext,
               baseDir,
-              srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)"
+              srsContent ? srsContent.substring(0, 2000) : "(SRS not generated — infer from codebases)",
+              fsdDocPath
             ),
         { isUpdate: !!existingFsd }
       );
 
-      fsdContent = await runAgentAnalyze(agent, jobId, fsdPrompt, baseDir, {
+      fsdContent = await runAgentForDoc(agent, jobId, fsdPrompt, productDir, {
         partialField: "fsd",
+        outputRelativePath: fsdDocPath,
+        existingContent: existingFsd,
+        docType: "fsd",
       });
       await persistProductDoc(jobId, appId, "fsd", fsdContent, actor);
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
@@ -965,9 +1039,17 @@ export async function generateProductDocs(
       if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
       const gitTemplate = await loadTemplate("git_snapshot");
-      const gitPrompt = `You are documenting a multi-repository product. Repositories are cloned under: ${baseDir}
+      const existingGitSnapshot = await readProductDocForGeneration(appId, "git_snapshot", {
+        excludeJobId: jobId,
+        repoFallback: () =>
+          readExistingDoc(productDir, GIT_SNAPSHOT_DOC_PATH, "srs"),
+      });
 
-Using git metadata collected below AND your tools to verify against each repo if needed, produce a GIT-SNAPSHOT.md reference document.
+      const gitPrompt = await withAdrConstraints(
+        appId,
+        `You are documenting a multi-repository product. Repositories are cloned under: ${baseDir}
+
+Using git metadata collected below AND your tools to verify against each repo if needed, produce a GIT-SNAPSHOT.md reference document at \`${GIT_SNAPSHOT_DOC_PATH}\`.
 
 Collected git metadata:
 ${gitContext}
@@ -983,13 +1065,18 @@ ${gitMetadata
 Template:
 ${gitTemplate}
 
+${buildDocFileOutputInstructions(GIT_SNAPSHOT_DOC_PATH)}
+
 Instructions:
 - Fill the snapshot table with accurate commit data for each repository.
-- Map each SDD document filename to its codebase.
-- Output ONLY the completed markdown document.`;
+- Map each SDD document filename to its codebase.`,
+        { isUpdate: !!existingGitSnapshot }
+      );
 
-      gitSnapshotContent = await runAgentAnalyze(agent, jobId, gitPrompt, baseDir, {
+      gitSnapshotContent = await runAgentForDoc(agent, jobId, gitPrompt, productDir, {
         partialField: "git_snapshot",
+        outputRelativePath: GIT_SNAPSHOT_DOC_PATH,
+        existingContent: existingGitSnapshot,
       });
       await persistProductDoc(jobId, appId, "git_snapshot", gitSnapshotContent, actor, {
         checkAdrCompliance: false,
@@ -1012,11 +1099,16 @@ Instructions:
         })
         .join("\n");
 
+      const existingSddIndex = await readProductDocForGeneration(appId, "sdd_index", {
+        excludeJobId: jobId,
+        repoFallback: () => readExistingDoc(productDir, SDD_INDEX_DOC_PATH, "sdd"),
+      });
+
       const sddIndexPrompt = await withAdrConstraints(
         appId,
         `You are an expert software architect documenting a multi-repository product under: ${baseDir}
 
-Produce a product-wide SDD INDEX document (SDD.md) that links to per-repository SDD files.
+Produce a product-wide SDD INDEX document (SDD.md) at \`${SDD_INDEX_DOC_PATH}\` that links to per-repository SDD files.
 
 ${aggregateContext}
 
@@ -1032,15 +1124,19 @@ ${srsContent ? srsContent.substring(0, 1200) : "(not available)"}
 Template:
 ${sddIndexTemplate}
 
+${buildDocFileOutputInstructions(SDD_INDEX_DOC_PATH)}
+
 Instructions:
 - SDD.md is an index only — detailed design lives in per-repo SDD files.
-- Fill in all {{placeholders}} with actual content.
-- Output ONLY the completed markdown document.`,
-        { isUpdate: false }
+- Fill in all {{placeholders}} with actual content.`,
+        { isUpdate: !!existingSddIndex }
       );
 
-      sddIndexContent = await runAgentAnalyze(agent, jobId, sddIndexPrompt, baseDir, {
+      sddIndexContent = await runAgentForDoc(agent, jobId, sddIndexPrompt, productDir, {
         partialField: "sdd_index",
+        outputRelativePath: SDD_INDEX_DOC_PATH,
+        existingContent: existingSddIndex,
+        docType: "sdd",
       });
       await persistProductDoc(jobId, appId, "sdd_index", sddIndexContent, actor);
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
@@ -1079,12 +1175,12 @@ Instructions:
             appId,
             existingSdd
               ? buildSddUpdatePrompt(
-                  existingSdd,
                   dir,
                   repo.name,
                   repoContext,
                   srsExcerpt,
-                  fsdExcerpt
+                  fsdExcerpt,
+                  sddPath
                 )
               : buildSddCreatePrompt(
                   sddTemplate,
@@ -1092,13 +1188,17 @@ Instructions:
                   repo.name,
                   repoContext,
                   srsExcerpt,
-                  fsdExcerpt
+                  fsdExcerpt,
+                  sddPath
                 ),
             { isUpdate: !!existingSdd }
           );
 
-          const sddContent = await runAgentAnalyze(agent, jobId, sddPrompt, dir, {
+          const sddContent = await runAgentForDoc(agent, jobId, sddPrompt, dir, {
             partialField: "sdd",
+            outputRelativePath: sddPath,
+            existingContent: existingSdd,
+            docType: "sdd",
           });
           lastSdd = sddContent;
           const ref = await getRepoRef(dir);
@@ -1270,17 +1370,20 @@ export async function generateRepoSdd(
       const prompt = await withAdrConstraints(
         repoRow.appId,
         buildSddDiffUpdatePrompt(
-          existingSdd,
           repo.name,
           dir,
           newTag,
           changedFiles,
-          patch
+          patch,
+          sddPath
         ),
         { isUpdate: true }
       );
-      sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
+      sddContent = await runAgentForDoc(agent, jobId, prompt, dir, {
         partialField: "sdd",
+        outputRelativePath: sddPath,
+        existingContent: existingSdd,
+        docType: "sdd",
       });
     } else if (existingSdd) {
       const structure = await getRepoStructure(dir);
@@ -1289,17 +1392,20 @@ export async function generateRepoSdd(
       const prompt = await withAdrConstraints(
         repoRow.appId,
         buildSddUpdatePrompt(
-          existingSdd,
           dir,
           repo.name,
           repoContext,
           "(not available for repo-scoped run)",
-          "(not available for repo-scoped run)"
+          "(not available for repo-scoped run)",
+          sddPath
         ),
         { isUpdate: true }
       );
-      sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
+      sddContent = await runAgentForDoc(agent, jobId, prompt, dir, {
         partialField: "sdd",
+        outputRelativePath: sddPath,
+        existingContent: existingSdd,
+        docType: "sdd",
       });
     } else {
       const structure = await getRepoStructure(dir);
@@ -1313,12 +1419,16 @@ export async function generateRepoSdd(
           repo.name,
           repoContext,
           "(not available for repo-scoped run)",
-          "(not available for repo-scoped run)"
+          "(not available for repo-scoped run)",
+          sddPath
         ),
         { isUpdate: false }
       );
-      sddContent = await runAgentAnalyze(agent, jobId, prompt, dir, {
+      sddContent = await runAgentForDoc(agent, jobId, prompt, dir, {
         partialField: "sdd",
+        outputRelativePath: sddPath,
+        existingContent: null,
+        docType: "sdd",
       });
     }
 

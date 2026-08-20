@@ -1,0 +1,72 @@
+import { readExistingDoc } from "./existing-doc";
+import { stripGeneratedDocArtifacts, type GeneratedDocType } from "./generated-doc";
+import {
+  looksTruncatedDocOutput,
+  validateGeneratedDocContent,
+} from "./generated-doc-validation";
+
+const DOC_WRITTEN_RE = /^DOC_WRITTEN:\s*(.+)$/m;
+
+export interface ResolveAgentDocOutputOptions {
+  outputRelativePath?: string;
+  existingContent?: string | null;
+  /** File content before the agent run — used to detect write-tool output. */
+  fileContentBefore?: string | null;
+  docType?: GeneratedDocType;
+}
+
+/**
+ * Prefer on-disk file content when the agent wrote via tools; fall back to chat text.
+ */
+export async function resolveAgentDocOutput(
+  chatOutput: string,
+  workdir: string,
+  options: ResolveAgentDocOutputOptions
+): Promise<string> {
+  const chatDoc = stripGeneratedDocArtifacts(chatOutput.trim(), options.docType);
+
+  if (!options.outputRelativePath) {
+    return chatDoc;
+  }
+
+  const fileAfter = await readExistingDoc(
+    workdir,
+    options.outputRelativePath,
+    options.docType
+  );
+
+  if (!fileAfter?.trim()) {
+    return chatDoc;
+  }
+
+  const beforeTrim = options.fileContentBefore?.trim() ?? "";
+  const afterTrim = fileAfter.trim();
+  const fileChanged = afterTrim !== beforeTrim;
+  const agentClaimsWritten = DOC_WRITTEN_RE.test(chatOutput);
+  const chatTruncated = looksTruncatedDocOutput(chatDoc);
+  const fileTruncated = looksTruncatedDocOutput(afterTrim);
+
+  if (fileChanged && !fileTruncated) {
+    return afterTrim;
+  }
+
+  if (
+    fileAfter &&
+    !fileTruncated &&
+    (agentClaimsWritten || chatTruncated || afterTrim.length > chatDoc.length)
+  ) {
+    return afterTrim;
+  }
+
+  return chatDoc;
+}
+
+export function assertValidGeneratedDoc(
+  content: string,
+  existingContent?: string | null
+): void {
+  const result = validateGeneratedDocContent(content, existingContent);
+  if (!result.valid) {
+    throw new Error(`Document generation produced incomplete output (${result.reason})`);
+  }
+}
