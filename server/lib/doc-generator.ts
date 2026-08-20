@@ -43,6 +43,8 @@ import {
   buildSddDiffUpdatePrompt,
   buildDocFileOutputInstructions,
   buildDocFileRetryPrompt,
+  buildDocSectionUpdateInstructions,
+  buildDocSectionUpdateRetryPrompt,
   prependAdrConstraints,
   buildWikiOutlinePrompt,
   buildWikiPagePrompt,
@@ -61,6 +63,7 @@ import {
   resolveAgentDocOutput,
   assertValidGeneratedDoc,
   preferDiskDocOutput,
+  applySectionUpdateFromAgent,
   validateGeneratedDocContent,
 } from "./agent-doc-output";
 import type { GeneratedDocType } from "./generated-doc";
@@ -622,10 +625,83 @@ interface RunAgentForDocOptions {
 }
 
 /**
- * Run the agent for document generation, prefer on-disk file output over chat text,
- * validate completeness, and retry once when output looks truncated.
+ * Run the agent for document generation.
+ * - Create: agent writes the full file; validate completeness.
+ * - Update: agent returns JSON section patches; system merges into existing doc.
  */
 async function runAgentForDoc(
+  agent: Agent,
+  jobId: string,
+  prompt: string,
+  workdir: string,
+  opts: RunAgentForDocOptions
+): Promise<string> {
+  const existing = opts.existingContent?.trim();
+  if (existing) {
+    return runAgentForSectionUpdate(agent, jobId, prompt, workdir, opts, existing);
+  }
+  return runAgentForFullDocCreate(agent, jobId, prompt, workdir, opts);
+}
+
+async function runAgentForSectionUpdate(
+  agent: Agent,
+  jobId: string,
+  prompt: string,
+  workdir: string,
+  opts: RunAgentForDocOptions,
+  existingContent: string
+): Promise<string> {
+  let lastPrompt = prompt;
+  let lastContent = "";
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const chatOutput = await runAgentAnalyze(agent, jobId, lastPrompt, workdir, {
+      partialField: opts.partialField,
+    });
+
+    try {
+      lastContent = await applySectionUpdateFromAgent(
+        chatOutput,
+        workdir,
+        opts.outputRelativePath,
+        existingContent,
+        opts.docType
+      );
+    } catch {
+      // Fallback: agent returned a full document instead of section JSON.
+      lastContent = await resolveAgentDocOutput(chatOutput, workdir, {
+        outputRelativePath: opts.outputRelativePath,
+        existingContent: opts.existingContent,
+        fileContentBefore: existingContent,
+        docType: opts.docType,
+      });
+    }
+
+    const validation = validateGeneratedDocContent(lastContent, existingContent, {
+      isMergedUpdate: true,
+    });
+    if (validation.valid) {
+      return lastContent;
+    }
+
+    if (attempt === 0) {
+      lastPrompt = buildDocSectionUpdateRetryPrompt(
+        opts.outputRelativePath,
+        validation.reason ?? "invalid section update"
+      );
+      await updateJobLiveProgress(jobId, {
+        progressMessage: "Retrying section update…",
+      });
+      continue;
+    }
+
+    assertValidGeneratedDoc(lastContent, existingContent, { isMergedUpdate: true });
+  }
+
+  return lastContent;
+}
+
+async function runAgentForFullDocCreate(
   agent: Agent,
   jobId: string,
   prompt: string,
@@ -1094,7 +1170,7 @@ ${gitMetadata
 Template:
 ${gitTemplate}
 
-${buildDocFileOutputInstructions(GIT_SNAPSHOT_DOC_PATH)}
+${existingGitSnapshot ? buildDocSectionUpdateInstructions(GIT_SNAPSHOT_DOC_PATH) : buildDocFileOutputInstructions(GIT_SNAPSHOT_DOC_PATH)}
 
 Instructions:
 - Fill the snapshot table with accurate commit data for each repository.
@@ -1153,7 +1229,7 @@ ${srsContent ? srsContent.substring(0, 1200) : "(not available)"}
 Template:
 ${sddIndexTemplate}
 
-${buildDocFileOutputInstructions(SDD_INDEX_DOC_PATH)}
+${existingSddIndex ? buildDocSectionUpdateInstructions(SDD_INDEX_DOC_PATH) : buildDocFileOutputInstructions(SDD_INDEX_DOC_PATH)}
 
 Instructions:
 - SDD.md is an index only — detailed design lives in per-repo SDD files.

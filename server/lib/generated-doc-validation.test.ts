@@ -44,4 +44,18 @@ describe("validateGeneratedDocContent", () => {
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/truncated/i);
   });
+
+  it("allows merged updates that stay close to existing length", () => {
+    const existing = "x".repeat(10000);
+    const merged = existing.replace("xxxx", "yyyy"); // tiny patch, same length
+    const result = validateGeneratedDocContent(merged, existing, { isMergedUpdate: true });
+    expect(result.valid).toBe(true);
+  });
+
+  it("skips length heuristic for merged section updates", () => {
+    const existing = "# Doc\n\n## A\n\n" + "x".repeat(5000) + "\n\n## B\n\nold";
+    const merged = "# Doc\n\n## A\n\n" + "x".repeat(5000) + "\n\n## B\n\nnew short";
+    const result = validateGeneratedDocContent(merged, existing, { isMergedUpdate: true });
+    expect(result.valid).toBe(true);
+  });
 });

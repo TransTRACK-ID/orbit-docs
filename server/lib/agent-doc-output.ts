@@ -4,6 +4,13 @@ import {
   looksTruncatedDocOutput,
   validateGeneratedDocContent,
 } from "./generated-doc-validation";
+import {
+  mergeDocSectionUpdates,
+  appendRevisionHistoryRow,
+  parseDocSectionUpdatePayload,
+} from "./doc-section-merge";
+import { writeFile, mkdir } from "fs/promises";
+import { join, dirname } from "path";
 
 export { validateGeneratedDocContent };
 
@@ -65,12 +72,37 @@ export async function resolveAgentDocOutput(
 
 export function assertValidGeneratedDoc(
   content: string,
-  existingContent?: string | null
+  existingContent?: string | null,
+  options?: { isMergedUpdate?: boolean }
 ): void {
-  const result = validateGeneratedDocContent(content, existingContent);
+  const result = validateGeneratedDocContent(content, existingContent, options);
   if (!result.valid) {
     throw new Error(`Document generation produced incomplete output (${result.reason})`);
   }
+}
+
+/**
+ * Parse section-update JSON from the agent, merge into the existing document,
+ * write the merged file to disk, and return the full merged markdown.
+ */
+export async function applySectionUpdateFromAgent(
+  chatOutput: string,
+  workdir: string,
+  outputRelativePath: string,
+  existingContent: string,
+  docType?: GeneratedDocType
+): Promise<string> {
+  const payload = parseDocSectionUpdatePayload(chatOutput);
+  let merged = mergeDocSectionUpdates(existingContent, payload);
+  if (payload.revisionSummary) {
+    merged = appendRevisionHistoryRow(merged, payload.revisionSummary);
+  }
+
+  const absPath = join(workdir, outputRelativePath);
+  await mkdir(dirname(absPath), { recursive: true });
+  await writeFile(absPath, merged, "utf-8");
+
+  return stripGeneratedDocArtifacts(merged, docType);
 }
 
 /**

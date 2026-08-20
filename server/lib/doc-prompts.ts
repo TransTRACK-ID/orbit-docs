@@ -22,6 +22,34 @@ export function buildDocFileOutputInstructions(relativePath: string): string {
 5. Do NOT paste the full document in chat — the file on disk is the authoritative output.`;
 }
 
+export function buildDocSectionUpdateInstructions(relativePath: string): string {
+  return `IMPORTANT — INCREMENTAL UPDATE (do NOT rewrite the whole document):
+1. Read the existing document at \`${relativePath}\` first.
+2. Analyze the codebase and identify ONLY the sections that need changes.
+3. Output ONLY a JSON object (no markdown fences, no prose before/after) with this shape:
+{
+  "sections": [
+    {
+      "heading": "## Exact heading line from the existing document",
+      "content": "New body for this section only — do NOT repeat the heading line"
+    }
+  ],
+  "revisionSummary": "One-line summary of what changed (optional but recommended)"
+}
+4. Include ONLY sections you actually changed. Omit unchanged sections entirely.
+5. Use the exact heading text from the existing file (including numbering), e.g. "## 5. Routing & Halaman".
+6. Each section's content must be complete for that section — no placeholders or "[...]".
+7. The system will merge your patches into the existing document and append a revision-history row.
+8. Do NOT write the full file with the write tool. Do NOT paste the full document in chat.`;
+}
+
+export function buildDocSectionUpdateRetryPrompt(relativePath: string, reason: string): string {
+  return `Your previous section update failed: ${reason}.
+
+Read \`${relativePath}\` again. Output ONLY valid JSON with changed sections (see schema in the original instructions).
+Include exact heading lines from the existing file. Do not output the full document.`;
+}
+
 export function buildDocFileRetryPrompt(relativePath: string, reason: string): string {
   return `Your previous attempt failed: ${reason}.
 
@@ -89,13 +117,11 @@ An existing Product Requirements Document (PRD) was found at \`${outputRelativeP
 
 ${aggregateContext}
 
-${buildDocFileOutputInstructions(outputRelativePath)}
+${buildDocSectionUpdateInstructions(outputRelativePath)}
 
 Instructions:
-- Output the COMPLETE updated PRD (not just the changed parts).
-- Preserve the existing structure and headings.
-- Keep unchanged sections as-is.
-- Do not add a second document or duplicate headings.
+- Change only what the codebase requires — leave unaffected sections out of the JSON.
+- Preserve the existing document structure and heading names.
 - Do NOT use placeholder text.`;
 }
 
@@ -143,13 +169,11 @@ ${aggregateContext}
 Product PRD (for reference):
 ${prdExcerpt}
 
-${buildDocFileOutputInstructions(outputRelativePath)}
+${buildDocSectionUpdateInstructions(outputRelativePath)}
 
 Instructions:
-- Output the COMPLETE updated FSD (not just the changed parts).
-- Preserve the existing structure and headings.
-- Keep unchanged sections as-is.
-- Do not add a second document or duplicate headings.
+- Change only what the codebase requires — leave unaffected sections out of the JSON.
+- Preserve the existing document structure and heading names.
 - Do NOT use placeholder text.`;
 }
 
@@ -214,13 +238,11 @@ ${prdExcerpt}
 Product-level FSD (for reference):
 ${fsdExcerpt}
 
-${buildDocFileOutputInstructions(outputRelativePath)}
+${buildDocSectionUpdateInstructions(outputRelativePath)}
 
 Instructions:
-- Output the COMPLETE updated SDD (not just the changed parts).
-- Preserve the existing structure and headings.
-- Keep unchanged sections as-is.
-- Do not add a second document or duplicate headings.
+- Change only what the codebase requires — leave unaffected sections out of the JSON.
+- Preserve the existing document structure and heading names.
 - Do NOT use placeholder text.`;
 }
 
@@ -248,11 +270,11 @@ Code diff:
 ${patch}
 \`\`\`
 
-${buildDocFileOutputInstructions(outputRelativePath)}
+${buildDocSectionUpdateInstructions(outputRelativePath)}
 
 Instructions:
-- Output the COMPLETE updated SDD (not just the changed parts).
-- Preserve the existing structure and headings.
+- Change only sections affected by the code diff above.
+- Preserve the existing document structure and heading names.
 - Do NOT use placeholder text.`;
 }
 

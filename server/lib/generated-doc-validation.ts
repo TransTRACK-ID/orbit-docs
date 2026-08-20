@@ -44,7 +44,8 @@ export function looksIncompleteDocUpdate(
 
 export function validateGeneratedDocContent(
   content: string,
-  existingContent?: string | null
+  existingContent?: string | null,
+  options?: { isMergedUpdate?: boolean }
 ): { valid: boolean; reason?: string } {
   const trimmed = content.trim();
   if (!trimmed) {
@@ -53,7 +54,7 @@ export function validateGeneratedDocContent(
   if (looksTruncatedDocOutput(trimmed)) {
     return { valid: false, reason: "truncated or placeholder markers in output" };
   }
-  if (looksIncompleteDocUpdate(trimmed, existingContent ?? null)) {
+  if (!options?.isMergedUpdate && looksIncompleteDocUpdate(trimmed, existingContent ?? null)) {
     return { valid: false, reason: "updated document is much shorter than the existing version" };
   }
   return { valid: true };
