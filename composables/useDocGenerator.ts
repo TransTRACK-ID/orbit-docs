@@ -1,4 +1,5 @@
 import { toast } from "vue3-toastify";
+import { isPendingDocGenerationStatus } from "~/utils/doc-generation-status";
 
 export interface DocGenerationJob {
   id: string;
@@ -74,13 +75,24 @@ export interface DocGenerationPayload {
   scope?: "product" | "wiki";
 }
 
+export interface TrackedActiveJob {
+  appId: string;
+  jobId: string;
+  status: string;
+  progressPct: number;
+  progressMessage: string;
+  currentActivity?: string | null;
+}
+
 export const useDocGenerator = () => {
-  const jobs = ref<DocGenerationJob[]>([]);
-  const currentJob = ref<DocGenerationJob | null>(null);
-  const currentResult = ref<DocGenerationResult | null>(null);
+  const jobs = useState<DocGenerationJob[]>("doc-gen-jobs", () => []);
+  const currentJob = useState<DocGenerationJob | null>("doc-gen-current-job", () => null);
+  const currentResult = useState<DocGenerationResult | null>("doc-gen-current-result", () => null);
   const isLoading = ref(false);
   const isGenerating = ref(false);
-  const eventSource = ref<EventSource | null>(null);
+  const eventSource = useState<EventSource | null>("doc-gen-event-source", () => null);
+  const trackedAppId = useState<string | null>("doc-gen-tracked-app-id", () => null);
+  const activeJobs = useState<TrackedActiveJob[]>("doc-gen-active-jobs", () => []);
 
   async function fetchJobs(appId: string, limit?: number, offset?: number) {
     isLoading.value = true;
@@ -140,6 +152,13 @@ export const useDocGenerator = () => {
 
       currentJob.value = job;
       jobs.value.unshift(job);
+      upsertActiveJob({
+        appId,
+        jobId: job.id,
+        status: job.status,
+        progressPct: job.progressPct,
+        progressMessage: job.progressMessage,
+      });
 
       toast.success(
         payload.scope === "wiki"
@@ -163,9 +182,19 @@ export const useDocGenerator = () => {
   }
 
   function connectToProgressStream(appId: string, jobId: string) {
+    if (
+      eventSource.value &&
+      trackedAppId.value === appId &&
+      currentJob.value?.id === jobId
+    ) {
+      return eventSource.value;
+    }
+
     if (eventSource.value) {
       eventSource.value.close();
     }
+
+    trackedAppId.value = appId;
 
     const es = new EventSource(
       `/api/apps/${appId}/generate-docs/${jobId}/status`
@@ -193,9 +222,31 @@ export const useDocGenerator = () => {
           tokensOutput: data.tokensOutput ?? 0,
         } as DocGenerationJob;
 
+        const idx = jobs.value.findIndex((j) => j.id === jobId);
+        if (idx !== -1) {
+          jobs.value[idx] = {
+            ...jobs.value[idx],
+            ...currentJob.value,
+          };
+        }
+
+        if (isPendingDocGenerationStatus(data.status)) {
+          upsertActiveJob({
+            appId,
+            jobId,
+            status: data.status,
+            progressPct: data.progressPct,
+            progressMessage: data.progressMessage,
+            currentActivity: data.currentActivity ?? null,
+          });
+        } else {
+          removeActiveJob(jobId);
+        }
+
         if (data.status === "completed" || data.status === "failed") {
           es.close();
           eventSource.value = null;
+          trackedAppId.value = null;
 
           if (data.status === "completed") {
             const scope = currentJob.value?.scope;
@@ -217,6 +268,13 @@ export const useDocGenerator = () => {
     };
 
     return es;
+  }
+
+  function resumeProgressStreamIfNeeded(appId: string) {
+    const job = currentJob.value;
+    if (!job || job.appId !== appId) return;
+    if (!isPendingDocGenerationStatus(job.status)) return;
+    connectToProgressStream(appId, job.id);
   }
 
   async function cancelJob(appId: string, jobId: string) {
@@ -243,6 +301,7 @@ export const useDocGenerator = () => {
           progressMessage: "Cancelled by user",
         };
       }
+      removeActiveJob(jobId);
 
       disconnectStream();
       toast.success("Generation cancelled");
@@ -384,6 +443,7 @@ export const useDocGenerator = () => {
       eventSource.value.close();
       eventSource.value = null;
     }
+    trackedAppId.value = null;
   }
 
   function clearCurrent() {
@@ -392,15 +452,102 @@ export const useDocGenerator = () => {
     disconnectStream();
   }
 
+  function dismissFloatingIndicator() {
+    if (currentJob.value && isPendingDocGenerationStatus(currentJob.value.status)) {
+      return;
+    }
+    currentJob.value = null;
+  }
+
+  function upsertActiveJob(entry: TrackedActiveJob) {
+    const idx = activeJobs.value.findIndex((j) => j.jobId === entry.jobId);
+    if (idx === -1) {
+      activeJobs.value = [...activeJobs.value, entry];
+      return;
+    }
+    const next = [...activeJobs.value];
+    next[idx] = { ...next[idx], ...entry };
+    activeJobs.value = next;
+  }
+
+  function removeActiveJob(jobId: string) {
+    activeJobs.value = activeJobs.value.filter((j) => j.jobId !== jobId);
+  }
+
+  async function discoverAllActiveJobs(appIds: string[]) {
+    const found: TrackedActiveJob[] = [];
+
+    await Promise.all(
+      appIds.map(async (appId) => {
+        try {
+          const data = await $fetch<{ data: DocGenerationJob[] }>(
+            `/api/apps/${appId}/generate-docs`,
+            { query: { limit: "5" } }
+          );
+          const active = data.data.find((job) => isPendingDocGenerationStatus(job.status));
+          if (active) {
+            found.push({
+              appId,
+              jobId: active.id,
+              status: active.status,
+              progressPct: active.progressPct,
+              progressMessage: active.progressMessage,
+              currentActivity: active.currentActivity ?? null,
+            });
+          }
+        } catch {
+          // Skip apps we cannot read.
+        }
+      })
+    );
+
+    activeJobs.value = found;
+
+    if (found.length > 0 && !currentJob.value) {
+      const first = found[0];
+      currentJob.value = {
+        id: first.jobId,
+        appId: first.appId,
+        repoUrl: null,
+        status: first.status,
+        progressPct: first.progressPct,
+        progressMessage: first.progressMessage,
+        repoRef: null,
+        createdAt: null,
+        completedAt: null,
+        errorMessage: null,
+        currentActivity: first.currentActivity ?? null,
+      };
+    }
+
+    if (currentJob.value && isPendingDocGenerationStatus(currentJob.value.status)) {
+      resumeProgressStreamIfNeeded(currentJob.value.appId);
+    }
+
+    return found;
+  }
+
+  async function refreshAllActiveJobs(appIds: string[]) {
+    return discoverAllActiveJobs(appIds);
+  }
+
+  const hasPendingJob = computed(() => {
+    if (!currentJob.value) return false;
+    return isPendingDocGenerationStatus(currentJob.value.status);
+  });
+
   return {
     jobs,
     currentJob,
     currentResult,
+    activeJobs,
     isLoading,
     isGenerating,
+    hasPendingJob,
     fetchJobs,
     generateDocs,
     connectToProgressStream,
+    resumeProgressStreamIfNeeded,
     cancelJob,
     removeJob,
     fetchResult,
@@ -409,5 +556,8 @@ export const useDocGenerator = () => {
     fetchDebugLogs,
     disconnectStream,
     clearCurrent,
+    dismissFloatingIndicator,
+    discoverAllActiveJobs,
+    refreshAllActiveJobs,
   };
 };

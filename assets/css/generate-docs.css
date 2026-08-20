@@ -1,0 +1,47 @@
+/* Orbit Docs — Generate docs page-specific styles
+ * Styles unique to /docs/generate not covered in shared components.
+ */
+
+.generate-hint {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.btn-ghost.generate-hint {
+  color: var(--accent);
+}
+
+.btn-ghost.generate-hint:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.app-name {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Generate landing: accent hover on app cards */
+.generate-docs-landing .app-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 15%, transparent);
+}
+
+.generate-docs-landing .app-card {
+  padding: 24px;
+  gap: 12px;
+  min-height: auto;
+}
+
+.generate-docs-page .topbar {
+  align-items: center;
+  margin-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .generate-docs-landing .app-card {
+    transition: none;
+  }
+}

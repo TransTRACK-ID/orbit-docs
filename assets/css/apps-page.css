@@ -1,0 +1,314 @@
+/* Orbit Docs — Apps page-specific styles
+ * Layout and components unique to /apps.
+ */
+
+.apps-page {
+  /* Inherits global semantic tokens from :root */
+}
+
+.apps-page .page-subtitle {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.apps-page .page-masthead__actions .btn-primary {
+  flex-shrink: 0;
+}
+
+/* Apps grid: 4-column dense layout */
+.apps-page .app-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 36px;
+}
+
+/* App card identity layout */
+.apps-page .app-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.apps-page .app-card__identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.apps-page .app-card__titles {
+  min-width: 0;
+}
+
+.apps-page .app-card__name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.apps-page .app-card__meta {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.apps-page .app-card__foot {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.apps-page .app-card__links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.apps-page .cell-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+/* Version strip */
+.app-version-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: color-mix(in oklch, oklch(60% 0.16 255) 10%, var(--surface));
+  font-size: 12px;
+  color: oklch(45% 0.12 255);
+}
+
+.app-version-strip__by {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Stats bar */
+.apps-page .stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.apps-page .stat-num {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.apps-page .stat-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* Section head */
+.apps-page .section-head__copy {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.apps-page .result-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+/* Search icon inside search-wrap */
+.apps-page .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.apps-page .search-wrap .search {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+}
+
+/* Activity feed */
+.activity-section {
+  margin-top: 8px;
+}
+
+.activity-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.activity-head h2 {
+  margin: 0;
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--fg);
+}
+
+.activity-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.contributor-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.activity-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.actor-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-row {
+  text-align: center;
+  padding: 28px 16px !important;
+  color: var(--muted);
+}
+
+/* Row actions & dropdown */
+.row-action {
+  min-height: 32px;
+  padding: 6px 10px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.row-action:hover {
+  color: var(--fg);
+  background: var(--fg-soft);
+}
+
+.row-action--icon {
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+}
+
+.action-dropdown-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.actions-menu {
+  position: relative;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 168px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px color-mix(in oklch, var(--fg) 10%, transparent);
+  z-index: 20;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: var(--radius);
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dropdown-item:hover {
+  background: var(--fg-soft);
+}
+
+.dropdown-item--danger {
+  color: oklch(50% 0.16 25);
+}
+
+.dropdown-item--danger:hover {
+  background: color-mix(in oklch, oklch(55% 0.16 25) 10%, transparent);
+}
+
+/* Apps page pills: compact uppercase variant */
+.apps-page .pill {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+}
+
+.apps-page .empty-state {
+  margin-bottom: 32px;
+  gap: 0;
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .apps-page .app-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 900px) {
+  .apps-page .app-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .apps-page .page-masthead__actions .btn-primary {
+    width: 100%;
+  }
+
+  .apps-page .app-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .apps-page .app-card,
+  .dropdown-item {
+    transition: none !important;
+  }
+}

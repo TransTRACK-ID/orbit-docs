@@ -1,0 +1,114 @@
+/* Orbit Docs — Shared motion primitives
+ * Keyframes and utility classes for enter transitions, spinners, and pulses.
+ * Import before components.css so .is-spinning can reference spin.
+ */
+
+@keyframes enter-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes enter-down {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes enter-scale {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes running-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@keyframes gen-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 25%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in oklch, var(--accent) 10%, transparent);
+  }
+}
+
+@keyframes indeterminate {
+  0% { transform: translateX(-100%) scaleX(0.5); }
+  50% { transform: translateX(0%) scaleX(0.5); }
+  100% { transform: translateX(200%) scaleX(0.5); }
+}
+
+@keyframes gen-indeterminate {
+  0% { transform: translateX(-100%) scaleX(0.5); }
+  50% { transform: translateX(0%) scaleX(0.5); }
+  100% { transform: translateX(200%) scaleX(0.5); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    box-shadow: 0 0 0 3px color-mix(in oklch, oklch(60% 0.2 145) 25%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in oklch, oklch(60% 0.2 145) 10%, transparent);
+  }
+}
+
+@keyframes activity-spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-enter-up {
+  animation: enter-up 0.2s var(--easing-entrance, cubic-bezier(0.25, 1, 0.5, 1)) both;
+}
+
+.animate-enter-down {
+  animation: enter-down 0.2s var(--easing-entrance, cubic-bezier(0.25, 1, 0.5, 1)) both;
+}
+
+.animate-enter-scale {
+  animation: enter-scale 0.2s var(--easing-entrance, cubic-bezier(0.25, 1, 0.5, 1)) both;
+}
+
+.animate-spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-enter-up,
+  .animate-enter-down,
+  .animate-enter-scale,
+  .animate-spin,
+  .running-dot,
+  .gen-float-dot.active,
+  .progress-bar-fill.indeterminate,
+  .gen-float-bar-fill.indeterminate,
+  .activity-spinner,
+  .logs-dot.active {
+    animation: none !important;
+    transition: none !important;
+  }
+}

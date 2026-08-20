@@ -1,0 +1,93 @@
+/**
+ * Design tokens
+ * OKLCH palette, typography, spacing, and semantic aliases.
+ */
+
+:root {
+  --dp-font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif !important;
+
+  /* Orbit Docs palette */
+  --od-bg: oklch(98% 0.004 250);
+  --od-surface: oklch(100% 0 0);
+  --od-fg: oklch(20% 0.02 250);
+  --od-muted: oklch(55% 0.015 250);
+  --od-border: oklch(90% 0.006 250);
+  --od-accent: oklch(55% 0.16 25);
+  --od-accent-soft: color-mix(in oklch, var(--od-accent) 12%, transparent);
+  --od-fg-soft: color-mix(in oklch, var(--od-fg) 6%, transparent);
+  --od-radius: 8px;
+  --od-radius-lg: 12px;
+  --od-font-display: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  --od-font-body: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  --od-font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  /* Semantic status */
+  --od-error: oklch(55% 0.18 25);
+  --od-error-text: oklch(50% 0.16 25);
+  --od-error-soft: color-mix(in oklch, var(--od-error) 20%, transparent);
+  --od-error-bg: color-mix(in oklch, var(--od-error) 8%, transparent);
+  --od-success: oklch(60% 0.18 145);
+  --od-success-text: oklch(50% 0.14 145);
+  --od-success-soft: color-mix(in oklch, var(--od-success) 10%, transparent);
+  --od-warning: oklch(75% 0.14 85);
+  --od-warning-text: oklch(60% 0.12 85);
+  --od-info: oklch(60% 0.16 255);
+  --od-info-text: oklch(55% 0.14 255);
+
+  /* Semantic aliases */
+  --bg: var(--od-bg);
+  --surface: var(--od-surface);
+  --fg: var(--od-fg);
+  --muted: var(--od-muted);
+  --border: var(--od-border);
+  --accent: var(--od-accent);
+  --accent-soft: var(--od-accent-soft);
+  --fg-soft: var(--od-fg-soft);
+  --font-display: var(--od-font-display);
+  --font-body: var(--od-font-body);
+  --font-mono: var(--od-font-mono);
+  --radius: var(--od-radius);
+  --radius-lg: var(--od-radius-lg);
+
+  /* Layout */
+  --sidebar-w: 260px;
+  --sidebar-w-collapsed: 64px;
+  --content-max: 1200px;
+
+  /* Spacing */
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Elevation */
+  --shadow-focus: 0 0 0 3px var(--accent-soft);
+  --shadow-panel: 0 8px 32px color-mix(in oklch, var(--fg) 12%, transparent);
+  --shadow-modal-backdrop: blur(4px);
+
+  /* Motion */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --easing-entrance: cubic-bezier(0.25, 1, 0.5, 1);
+
+  /* Status rings */
+  --accent-ring: color-mix(in oklch, var(--accent) 25%, transparent);
+  --success-ring: color-mix(in oklch, oklch(60% 0.18 145) 25%, transparent);
+  --info-ring: color-mix(in oklch, oklch(60% 0.16 255) 25%, transparent);
+  --warning-ring: color-mix(in oklch, oklch(75% 0.14 85) 25%, transparent);
+  --error-ring: color-mix(in oklch, oklch(55% 0.18 25) 25%, transparent);
+}
+
+.dark {
+  --od-bg: oklch(18% 0.02 250);
+  --od-surface: oklch(24% 0.02 250);
+  --od-fg: oklch(96% 0.005 250);
+  --od-muted: oklch(60% 0.02 250);
+  --od-border: oklch(35% 0.02 250);
+  --od-accent: oklch(60% 0.18 25);
+  --od-accent-soft: color-mix(in oklch, var(--od-accent) 15%, transparent);
+  --od-fg-soft: color-mix(in oklch, var(--od-fg) 10%, transparent);
+  color-scheme: dark;
+}

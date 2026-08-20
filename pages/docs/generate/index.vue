@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
+import DocGenerationFloatingIndicator from "~/components/docs/DocGenerationFloatingIndicator.vue";
+import type { FloatingGenerationJob } from "~/components/docs/DocGenerationFloatingIndicator.vue";
+import {
+  DOC_GENERATION_STATUS_LABEL,
+} from "~/utils/doc-generation-status";
 
 definePageMeta({
   auth: true,
@@ -8,11 +13,100 @@ definePageMeta({
 const $page = usePageStore();
 const { apps, isLoading, fetchApps } = useApps();
 const router = useRouter();
+const {
+  activeJobs,
+  discoverAllActiveJobs,
+  refreshAllActiveJobs,
+  cancelJob,
+} = useDocGenerator();
 
-onMounted(() => {
+const POLL_MS = 5000;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+onMounted(async () => {
   $page.setTitle("Generate Docs");
-  fetchApps();
+  await fetchApps();
+  if (apps.value.length > 0) {
+    await discoverAllActiveJobs(apps.value.map((app) => app.id));
+    startPolling();
+  }
 });
+
+onBeforeUnmount(() => {
+  stopPolling();
+});
+
+function startPolling() {
+  stopPolling();
+  pollTimer = setInterval(async () => {
+    if (apps.value.length === 0) return;
+    await refreshAllActiveJobs(apps.value.map((app) => app.id));
+  }, POLL_MS);
+}
+
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+const appNameById = computed(() => {
+  const map: Record<string, string> = {};
+  for (const app of apps.value) map[app.id] = app.name;
+  return map;
+});
+
+const runningJobByAppId = computed(() => {
+  const map: Record<string, (typeof activeJobs.value)[number]> = {};
+  for (const job of activeJobs.value) {
+    map[job.appId] = job;
+  }
+  return map;
+});
+
+const floatingJobs = computed<FloatingGenerationJob[]>(() =>
+  activeJobs.value.map((job) => ({
+    appId: job.appId,
+    appName: appNameById.value[job.appId] || "App",
+    jobId: job.jobId,
+    status: job.status,
+    progressPct: job.progressPct,
+    progressMessage: job.progressMessage,
+    currentActivity: job.currentActivity,
+  }))
+);
+
+function isAppGenerating(appId: string) {
+  return !!runningJobByAppId.value[appId];
+}
+
+function runningPhase(appId: string) {
+  const job = runningJobByAppId.value[appId];
+  if (!job) return "";
+  return DOC_GENERATION_STATUS_LABEL[job.status] || job.status;
+}
+
+function runningPct(appId: string) {
+  return runningJobByAppId.value[appId]?.progressPct ?? 0;
+}
+
+function handleViewJob(appId: string) {
+  router.push(`/docs/generate/${appId}`);
+}
+
+async function handleCancelJob(jobId: string, appId: string) {
+  await cancelJob(appId, jobId);
+  await refreshAllActiveJobs(apps.value.map((app) => app.id));
+}
+
+watch(
+  () => activeJobs.value.length,
+  (count) => {
+    if (count > 0 && !pollTimer) startPolling();
+    if (count === 0) stopPolling();
+  }
+);
 
 function timeAgo(dateStr: string | null) {
   if (!dateStr) return "";
@@ -75,6 +169,7 @@ const statusLabel: Record<string, string> = {
         v-for="app in apps"
         :key="app.id"
         class="app-card"
+        :class="{ 'app-card--generating': isAppGenerating(app.id) }"
       >
         <div class="app-card-header">
           <div class="app-card-title-row">
@@ -90,17 +185,45 @@ const statusLabel: Record<string, string> = {
           {{ app.description }}
         </div>
 
+        <div
+          v-if="isAppGenerating(app.id)"
+          class="app-card-progress"
+          role="progressbar"
+          :aria-valuenow="runningPct(app.id)"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          :aria-label="`${runningPhase(app.id)} for ${app.name}`"
+        >
+          <div class="app-card-progress__meta">
+            <span class="app-card-progress__phase">{{ runningPhase(app.id) }}</span>
+            <span class="app-card-progress__pct">{{ runningPct(app.id) }}%</span>
+          </div>
+          <div class="app-card-progress__track">
+            <div
+              class="app-card-progress__fill"
+              :style="{ width: `${runningPct(app.id)}%` }"
+            />
+          </div>
+        </div>
+
         <div class="app-card-foot">
           <NuxtLink
             :to="`/docs/generate/${app.id}`"
             class="generate-hint btn btn-ghost btn-sm"
             @click.stop
           >
-            Generate docs &rarr;
+            {{ isAppGenerating(app.id) ? "View progress" : "Generate docs" }} &rarr;
           </NuxtLink>
         </div>
       </div>
     </div>
+
+    <DocGenerationFloatingIndicator
+      :jobs="floatingJobs"
+      can-cancel
+      @view-job="handleViewJob"
+      @cancel="handleCancelJob"
+    />
   </div>
 </template>
 
@@ -149,8 +272,7 @@ const statusLabel: Record<string, string> = {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 24px;
-  transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -158,8 +280,15 @@ const statusLabel: Record<string, string> = {
 }
 
 .app-card:hover {
-  border-color: var(--accent);
-  box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 15%, transparent);
+  border-color: color-mix(in oklch, var(--fg) 18%, var(--border));
+}
+
+.app-card--generating {
+  border-color: color-mix(in oklch, oklch(60% 0.16 255) 28%, var(--border));
+}
+
+.app-card--generating:hover {
+  border-color: color-mix(in oklch, oklch(60% 0.16 255) 40%, var(--border));
 }
 
 .app-card-header {
@@ -198,6 +327,50 @@ const statusLabel: Record<string, string> = {
   overflow: hidden;
 }
 
+.app-card-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.app-card-progress__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.app-card-progress__phase {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+
+.app-card-progress__pct {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 600;
+  color: oklch(55% 0.14 255);
+}
+
+.app-card-progress__track {
+  width: 100%;
+  height: 4px;
+  background: color-mix(in oklch, var(--fg) 8%, transparent);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.app-card-progress__fill {
+  height: 100%;
+  background: oklch(60% 0.16 255);
+  border-radius: 999px;
+  transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
 .app-card-foot {
   margin-top: auto;
   padding-top: 12px;
@@ -218,6 +391,7 @@ const statusLabel: Record<string, string> = {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 500;
+  flex-shrink: 0;
 }
 
 .pill-green {
@@ -293,7 +467,8 @@ const statusLabel: Record<string, string> = {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .app-card {
+  .app-card,
+  .app-card-progress__fill {
     transition: none;
   }
 }

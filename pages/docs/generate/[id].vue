@@ -4,8 +4,11 @@ import DocGeneratorForm from "~/components/docs/DocGeneratorForm.vue";
 import DocResultViewer from "~/components/docs/DocResultViewer.vue";
 import DocGenerationShareDrawer from "~/components/docs/DocGenerationShareDrawer.vue";
 import RepositoryManager from "~/components/docs/RepositoryManager.vue";
+import DocGenerationFloatingIndicator from "~/components/docs/DocGenerationFloatingIndicator.vue";
+import type { FloatingGenerationJob } from "~/components/docs/DocGenerationFloatingIndicator.vue";
 import type { DocGenerationJob } from "~/composables/useDocGenerator";
 import { isWikiGenerationJob, wikiOverviewPathFromJob } from "~/utils/wiki-generation";
+import { isPendingDocGenerationStatus } from "~/utils/doc-generation-status";
 
 definePageMeta({
   auth: true,
@@ -116,7 +119,7 @@ const {
   removeJob,
   fetchResult,
   fetchDebugLogs,
-  clearCurrent,
+  resumeProgressStreamIfNeeded,
 } = useDocGenerator();
 
 // Fetch app info for display
@@ -142,13 +145,37 @@ onMounted(() => {
   loadAppInfo();
   fetchRepositories(appId);
   fetchJobs(appId);
+  resumeProgressStreamIfNeeded(appId);
   if (canRunDocGeneration.value) {
     fetchSchedule();
   }
 });
 
-onBeforeUnmount(() => {
-  clearCurrent();
+const progressSectionEl = ref<HTMLElement | null>(null);
+
+function scrollToProgressSection() {
+  progressSectionEl.value?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function handleFloatingCancel(jobId: string, _appId: string) {
+  await handleCancel(jobId);
+}
+
+const floatingJobs = computed<FloatingGenerationJob[]>(() => {
+  if (!currentJob.value || !isPendingDocGenerationStatus(currentJob.value.status)) {
+    return [];
+  }
+  return [
+    {
+      appId,
+      appName: appInfo.value?.name || "App",
+      jobId: currentJob.value.id,
+      status: currentJob.value.status,
+      progressPct: currentJob.value.progressPct,
+      progressMessage: currentJob.value.progressMessage,
+      currentActivity: currentJob.value.currentActivity,
+    },
+  ];
 });
 
 // ── Submitting state shown before API returns ──────────────────
@@ -611,7 +638,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
     </div>
 
     <!-- ─── Progress + Agent Logs panel ─────────────────────────── -->
-    <div v-if="showProgress" class="progress-section">
+    <div v-if="showProgress" ref="progressSectionEl" class="progress-section">
       <h2>Generation Progress</h2>
 
       <!-- Submitting skeleton (before API returns) -->
@@ -949,6 +976,14 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
         </tbody>
       </GeneralDataTable>
     </div>
+
+    <DocGenerationFloatingIndicator
+      :jobs="floatingJobs"
+      :is-submitting="isSubmitting"
+      :can-cancel="canRunDocGeneration"
+      @view-job="scrollToProgressSection"
+      @cancel="handleFloatingCancel"
+    />
   </div>
 </template>
 
