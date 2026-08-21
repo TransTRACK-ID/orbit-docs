@@ -120,6 +120,40 @@ export default defineNitroPlugin(async () => {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS docs_site_id_idx ON docs (site_id)`);
 
+  // pgvector for semantic doc chunk search
+  try {
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+  } catch (err: any) {
+    console.warn("[db-init] pgvector extension unavailable:", err.message);
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_chunks (
+      id TEXT PRIMARY KEY,
+      doc_id TEXT NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
+      app_id TEXT REFERENCES apps(id) ON DELETE CASCADE,
+      doc_type TEXT,
+      heading TEXT NOT NULL,
+      chunk_index INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      embedding vector(1536),
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      UNIQUE (doc_id, chunk_index)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS doc_chunks_app_doc_type_idx ON doc_chunks (app_id, doc_type)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS doc_chunks_doc_id_idx ON doc_chunks (doc_id)`);
+  try {
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS doc_chunks_embedding_hnsw_idx
+      ON doc_chunks USING hnsw (embedding vector_cosine_ops)
+    `);
+  } catch (err: any) {
+    console.warn("[db-init] doc_chunks HNSW index skipped:", err.message);
+  }
+
   // OpenAPI site generation columns
   await pool.query(`ALTER TABLE doc_sites ADD COLUMN IF NOT EXISTS openapi_spec TEXT`);
   await pool.query(`ALTER TABLE doc_sites ADD COLUMN IF NOT EXISTS openapi_format TEXT`);
@@ -402,6 +436,20 @@ export default defineNitroPlugin(async () => {
     )
   `);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS doc_generation_schedule_app_id_unique ON doc_generation_schedule (app_id)`);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS doc_embedding_schedule (
+      id TEXT PRIMARY KEY,
+      app_id TEXT NOT NULL REFERENCES apps(id) ON DELETE CASCADE,
+      schedule_enabled BOOLEAN NOT NULL DEFAULT false,
+      last_run_at TIMESTAMP WITH TIME ZONE,
+      last_run_status TEXT NOT NULL DEFAULT 'idle',
+      last_run_result JSONB,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS doc_embedding_schedule_app_id_unique ON doc_embedding_schedule (app_id)`);
 
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS share_token TEXT`);
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS share_enabled BOOLEAN NOT NULL DEFAULT false`);

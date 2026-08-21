@@ -7,6 +7,7 @@ import {
   docGenerationVersions,
 } from "~/server/database/schema";
 import { and, desc, eq } from "drizzle-orm";
+import { onDocContentSaved } from "~/server/lib/doc-embedding-hooks";
 
 export type AppProductDocType = "srs" | "fsd" | "git_snapshot" | "sdd";
 export type GenerationProductDocType = "srs" | "fsd" | "git_snapshot" | "sdd_index";
@@ -185,6 +186,8 @@ export async function saveAppProductDoc(
       action: "Generated doc updated",
       actor,
     });
+
+    onDocContentSaved({ id: existing.id, docType, content: trimmed });
     return;
   }
 
@@ -216,4 +219,6 @@ export async function saveAppProductDoc(
     action: "Generated doc created",
     actor,
   });
+
+  onDocContentSaved({ id: doc.id, docType, content: trimmed });
 }

@@ -12,6 +12,7 @@ import {
   validateFeatureRow,
 } from "~/server/lib/feature-docs";
 import { archiveMissingFeatureDocs } from "~/server/lib/feature-doc-search";
+import { onDocContentSaved } from "~/server/lib/doc-embedding-hooks";
 
 export interface SyncFeatureOptions {
   archiveMissing?: boolean;
@@ -162,6 +163,12 @@ export async function syncFeaturesToOrbit(
         actor: feature.author,
       });
 
+      onDocContentSaved({
+        id: updated.id,
+        docType: updated.docType,
+        content: updated.content,
+      });
+
       response.updated += 1;
       response.results.push({
         feature_id: feature.feature_id,
@@ -204,6 +211,12 @@ export async function syncFeaturesToOrbit(
       appName: feature.feature_name,
       action: "Feature doc created (OP sync)",
       actor: feature.author,
+    });
+
+    onDocContentSaved({
+      id: created.id,
+      docType: created.docType,
+      content: created.content,
     });
 
     response.created += 1;

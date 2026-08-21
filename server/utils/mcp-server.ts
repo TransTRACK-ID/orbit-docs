@@ -13,7 +13,7 @@ import {
   formatMcpDoc,
   type McpDocRow,
 } from "~/server/lib/mcp-doc-payload";
-import { searchDocsContent } from "~/server/lib/doc-content-search";
+import { searchDocsContentHybrid } from "~/server/lib/doc-content-search";
 import { runAskWorkflowAnswer } from "~/server/lib/ask-workflow";
 import {
   listFeatureDocIndex,
@@ -513,7 +513,8 @@ const TOOLS: Tool[] = [
   {
     name: "search_docs_content",
     description:
-      "Full-text search inside doc content (not just titles). Supports product/knowledge filtering to match /docs views.",
+      "Hybrid semantic + keyword search inside doc content (feature, SDD, wiki chunks + ILIKE for other types). " +
+      "Supports product/knowledge filtering to match /docs views.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1506,15 +1507,15 @@ mcpServer.setRequestHandler(
             };
           }
 
-          const { results, total } = await searchDocsContent({
+          const { results, total, searchMode } = await searchDocsContentHybrid({
             appId: app.id ?? undefined,
             query: params.query,
             category: params.category,
             limit: params.limit,
           });
 
-          const data = results.map((row) =>
-            formatMcpDoc(
+          const data = results.map((row) => ({
+            ...formatMcpDoc(
               {
                 id: row.id,
                 appId: app.id,
@@ -1540,7 +1541,10 @@ mcpServer.setRequestHandler(
               } as McpDocRow,
               { includeContent: true },
             ),
-          );
+            ...(row.heading ? { heading: row.heading } : {}),
+            ...(row.chunkId ? { chunkId: row.chunkId } : {}),
+            ...(row.score != null ? { score: row.score } : {}),
+          }));
 
           return {
             content: [
@@ -1549,6 +1553,7 @@ mcpServer.setRequestHandler(
                 text: JSON.stringify(
                   {
                     app: app.found ? { id: app.id, name: app.name } : null,
+                    searchMode,
                     total,
                     count: data.length,
                     data,

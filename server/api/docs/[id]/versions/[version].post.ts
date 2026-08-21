@@ -4,6 +4,7 @@ import { docs, docVersions, activityLogs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
 import { createDocVersionSnapshot } from "~/server/lib/doc-version-snapshot";
+import { onDocContentSaved } from "~/server/lib/doc-embedding-hooks";
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event);
@@ -83,6 +84,12 @@ export default defineEventHandler(async (event) => {
     appName: existing.title,
     action: `Restored version ${versionRow.version}`,
     actor: getActorName(user),
+  });
+
+  onDocContentSaved({
+    id: updatedRow.id,
+    docType: existing.docType,
+    content: updatedRow.content,
   });
 
   return { data: updatedRow };

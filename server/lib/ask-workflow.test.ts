@@ -20,6 +20,10 @@ vi.mock("~/server/lib/doc-content-search", () => ({
   searchDocsContent: vi.fn(),
 }));
 
+vi.mock("~/server/lib/doc-chunk-search", () => ({
+  searchDocChunksHybrid: vi.fn(),
+}));
+
 vi.mock("~/server/lib/adr-queries", () => ({
   extractDecisionSection: vi.fn((c: string) => c),
   formatAdrConstraintSummary: vi.fn(() => "BINDING ADRs:\n- ADR-001: Use JWT"),
@@ -110,6 +114,28 @@ describe("dedupeAndBudgetSources", () => {
     expect(result[0].id).toBe("d1");
   });
 
+  it("keeps distinct sections from the same doc", () => {
+    const sources: AskRetrievedSource[] = [
+      {
+        id: "d1",
+        title: "SDD › Outbox",
+        content: "outbox body",
+        docType: "sdd",
+        citationRef: "[doc:d1]",
+        sectionHeading: "Outbox",
+      },
+      {
+        id: "d1",
+        title: "SDD › Auth",
+        content: "auth body",
+        docType: "sdd",
+        citationRef: "[doc:d1]",
+        sectionHeading: "Auth",
+      },
+    ];
+    expect(dedupeAndBudgetSources(sources)).toHaveLength(2);
+  });
+
   it("truncates when over budget", () => {
     const huge = "x".repeat(100_000);
     const sources: AskRetrievedSource[] = [
@@ -171,8 +197,16 @@ describe("buildAskSynthesisPrompt", () => {
 });
 
 describe("executeAskRetrieval", () => {
+  const originalSemantic = process.env.SEMANTIC_SEARCH;
+
   beforeEach(() => {
     vi.resetModules();
+    process.env.SEMANTIC_SEARCH = "false";
+  });
+
+  afterEach(() => {
+    if (originalSemantic === undefined) delete process.env.SEMANTIC_SEARCH;
+    else process.env.SEMANTIC_SEARCH = originalSemantic;
   });
 
   it("routes feature searches to searchFeatureDocs", async () => {

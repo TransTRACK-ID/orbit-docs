@@ -1517,7 +1517,8 @@ function getCallbackUrl(provider: SsoProvider): string {
               <h3>Sync</h3>
               <p class="desc">
                 Run a manual import or enable automatic sync on a schedule. The schedule interval
-                applies to Notion sync and scheduled doc generation on Generate Docs pages.
+                applies to Notion sync, scheduled doc generation on Generate Docs pages, and
+                scheduled semantic indexing on the Docs page (per app).
               </p>
 
               <div class="toggle" style="margin-bottom: 20px;">
@@ -1533,7 +1534,7 @@ function getCallbackUrl(provider: SsoProvider): string {
                   <div class="toggle-desc">
                     {{
                       notionForm.scheduleEnabled
-                        ? `Runs ${notionForm.scheduleInterval === 'hourly' ? 'every hour' : 'once per day'} for Notion and enabled Generate Docs apps`
+                        ? `Runs ${notionForm.scheduleInterval === 'hourly' ? 'every hour' : 'once per day'} for Notion, enabled Generate Docs apps, and enabled semantic index apps`
                         : 'Off — sync only when you run it manually'
                     }}
                   </div>

@@ -2,6 +2,15 @@ import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getDb } from "~/server/database";
 import { docs } from "~/server/database/schema";
 import { isBindingAdrDoc } from "~/server/lib/adr-queries";
+import { searchDocChunksHybrid } from "~/server/lib/doc-chunk-search";
+import {
+  indexableDocTypesForCategory,
+  isIndexableDocType,
+} from "~/server/lib/doc-chunking";
+import {
+  hasEmbeddingApiKey,
+  isSemanticSearchEnabled,
+} from "~/server/lib/doc-embeddings";
 import { docCategoryCondition } from "~/server/lib/mcp-doc-queries";
 
 export interface DocContentSearchResult {
@@ -13,7 +22,12 @@ export interface DocContentSearchResult {
   externalId: string | null;
   frontmatter?: Record<string, unknown> | null;
   binding?: boolean;
+  heading?: string;
+  chunkId?: string;
+  score?: number;
 }
+
+export type DocContentSearchMode = "hybrid" | "keyword";
 
 export async function searchDocsContent(params: {
   appId?: string;
@@ -103,5 +117,83 @@ export async function searchDocsContent(params: {
   return {
     results,
     total: totalResult[0]?.count ?? results.length,
+  };
+}
+
+export async function searchDocsContentHybrid(params: {
+  appId?: string;
+  query: string;
+  docTypes?: string[];
+  category?: "product" | "knowledge";
+  publishedOnly?: boolean;
+  limit?: number;
+}): Promise<{
+  results: DocContentSearchResult[];
+  total: number;
+  searchMode: DocContentSearchMode;
+}> {
+  const limit = params.limit ?? 10;
+  const query = params.query.trim();
+
+  if (
+    !query ||
+    !params.appId ||
+    !isSemanticSearchEnabled() ||
+    !hasEmbeddingApiKey()
+  ) {
+    const legacy = await searchDocsContent(params);
+    return { ...legacy, searchMode: "keyword" };
+  }
+
+  const indexableTypes = indexableDocTypesForCategory(params.category).filter(
+    (type) => !params.docTypes?.length || params.docTypes.includes(type),
+  );
+
+  const chunkRows =
+    indexableTypes.length > 0
+      ? await searchDocChunksHybrid({
+          appId: params.appId,
+          query,
+          docTypes: indexableTypes,
+          publishedOnly: params.publishedOnly,
+          limit,
+        })
+      : [];
+
+  const chunkResults: DocContentSearchResult[] = chunkRows.map((row) => ({
+    id: row.docId,
+    title: `${row.title} › ${row.heading}`,
+    content: row.content,
+    docType: row.docType,
+    status: "published",
+    externalId: null,
+    heading: row.heading,
+    chunkId: row.chunkId,
+    score: row.score,
+  }));
+
+  const nonIndexableDocTypes = params.docTypes?.filter((type) => !isIndexableDocType(type));
+
+  const keywordSupplement = await searchDocsContent({
+    ...params,
+    docTypes: nonIndexableDocTypes?.length ? nonIndexableDocTypes : undefined,
+    limit: Math.max(limit - chunkResults.length, 0) || limit,
+  });
+
+  const filteredKeyword = keywordSupplement.results.filter(
+    (row) => !isIndexableDocType(row.docType),
+  );
+
+  if (chunkResults.length === 0 && filteredKeyword.length === 0) {
+    const fallback = await searchDocsContent(params);
+    return { ...fallback, searchMode: "keyword" };
+  }
+
+  const merged = [...chunkResults, ...filteredKeyword].slice(0, limit);
+
+  return {
+    results: merged,
+    total: merged.length,
+    searchMode: chunkResults.length > 0 ? "hybrid" : "keyword",
   };
 }

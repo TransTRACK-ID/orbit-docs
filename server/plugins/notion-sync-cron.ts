@@ -4,6 +4,7 @@ import {
   isSyncIntervalDue,
 } from "~/server/lib/sync-schedule";
 import { runScheduledDocGenerations } from "~/server/lib/doc-generation-schedule";
+import { runScheduledEmbeddingIndexes } from "~/server/lib/doc-embedding-schedule";
 
 export default defineNitroPlugin(() => {
   const tick = async () => {
@@ -24,6 +25,7 @@ export default defineNitroPlugin(() => {
       }
 
       await runScheduledDocGenerations();
+      await runScheduledEmbeddingIndexes();
     } catch (err: any) {
       console.warn("[sync-cron]", err?.message || err);
     }

@@ -6,6 +6,7 @@ import { requirePermission } from "~/server/utils/rbac";
 import { getActorName } from "~/server/utils/auth";
 import { createDocVersionSnapshot, isValidDocVersionAction } from "~/server/lib/doc-version-snapshot";
 import { syncAdrContentWithFrontmatter } from "~/server/lib/adr-queries";
+import { onDocContentSaved } from "~/server/lib/doc-embedding-hooks";
 import { parseFrontmatter } from "~/composables/useMarkdown";
 import {
   isForbiddenWikiDocStatus,
@@ -188,6 +189,12 @@ export default defineEventHandler(async (event) => {
     appName: updatedRow.title,
     action: "Doc updated",
     actor: updatedRow.author || getActorName(user),
+  });
+
+  onDocContentSaved({
+    id: updatedRow.id,
+    docType: updatedRow.docType,
+    content: updatedRow.content,
   });
 
   return {

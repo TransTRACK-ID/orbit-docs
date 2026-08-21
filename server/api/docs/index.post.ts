@@ -5,6 +5,8 @@ import { eq, and, desc } from "drizzle-orm";
 import { getActorName } from "~/server/utils/auth";
 import { requirePermission } from "~/server/utils/rbac";
 import { isForbiddenWikiDocStatus, isWikiDoc, WIKI_PUBLISH_BLOCKED_MESSAGE } from "~/utils/wiki-content";
+import { onDocContentSaved } from "~/server/lib/doc-embedding-hooks";
+import { parseFrontmatter } from "~/composables/useMarkdown";
 
 const VALID_STATUSES = ["draft", "in_review", "published", "archived"] as const;
 
@@ -110,6 +112,12 @@ export default defineEventHandler(async (event) => {
         actor: updated.author || getActorName(user),
       });
 
+      onDocContentSaved({
+        id: updated.id,
+        docType: updated.docType,
+        content: updated.content,
+      });
+
       return { data: updated };
     }
   }
@@ -149,6 +157,12 @@ export default defineEventHandler(async (event) => {
     appName: doc.title,
     action: "Doc created",
     actor: doc.author || getActorName(user),
+  });
+
+  onDocContentSaved({
+    id: doc.id,
+    docType: doc.docType,
+    content: doc.content,
   });
 
   return { data: doc };

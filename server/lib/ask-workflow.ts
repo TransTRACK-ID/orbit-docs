@@ -10,6 +10,8 @@ import {
   type AdrDocRow,
 } from "~/server/lib/adr-queries";
 import { createChatAgent } from "~/server/lib/agent-factory";
+import { searchDocChunksHybrid } from "~/server/lib/doc-chunk-search";
+import { isSemanticSearchEnabled } from "~/server/lib/doc-embeddings";
 import { searchDocsContent } from "~/server/lib/doc-content-search";
 import { searchFeatureDocs } from "~/server/lib/feature-doc-search";
 import { getCustomOpenAI } from "~/server/lib/openai";
@@ -70,6 +72,8 @@ export interface AskRetrievedSource {
   docType: string | null;
   citationRef: string;
   adrNumber?: number | null;
+  /** Section heading when retrieval is chunk-level (semantic search). */
+  sectionHeading?: string;
 }
 
 export interface AskWorkflowContextResult {
@@ -342,8 +346,58 @@ async function executeSingleSearch(
     docTypes.length === 0 || docTypes.includes("feature");
   const nonFeatureTypes = docTypes.filter((t) => t !== "feature" && t !== "adr");
   const wantsAdrInContent = docTypes.includes("adr") && !item.bindingOnly;
+  const wantsChunkSearch =
+    isSemanticSearchEnabled() &&
+    (wantsFeature ||
+      nonFeatureTypes.includes("sdd") ||
+      nonFeatureTypes.includes("wiki") ||
+      (docTypes.length === 0 && !item.bindingOnly));
 
-  if (wantsFeature) {
+  if (wantsChunkSearch) {
+    const chunkDocTypes: string[] = [];
+    if (wantsFeature || docTypes.length === 0) chunkDocTypes.push("feature");
+    if (nonFeatureTypes.includes("sdd") || docTypes.length === 0) chunkDocTypes.push("sdd");
+    if (nonFeatureTypes.includes("wiki") || docTypes.length === 0) chunkDocTypes.push("wiki");
+
+    const chunkRows = await searchDocChunksHybrid({
+      appId,
+      query: item.query,
+      docTypes: chunkDocTypes,
+      publishedOnly: options.publishedOnly,
+      limit,
+    });
+
+    if (chunkRows.length > 0) {
+      for (const row of chunkRows) {
+        results.push({
+          id: row.docId,
+          title: `${row.title} › ${row.heading}`,
+          content: row.content.trim(),
+          docType: row.docType,
+          citationRef: docCitationRef(row.docId),
+          sectionHeading: row.heading,
+        });
+      }
+    } else if (wantsFeature) {
+      const featureRows = await searchFeatureDocs({
+        appId,
+        query: item.query,
+        module: item.module,
+        publishedOnly: options.publishedOnly,
+        limit,
+      });
+
+      for (const row of featureRows) {
+        results.push({
+          id: row.id,
+          title: row.title,
+          content: row.content?.trim() || "",
+          docType: "feature",
+          citationRef: docCitationRef(row.id),
+        });
+      }
+    }
+  } else if (wantsFeature) {
     const featureRows = await searchFeatureDocs({
       appId,
       query: item.query,
@@ -368,7 +422,15 @@ async function executeSingleSearch(
     contentDocTypes.push("adr");
   }
 
-  if (contentDocTypes.length > 0 || (!wantsFeature && docTypes.length === 0)) {
+  const skipFullDocSearchForChunkTypes =
+    wantsChunkSearch &&
+    results.some((r) => r.sectionHeading) &&
+    !contentDocTypes.some((t) => t !== "sdd" && t !== "feature" && t !== "wiki");
+
+  if (
+    !skipFullDocSearchForChunkTypes &&
+    (contentDocTypes.length > 0 || (!wantsFeature && docTypes.length === 0))
+  ) {
     const { results: contentRows } = await searchDocsContent({
       appId,
       query: item.query,
@@ -411,8 +473,11 @@ export function dedupeAndBudgetSources(sources: AskRetrievedSource[]): AskRetrie
   const deduped: AskRetrievedSource[] = [];
 
   for (const source of sources) {
-    if (seen.has(source.id)) continue;
-    seen.add(source.id);
+    const dedupeKey = source.sectionHeading
+      ? `${source.id}:${source.sectionHeading}`
+      : source.id;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
     deduped.push(source);
   }
 

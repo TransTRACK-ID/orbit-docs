@@ -118,6 +118,13 @@ const docLoading = ref(false);
 const docNotFound = ref(false);
 const rightSidebarTab = ref<'properties' | 'versions'>('properties');
 const restoreConfirmVisible = ref(false);
+const embeddingStatus = ref<{
+  status: string;
+  chunkCount: number;
+  lastIndexedAt: string | null;
+  indexable: boolean;
+} | null>(null);
+const embeddingStatusLoading = ref(false);
 const versionToRestore = ref<any>(null);
 const isRestoring = ref(false);
 const autosaveReady = ref(false);
@@ -126,6 +133,27 @@ const isPublishing = ref(false);
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 const isPublished = computed(() => editorStatus.value === "published");
+
+const showEmbeddingPanel = computed(() => {
+  const docType = currentDoc.value?.docType;
+  return docType === "feature" || docType === "sdd" || docType === "wiki";
+});
+
+const embeddingStatusLabel = computed(() => {
+  if (!embeddingStatus.value) return "Checking…";
+  switch (embeddingStatus.value.status) {
+    case "indexed":
+      return `Indexed (${embeddingStatus.value.chunkCount} chunks)`;
+    case "pending":
+      return "Pending index";
+    case "stale":
+      return "Stale — re-index on save";
+    case "no_api_key":
+      return "No embedding API key";
+    default:
+      return "Not indexed";
+  }
+});
 
 const hasEditorChanges = computed(() => {
   if (docLoading.value || docNotFound.value || !currentDoc.value) return false;
@@ -379,6 +407,7 @@ async function doPublish() {
     }
     markClean();
     await fetchDocVersions(docId.value);
+    void fetchEmbeddingStatus();
   } finally {
     isPublishing.value = false;
   }
@@ -397,6 +426,7 @@ async function flushEditorChanges(options: { silent?: boolean } = { silent: true
       options,
     );
     markClean();
+    void fetchEmbeddingStatus();
   }
 }
 
@@ -599,6 +629,29 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
   }
 }
 
+async function fetchEmbeddingStatus() {
+  if (!docId.value || !showEmbeddingPanel.value) {
+    embeddingStatus.value = null;
+    return;
+  }
+  embeddingStatusLoading.value = true;
+  try {
+    const res = await $fetch<{
+      data: {
+        status: string;
+        chunkCount: number;
+        lastIndexedAt: string | null;
+        indexable: boolean;
+      };
+    }>(`/api/docs/${docId.value}/embedding-status`);
+    embeddingStatus.value = res.data;
+  } catch {
+    embeddingStatus.value = null;
+  } finally {
+    embeddingStatusLoading.value = false;
+  }
+}
+
 async function loadDoc() {
   if (!docId.value) return;
   autosaveReady.value = false;
@@ -627,6 +680,7 @@ async function loadDoc() {
       docNotFound.value = true;
     }
     await fetchDocVersions(docId.value);
+    await fetchEmbeddingStatus();
   } catch {
     docNotFound.value = true;
   } finally {
@@ -980,6 +1034,32 @@ const lastModified = computed(() => {
                       @blur="finishAddTag"
                       @keydown="onTagKeydown"
                     />
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="showEmbeddingPanel" class="props-section">
+                <div class="props-section-label">Semantic search</div>
+                <div
+                  class="embed-status"
+                  :class="[
+                    embeddingStatus?.status ? `embed-status--${embeddingStatus.status}` : '',
+                    { 'embed-status--loading': embeddingStatusLoading },
+                  ]"
+                >
+                  <span class="embed-status-dot" aria-hidden="true" />
+                  <div class="embed-status-copy">
+                    <span class="embed-status-label">{{ embeddingStatusLabel }}</span>
+                    <span
+                      v-if="embeddingStatus?.lastIndexedAt"
+                      class="embed-status-meta"
+                    >
+                      Last indexed
+                      {{ new Date(embeddingStatus.lastIndexedAt).toLocaleString() }}
+                    </span>
+                    <span v-else class="embed-status-meta">
+                      Chunks power Ask workflow and MCP hybrid search.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1952,6 +2032,66 @@ const lastModified = computed(() => {
   border-color: color-mix(in oklch, oklch(45% 0.12 145) 35%, var(--border));
   color: oklch(45% 0.12 145);
   background: oklch(97% 0.03 145);
+}
+
+.embed-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.embed-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-top: 4px;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+
+.embed-status-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.embed-status-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.embed-status-meta {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.embed-status--indexed .embed-status-dot {
+  background: oklch(45% 0.12 145);
+}
+
+.embed-status--pending .embed-status-dot,
+.embed-status--stale .embed-status-dot {
+  background: oklch(55% 0.14 75);
+}
+
+.embed-status--no_api_key .embed-status-dot {
+  background: oklch(50% 0.02 260);
+}
+
+.embed-status--loading .embed-status-dot {
+  animation: embed-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes embed-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
 
 .field-row {

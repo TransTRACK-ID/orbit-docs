@@ -46,6 +46,52 @@ const siteFilter = ref((route.query.siteId as string) || "");
 const statusFilter = ref("");
 const docView = ref<DocListView>("all");
 
+const embeddingScheduleAppId = computed(() => appFilter.value || "");
+const {
+  settings: embeddingScheduleSettings,
+  isLoading: isLoadingEmbeddingSchedule,
+  isSaving: isSavingEmbeddingSchedule,
+  isRunning: isRunningEmbeddingSchedule,
+  fetchSchedule: fetchEmbeddingSchedule,
+  toggleSchedule: toggleEmbeddingSchedule,
+  runNow: runEmbeddingIndexNow,
+} = useDocEmbeddingSchedule(embeddingScheduleAppId);
+
+const embeddingScheduleIntervalLabel = computed(() => {
+  const interval = embeddingScheduleSettings.value?.workspaceSchedule.interval;
+  return interval === "hourly" ? "setiap jam" : "sekali sehari";
+});
+
+const embeddingScheduleActive = computed(() => {
+  return (
+    !!embeddingScheduleSettings.value?.scheduleEnabled &&
+    !!embeddingScheduleSettings.value?.workspaceSchedule.enabled
+  );
+});
+
+const embeddingScheduleHint = computed(() => {
+  if (!appFilter.value) return "";
+  if (!embeddingScheduleSettings.value) return "";
+  if (!embeddingScheduleSettings.value.semanticSearchEnabled) {
+    return "Semantic search dinonaktifkan (SEMANTIC_SEARCH=false).";
+  }
+  if (!embeddingScheduleSettings.value.hasApiKey) {
+    return "Set OPENAI_API_KEY di server untuk indexing embedding.";
+  }
+  if (!embeddingScheduleSettings.value.workspaceSchedule.enabled) {
+    return "Scheduled sync workspace mati. Aktifkan di Settings → Integrations → Sync.";
+  }
+  if (!embeddingScheduleSettings.value.scheduleEnabled) {
+    return "Index terjadwal mati untuk app ini.";
+  }
+  return `Mengindex dokumen pending/stale ${embeddingScheduleIntervalLabel.value} (feature, SDD, wiki). Save tetap auto-index via EMBED_ON_SAVE.`;
+});
+
+function formatEmbeddingScheduleTime(iso: string | null | undefined) {
+  if (!iso) return "Belum pernah";
+  return new Date(iso).toLocaleString();
+}
+
 const docViewOptions: { id: DocListView; label: string }[] = [
   { id: "all", label: "Semua jenis" },
   { id: "product", label: "Dokumentasi produk" },
@@ -101,6 +147,9 @@ onMounted(async () => {
     siteId: siteFilter.value || undefined,
     status: statusFilter.value || undefined,
   });
+  if (appFilter.value) {
+    void fetchEmbeddingSchedule();
+  }
   document.addEventListener("keydown", onKeydown);
 });
 
@@ -126,6 +175,8 @@ watch(siteFilter, (siteId) => {
 
 watch(appFilter, (appId) => {
   createForm.appId = appId;
+  if (appId) void fetchEmbeddingSchedule();
+  else embeddingScheduleSettings.value = null;
 });
 
 const showCreateModal = ref(false);
@@ -539,6 +590,74 @@ watch(docs, () => {
         <span class="stat-num num">{{ pageStats.systems }}</span>
         <span class="stat-label">Sistem</span>
       </div>
+    </div>
+
+    <div
+      v-if="appFilter && canWriteDocs"
+      class="embedding-schedule-section"
+    >
+      <div class="embedding-schedule-header">
+        <div>
+          <h2>Index semantik terjadwal</h2>
+          <p class="embedding-schedule-desc">
+            Catch-up otomatis untuk dokumen feature, SDD, dan wiki yang belum atau perlu re-index.
+            Menggunakan jadwal workspace yang sama dengan Notion sync dan Generate Docs.
+          </p>
+        </div>
+      </div>
+
+      <div v-if="isLoadingEmbeddingSchedule" class="embedding-schedule-skeleton">
+        Memuat pengaturan index…
+      </div>
+
+      <template v-else-if="embeddingScheduleSettings">
+        <div class="toggle embedding-schedule-toggle">
+          <button
+            class="toggle-switch"
+            :class="{ on: embeddingScheduleSettings.scheduleEnabled }"
+            aria-label="Toggle scheduled semantic index"
+            :disabled="isSavingEmbeddingSchedule"
+            @click="toggleEmbeddingSchedule"
+          />
+          <div>
+            <div class="toggle-label">Scheduled semantic index</div>
+            <div class="toggle-desc">
+              {{
+                embeddingScheduleSettings.scheduleEnabled
+                  ? embeddingScheduleActive
+                    ? `Aktif · ${embeddingScheduleIntervalLabel}`
+                    : "Diaktifkan untuk app ini, menunggu workspace scheduled sync"
+                  : "Nonaktif untuk app ini"
+              }}
+            </div>
+          </div>
+        </div>
+
+        <div class="embedding-schedule-meta">
+          <span>Run terakhir: {{ formatEmbeddingScheduleTime(embeddingScheduleSettings.lastRunAt) }}</span>
+          <template v-if="embeddingScheduleSettings.lastRunStatus && embeddingScheduleSettings.lastRunStatus !== 'idle'">
+            · {{ embeddingScheduleSettings.lastRunStatus }}
+          </template>
+          <template v-if="embeddingScheduleSettings.lastRunResult">
+            · {{ embeddingScheduleSettings.lastRunResult.indexed }} indexed,
+            {{ embeddingScheduleSettings.lastRunResult.candidates }} kandidat
+          </template>
+        </div>
+
+        <div class="embedding-schedule-actions">
+          <button
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="isRunningEmbeddingSchedule || !embeddingScheduleSettings.hasApiKey"
+            @click="runEmbeddingIndexNow"
+          >
+            <span v-if="isRunningEmbeddingSchedule">Mengindex…</span>
+            <span v-else>Index sekarang</span>
+          </button>
+        </div>
+
+        <p v-if="embeddingScheduleHint" class="embedding-schedule-hint">{{ embeddingScheduleHint }}</p>
+      </template>
     </div>
 
     <div
@@ -1018,6 +1137,111 @@ watch(docs, () => {
 .stat-label {
   font-size: 14px;
   color: var(--muted);
+}
+
+.embedding-schedule-section {
+  margin-bottom: 24px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--bg) 92%, var(--fg) 8%);
+}
+
+.embedding-schedule-header h2 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.embedding-schedule-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.embedding-schedule-toggle {
+  margin-top: 14px;
+}
+
+.embedding-schedule-meta {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.embedding-schedule-actions {
+  margin-top: 12px;
+}
+
+.embedding-schedule-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.embedding-schedule-skeleton {
+  margin-top: 12px;
+  min-height: 48px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.toggle-switch {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: var(--border);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+  border: none;
+  padding: 0;
+}
+
+.toggle-switch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.toggle-switch.on {
+  background: var(--accent);
+}
+
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch.on::after {
+  transform: translateX(18px);
+}
+
+.toggle-label {
+  font-size: 14px;
+  color: var(--fg);
+}
+
+.toggle-desc {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 2px;
 }
 
 .accordion-list {

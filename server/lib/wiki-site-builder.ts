@@ -4,6 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { isValidSiteSlug, slugify } from "~/server/lib/nav-config";
 import type { WikiOutlinePagePlan, WikiSitePlan } from "~/server/lib/doc-prompts";
 import { buildNavConfigFromPlan } from "~/utils/wiki-nav";
+import { onDocContentSaved } from "~/server/lib/doc-embedding-hooks";
 
 export interface WikiPageContent {
   slug: string;
@@ -112,6 +113,7 @@ export async function createOrUpdateWikiSite(
           updatedAt: new Date(),
         })
         .where(eq(docs.id, existingId));
+      onDocContentSaved({ id: existingId, docType: "wiki", content: page.content });
       pageIds.push(existingId);
     } else {
       const inserted = await db
@@ -130,6 +132,7 @@ export async function createOrUpdateWikiSite(
         })
         .returning({ id: docs.id })
         .then((r) => r[0]);
+      onDocContentSaved({ id: inserted.id, docType: "wiki", content: page.content });
       pageIds.push(inserted.id);
     }
   }

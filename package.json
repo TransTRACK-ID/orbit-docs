@@ -23,6 +23,7 @@
     "test:coverage": "vitest run --coverage",
     "db:seed": "tsx server/database/seed.ts",
     "db:migrate-adrs": "tsx scripts/migrate-adr-docs.ts",
+    "db:rebuild-embeddings": "tsx scripts/rebuild-doc-embeddings.ts",
     "mcp:start": "tsx mcp-server.ts"
   },
   "dependencies": {
