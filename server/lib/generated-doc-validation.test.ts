@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   looksTruncatedDocOutput,
   looksIncompleteDocUpdate,
+  looksLikeRawAgentOutput,
   validateGeneratedDocContent,
 } from "./generated-doc-validation";
 
@@ -57,5 +58,14 @@ describe("validateGeneratedDocContent", () => {
     const merged = "# Doc\n\n## A\n\n" + "x".repeat(5000) + "\n\n## B\n\nnew short";
     const result = validateGeneratedDocContent(merged, existing, { isMergedUpdate: true });
     expect(result.valid).toBe(true);
+  });
+
+  it("rejects raw agent reasoning with embedded JSON", () => {
+    const raw =
+      'I\'ll read the existing PRD...\n{"heading":"# PRD","content":"| A | B |\\n|---|---|\\n| x | y |"}';
+    expect(looksLikeRawAgentOutput(raw)).toBe(true);
+    const result = validateGeneratedDocContent(raw, "existing doc");
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/raw agent reasoning/i);
   });
 });

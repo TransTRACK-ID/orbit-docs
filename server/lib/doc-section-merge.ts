@@ -196,14 +196,44 @@ export function extractDocSectionUpdateJson(raw: string): string {
   throw new Error("Section update response contained incomplete JSON");
 }
 
+/** When the agent returns a single H1 heading + body, treat it as a full document. */
+export function tryBuildFullDocFromPayload(payload: DocSectionUpdatePayload): string | null {
+  if (payload.sections.length !== 1) return null;
+
+  const { heading, content } = payload.sections[0];
+  const h = heading.trim();
+  if (!/^#\s+/.test(h) || /^##/.test(h)) return null;
+
+  const body = content.trim();
+  return body ? `${h}\n\n${body}` : h;
+}
+
+/** Extract a complete markdown document embedded in agent JSON output. */
+export function extractFullMarkdownFromAgentJson(raw: string): string | null {
+  try {
+    const payload = parseDocSectionUpdatePayload(raw);
+    return tryBuildFullDocFromPayload(payload);
+  } catch {
+    return null;
+  }
+}
+
 export function parseDocSectionUpdatePayload(raw: string): DocSectionUpdatePayload {
   const jsonText = extractDocSectionUpdateJson(raw);
-  let parsed: DocSectionUpdatePayload;
+  let parsed: Record<string, unknown>;
   try {
-    parsed = JSON.parse(jsonText) as DocSectionUpdatePayload;
+    parsed = JSON.parse(jsonText) as Record<string, unknown>;
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`Section update JSON is invalid (${detail})`);
+  }
+
+  if (
+    !Array.isArray(parsed.sections) &&
+    typeof parsed.heading === "string" &&
+    typeof parsed.content === "string"
+  ) {
+    parsed.sections = [{ heading: parsed.heading, content: parsed.content }];
   }
 
   if (!Array.isArray(parsed.sections)) {
@@ -212,12 +242,14 @@ export function parseDocSectionUpdatePayload(raw: string): DocSectionUpdatePaylo
 
   const sections: DocSectionUpdate[] = [];
   for (const item of parsed.sections) {
-    if (!item || typeof item.heading !== "string" || typeof item.content !== "string") {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Record<string, unknown>;
+    if (typeof record.heading !== "string" || typeof record.content !== "string") {
       continue;
     }
-    const heading = item.heading.trim();
+    const heading = record.heading.trim();
     if (!heading) continue;
-    sections.push({ heading, content: item.content });
+    sections.push({ heading, content: record.content });
   }
 
   if (sections.length === 0) {

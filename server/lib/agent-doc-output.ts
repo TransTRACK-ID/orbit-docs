@@ -8,6 +8,8 @@ import {
   mergeDocSectionUpdates,
   appendRevisionHistoryRow,
   parseDocSectionUpdatePayload,
+  tryBuildFullDocFromPayload,
+  extractFullMarkdownFromAgentJson,
 } from "./doc-section-merge";
 import { writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
@@ -32,7 +34,11 @@ export async function resolveAgentDocOutput(
   workdir: string,
   options: ResolveAgentDocOutputOptions
 ): Promise<string> {
-  const chatDoc = stripGeneratedDocArtifacts(chatOutput.trim(), options.docType);
+  const jsonMarkdown = extractFullMarkdownFromAgentJson(chatOutput.trim());
+  const chatDoc = stripGeneratedDocArtifacts(
+    (jsonMarkdown ?? chatOutput).trim(),
+    options.docType
+  );
 
   if (!options.outputRelativePath) {
     return chatDoc;
@@ -93,7 +99,8 @@ export async function applySectionUpdateFromAgent(
   docType?: GeneratedDocType
 ): Promise<string> {
   const payload = parseDocSectionUpdatePayload(chatOutput);
-  let merged = mergeDocSectionUpdates(existingContent, payload);
+  const fullDoc = tryBuildFullDocFromPayload(payload);
+  let merged = fullDoc ?? mergeDocSectionUpdates(existingContent, payload);
   if (payload.revisionSummary) {
     merged = appendRevisionHistoryRow(merged, payload.revisionSummary);
   }

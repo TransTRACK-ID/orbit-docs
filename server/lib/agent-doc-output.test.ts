@@ -31,6 +31,15 @@ describe("resolveAgentDocOutput", () => {
     const resolved = await resolveAgentDocOutput(chat, "/tmp", {});
     expect(resolved).toBe(chat);
   });
+
+  it("extracts markdown from agent JSON when chat includes reasoning preamble", async () => {
+    const chat =
+      'Searching for the PRD file...\n{"heading":"# Product Requirements Document (PRD) — MMS","content":"## 1. Pendahuluan\\n\\nUpdated body."}';
+    const resolved = await resolveAgentDocOutput(chat, "/tmp", { docType: "srs" });
+    expect(resolved).toBe(
+      "# Product Requirements Document (PRD) — MMS\n\n## 1. Pendahuluan\n\nUpdated body."
+    );
+  });
 });
 
 describe("preferDiskDocOutput", () => {

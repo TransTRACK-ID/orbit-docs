@@ -30,4 +30,12 @@ describe("stripGeneratedDocArtifacts", () => {
     const raw = "Starting analysis now.\n\n# Custom Title\n\nContent";
     expect(stripGeneratedDocArtifacts(raw)).toBe("# Custom Title\n\nContent");
   });
+
+  it("strips preamble before PRD-style SRS headings", () => {
+    const raw =
+      "I'll analyze the repositories first.\n\n# Product Requirements Document (PRD) — MMS\n\nBody";
+    expect(stripGeneratedDocArtifacts(raw, "srs")).toBe(
+      "# Product Requirements Document (PRD) — MMS\n\nBody"
+    );
+  });
 });

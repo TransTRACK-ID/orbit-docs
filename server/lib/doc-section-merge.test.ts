@@ -4,6 +4,7 @@ import {
   appendRevisionHistoryRow,
   parseDocSectionUpdatePayload,
   splitMarkdownSections,
+  extractFullMarkdownFromAgentJson,
 } from "./doc-section-merge";
 
 const BASE_DOC = `# SDD Frontend — Demo
@@ -98,5 +99,25 @@ describe("parseDocSectionUpdatePayload", () => {
     const payload = parseDocSectionUpdatePayload(raw);
     expect(payload.sections).toHaveLength(1);
     expect(payload.sections[0].heading).toBe("## 1. Pendahuluan");
+  });
+
+  it("normalizes a single heading/content object into sections", () => {
+    const raw =
+      'I\'ll read the existing PRD...\n{"heading":"# Product Requirements Document (PRD) — MMS","content":"| Informasi | Detail |\\n|---|---|\\n| Nama | MMS |"}';
+    const payload = parseDocSectionUpdatePayload(raw);
+    expect(payload.sections).toHaveLength(1);
+    expect(payload.sections[0].heading).toBe("# Product Requirements Document (PRD) — MMS");
+    expect(payload.sections[0].content).toContain("Informasi");
+  });
+});
+
+describe("extractFullMarkdownFromAgentJson", () => {
+  it("builds a full markdown doc from agent JSON with preamble", () => {
+    const raw =
+      'Searching for the PRD file...\n{"heading":"# Product Requirements Document (PRD) — MMS","content":"## 1. Pendahuluan\\n\\nBody text."}';
+    const doc = extractFullMarkdownFromAgentJson(raw);
+    expect(doc).toBe(
+      "# Product Requirements Document (PRD) — MMS\n\n## 1. Pendahuluan\n\nBody text."
+    );
   });
 });

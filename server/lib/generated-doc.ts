@@ -1,7 +1,8 @@
 export type GeneratedDocType = "srs" | "fsd" | "sdd";
 
 const DOC_HEADING_RE: Record<GeneratedDocType, RegExp> = {
-  srs: /^#\s+Software Requirements Specification\s*\(SRS\)/im,
+  srs:
+    /^#\s+(?:Software Requirements Specification\s*\(SRS\)|Product Requirements Document\s*\(PRD\)|Dokumentasi Proyek)/im,
   fsd: /^#\s+Functional Specification Document\s*\(FSD\)/im,
   sdd: /^#\s+System Design Document\s*\(SDD\)/im,
 };
