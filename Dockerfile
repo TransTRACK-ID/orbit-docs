@@ -19,6 +19,8 @@ COPY . .
 ARG NUXT_APP_BASE_URL=/
 ENV NUXT_APP_BASE_URL=${NUXT_APP_BASE_URL}
 ENV NITRO_PRESET=node-server
+# Nitro bundling is memory-heavy; CI Docker builds often SIGABRT without an explicit heap limit.
+ENV NODE_OPTIONS=--max-old-space-size=4096
 RUN bun run build
 
 # Production stage

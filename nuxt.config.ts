@@ -173,6 +173,11 @@ export default defineNuxtConfig({
         "@img/sharp-linux-x64",
         "@img/sharp-libvips-linux-x64",
         "sharp",
+        // Keep heavy server deps out of the Rollup graph to reduce Nitro build memory.
+        "@aws-sdk/client-s3",
+        "@modelcontextprotocol/sdk",
+        "ai",
+        "@ai-sdk/openai",
       ],
     },
     minify: true,
