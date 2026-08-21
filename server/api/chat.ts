@@ -15,6 +15,7 @@ import {
   searchFeatureDocs,
 } from "~/server/lib/feature-doc-search";
 import { formatAdrConstraintSummary, listBindingAdrs } from "~/server/lib/adr-queries";
+import { isAskWorkflowEnabled, runAskWorkflowContext } from "~/server/lib/ask-workflow";
 
 interface ChatMessage {
   role: string;
@@ -98,11 +99,22 @@ async function buildSystemPrompt(event: H3Event, options: ChatContextOptions): P
       .reverse()
       .find((m) => m.role === "user" && m.content.trim())?.content;
 
+    const query = lastUserMessage?.trim() || "";
+
+    if (isAskWorkflowEnabled() && query) {
+      const askContext = await runAskWorkflowContext({
+        appId: options.appId,
+        userQuestion: query,
+        module: options.module,
+        publishedOnly,
+      });
+      return askContext.systemPrompt;
+    }
+
     const constraints = await formatAdrConstraintSummary(
       await listBindingAdrs(getDb(), options.appId, { includeContent: true })
     );
 
-    const query = lastUserMessage?.trim() || "";
     const matchedDocs = await searchFeatureDocs({
       appId: options.appId,
       query,

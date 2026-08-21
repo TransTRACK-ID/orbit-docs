@@ -13,6 +13,8 @@ import {
   formatMcpDoc,
   type McpDocRow,
 } from "~/server/lib/mcp-doc-payload";
+import { searchDocsContent } from "~/server/lib/doc-content-search";
+import { runAskWorkflowAnswer } from "~/server/lib/ask-workflow";
 import {
   listFeatureDocIndex,
   searchFeatureDocs,
@@ -82,12 +84,13 @@ const MCP_PLATFORM_INSTRUCTIONS = [
   "",
   "To answer any question about an app's documentation, follow this workflow:",
   "1. Call list_apps (no search unless user named a specific app) to find the app and get its id.",
-  "2. Call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty. The response includes bindingConstraints with mandatory ADR rules — follow them in every answer.",
-  "3. To read a doc's full content, call get_doc with the doc id.",
-  "4. To find docs by keyword, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
+  "2. For complex or cross doc-type questions, prefer ask_docs with appId/appName and the user's question — it runs Plan → Retrieve → Synthesize server-side across SDD, FSD, features, ADRs, and wiki.",
+  "3. For granular access, call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty. The response includes bindingConstraints with mandatory ADR rules — follow them in every answer.",
+  "4. To read a doc's full content, call get_doc with the doc id.",
+  "5. To find docs by keyword manually, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
   isMcpInternalLinkMode()
-    ? "5. To share links with users, prefer sharePath/shareUrl on docs and doc sites (internal wiki at /wiki/{siteSlug}/{pageSlug}). MCP_API_KEY is set — doc site pages include wikiPath for drafts. Use publicPath/publicUrl only for externally published pages (/s/, /p/). Call list_doc_sites or get_doc_site for site navigation."
-    : "5. To share links with users, use publicUrl/publicPath on docs and doc sites. Call list_doc_sites or get_doc_site for published site URLs (/s/{siteSlug}). Published docs return /p/{id} or /s/{siteSlug}/{pageSlug} when part of a published site.",
+    ? "6. To share links with users, prefer sharePath/shareUrl on docs and doc sites (internal wiki at /wiki/{siteSlug}/{pageSlug}). MCP_API_KEY is set — doc site pages include wikiPath for drafts. Use publicPath/publicUrl only for externally published pages (/s/, /p/). Call list_doc_sites or get_doc_site for site navigation."
+    : "6. To share links with users, use publicUrl/publicPath on docs and doc sites. Call list_doc_sites or get_doc_site for published site URLs (/s/{siteSlug}). Published docs return /p/{id} or /s/{siteSlug}/{pageSlug} when part of a published site.",
   "",
   "ARCHITECTURAL DECISION RECORDS (ADRs):",
   "- ADRs are binding architectural constraints, not optional background.",
@@ -344,6 +347,24 @@ const GetBindingConstraintsSchema = z
   .transform((data) => ({
     ...parseAppRefInput(data),
     scope: data.scope,
+  }))
+  .refine((data) => !!(data.appId || data.appName), {
+    message: "Provide appId or appName",
+  });
+
+const AskDocsSchema = z
+  .object({
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    question: z.string().min(1),
+    module: optionalString,
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    question: data.question,
+    module: data.module,
   }))
   .refine((data) => !!(data.appId || data.appName), {
     message: "Provide appId or appName",
@@ -655,6 +676,23 @@ const TOOLS: Tool[] = [
         appName: { type: "string" },
         scope: { type: "string" },
       },
+    },
+  },
+  {
+    name: "ask_docs",
+    description:
+      "Answer a documentation question using the Ask workflow (Plan → Retrieve → Synthesize). " +
+      "Searches across product docs (SDD, FSD, SRS), knowledge-base features, ADRs, and wiki in parallel, " +
+      "then synthesizes an answer with citations [doc:id] / [adr:NNN]. Prefer this for complex cross-doc-type questions.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        appId: { type: "string" },
+        appName: { type: "string" },
+        question: { type: "string", description: "The user's documentation question" },
+        module: { type: "string", description: "Optional module scope hint (e.g. auth, mobile)" },
+      },
+      required: ["question"],
     },
   },
 ];
@@ -1443,8 +1481,6 @@ mcpServer.setRequestHandler(
 
         case "search_docs_content": {
           const params = SearchDocsContentSchema.parse(args);
-          const query = params.query;
-          const limit = params.limit;
           const app = await resolveAppRef(db, {
             appId: params.appId,
             appName: params.appName,
@@ -1470,37 +1506,40 @@ mcpServer.setRequestHandler(
             };
           }
 
-          const searchPattern = "%" + query + "%";
-          const conditions = [
-            sql`(
-              ${schema.docs.content} ILIKE ${searchPattern}
-              OR ${schema.docs.title} ILIKE ${searchPattern}
-              OR ${schema.docs.externalId} ILIKE ${searchPattern}
-            )`,
-          ];
+          const { results, total } = await searchDocsContent({
+            appId: app.id ?? undefined,
+            query: params.query,
+            category: params.category,
+            limit: params.limit,
+          });
 
-          if (app.id) {
-            conditions.push(eq(schema.docs.appId, app.id));
-          }
-
-          const categoryCondition = docCategoryCondition(params.category);
-          if (categoryCondition) {
-            conditions.push(categoryCondition);
-          }
-
-          const total = await countDocsForFilters(db, conditions);
-
-          const rows = await db
-            .select(mcpDocSelectFields)
-            .from(schema.docs)
-            .leftJoin(schema.apps, eq(schema.docs.appId, schema.apps.id))
-            .leftJoin(schema.appVersions, eq(schema.docs.versionId, schema.appVersions.id))
-            .leftJoin(schema.docSites, eq(schema.docs.siteId, schema.docSites.id))
-            .where(and(...conditions))
-            .limit(limit);
-
-          const data = rows.map((row) =>
-            formatMcpDoc(row as McpDocRow, { includeContent: true }),
+          const data = results.map((row) =>
+            formatMcpDoc(
+              {
+                id: row.id,
+                appId: app.id,
+                title: row.title,
+                content: row.content,
+                status: row.status,
+                versionId: null,
+                tags: null,
+                author: null,
+                source: null,
+                docType: row.docType,
+                externalId: row.externalId,
+                siteId: null,
+                slug: null,
+                frontmatter: row.frontmatter ?? null,
+                createdAt: null,
+                updatedAt: null,
+                appName: app.name,
+                version: null,
+                siteName: null,
+                siteSlug: null,
+                siteStatus: null,
+              } as McpDocRow,
+              { includeContent: true },
+            ),
           );
 
           return {
@@ -2138,6 +2177,60 @@ mcpServer.setRequestHandler(
                       ...formatAdrApiItem(row, { includeContent: false }),
                       decision: extractDecisionSection(row.content),
                     })),
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        }
+
+        case "ask_docs": {
+          const params = AskDocsSchema.parse(args);
+          const app = await resolveAppRef(db, {
+            appId: params.appId,
+            appName: params.appName,
+          });
+
+          if (!app.found || !app.id) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      error: "App not found",
+                      appId: params.appId ?? null,
+                      appName: params.appName ?? null,
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+              isError: true,
+            };
+          }
+
+          const result = await runAskWorkflowAnswer({
+            appId: app.id,
+            question: params.question,
+            module: params.module ?? undefined,
+            publishedOnly: false,
+          });
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(
+                  {
+                    app: { id: app.id, name: app.name },
+                    answer: result.answer,
+                    citations: result.citations,
+                    searchPlan: result.searchPlan,
+                    sourcesUsed: result.sourcesUsed,
                   },
                   null,
                   2,
