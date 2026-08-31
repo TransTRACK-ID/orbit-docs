@@ -96,11 +96,14 @@ export function mergeDocSectionUpdates(
   }
 
   const replaced = new Set<number>();
+  const appended: DocSectionUpdate[] = [];
 
   for (const update of payload.sections) {
     const idx = findSectionIndex(sections, update.heading);
     if (idx < 0) {
-      throw new Error(`Section not found for heading: ${update.heading}`);
+      // Heading not found — collect for appending instead of failing.
+      appended.push(update);
+      continue;
     }
 
     sections[idx] = {
@@ -110,7 +113,17 @@ export function mergeDocSectionUpdates(
     replaced.add(idx);
   }
 
-  if (replaced.size === 0) {
+  // Append sections whose headings didn't match any existing section.
+  for (const update of appended) {
+    sections.push({
+      headingLine: update.heading,
+      level: 2,
+      raw: formatSection(update.heading, update.content),
+      normalizedHeading: normalizeHeading(update.heading),
+    });
+  }
+
+  if (replaced.size === 0 && appended.length === 0) {
     return baseDoc;
   }
 
@@ -206,6 +219,11 @@ export function tryBuildFullDocFromPayload(payload: DocSectionUpdatePayload): st
 
   const body = content.trim();
   return body ? `${h}\n\n${body}` : h;
+}
+
+/** Build a standalone markdown document from all sections in a payload. */
+export function buildFullDocFromAllSections(payload: DocSectionUpdatePayload): string {
+  return payload.sections.map((s) => formatSection(s.heading, s.content)).join("\n\n");
 }
 
 /** Extract a complete markdown document embedded in agent JSON output. */

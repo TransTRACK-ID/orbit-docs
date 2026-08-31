@@ -9,6 +9,7 @@ import {
   appendRevisionHistoryRow,
   parseDocSectionUpdatePayload,
   tryBuildFullDocFromPayload,
+  buildFullDocFromAllSections,
   extractFullMarkdownFromAgentJson,
 } from "./doc-section-merge";
 import { writeFile, mkdir } from "fs/promises";
@@ -100,7 +101,15 @@ export async function applySectionUpdateFromAgent(
 ): Promise<string> {
   const payload = parseDocSectionUpdatePayload(chatOutput);
   const fullDoc = tryBuildFullDocFromPayload(payload);
-  let merged = fullDoc ?? mergeDocSectionUpdates(existingContent, payload);
+  let merged = fullDoc;
+  if (merged === null) {
+    try {
+      merged = mergeDocSectionUpdates(existingContent, payload);
+    } catch {
+      // Merge failed (e.g. base doc has no ## headings) — build from payload.
+      merged = buildFullDocFromAllSections(payload);
+    }
+  }
   if (payload.revisionSummary) {
     merged = appendRevisionHistoryRow(merged, payload.revisionSummary);
   }

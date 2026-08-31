@@ -38,4 +38,9 @@ describe("stripGeneratedDocArtifacts", () => {
       "# Product Requirements Document (PRD) — MMS\n\nBody"
     );
   });
+
+  it("strips preamble before first H2 when no H1 is present", () => {
+    const raw = "I'll analyze the codebase first.\n\n## 1. Pendahuluan\n\nBody text.";
+    expect(stripGeneratedDocArtifacts(raw)).toBe("## 1. Pendahuluan\n\nBody text.");
+  });
 });

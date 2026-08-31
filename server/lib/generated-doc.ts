@@ -36,6 +36,12 @@ export function stripGeneratedDocArtifacts(
     const h1 = text.search(/^#\s+\S/m);
     if (h1 > 0) {
       start = h1;
+    } else if (h1 === -1) {
+      // No H1 — try first H2 to strip preamble before sections.
+      const h2 = text.search(/^##\s+\S/m);
+      if (h2 > 0) {
+        start = h2;
+      }
     }
   }
 

@@ -4,6 +4,7 @@ import {
   appendRevisionHistoryRow,
   parseDocSectionUpdatePayload,
   splitMarkdownSections,
+  buildFullDocFromAllSections,
   extractFullMarkdownFromAgentJson,
 } from "./doc-section-merge";
 
@@ -83,6 +84,25 @@ describe("mergeDocSectionUpdates", () => {
     expect(merged.startsWith("# SDD Frontend — Demo")).toBe(true);
     expect(merged).toContain("Updated intro.");
   });
+
+  it("appends sections with unmatched headings instead of failing", () => {
+    const payload = parseDocSectionUpdatePayload(
+      JSON.stringify({
+        sections: [
+          {
+            heading: "## 99. New Section",
+            content: "Brand new content.",
+          },
+        ],
+      })
+    );
+
+    const merged = mergeDocSectionUpdates(BASE_DOC, payload);
+    expect(merged).toContain("Brand new content.");
+    expect(merged).toContain("## 99. New Section");
+    expect(merged).toContain("Old intro text.");
+    expect(splitMarkdownSections(merged)).toHaveLength(5);
+  });
 });
 
 describe("appendRevisionHistoryRow", () => {
@@ -119,5 +139,20 @@ describe("extractFullMarkdownFromAgentJson", () => {
     expect(doc).toBe(
       "# Product Requirements Document (PRD) — MMS\n\n## 1. Pendahuluan\n\nBody text."
     );
+  });
+});
+
+describe("buildFullDocFromAllSections", () => {
+  it("builds a standalone doc from all payload sections", () => {
+    const payload = parseDocSectionUpdatePayload(
+      JSON.stringify({
+        sections: [
+          { heading: "## 1. Pendahuluan", content: "Intro text." },
+          { heading: "## 2. Arsitektur", content: "Architecture details." },
+        ],
+      })
+    );
+    const doc = buildFullDocFromAllSections(payload);
+    expect(doc).toBe("## 1. Pendahuluan\n\nIntro text.\n\n## 2. Arsitektur\n\nArchitecture details.");
   });
 });

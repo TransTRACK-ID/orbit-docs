@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, writeFile, rm, mkdir } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
-import { resolveAgentDocOutput, preferDiskDocOutput } from "./agent-doc-output";
+import { resolveAgentDocOutput, preferDiskDocOutput, applySectionUpdateFromAgent } from "./agent-doc-output";
 
 describe("resolveAgentDocOutput", () => {
   it("prefers on-disk file when chat output is truncated", async () => {
@@ -54,6 +54,36 @@ describe("preferDiskDocOutput", () => {
     const resolved = await preferDiskDocOutput(workdir, relPath, truncated, "sdd");
 
     expect(resolved.trim()).toBe(fullDoc.trim());
+    await rm(workdir, { recursive: true, force: true });
+  });
+});
+
+describe("applySectionUpdateFromAgent", () => {
+  it("builds from payload sections when base doc has no ## headings", async () => {
+    const workdir = await mkdtemp(join(tmpdir(), "orbit-doc-merge-fail-"));
+    const relPath = "docs/SRS.md";
+    await mkdir(join(workdir, "docs"), { recursive: true });
+
+    // Existing doc has no ## headings — merge will throw.
+    const existing = "Just some text without headings.";
+    const chatOutput = JSON.stringify({
+      sections: [
+        { heading: "## 1. Pendahuluan", content: "New intro." },
+        { heading: "## 2. Stack", content: "Tech details." },
+      ],
+    });
+
+    const result = await applySectionUpdateFromAgent(
+      chatOutput,
+      workdir,
+      relPath,
+      existing
+    );
+    expect(result).toContain("## 1. Pendahuluan");
+    expect(result).toContain("New intro.");
+    expect(result).toContain("## 2. Stack");
+    expect(result).toContain("Tech details.");
+
     await rm(workdir, { recursive: true, force: true });
   });
 });
