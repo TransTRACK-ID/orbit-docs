@@ -2,6 +2,7 @@ import { defineEventHandler } from "h3";
 import { isCursorInstalled, isCursorAuthenticated } from "~/server/lib/cursor-agent";
 import { getDocAgent, getCursorModel } from "~/server/utils/agent-config";
 import { getOpencodeConfigB64 } from "~/server/utils/opencode-config";
+import { hasCursorApiKey } from "~/server/utils/cursor-api-key";
 
 export default defineEventHandler(async () => {
   const agent = getDocAgent();
@@ -35,8 +36,7 @@ export default defineEventHandler(async () => {
         : "Authenticate with: cursor-agent login (or set CURSOR_API_KEY env var)"
       : "Install cursor-agent: npm install -g cursor-agent",
     config: {
-      model: getCursorModel(),
-      hasApiKey: !!process.env.CURSOR_API_KEY,
+      hasApiKey: await hasCursorApiKey(),
     },
   };
 });

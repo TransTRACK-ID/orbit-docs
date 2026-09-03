@@ -287,6 +287,7 @@ async function loadSuperAdminSettings() {
   fetchDocGeneration();
   fetchApiKeys();
   fetchSsoConfig();
+  fetchCursorKeySettings();
 
   if (can("integrations:read")) {
     await fetchNotionSettings();
@@ -333,6 +334,45 @@ const {
   testConnection: testNotionConnection,
   runSync: runNotionSync,
 } = useNotionSync();
+
+// ─── Cursor Agent API key ───────────────────────────────────────
+const {
+  settings: cursorKeySettings,
+  isLoading: isLoadingCursorKey,
+  isSaving: isSavingCursorKey,
+  fetchSettings: fetchCursorKeySettings,
+  saveApiKey: saveCursorApiKey,
+} = useCursorApiKey();
+
+const cursorApiKeyForm = reactive({
+  apiKey: "",
+});
+const cursorApiKeyDirty = ref(false);
+const hasPopulatedCursorKey = ref(false);
+
+watch(
+  () => cursorKeySettings.value,
+  (cs) => {
+    if (!cs || hasPopulatedCursorKey.value) return;
+    cursorApiKeyForm.apiKey = cs.hasApiKey ? "••••••••" : "";
+    hasPopulatedCursorKey.value = true;
+    cursorApiKeyDirty.value = false;
+  },
+  { immediate: true },
+);
+
+function markCursorKeyDirty() {
+  cursorApiKeyDirty.value = true;
+}
+
+async function saveCursorKeyForm() {
+  if (!cursorApiKeyDirty.value) return;
+  await saveCursorApiKey(cursorApiKeyForm.apiKey);
+  cursorApiKeyDirty.value = false;
+  if (cursorKeySettings.value?.hasApiKey) {
+    cursorApiKeyForm.apiKey = "••••••••";
+  }
+}
 
 const notionForm = reactive({
   apiKey: "",
@@ -1590,6 +1630,63 @@ function getCallbackUrl(provider: SsoProvider): string {
                   </li>
                 </ul>
               </div>
+            </div>
+
+            <!-- Cursor Agent API Key -->
+            <div class="setting-section">
+              <div class="row-between" style="margin-bottom: 8px;">
+                <div>
+                  <h3>Cursor Agent</h3>
+                  <p class="desc">
+                    API key for the Cursor agent used by doc generation and chat.
+                    The key is encrypted at rest and cannot be viewed after saving.
+                    Updating it here takes effect immediately — no restart required.
+                  </p>
+                </div>
+                <span
+                  v-if="cursorKeySettings?.hasApiKey"
+                  class="pill pill-green"
+                >Configured</span>
+                <span
+                  v-else
+                  class="pill pill-amber"
+                >Not set</span>
+              </div>
+
+              <div v-if="isLoadingCursorKey" class="skeleton-wrap">
+                <div class="skeleton-line w-full" />
+                <div class="skeleton-line w-2/3" />
+              </div>
+
+              <template v-else>
+                <div class="form-group">
+                  <label for="cursorApiKey">API key</label>
+                  <input
+                    id="cursorApiKey"
+                    v-model="cursorApiKeyForm.apiKey"
+                    type="password"
+                    placeholder="Enter Cursor API key"
+                    autocomplete="off"
+                    @input="markCursorKeyDirty"
+                  />
+                  <span class="slug-hint">
+                    Leave the masked value and save to keep the current key.
+                    Type a new key to replace it, or clear the field and save to remove it.
+                  </span>
+                </div>
+
+                <div class="form-actions" style="justify-content: flex-start;">
+                  <button
+                    type="button"
+                    class="btn btn-primary"
+                    :disabled="isSavingCursorKey || !cursorApiKeyDirty"
+                    @click="saveCursorKeyForm"
+                  >
+                    <span v-if="isSavingCursorKey">Saving…</span>
+                    <span v-else>Save</span>
+                  </button>
+                </div>
+              </template>
             </div>
           </template>
         </div>

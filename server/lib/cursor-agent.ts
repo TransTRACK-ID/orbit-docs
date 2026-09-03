@@ -1,6 +1,6 @@
 import { spawn } from "child_process";
 import { getCursorModel as getCursorModelFromEnv } from "~/server/utils/agent-config";
-import { getChatWorkspace } from "~/server/lib/chat-workspace";
+import { getCursorApiKey } from "~/server/utils/cursor-api-key";
 
 export interface AnalyzeOptions {
   workdir?: string;
@@ -62,8 +62,10 @@ export async function isCursorInstalled(): Promise<boolean> {
 }
 
 export async function isCursorAuthenticated(): Promise<{ ok: boolean; method: "login" | "api_key" | "none"; error?: string }> {
-  // Check for API key first (headless / production-friendly)
-  if (process.env.CURSOR_API_KEY) {
+  // Check for API key first (headless / production-friendly).
+  // Reads from DB (settings page) with env fallback.
+  const apiKey = await getCursorApiKey();
+  if (apiKey) {
     return { ok: true, method: "api_key" };
   }
 
@@ -137,6 +139,14 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
         args.push("--workspace", effectiveWorkdir);
       }
 
+      // Resolve the Cursor API key from DB (settings page) with env fallback
+      // so the cursor-agent child process authenticates without a .env restart.
+      const resolvedApiKey = await getCursorApiKey();
+      const childEnv = { ...process.env };
+      if (resolvedApiKey) {
+        childEnv.CURSOR_API_KEY = resolvedApiKey;
+      }
+
       // Pass the prompt on stdin — large SDD prompts (diff + existing doc) exceed
       // Linux ARG_MAX (~128 KiB) and cause spawn E2BIG when passed as argv.
       return new Promise((resolve, reject) => {
@@ -147,7 +157,7 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
         const proc = spawn(getCursorPath(), args, {
           stdio: ["pipe", "pipe", "pipe"],
           cwd: effectiveWorkdir || process.cwd(),
-          env: { ...process.env },
+          env: childEnv,
         });
 
         onDebugEvent?.({
