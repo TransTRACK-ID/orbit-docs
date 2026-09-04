@@ -15,6 +15,7 @@ RUN npm ci --omit=dev && npm install tsx
 COPY mcp-server.ts ./
 COPY tsconfig.mcp.json ./
 COPY server/database/schema ./server/database/schema
+COPY server/utils/mcp-oauth ./server/utils/mcp-oauth
 COPY .env ./
 
 # Expose the MCP port

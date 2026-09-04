@@ -48,6 +48,8 @@ import {
   listBindingAdrs,
 } from "~/server/lib/adr-queries";
 import type { AdrStatus } from "~/types/adr";
+import { isMcpOAuthEnabled, getProtectedResourceMetadataUrl } from "~/server/utils/mcp-oauth/config";
+import { verifyMcpAccessToken } from "~/server/utils/mcp-oauth/tokens";
 
 const optionalString = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
@@ -2318,13 +2320,29 @@ mcpServer.setRequestHandler(
 export const MCP_API_KEY = process.env.MCP_API_KEY;
 
 export function checkMcpApiKey(authHeader: string | undefined, apiKeyHeader: string | undefined): boolean {
-  // If no MCP_API_KEY is configured, allow open (unauthenticated) connections
-  // so remote clients can connect without an Authorization header.
-  if (!MCP_API_KEY) {
+  // If no MCP_API_KEY is configured and OAuth is not enabled, allow open
+  // (unauthenticated) connections so remote clients can connect without an
+  // Authorization header.
+  if (!MCP_API_KEY && !isMcpOAuthEnabled()) {
     return true;
   }
+
   const providedKey = (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : apiKeyHeader) || "";
-  return providedKey === MCP_API_KEY;
+
+  // Check static API key first
+  if (MCP_API_KEY && providedKey === MCP_API_KEY) {
+    return true;
+  }
+
+  // Check OAuth access token (JWT)
+  if (isMcpOAuthEnabled() && authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    if (verifyMcpAccessToken(token)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 /* ------------------------------------------------------------------ */

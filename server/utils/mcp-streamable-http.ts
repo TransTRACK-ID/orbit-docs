@@ -1,17 +1,25 @@
 import type { H3Event } from "h3";
-import { getHeader, readBody, createError } from "h3";
+import { getHeader, readBody, createError, setResponseHeaders } from "h3";
 import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createMcpServer, checkMcpApiKey, transports } from "~/server/utils/mcp-server";
 import { InMemoryEventStore } from "~/server/utils/mcp-event-store";
+import { isMcpOAuthEnabled, getProtectedResourceMetadataUrl } from "~/server/utils/mcp-oauth/config";
 
 export function assertMcpAuth(event: H3Event) {
   const authHeader = getHeader(event, "authorization");
   const apiKeyHeader = getHeader(event, "x-api-key");
 
   if (!checkMcpApiKey(authHeader, apiKeyHeader)) {
+    // When OAuth is enabled, advertise the protected resource metadata URL
+    // so MCP clients (Gemini Spark, etc.) can discover the OAuth flow.
+    if (isMcpOAuthEnabled()) {
+      setResponseHeaders(event, {
+        "WWW-Authenticate": `Bearer realm="mcp", resource_metadata="${getProtectedResourceMetadataUrl()}", scope="mcp:read"`,
+      });
+    }
     throw createError({
       statusCode: 401,
       statusMessage: "Unauthorized",

@@ -17,11 +17,11 @@ The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open p
 - **CORS enabled** for cross-origin access
 - **Health check endpoint** at `/health`
 
-> **In-app endpoint auth:** The Nuxt-hosted endpoint at `/api/mcp/connect` (shown on the **Settings → MCP Connection** page) follows the `MCP_API_KEY` environment variable:
-> - If `MCP_API_KEY` is **not set**, the endpoint is **public** — remote MCP clients connect with just the URL and no `Authorization` header.
-> - If `MCP_API_KEY` **is set**, all connections must authenticate with `Authorization: Bearer <key>` or `X-API-Key`.
+> **In-app endpoint auth:** The Nuxt-hosted endpoint at `/api/mcp/connect` (shown on the **Settings → MCP Connection** page) supports two authentication modes:
+> - **Static API key** (`MCP_API_KEY`): If set, connections must authenticate with `Authorization: Bearer <key>` or `X-API-Key`. If unset, the endpoint is public.
+> - **OAuth 2.0 + PKCE** (`MCP_OAUTH_CLIENT_ID` / `MCP_OAUTH_CLIENT_SECRET`): If set, OAuth clients (Gemini Spark, etc.) can connect via the authorization code flow. See [OAuth 2.0 + PKCE](#oauth-20--pkce-authentication-gemini-spark--other-oauth-mcp-clients) below.
 >
-> The standalone server (`npm run mcp:start`) has the same conditional `MCP_API_KEY` auth described below.
+> The standalone server (`npm run mcp:start`) supports the same auth modes.
 - **Docker support** for easy deployment
 
 ## Available Tools
@@ -301,6 +301,91 @@ curl -N \
   https://mcp.yourdomain.com/mcp
 ```
 
+## OAuth 2.0 + PKCE Authentication (Gemini Spark & Other OAuth MCP Clients)
+
+In addition to the static `MCP_API_KEY` bearer token, the MCP server supports
+OAuth 2.0 Authorization Code flow with PKCE (Proof Key for Code Exchange). This
+enables MCP clients that require OAuth — such as **Gemini Spark** — to connect
+without a static API key.
+
+Both the **Nitro-hosted endpoint** (`/api/mcp/connect`) and the **standalone
+server** (`/mcp`) support OAuth. Static bearer tokens continue to work
+alongside OAuth — you can use either or both.
+
+### How It Works
+
+1. Client connects to the MCP endpoint without a valid token
+2. Server responds with `401` and a `WWW-Authenticate` header pointing to the
+   protected resource metadata URL
+3. Client fetches `/.well-known/oauth-protected-resource/mcp` to discover the
+   authorization server
+4. Client fetches `/.well-known/oauth-authorization-server` for endpoint URLs
+5. Client redirects the user to `/oauth/authorize` (consent page)
+6. After consent, server issues an authorization code
+7. Client exchanges the code for a JWT access token at `/oauth/token`
+8. Client retries the MCP connection with `Authorization: Bearer <jwt>`
+
+### Configuration
+
+Add these to your `.env`:
+
+```env
+# Generate: openssl rand -hex 16 (client id) and openssl rand -hex 32 (client secret)
+MCP_OAUTH_CLIENT_ID=your-mcp-oauth-client-id
+MCP_OAUTH_CLIENT_SECRET=your-mcp-oauth-client-secret
+# Public issuer URL (defaults to NUXT_PUBLIC_APP_URL)
+MCP_OAUTH_ISSUER=https://docs.your-domain.com
+# Optional: comma-separated redirect URIs (e.g. from Gemini "Copy redirect URI")
+MCP_OAUTH_REDIRECT_URIS=https://oauth-redirect.googleusercontent.com/r/your-callback
+# Token expiry in seconds (default: 3600)
+MCP_OAUTH_TOKEN_EXPIRY=3600
+# JWT signing secret (defaults to JWT_SECRET)
+MCP_OAUTH_SIGNING_SECRET=your-jwt-signing-secret
+# Resource path: /api/mcp/connect (Nitro) or /mcp (standalone)
+# MCP_OAUTH_RESOURCE_PATH=/api/mcp/connect
+```
+
+### Gemini Spark Setup
+
+1. Set the OAuth env vars above in your backend `.env`
+2. Restart the server
+3. In Gemini Spark, add a new MCP connection:
+   - URL: `https://docs.your-domain.com/api/mcp/connect` (Nitro) or
+     `https://mcp.your-domain.com/mcp` (standalone)
+   - Advanced settings → Client ID / Client Secret: use the values from step 1
+   - Click **Copy redirect URI** in Gemini and add it to `MCP_OAUTH_REDIRECT_URIS`
+4. Complete the OAuth consent flow when prompted
+
+Cursor and other static-token clients continue to work with `MCP_API_KEY` —
+no changes needed.
+
+### OAuth Endpoints
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /oauth/authorize` | Authorization code issuance (consent page) |
+| `POST /oauth/token` | Token exchange (authorization code → JWT) |
+| `GET /.well-known/oauth-authorization-server` | OAuth server metadata (RFC 8418) |
+| `GET /.well-known/oauth-protected-resource` | Protected resource metadata |
+| `GET /.well-known/oauth-protected-resource/mcp` | RFC 9728 resource metadata |
+
+### Nginx / Reverse Proxy
+
+When the app is served behind a reverse proxy under a subpath (e.g. `/docs/`),
+add location blocks to proxy the OAuth endpoints at the root path:
+
+```nginx
+location ^~ /.well-known/ {
+    proxy_pass http://orbit-docs-app:3000/docs/.well-known/;
+    # ... standard proxy headers
+}
+
+location ^~ /oauth/ {
+    proxy_pass http://orbit-docs-app:3000/docs/oauth/;
+    # ... standard proxy headers
+}
+```
+
 ## Adding to AI Agent Settings
 
 ### Claude Desktop (macOS)
@@ -555,16 +640,19 @@ npx concurrently "npm run dev" "npm run mcp:start"
 ```
 ┌─────────────────────────────────────────────┐
 │           External AI Agent                 │
-│  (Claude, OpenCode, Cursor, VS Code, etc.)  │
+│  (Claude, OpenCode, Cursor, Gemini, etc.)   │
 └────────────────┬────────────────────────────┘
                  │ MCP over HTTP SSE
-                 │ Authorization: Bearer <key>
+                 │ Authorization: Bearer <key|jwt>
                  ▼
 ┌─────────────────────────────────────────────┐
 │         Orbit Docs MCP Server               │
-│         (Node.js + Express)                 │
+│         (Node.js + Express / Nitro)         │
 │  Port: 41244 (configurable via MCP_PORT)    │
-│  Auth: Bearer token via MCP_API_KEY         │
+│  Auth: MCP_API_KEY (static) or OAuth 2.0   │
+│        + PKCE (MCP_OAUTH_CLIENT_ID/SECRET)  │
+│  OAuth: /oauth/authorize, /oauth/token     │
+│         /.well-known/oauth-*               │
 └────────────────┬────────────────────────────┘
                  │ Drizzle ORM + pg
                  ▼
@@ -577,11 +665,14 @@ npx concurrently "npm run dev" "npm run mcp:start"
 ## Security Considerations
 
 - The MCP server provides **read-only access** to all platform data
-- Always set `MCP_API_KEY` in production
+- Always set `MCP_API_KEY` and/or configure OAuth in production
 - The server uses the same database credentials as the Nuxt app — consider using a dedicated read-only database user for the MCP server
 - Run behind HTTPS in production (use a reverse proxy or Traefik)
 - The `/health` endpoint is public (no auth required) for monitoring purposes
-- All other endpoints require the API key
+- OAuth endpoints (`/oauth/*`, `/.well-known/*`) are public by design (OAuth discovery + authorization flow)
+- All MCP data endpoints require either a static API key or a valid OAuth JWT access token
+- OAuth access tokens are signed JWTs with a configurable expiry (default: 1 hour)
+- PKCE (S256) is required for all OAuth authorization code flows
 
 ## Troubleshooting
 
@@ -591,8 +682,9 @@ npx concurrently "npm run dev" "npm run mcp:start"
 - Verify the URL in your agent settings matches the running port
 
 ### 401 Unauthorized
-- You must provide the API key via `Authorization: Bearer <key>` or `X-API-Key: <key>` header
-- Verify the `MCP_API_KEY` environment variable matches what you're sending
+- **Static API key:** provide it via `Authorization: Bearer <key>` or `X-API-Key: <key>` header. Verify the `MCP_API_KEY` environment variable matches.
+- **OAuth:** ensure `MCP_OAUTH_CLIENT_ID` and `MCP_OAUTH_CLIENT_SECRET` are set. Complete the OAuth consent flow to obtain a valid access token. Check that `MCP_OAUTH_ISSUER` matches your public URL.
+- When OAuth is enabled, the `401` response includes a `WWW-Authenticate` header with the protected resource metadata URL for client discovery.
 
 ### Database Connection Errors
 - Verify `POSTGRES_URL` or `DATABASE_URL` is set in your `.env` file

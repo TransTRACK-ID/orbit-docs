@@ -13,6 +13,16 @@ import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { eq, desc, sql, and, count, asc } from "drizzle-orm";
 import * as schema from "./server/database/schema";
+import { mountMcpOAuth } from "./server/utils/mcp-oauth/mount-express";
+import { isMcpOAuthEnabled, getProtectedResourceMetadataUrl } from "./server/utils/mcp-oauth/config";
+import { verifyMcpAccessToken } from "./server/utils/mcp-oauth/tokens";
+
+// Default resource path for the standalone server is /mcp (the Nitro-hosted
+// endpoint uses /api/mcp/connect).  Set MCP_OAUTH_RESOURCE_PATH in .env to
+// override.
+if (!process.env.MCP_OAUTH_RESOURCE_PATH) {
+  process.env.MCP_OAUTH_RESOURCE_PATH = "/mcp";
+}
 
 /* ------------------------------------------------------------------ */
 /* 1. Database Setup                                                   */
@@ -35,18 +45,35 @@ const MCP_API_KEY = process.env.MCP_API_KEY;
 
 if (MCP_API_KEY) {
   console.log("[orbit-docs-mcp] API key authentication enabled");
-} else {
-  console.warn("[orbit-docs-mcp] WARNING: MCP_API_KEY not set. Server is open to anyone with the URL.");
-  console.warn("[orbit-docs-mcp] Set MCP_API_KEY in your environment to secure the endpoint.");
+}
+if (isMcpOAuthEnabled()) {
+  console.log("[orbit-docs-mcp] OAuth 2.0 + PKCE authentication enabled");
+}
+if (!MCP_API_KEY && !isMcpOAuthEnabled()) {
+  console.warn("[orbit-docs-mcp] WARNING: MCP_API_KEY not set and OAuth not configured. Server is open to anyone with the URL.");
+  console.warn("[orbit-docs-mcp] Set MCP_API_KEY or configure MCP OAuth in your environment to secure the endpoint.");
+}
+
+function sendUnauthorized(req: express.Request, res: express.Response, message: string): void {
+  // When OAuth is enabled, advertise the protected resource metadata URL
+  // so MCP clients (Gemini Spark, etc.) can discover the OAuth flow.
+  if (isMcpOAuthEnabled()) {
+    res.setHeader(
+      "WWW-Authenticate",
+      `Bearer realm="mcp", resource_metadata="${getProtectedResourceMetadataUrl()}", scope="mcp:read"`,
+    );
+  }
+  res.status(401).json({ error: "Unauthorized", message });
 }
 
 function requireApiKey(req: express.Request, res: express.Response, next: express.NextFunction) {
-  // Skip auth for health check
-  if (req.path === "/health") {
+  // Skip auth for health check and OAuth endpoints
+  if (req.path === "/health" || req.path.startsWith("/oauth/") || req.path.startsWith("/.well-known/")) {
     return next();
   }
 
-  if (!MCP_API_KEY) {
+  // If neither static key nor OAuth is configured, allow open access
+  if (!MCP_API_KEY && !isMcpOAuthEnabled()) {
     return next();
   }
 
@@ -55,14 +82,24 @@ function requireApiKey(req: express.Request, res: express.Response, next: expres
 
   const providedKey = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : apiKey;
 
-  if (!providedKey || providedKey !== MCP_API_KEY) {
-    return res.status(401).json({
-      error: "Unauthorized",
-      message: "Invalid or missing API key. Provide it via Authorization: Bearer <key> or X-API-Key header.",
-    });
+  // Check static API key
+  if (MCP_API_KEY && providedKey === MCP_API_KEY) {
+    return next();
   }
 
-  next();
+  // Check OAuth access token (JWT)
+  if (isMcpOAuthEnabled() && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.slice(7);
+    if (verifyMcpAccessToken(token)) {
+      return next();
+    }
+  }
+
+  return sendUnauthorized(
+    req,
+    res,
+    "Invalid or missing API key. Provide it via Authorization: Bearer <key> or X-API-Key header.",
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -1287,6 +1324,12 @@ server.setRequestHandler(
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Mount OAuth 2.0 + PKCE routes (authorize, token, .well-known/*).
+// No-ops when OAuth is not configured. Must come before requireApiKey so
+// OAuth endpoints are accessible without a bearer token.
+mountMcpOAuth(app);
+
 app.use(requireApiKey);
 
 const transports: Record<string, SSEServerTransport> = {};
