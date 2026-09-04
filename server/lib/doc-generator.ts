@@ -535,9 +535,9 @@ async function runAgentAnalyze(
   jobId: string,
   prompt: string,
   workdir: string,
-  opts: { partialField?: DocType; flushMs?: number; cursorModel?: string } = {}
+  opts: { partialField?: DocType; flushMs?: number; cursorModel?: string; staleMs?: number } = {}
 ): Promise<string> {
-  const { flushMs = 1500 } = opts;
+  const { flushMs = 1500, staleMs = 300_000 } = opts;
 
   let pendingActivity: string | null = null;
   let pendingPartial: string | null = null;
@@ -569,8 +569,10 @@ async function runAgentAnalyze(
 
   const flushTimer = setInterval(flush, flushMs);
 
-  // Poll the job status so an external "cancel" in the DB aborts the run.
+  // AbortController for cancel + stale watchdog.
   const ac = new AbortController();
+
+  // Poll the job status so an external "cancel" in the DB aborts the run.
   const cancelPoll = setInterval(async () => {
     try {
       if (await isJobCancelled(jobId)) {
@@ -579,23 +581,41 @@ async function runAgentAnalyze(
     } catch { /* swallow */ }
   }, 2_000);
 
+  // Stale watchdog: if the agent produces no events for staleMs (default 5 min),
+  // abort the run so the job doesn't hang forever on a silently-dropped stream
+  // or a hung child process. Covers both Opencode (SSE stream) and Cursor
+  // (spawned process) agents.
+  let lastEventTime = Date.now();
+  const staleTimer = setInterval(() => {
+    if (Date.now() - lastEventTime >= staleMs) {
+      console.warn(
+        `[doc-generator] Job ${jobId} stale for ${Math.round((Date.now() - lastEventTime) / 1000)}s — aborting`,
+      );
+      ac.abort();
+    }
+  }, 10_000);
+
   try {
     const result = await agent.analyze(prompt, {
       workdir,
       signal: ac.signal,
       onActivity: (activity) => {
+        lastEventTime = Date.now();
         pendingActivity = activity;
         dirty = true;
       },
       onText: (_delta, accumulated) => {
+        lastEventTime = Date.now();
         pendingPartial = accumulated;
         dirty = true;
       },
       onTokens: (tokens) => {
+        lastEventTime = Date.now();
         pendingTokens = tokens;
         dirty = true;
       },
       onDebugEvent: (event) => {
+        lastEventTime = Date.now();
         if (event.type === "session.created" && typeof event.payload.sessionId === "string") {
           updateJobSessionId(jobId, event.payload.sessionId).catch(() => {});
         }
@@ -613,6 +633,7 @@ async function runAgentAnalyze(
   } finally {
     clearInterval(flushTimer);
     clearInterval(cancelPoll);
+    clearInterval(staleTimer);
     await debugBuffer.dispose();
   }
 }
@@ -1007,10 +1028,15 @@ export async function generateProductDocs(
     const actor = await resolveJobActor(jobId);
 
     let stepIndex = 0;
+    let maxPct = 0;
     const progressFor = (message: string, status: GenerationStatus) => {
       stepIndex += 1;
       const pct = Math.min(95, Math.round((stepIndex / (enabledSteps + 2)) * 100));
-      return onProgress({ status, progressPct: pct, progressMessage: message });
+      // Clamp to monotonically increasing so progress never goes backwards
+      // (e.g. analyzing=15% → first step=14% would regress without this).
+      const clamped = Math.max(pct, maxPct);
+      maxPct = clamped;
+      return onProgress({ status, progressPct: clamped, progressMessage: message });
     };
 
     await onProgress({
@@ -1041,6 +1067,7 @@ export async function generateProductDocs(
       progressPct: 15,
       progressMessage: "Analyzing repositories...",
     });
+    maxPct = 15;
     if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
     const repoSummaries: string[] = [];

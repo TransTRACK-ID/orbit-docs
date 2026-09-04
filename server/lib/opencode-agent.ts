@@ -401,6 +401,12 @@ export function createOpencodeAgent() {
                     }
                   }
                 }
+                // Stream ended without session.idle or session.error — the
+                // connection was dropped or the server closed the stream
+                // prematurely. Reject so the caller doesn't hang forever.
+                if (!signal?.aborted) {
+                  rejectIdle?.(new Error("Agent event stream ended unexpectedly (no session.idle received)"));
+                }
               } catch (err) {
                 if (!signal?.aborted) {
                   rejectIdle?.(err instanceof Error ? err : new Error(String(err)));

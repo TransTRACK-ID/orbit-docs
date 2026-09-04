@@ -456,7 +456,9 @@ const showDebug = ref(false);
 const debugLogs = ref<Array<{ id: string; eventType: string; eventData: Record<string, unknown>; createdAt: string }>>([]);
 const debugMeta = ref({ total: 0, limit: 200, offset: 0 });
 const isLoadingDebug = ref(false);
-const debugPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
+const debugPollTimer = ref<ReturnType<typeof setInterval> | null = null);
+const expandedDebugIds = ref<Set<string>>(new Set());
+const debugFilter = ref<"all" | "text" | "tools" | "errors">("all");
 
 async function loadDebugLogs() {
   if (!currentJob.value) return;
@@ -497,6 +499,42 @@ onBeforeUnmount(() => {
   stopDebugPolling();
 });
 
+function toggleDebugExpand(id: string) {
+  if (expandedDebugIds.value.has(id)) {
+    expandedDebugIds.value.delete(id);
+  } else {
+    expandedDebugIds.value.add(id);
+  }
+}
+
+/**
+ * Classify a debug event into a filter category so the user can focus on
+ * streaming text, tool calls, or errors.
+ */
+function debugEventCategory(ev: { eventType: string; eventData: Record<string, unknown> }): "text" | "tools" | "errors" | "other" {
+  const t = ev.eventType;
+  if (t === "session.error" || t === "cursor.error" || t === "cursor.stderr") return "errors";
+  if (t === "message.part.updated") {
+    const part = ev.eventData.part as Record<string, unknown> | undefined;
+    if (part?.type === "text" || part?.type === "reasoning") return "text";
+    if (part?.type === "tool") return "tools";
+  }
+  if (t === "cursor.assistant" || t === "cursor.raw" || t === "cursor.content") return "text";
+  if (t === "cursor.tool_use") return "tools";
+  return "other";
+}
+
+const filteredDebugLogs = computed(() => {
+  if (debugFilter.value === "all") return debugLogs.value;
+  return debugLogs.value.filter((log) => debugEventCategory(log) === debugFilter.value);
+});
+
+/**
+ * Format a debug event for the Debug Session panel. Returns the FULL text —
+ * long entries are CSS-clamped with a click-to-expand toggle in the template.
+ * Handles both Opencode (message.part.updated, session.*) and Cursor
+ * (cursor.*) event types.
+ */
 function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unknown> }): string {
   switch (ev.eventType) {
     case "session.created":
@@ -509,22 +547,77 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
       const part = ev.eventData.part as Record<string, unknown> | undefined;
       if (!part) return "Message part updated";
       if (part.type === "text" && typeof part.text === "string") {
-        const text = part.text as string;
-        return `Text: ${text.slice(0, 120)}${text.length > 120 ? "…" : ""}`;
+        return `Text: ${part.text}`;
       }
       if (part.type === "tool" && part.tool) {
         const state = part.state as Record<string, unknown> | undefined;
-        return `Tool ${part.tool}: ${state?.status ?? "unknown"}`;
+        const status = state?.status ?? "unknown";
+        const input = state?.input as Record<string, unknown> | undefined;
+        if (input && status === "running") {
+          const summary = Object.entries(input)
+            .map(([k, v]) => `${k}=${String(v).slice(0, 80)}`)
+            .join(", ");
+          return `Tool ${part.tool} (${status}): ${summary}`;
+        }
+        const title = state?.title as string | undefined;
+        return `Tool ${part.tool}: ${status}${title ? ` — ${title}` : ""}`;
       }
       if (part.type === "step-finish") {
         const tokens = part.tokens as Record<string, number> | undefined;
         return `Step finish · ${tokens?.input ?? 0} in / ${tokens?.output ?? 0} out`;
       }
       if (part.type === "reasoning" && typeof part.text === "string") {
-        const text = part.text as string;
-        return `Reasoning: ${text.slice(0, 120)}${text.length > 120 ? "…" : ""}`;
+        return `Reasoning: ${part.text}`;
       }
       return `Part: ${part.type}`;
+    }
+    // ── Cursor agent events ──────────────────────────────────────
+    case "cursor.spawn": {
+      const p = ev.eventData;
+      return `Spawned cursor-agent (pid=${p.pid}, prompt=${p.promptBytes} bytes)`;
+    }
+    case "cursor.start":
+      return `Cursor session started: ${ev.eventData.chatId}`;
+    case "cursor.assistant": {
+      const msg = ev.eventData.message as Record<string, unknown> | undefined;
+      const parts = msg?.content as Array<{ type?: string; text?: string }> | undefined;
+      if (Array.isArray(parts)) {
+        const text = parts
+          .filter((p) => p.type === "text" && typeof p.text === "string")
+          .map((p) => p.text as string)
+          .join("");
+        return text ? `Assistant: ${text}` : "Assistant: (empty)";
+      }
+      return "Assistant: (no content)";
+    }
+    case "cursor.content":
+      return "Content stream event";
+    case "cursor.result": {
+      const subtype = ev.eventData.subtype as string | undefined;
+      const result = ev.eventData.result as string | undefined;
+      if (result) return `Result (${subtype ?? "unknown"}): ${result}`;
+      return `Result: ${subtype ?? "unknown"}`;
+    }
+    case "cursor.tool_use": {
+      const tool = ev.eventData.tool as string | undefined;
+      const args = ev.eventData.args as Record<string, unknown> | undefined;
+      if (args) {
+        const summary = Object.entries(args)
+          .map(([k, v]) => `${k}=${String(v).slice(0, 80)}`)
+          .join(", ");
+        return `Tool: ${tool ?? "unknown"}(${summary})`;
+      }
+      return `Tool: ${tool ?? "unknown"}`;
+    }
+    case "cursor.error":
+      return `Cursor error: ${ev.eventData.message}`;
+    case "cursor.stderr":
+      return `stderr: ${ev.eventData.text}`;
+    case "cursor.raw":
+      return `Raw: ${ev.eventData.line}`;
+    case "cursor.unhandled": {
+      const p = ev.eventData;
+      return `Unhandled: type=${p.type}, subtype=${p.subtype ?? "none"}`;
     }
     default:
       return ev.eventType;
@@ -774,6 +867,17 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
               {{ currentJob.opencodeSessionId }}
             </span>
             <span class="meta-pill">{{ debugMeta.total }} events</span>
+            <div class="debug-filters">
+              <button
+                v-for="f in (['all', 'text', 'tools', 'errors'] as const)"
+                :key="f"
+                class="debug-filter-btn"
+                :class="{ active: debugFilter === f }"
+                @click="debugFilter = f"
+              >
+                {{ f }}
+              </button>
+            </div>
             <button class="btn btn-ghost btn-sm" @click="loadDebugLogs">
               Refresh
             </button>
@@ -788,12 +892,20 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
           No debug events captured yet.
         </div>
 
+        <div v-else-if="filteredDebugLogs.length === 0" class="debug-empty">
+          No events matching filter "{{ debugFilter }}".
+        </div>
+
         <div v-else class="debug-body">
           <div
-            v-for="log in debugLogs"
+            v-for="log in filteredDebugLogs"
             :key="log.id"
             class="debug-line"
-            :class="`debug-${log.eventType.replace(/\./g, '-')}`"
+            :class="[
+              `debug-${log.eventType.replace(/\./g, '-')}`,
+              { expanded: expandedDebugIds.has(log.id) }
+            ]"
+            @click="toggleDebugExpand(log.id)"
           >
             <span class="debug-ts">{{ new Date(log.createdAt).toLocaleTimeString('en-US', { hour12: false }) }}</span>
             <span class="debug-type">{{ log.eventType }}</span>
@@ -1642,7 +1754,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
   font-size: 12px;
   line-height: 1.6;
   padding: 12px 16px;
-  max-height: 320px;
+  max-height: 480px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -1655,6 +1767,12 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
   align-items: baseline;
   padding: 3px 0;
   border-bottom: 1px solid color-mix(in oklch, var(--fg) 4%, transparent);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.debug-line:hover {
+  background: color-mix(in oklch, var(--fg) 4%, transparent);
 }
 
 .debug-line:last-child {
@@ -1680,6 +1798,45 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
   color: var(--fg);
   word-break: break-word;
   flex: 1;
+  white-space: pre-wrap;
+  /* Clamp to 3 lines when collapsed; expand on click */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.debug-line.expanded .debug-text {
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.debug-filters {
+  display: flex;
+  gap: 2px;
+}
+
+.debug-filter-btn {
+  padding: 2px 8px;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  text-transform: capitalize;
+  transition: all 0.1s;
+}
+
+.debug-filter-btn:hover {
+  color: var(--fg);
+  background: color-mix(in oklch, var(--fg) 4%, transparent);
+}
+
+.debug-filter-btn.active {
+  color: var(--accent);
+  background: color-mix(in oklch, var(--accent) 10%, transparent);
+  border-color: color-mix(in oklch, var(--accent) 30%, transparent);
 }
 
 .debug-session-error .debug-type {
@@ -1687,6 +1844,16 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .debug-session-error .debug-text {
+  color: oklch(50% 0.14 25);
+}
+
+.debug-cursor-error .debug-type,
+.debug-cursor-stderr .debug-type {
+  color: oklch(55% 0.16 25);
+}
+
+.debug-cursor-error .debug-text,
+.debug-cursor-stderr .debug-text {
   color: oklch(50% 0.14 25);
 }
 

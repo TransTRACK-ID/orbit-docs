@@ -282,12 +282,11 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
               onDebugEvent?.({ type: "cursor.error", payload: { message: msg } });
               break;
             }
-            default: {
-              onDebugEvent?.({
-                type: "cursor.unhandled",
-                payload: { type: ev.type, subtype: ev.subtype, keys: Object.keys(ev) },
-              });
-            }
+            // No default case — line 210 already emits a debug event for
+            // every cursor.* type. The previous default emitted a redundant
+            // cursor.unhandled event that duplicated every unrecognized type
+            // (including "assistant", "content", etc.), flooding the Debug
+            // Session panel with noise.
           }
         }
 
