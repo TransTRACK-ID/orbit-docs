@@ -1,11 +1,12 @@
 import { defineEventHandler, readBody, getHeader, createError } from "h3";
 import {
   getMcpOAuthClientId,
+  getMcpResourceUrl,
   isMcpOAuthEnabled,
 } from "~/server/utils/mcp-oauth/config";
 import { consumeAuthorizationCode } from "~/server/utils/mcp-oauth/codes";
 import { verifyPkceS256 } from "~/server/utils/mcp-oauth/pkce";
-import { issueMcpAccessToken } from "~/server/utils/mcp-oauth/tokens";
+import { issueMcpAccessToken, refreshMcpAccessToken } from "~/server/utils/mcp-oauth/tokens";
 import {
   isRedirectUriAllowed,
   validateStaticClientCredentials,
@@ -57,8 +58,28 @@ export default defineEventHandler(async (event) => {
   const body = (await readBody(event)) as Record<string, unknown>;
   const grantType = typeof body.grant_type === "string" ? body.grant_type : undefined;
 
+  if (grantType === "refresh_token") {
+    const refreshToken =
+      typeof body.refresh_token === "string" ? body.refresh_token : undefined;
+    if (!refreshToken) {
+      throw oauthError(400, "invalid_request", "refresh_token is required.");
+    }
+    const result = refreshMcpAccessToken(refreshToken);
+    if (!result) {
+      throw oauthError(400, "invalid_grant", "Refresh token is invalid or expired.");
+    }
+    return {
+      access_token: result.accessToken,
+      token_type: "Bearer",
+      expires_in: result.expiresIn,
+      scope: "mcp:read",
+      resource: getMcpResourceUrl(),
+      refresh_token: result.refreshToken,
+    };
+  }
+
   if (grantType !== "authorization_code") {
-    throw oauthError(400, "unsupported_grant_type", "Only authorization_code is supported.");
+    throw oauthError(400, "unsupported_grant_type", "Only authorization_code and refresh_token are supported.");
   }
 
   const code = typeof body.code === "string" ? body.code : undefined;
@@ -101,11 +122,13 @@ export default defineEventHandler(async (event) => {
     throw oauthError(400, "invalid_grant", "PKCE verification failed.");
   }
 
-  const { accessToken, expiresIn } = issueMcpAccessToken(bodyClientId, record.scope);
+  const { accessToken, expiresIn, refreshToken } = issueMcpAccessToken(bodyClientId, record.scope);
   return {
     access_token: accessToken,
     token_type: "Bearer",
     expires_in: expiresIn,
     scope: record.scope,
+    resource: getMcpResourceUrl(),
+    refresh_token: refreshToken,
   };
 });

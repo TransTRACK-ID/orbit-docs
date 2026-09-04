@@ -41,6 +41,10 @@ export default defineNitroPlugin((nitroApp) => {
 
     // Content Security Policy (C3)
     // Default CSP that works with the Nuxt SPA + external fonts + Leaflet
+    // OAuth consent page needs form-action * because the form redirects
+    // to a cross-origin callback URL (e.g. Gemini's redirect_uri).
+    const path = event.path || '';
+    const isOAuthRoute = path.startsWith('/oauth/') || path.startsWith('/.well-known/');
     const csp = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
@@ -50,7 +54,7 @@ export default defineNitroPlugin((nitroApp) => {
       "connect-src 'self'",
       "frame-ancestors 'self'",
       "base-uri 'self'",
-      "form-action 'self'",
+      isOAuthRoute ? "form-action *" : "form-action 'self'",
     ].join('; ');
 
     event.node.res.setHeader('Content-Security-Policy', csp);

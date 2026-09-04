@@ -9,7 +9,7 @@ import {
 } from "./config";
 import { createAuthorizationCode, consumeAuthorizationCode } from "./codes";
 import { verifyPkceS256 } from "./pkce";
-import { issueMcpAccessToken } from "./tokens";
+import { issueMcpAccessToken, refreshMcpAccessToken } from "./tokens";
 import {
   isRedirectUriAllowed,
   validateStaticClientCredentials,
@@ -135,8 +135,31 @@ async function handleAuthorize(req: Request, res: Response): Promise<void> {
 async function handleToken(req: Request, res: Response): Promise<void> {
   const grantType = typeof req.body?.grant_type === "string" ? req.body.grant_type : undefined;
 
+  if (grantType === "refresh_token") {
+    const refreshToken =
+      typeof req.body?.refresh_token === "string" ? req.body.refresh_token : undefined;
+    if (!refreshToken) {
+      oauthError(res, 400, "invalid_request", "refresh_token is required.");
+      return;
+    }
+    const result = refreshMcpAccessToken(refreshToken);
+    if (!result) {
+      oauthError(res, 400, "invalid_grant", "Refresh token is invalid or expired.");
+      return;
+    }
+    res.json({
+      access_token: result.accessToken,
+      token_type: "Bearer",
+      expires_in: result.expiresIn,
+      scope: "mcp:read",
+      resource: getMcpResourceUrl(),
+      refresh_token: result.refreshToken,
+    });
+    return;
+  }
+
   if (grantType !== "authorization_code") {
-    oauthError(res, 400, "unsupported_grant_type", "Only authorization_code is supported.");
+    oauthError(res, 400, "unsupported_grant_type", "Only authorization_code and refresh_token are supported.");
     return;
   }
 
@@ -183,12 +206,14 @@ async function handleToken(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const { accessToken, expiresIn } = issueMcpAccessToken(bodyClientId, record.scope);
+  const { accessToken, expiresIn, refreshToken } = issueMcpAccessToken(bodyClientId, record.scope);
   res.json({
     access_token: accessToken,
     token_type: "Bearer",
     expires_in: expiresIn,
     scope: record.scope,
+    resource: getMcpResourceUrl(),
+    refresh_token: refreshToken,
   });
 }
 
@@ -199,7 +224,7 @@ function handleAuthorizationServerMetadata(_req: Request, res: Response): void {
     authorization_endpoint: getAuthorizationEndpoint(),
     token_endpoint: getTokenEndpoint(),
     response_types_supported: ["code"],
-    grant_types_supported: ["authorization_code"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
     token_endpoint_auth_methods_supported: [
       "client_secret_basic",
