@@ -25,6 +25,15 @@ services:
       NITRO_POSTRACK_API_URL: ${NITRO_POSTRACK_API_URL:-}
       NITRO_POSTRACK_API_KEY: ${NITRO_POSTRACK_API_KEY:-}
       ORBIT_REPO_DIR: /home/nodejs/.local/share/orbit-docs-repositories
+      # MCP OAuth (optional — enables Gemini Spark / OAuth MCP clients)
+      MCP_API_KEY: ${MCP_API_KEY:-}
+      MCP_OAUTH_CLIENT_ID: ${MCP_OAUTH_CLIENT_ID:-}
+      MCP_OAUTH_CLIENT_SECRET: ${MCP_OAUTH_CLIENT_SECRET:-}
+      MCP_OAUTH_ISSUER: ${MCP_OAUTH_ISSUER:-}
+      MCP_OAUTH_REDIRECT_URIS: ${MCP_OAUTH_REDIRECT_URIS:-}
+      MCP_OAUTH_TOKEN_EXPIRY: ${MCP_OAUTH_TOKEN_EXPIRY:-3600}
+      MCP_OAUTH_SIGNING_SECRET: ${MCP_OAUTH_SIGNING_SECRET:-}
+      MCP_OAUTH_RESOURCE_PATH: ${MCP_OAUTH_RESOURCE_PATH:-/api/mcp/connect}
     deploy:
       replicas: ${COMPOSE_REPLICAS:-1}
     volumes:
