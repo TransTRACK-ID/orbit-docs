@@ -135,6 +135,8 @@ production:
     paths:
       - .env
       - docker-compose.yml
+      - docker-compose.deployment.nginx.yml
+      - docker-compose.deployment.traefik.yml
       #- storage/firebase-admin-sdk.json
     expire_in: 1 days
     when: always
