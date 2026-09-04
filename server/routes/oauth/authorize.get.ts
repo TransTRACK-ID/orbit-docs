@@ -1,4 +1,4 @@
-import { defineEventHandler, getQuery, setHeader, createError } from "h3";
+import { defineEventHandler, getQuery, setHeader, createError, sendRedirect } from "h3";
 import {
   getMcpOAuthClientId,
   isMcpOAuthEnabled,

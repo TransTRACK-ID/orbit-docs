@@ -193,6 +193,7 @@ export default defineNuxtConfig({
       },
     },
     server: {
+      allowedHosts: true,
       hmr: {
         protocol: "ws",
       },
