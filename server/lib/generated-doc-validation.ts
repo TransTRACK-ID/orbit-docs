@@ -35,11 +35,10 @@ export function looksLikeRawAgentOutput(content: string): boolean {
     return true;
   }
 
-  if (
-    trimmed.includes('"heading"') &&
-    trimmed.includes('"content"') &&
-    trimmed.includes("{")
-  ) {
+  // Only flag as raw JSON when the content itself IS JSON (starts with {),
+  // not when a valid markdown doc merely contains those strings (e.g. a
+  // metadata table with "heading" / "content" column names).
+  if (trimmed.startsWith("{") && trimmed.includes('"heading"') && trimmed.includes('"content"')) {
     try {
       extractDocSectionUpdateJson(trimmed);
       return true;

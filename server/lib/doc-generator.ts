@@ -66,7 +66,7 @@ import {
   applySectionUpdateFromAgent,
   validateGeneratedDocContent,
 } from "./agent-doc-output";
-import type { GeneratedDocType } from "./generated-doc";
+import { stripGeneratedDocArtifacts, type GeneratedDocType } from "./generated-doc";
 
 const execAsync = promisify(exec);
 
@@ -689,13 +689,23 @@ async function runAgentForSectionUpdate(
         opts.docType
       );
     } catch {
-      // Fallback: agent returned a full document instead of section JSON.
-      lastContent = await resolveAgentDocOutput(chatOutput, workdir, {
-        outputRelativePath: opts.outputRelativePath,
-        existingContent: opts.existingContent,
-        fileContentBefore: existingContent,
-        docType: opts.docType,
-      });
+      // Agent may have written via the write tool — prefer disk content.
+      const diskContent = await readExistingDoc(
+        workdir,
+        opts.outputRelativePath,
+        opts.docType
+      );
+      if (diskContent?.trim() && diskContent.trim() !== existingContent.trim()) {
+        lastContent = stripGeneratedDocArtifacts(diskContent, opts.docType);
+      } else {
+        // Fallback: agent returned a full document instead of section JSON.
+        lastContent = await resolveAgentDocOutput(chatOutput, workdir, {
+          outputRelativePath: opts.outputRelativePath,
+          existingContent: opts.existingContent,
+          fileContentBefore: existingContent,
+          docType: opts.docType,
+        });
+      }
     }
 
     const validation = validateGeneratedDocContent(lastContent, existingContent, {
@@ -716,7 +726,12 @@ async function runAgentForSectionUpdate(
       continue;
     }
 
-    assertValidGeneratedDoc(lastContent, existingContent, { isMergedUpdate: true });
+    // Graceful degradation: keep the existing document instead of failing
+    // the entire job when the agent can't produce a valid section update.
+    await updateJobLiveProgress(jobId, {
+      progressMessage: `Section update failed (${validation.reason}) — keeping existing document.`,
+    });
+    return existingContent;
   }
 
   return lastContent;
@@ -761,6 +776,18 @@ async function runAgentForFullDocCreate(
       continue;
     }
 
+    // Last resort: check if the agent wrote the file via the write tool.
+    const diskContent = await readExistingDoc(
+      workdir,
+      opts.outputRelativePath,
+      opts.docType
+    );
+    if (diskContent?.trim()) {
+      const diskValidation = validateGeneratedDocContent(diskContent, opts.existingContent);
+      if (diskValidation.valid) {
+        return stripGeneratedDocArtifacts(diskContent, opts.docType);
+      }
+    }
     assertValidGeneratedDoc(lastContent, opts.existingContent);
   }
 

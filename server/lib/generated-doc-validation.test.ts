@@ -68,4 +68,22 @@ describe("validateGeneratedDocContent", () => {
     expect(result.valid).toBe(false);
     expect(result.reason).toMatch(/raw agent reasoning/i);
   });
+
+  it("does not flag valid markdown containing heading/content strings as raw JSON", () => {
+    const doc = `# Product Requirements Document (PRD) — MyApp
+
+## Metadata
+
+| Field | Value |
+|---|---|
+| "heading" | "content" |
+| {key} | value |
+
+## 1. Pendahuluan
+
+Real content here.`;
+    expect(looksLikeRawAgentOutput(doc)).toBe(false);
+    const result = validateGeneratedDocContent(doc, "existing");
+    expect(result.valid).toBe(true);
+  });
 });
