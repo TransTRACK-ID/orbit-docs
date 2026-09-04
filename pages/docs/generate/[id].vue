@@ -456,7 +456,7 @@ const showDebug = ref(false);
 const debugLogs = ref<Array<{ id: string; eventType: string; eventData: Record<string, unknown>; createdAt: string }>>([]);
 const debugMeta = ref({ total: 0, limit: 200, offset: 0 });
 const isLoadingDebug = ref(false);
-const debugPollTimer = ref<ReturnType<typeof setInterval> | null = null);
+const debugPollTimer = ref<ReturnType<typeof setInterval> | null>(null);
 const expandedDebugIds = ref<Set<string>>(new Set());
 const debugFilter = ref<"all" | "text" | "tools" | "errors">("all");
 
