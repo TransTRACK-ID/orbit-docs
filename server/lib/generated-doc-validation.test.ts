@@ -87,3 +87,41 @@ Real content here.`;
     expect(result.valid).toBe(true);
   });
 });
+
+describe("looksLikeRawAgentOutput — expanded preamble patterns", () => {
+  it("detects 'I'll locate' preamble", () => {
+    expect(looksLikeRawAgentOutput("I'll locate the existing product SDD and the per-repo design docs.")).toBe(true);
+  });
+
+  it("detects 'Product-root' preamble", () => {
+    expect(looksLikeRawAgentOutput("Product-root docs/SDD.md is missing; I'll read the per-repo SDDs.")).toBe(true);
+  });
+
+  it("detects 'No product-root' preamble", () => {
+    expect(looksLikeRawAgentOutput("No product-root docs/SDD.md exists; emitting JSON patches.")).toBe(true);
+  });
+
+  it("detects 'emitting JSON' preamble", () => {
+    expect(looksLikeRawAgentOutput("emitting JSON patches for the template headings.")).toBe(true);
+  });
+
+  it("detects 'I'll patch' preamble", () => {
+    expect(looksLikeRawAgentOutput("I'll patch only the sections that need updates.")).toBe(true);
+  });
+
+  it("detects 'Looking at' preamble", () => {
+    expect(looksLikeRawAgentOutput("Looking at the repository structure to understand the codebase.")).toBe(true);
+  });
+
+  it("detects truncated JSON after preamble", () => {
+    const raw =
+      'I\'ll locate the existing product SDD.\n' +
+      '{"sections":[{"heading":"## 1. Pendahuluan","content":"Intro';
+    expect(looksLikeRawAgentOutput(raw)).toBe(true);
+  });
+
+  it("does not flag valid markdown with common phrases", () => {
+    const doc = "## 1. Pendahuluan\n\nThis section introduces the product.\n\n## 2. Architecture\n\nDetails here.";
+    expect(looksLikeRawAgentOutput(doc)).toBe(false);
+  });
+});

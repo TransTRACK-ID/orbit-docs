@@ -1,7 +1,7 @@
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFile, mkdir } from "fs/promises";
-import { join } from "path";
+import { readFile, mkdir, writeFile } from "fs/promises";
+import { join, dirname } from "path";
 import { existsSync } from "fs";
 import { getRepoDir } from "~/server/utils/repo-dir";
 import { getDb } from "~/server/database";
@@ -65,6 +65,7 @@ import {
   preferDiskDocOutput,
   applySectionUpdateFromAgent,
   validateGeneratedDocContent,
+  looksLikeRawAgentOutput,
 } from "./agent-doc-output";
 import { stripGeneratedDocArtifacts, type GeneratedDocType } from "./generated-doc";
 
@@ -646,6 +647,25 @@ interface RunAgentForDocOptions {
 }
 
 /**
+ * When the existing document content was loaded from the Orbit Docs database
+ * (not from the repo filesystem), it won't exist at `outputRelativePath` on
+ * disk. The agent's update prompt instructs it to "read the existing document
+ * at <path> first" — so we must materialise the content on disk before the
+ * agent runs, otherwise the agent cannot find the file and returns an empty
+ * section-update payload.
+ */
+async function ensureExistingDocOnDisk(
+  workdir: string,
+  outputRelativePath: string,
+  existingContent: string
+): Promise<void> {
+  const absPath = join(workdir, outputRelativePath);
+  if (existsSync(absPath)) return;
+  await mkdir(dirname(absPath), { recursive: true });
+  await writeFile(absPath, existingContent, "utf-8");
+}
+
+/**
  * Run the agent for document generation.
  * - Create: agent writes the full file; validate completeness.
  * - Update: agent returns JSON section patches; system merges into existing doc.
@@ -659,6 +679,7 @@ async function runAgentForDoc(
 ): Promise<string> {
   const existing = opts.existingContent?.trim();
   if (existing) {
+    await ensureExistingDocOnDisk(workdir, opts.outputRelativePath, existing);
     return runAgentForSectionUpdate(agent, jobId, prompt, workdir, opts, existing);
   }
   return runAgentForFullDocCreate(agent, jobId, prompt, workdir, opts);
@@ -679,7 +700,6 @@ async function runAgentForSectionUpdate(
     const chatOutput = await runAgentAnalyze(agent, jobId, lastPrompt, workdir, {
       partialField: opts.partialField,
     });
-
     try {
       lastContent = await applySectionUpdateFromAgent(
         chatOutput,
@@ -698,13 +718,20 @@ async function runAgentForSectionUpdate(
       if (diskContent?.trim() && diskContent.trim() !== existingContent.trim()) {
         lastContent = stripGeneratedDocArtifacts(diskContent, opts.docType);
       } else {
-        // Fallback: agent returned a full document instead of section JSON.
-        lastContent = await resolveAgentDocOutput(chatOutput, workdir, {
+        // Fallback: try to extract markdown from agent JSON, then fall back
+        // to existing content rather than raw chat output (which may contain
+        // agent thinking/preamble text).
+        const resolved = await resolveAgentDocOutput(chatOutput, workdir, {
           outputRelativePath: opts.outputRelativePath,
           existingContent: opts.existingContent,
           fileContentBefore: existingContent,
           docType: opts.docType,
         });
+        if (resolved.trim() && !looksLikeRawAgentOutput(resolved)) {
+          lastContent = resolved;
+        } else {
+          lastContent = existingContent;
+        }
       }
     }
 

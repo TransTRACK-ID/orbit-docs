@@ -20,30 +20,41 @@ const TRUNCATION_MARKERS: RegExp[] = [
 ];
 
 const AGENT_PREAMBLE_PATTERNS: RegExp[] = [
-  /^I['']ll (read|explore|analyze|search|start)/im,
+  /^I['']ll (read|explore|analyze|search|start|locate|find|check|begin|review)/im,
   /^Searching for/im,
-  /^Let me (read|explore|analyze|search)/im,
-  /^Analyzing (the|all|your)/im,
+  /^Let me (read|explore|analyze|search|check|look|start|try|review)/im,
+  /^Analyzing (the|all|your|this)/im,
+  /^(Product-root|No product-root|Product root|No product root)/im,
+  /^emitting JSON/im,
+  /^I need to (read|explore|analyze|search|check|find|look|review)/im,
+  /^I will (read|explore|analyze|search|check|find|look|review|locate)/im,
+  /^I'll (patch|update|produce|generate|create|write|draft|build)/im,
+  /^Looking (at|for|through)/im,
+  /^Checking (the|for|if)/im,
+  /^Reading (the|from|existing)/im,
+  /^Now (I|let|reading|analyzing|searching|checking|looking|producing|emitting)/im,
 ];
 
 /** Agent reasoning or unprocessed JSON that was saved instead of markdown. */
 export function looksLikeRawAgentOutput(content: string): boolean {
   const trimmed = content.trim();
   if (!trimmed) return false;
-
   if (AGENT_PREAMBLE_PATTERNS.some((re) => re.test(trimmed))) {
     return true;
   }
 
-  // Only flag as raw JSON when the content itself IS JSON (starts with {),
-  // not when a valid markdown doc merely contains those strings (e.g. a
-  // metadata table with "heading" / "content" column names).
-  if (trimmed.startsWith("{") && trimmed.includes('"heading"') && trimmed.includes('"content"')) {
-    try {
-      extractDocSectionUpdateJson(trimmed);
-      return true;
-    } catch {
-      /* not parseable agent JSON */
+  // Detect raw JSON section-update payloads — either at the start of the
+  // content or embedded after agent preamble text (e.g. "I'll locate...{"sections":...}").
+  if (trimmed.includes('"sections"') && trimmed.includes('"heading"') && trimmed.includes('"content"')) {
+    const jsonStart = trimmed.indexOf("{");
+    if (jsonStart !== -1) {
+      try {
+        extractDocSectionUpdateJson(trimmed);
+        return true;
+      } catch {
+        // JSON may be truncated — still flag if preamble precedes it.
+        if (jsonStart > 0) return true;
+      }
     }
   }
 

@@ -44,3 +44,40 @@ describe("stripGeneratedDocArtifacts", () => {
     expect(stripGeneratedDocArtifacts(raw)).toBe("## 1. Pendahuluan\n\nBody text.");
   });
 });
+
+describe("stripGeneratedDocArtifacts — JSON section payloads", () => {
+  it("extracts markdown from multi-section JSON with preamble", () => {
+    const raw =
+      'I\'ll locate the existing product SDD and the per-repo design docs.\n' +
+      'No product-root docs/SDD.md exists; emitting JSON patches.\n' +
+      JSON.stringify({
+        sections: [
+          { heading: "## 1. Pendahuluan", content: "Intro text." },
+          { heading: "## 2. Arsitektur", content: "Architecture details." },
+        ],
+      });
+    const result = stripGeneratedDocArtifacts(raw, "sdd");
+    expect(result).toContain("## 1. Pendahuluan");
+    expect(result).toContain("Intro text.");
+    expect(result).toContain("## 2. Arsitektur");
+    expect(result).toContain("Architecture details.");
+    expect(result).not.toContain("I'll locate");
+    expect(result).not.toContain("No product-root");
+  });
+
+  it("extracts markdown from single-section JSON with H1 heading", () => {
+    const raw =
+      'Searching for the PRD file...\n' +
+      JSON.stringify({
+        heading: "# Product Requirements Document (PRD) — MMS",
+        content: "## 1. Pendahuluan\n\nUpdated body.",
+      });
+    const result = stripGeneratedDocArtifacts(raw, "srs");
+    expect(result).toBe("# Product Requirements Document (PRD) — MMS\n\n## 1. Pendahuluan\n\nUpdated body.");
+  });
+
+  it("leaves normal markdown unchanged when no JSON is present", () => {
+    const doc = "# System Design Document (SDD)\n\n## 1. Pendahuluan\n\nReal content.";
+    expect(stripGeneratedDocArtifacts(doc, "sdd")).toBe(doc);
+  });
+});

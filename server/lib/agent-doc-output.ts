@@ -2,6 +2,7 @@ import { readExistingDoc } from "./existing-doc";
 import { stripGeneratedDocArtifacts, type GeneratedDocType } from "./generated-doc";
 import {
   looksTruncatedDocOutput,
+  looksLikeRawAgentOutput,
   validateGeneratedDocContent,
 } from "./generated-doc-validation";
 import {
@@ -15,7 +16,7 @@ import {
 import { writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
 
-export { validateGeneratedDocContent };
+export { validateGeneratedDocContent, looksLikeRawAgentOutput };
 
 const DOC_WRITTEN_RE = /^DOC_WRITTEN:\s*(.+)$/m;
 
@@ -28,6 +29,34 @@ export interface ResolveAgentDocOutputOptions {
 }
 
 /**
+ * Try to extract a readable markdown document from agent chat output that
+ * contains JSON section-update payloads. Handles both single-H1 payloads
+ * (via extractFullMarkdownFromAgentJson) and multi-section payloads (via
+ * buildFullDocFromAllSections). Returns null if no JSON is found or parsing
+ * fails.
+ */
+function extractMarkdownFromAgentJson(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // Single H1 section → full document.
+  const single = extractFullMarkdownFromAgentJson(trimmed);
+  if (single) return single;
+
+  // Multi-section payload → build a standalone doc from all sections.
+  try {
+    const payload = parseDocSectionUpdatePayload(trimmed);
+    if (payload.sections.length > 0) {
+      return buildFullDocFromAllSections(payload);
+    }
+  } catch {
+    // Not valid JSON or no sections — fall through.
+  }
+
+  return null;
+}
+
+/**
  * Prefer on-disk file content when the agent wrote via tools; fall back to chat text.
  */
 export async function resolveAgentDocOutput(
@@ -35,7 +64,7 @@ export async function resolveAgentDocOutput(
   workdir: string,
   options: ResolveAgentDocOutputOptions
 ): Promise<string> {
-  const jsonMarkdown = extractFullMarkdownFromAgentJson(chatOutput.trim());
+  const jsonMarkdown = extractMarkdownFromAgentJson(chatOutput);
   const chatDoc = stripGeneratedDocArtifacts(
     (jsonMarkdown ?? chatOutput).trim(),
     options.docType
