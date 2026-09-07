@@ -6,10 +6,11 @@ WORKDIR /app
 
 # git + build tools for native modules during install
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends git python3 make g++ ca-certificates && \
+    apt-get install -y --no-install-recommends git python3 make g++ pkg-config libvips-dev ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
 COPY package.json bun.lock ./
+ENV npm_config_network_timeout=300000
 RUN bun install --frozen-lockfile
 
 COPY . .
@@ -31,15 +32,14 @@ FROM node:22-slim
 WORKDIR /app
 
 ENV NODE_ENV=production
-
 # git + bash + curl + openssh-client are required at runtime:
 # - git: repository clone/diff/push for doc generation
 # - bash: opencode agent tool execution
 # - curl: used to install cursor-agent below
+# - libvips42: runtime library for sharp image processing
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends bash curl git openssh-client ca-certificates unzip gosu && \
+    apt-get install -y --no-install-recommends bash curl git openssh-client ca-certificates unzip gosu libvips42 && \
     rm -rf /var/lib/apt/lists/*
-
 RUN groupadd -r nodejs --gid=1001 && \
     useradd -r -g nodejs --uid=1001 nodejs
 
