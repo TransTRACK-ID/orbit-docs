@@ -33,6 +33,9 @@ const AGENT_PREAMBLE_PATTERNS: RegExp[] = [
   /^Checking (the|for|if)/im,
   /^Reading (the|from|existing)/im,
   /^Now (I|let|reading|analyzing|searching|checking|looking|producing|emitting)/im,
+  /^(Unable to|Cannot|Can not) (perform|update|generate|find|read|create|produce)/im,
+  /^I (can['']t|cannot) (produce|find|locate|generate|create|update|read)/im,
+  /^I could not (find|locate|read|update|generate)/im,
 ];
 
 /** Agent reasoning or unprocessed JSON that was saved instead of markdown. */
@@ -43,22 +46,50 @@ export function looksLikeRawAgentOutput(content: string): boolean {
     return true;
   }
 
-  // Detect raw JSON section-update payloads — either at the start of the
-  // content or embedded after agent preamble text (e.g. "I'll locate...{"sections":...}").
-  if (trimmed.includes('"sections"') && trimmed.includes('"heading"') && trimmed.includes('"content"')) {
+  // Detect raw JSON section-update or error payloads — either as standalone JSON
+  // (e.g. {"sections":[], ...}) or embedded after preamble text.
+  if (
+    trimmed.startsWith("{") ||
+    trimmed.includes('"sections"') ||
+    trimmed.includes('"revisionSummary"') ||
+    (trimmed.includes('"heading"') && trimmed.includes('"content"'))
+  ) {
     const jsonStart = trimmed.indexOf("{");
-    if (jsonStart !== -1) {
+    const jsonEnd = trimmed.lastIndexOf("}");
+    if (jsonStart !== -1 && jsonEnd >= jsonStart) {
       try {
-        extractDocSectionUpdateJson(trimmed);
-        return true;
+        const candidate = trimmed.slice(jsonStart, jsonEnd + 1);
+        const parsed = JSON.parse(candidate);
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          ("sections" in parsed || "revisionSummary" in parsed || "error" in parsed)
+        ) {
+          return true;
+        }
       } catch {
-        // JSON may be truncated — still flag if preamble precedes it.
-        if (jsonStart > 0) return true;
+        if (trimmed.includes('"sections"') || trimmed.includes('"revisionSummary"')) {
+          return true;
+        }
       }
     }
   }
 
   return false;
+}
+
+/**
+ * Check whether content is a valid, usable markdown document (not error JSON,
+ * not raw agent reasoning, not empty, and containing markdown headings).
+ */
+export function isValidExistingDoc(content: string | null | undefined): boolean {
+  if (!content) return false;
+  const trimmed = content.trim();
+  if (trimmed.length < 20) return false;
+  if (looksTruncatedDocOutput(trimmed)) return false;
+  if (looksLikeRawAgentOutput(trimmed)) return false;
+  if (!/^#{1,3}\s+\S/m.test(trimmed)) return false;
+  return true;
 }
 
 export function looksTruncatedDocOutput(content: string): boolean {
@@ -73,6 +104,7 @@ export function looksIncompleteDocUpdate(
   newContent: string,
   existingContent: string | null
 ): boolean {
+
   if (!existingContent?.trim()) return false;
 
   const existingLen = existingContent.trim().length;
@@ -100,6 +132,9 @@ export function validateGeneratedDocContent(
   }
   if (looksLikeRawAgentOutput(trimmed)) {
     return { valid: false, reason: "raw agent reasoning or JSON in output" };
+  }
+  if (!/^#{1,3}\s+\S/m.test(trimmed)) {
+    return { valid: false, reason: "document has no markdown headings" };
   }
   if (!options?.isMergedUpdate && looksIncompleteDocUpdate(trimmed, existingContent ?? null)) {
     return { valid: false, reason: "updated document is much shorter than the existing version" };

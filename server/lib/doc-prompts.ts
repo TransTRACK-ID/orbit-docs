@@ -26,7 +26,7 @@ export function buildDocSectionUpdateInstructions(relativePath: string): string 
   return `IMPORTANT — INCREMENTAL UPDATE (do NOT rewrite the whole document):
 1. Read the existing document at \`${relativePath}\` first.
 2. Analyze the codebase and identify ONLY the sections that need changes.
-3. Output ONLY a JSON object (no markdown fences, no prose before/after) with this shape:
+3. Output ONLY a valid JSON object. Start your response directly with { and end with }. Do NOT write conversational thoughts, analysis preamble, or markdown fences around the JSON.
 {
   "sections": [
     {
@@ -39,8 +39,10 @@ export function buildDocSectionUpdateInstructions(relativePath: string): string 
 4. Include ONLY sections you actually changed. Omit unchanged sections entirely.
 5. Use the exact heading text from the existing file (including numbering), e.g. "## 5. Routing & Halaman".
 6. Each section's content must be complete for that section — no placeholders or "[...]".
-7. The system will merge your patches into the existing document and append a revision-history row.
-8. Do NOT write the full file with the write tool. Do NOT paste the full document in chat.`;
+7. Diagrams and code blocks inside section content MUST use proper markdown code fences: use \`\`\`mermaid ... \`\`\` for Mermaid diagrams, \`\`\`ts ... \`\`\` for code. Never emit bare un-fenced "mermaid" text.
+8. If the file at \`${relativePath}\` is damaged, contains only prior error JSON, or has no section headings to patch, write the COMPLETE document to \`${relativePath}\` using the write tool and reply exactly: DOC_WRITTEN: ${relativePath}
+9. The system will merge your patches into the existing document and append a revision-history row.
+10. Do NOT write the full file with the write tool if the existing file has valid sections. Do NOT paste the full document in chat.`;
 }
 
 export function buildDocSectionUpdateRetryPrompt(relativePath: string, reason: string): string {

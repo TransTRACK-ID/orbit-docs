@@ -8,6 +8,7 @@ import {
 } from "~/server/database/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { onDocContentSaved } from "~/server/lib/doc-embedding-hooks";
+import { isValidExistingDoc } from "./generated-doc-validation";
 
 export type AppProductDocType = "srs" | "fsd" | "git_snapshot" | "sdd";
 export type GenerationProductDocType = "srs" | "fsd" | "git_snapshot" | "sdd_index";
@@ -44,8 +45,12 @@ export async function readAppProductDoc(
     .then((rows) => rows[0]);
 
   const content = row?.content?.trim();
-  return content || null;
+  if (content && isValidExistingDoc(content)) {
+    return content;
+  }
+  return null;
 }
+
 
 async function readLatestJobProductDoc(
   appId: string,
@@ -83,7 +88,8 @@ async function readLatestJobProductDoc(
       .then((rows) => rows[0]);
 
     const fromVersion = versionRow?.content?.trim();
-    if (fromVersion) return fromVersion;
+    if (fromVersion && isValidExistingDoc(fromVersion)) return fromVersion;
+
 
     const fromJob =
       docType === "srs"
@@ -94,11 +100,12 @@ async function readLatestJobProductDoc(
         ? job.gitSnapshotContent
         : job.sddContent;
 
-    if (fromJob?.trim()) return fromJob.trim();
+    if (fromJob?.trim() && isValidExistingDoc(fromJob.trim())) return fromJob.trim();
   }
 
   return null;
 }
+
 
 /** Load the best existing product doc for incremental generation. */
 export async function readProductDocForGeneration(
@@ -111,17 +118,18 @@ export async function readProductDocForGeneration(
 ): Promise<string | null> {
   const appDocType = generationDocTypeToAppDocType(docType);
   const fromApp = await readAppProductDoc(appId, appDocType);
-  if (fromApp) return fromApp;
+  if (fromApp && isValidExistingDoc(fromApp)) return fromApp;
 
   const fromJob = await readLatestJobProductDoc(
     appId,
     docType,
     options.excludeJobId
   );
-  if (fromJob) return fromJob;
+  if (fromJob && isValidExistingDoc(fromJob)) return fromJob;
 
   if (options.repoFallback) {
-    return options.repoFallback();
+    const fromRepo = await options.repoFallback();
+    if (fromRepo && isValidExistingDoc(fromRepo)) return fromRepo;
   }
 
   return null;
@@ -137,8 +145,7 @@ export async function saveAppProductDoc(
   const db = getDb();
   const docTitle = title || TITLES[docType];
   const trimmed = content.trim();
-  if (!trimmed) return;
-
+  if (!trimmed || !isValidExistingDoc(trimmed)) return;
   const existing = await db
     .select()
     .from(docs)

@@ -6,7 +6,9 @@ import {
   splitMarkdownSections,
   buildFullDocFromAllSections,
   extractFullMarkdownFromAgentJson,
+  normalizeMarkdownDiagrams,
 } from "./doc-section-merge";
+
 
 const BASE_DOC = `# SDD Frontend — Demo
 
@@ -154,5 +156,19 @@ describe("buildFullDocFromAllSections", () => {
     );
     const doc = buildFullDocFromAllSections(payload);
     expect(doc).toBe("## 1. Pendahuluan\n\nIntro text.\n\n## 2. Arsitektur\n\nArchitecture details.");
+  });
+});
+
+describe("normalizeMarkdownDiagrams", () => {
+  it("wraps bare mermaid diagrams in code fences", () => {
+    const bare = "mermaid\nflowchart TB\n subgraph presentation\n FE[Frontend]\n end";
+    const normalized = normalizeMarkdownDiagrams(bare);
+    expect(normalized).toBe("```mermaid\nflowchart TB\n subgraph presentation\n FE[Frontend]\n end\n```");
+  });
+
+  it("leaves already-fenced mermaid diagrams untouched", () => {
+    const fenced = "```mermaid\nflowchart LR\n A --> B\n```";
+    const normalized = normalizeMarkdownDiagrams(fenced);
+    expect(normalized).toBe(fenced);
   });
 });

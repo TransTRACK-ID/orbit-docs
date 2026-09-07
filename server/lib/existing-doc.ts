@@ -3,6 +3,7 @@ import { join } from "path";
 import { existsSync } from "fs";
 import { stripGeneratedDocArtifacts } from "./generated-doc";
 import type { GeneratedDocType } from "./generated-doc";
+import { isValidExistingDoc } from "./generated-doc-validation";
 
 /**
  * Read an existing document from a cloned repository.
@@ -34,6 +35,10 @@ export async function readExistingDoc(
 
     if (docType) {
       content = stripGeneratedDocArtifacts(content, docType);
+    }
+
+    if (!isValidExistingDoc(content)) {
+      return null;
     }
 
     return content;

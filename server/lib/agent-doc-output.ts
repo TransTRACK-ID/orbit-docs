@@ -3,6 +3,7 @@ import { stripGeneratedDocArtifacts, type GeneratedDocType } from "./generated-d
 import {
   looksTruncatedDocOutput,
   looksLikeRawAgentOutput,
+  isValidExistingDoc,
   validateGeneratedDocContent,
 } from "./generated-doc-validation";
 import {
@@ -16,7 +17,7 @@ import {
 import { writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
 
-export { validateGeneratedDocContent, looksLikeRawAgentOutput };
+export { validateGeneratedDocContent, looksLikeRawAgentOutput, isValidExistingDoc };
 
 const DOC_WRITTEN_RE = /^DOC_WRITTEN:\s*(.+)$/m;
 

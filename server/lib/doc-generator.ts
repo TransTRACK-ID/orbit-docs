@@ -1,7 +1,8 @@
 import { exec } from "child_process";
 import { promisify } from "util";
-import { readFile, mkdir, writeFile } from "fs/promises";
+import { readFile, mkdir, writeFile, unlink } from "fs/promises";
 import { join, dirname } from "path";
+
 import { existsSync } from "fs";
 import { getRepoDir } from "~/server/utils/repo-dir";
 import { getDb } from "~/server/database";
@@ -66,8 +67,8 @@ import {
   applySectionUpdateFromAgent,
   validateGeneratedDocContent,
   looksLikeRawAgentOutput,
+  isValidExistingDoc,
 } from "./agent-doc-output";
-import { stripGeneratedDocArtifacts, type GeneratedDocType } from "./generated-doc";
 
 const execAsync = promisify(exec);
 
@@ -381,9 +382,12 @@ async function persistProductDoc(
   options?: { checkAdrCompliance?: boolean }
 ): Promise<void> {
   const trimmed = content.trim();
-  if (!trimmed) return;
+  if (!trimmed || !isValidExistingDoc(trimmed)) {
+    console.warn(`[persistProductDoc] Refusing to persist invalid doc for ${type}`);
+    return;
+  }
 
-  await updateJobResult(jobId, type, content);
+  await updateJobResult(jobId, type, trimmed);
 
   const previous = await readProductDocForGeneration(appId, type, {
     excludeJobId: jobId,
@@ -645,24 +649,41 @@ interface RunAgentForDocOptions {
   existingContent?: string | null;
   docType?: GeneratedDocType;
 }
-
 /**
- * When the existing document content was loaded from the Orbit Docs database
- * (not from the repo filesystem), it won't exist at `outputRelativePath` on
- * disk. The agent's update prompt instructs it to "read the existing document
- * at <path> first" — so we must materialise the content on disk before the
- * agent runs, otherwise the agent cannot find the file and returns an empty
- * section-update payload.
+ * Prepare the target doc file path on disk before running the agent:
+ * - If we have valid existing document content (from DB or repo), ensure the
+ *   file on disk contains that valid content. If the disk has stale/corrupted
+ *   content (e.g. prior error JSON), overwrite it.
+ * - If we do NOT have valid existing document content (i.e. full creation),
+ *   and the file on disk currently exists with corrupted content (e.g. prior
+ *   error JSON), remove it so the agent is not misled by stale error files.
  */
-async function ensureExistingDocOnDisk(
+async function prepareDocPathOnDisk(
   workdir: string,
   outputRelativePath: string,
-  existingContent: string
+  existingContent: string | null | undefined
 ): Promise<void> {
   const absPath = join(workdir, outputRelativePath);
-  if (existsSync(absPath)) return;
-  await mkdir(dirname(absPath), { recursive: true });
-  await writeFile(absPath, existingContent, "utf-8");
+  const exists = existsSync(absPath);
+
+  if (existingContent && isValidExistingDoc(existingContent)) {
+    if (exists) {
+      const diskContent = await readFile(absPath, "utf-8").catch(() => "");
+      if (diskContent.trim() === existingContent.trim()) return;
+      if (isValidExistingDoc(diskContent)) {
+        return;
+      }
+    }
+    await mkdir(dirname(absPath), { recursive: true });
+    await writeFile(absPath, existingContent, "utf-8");
+  } else {
+    if (exists) {
+      const diskContent = await readFile(absPath, "utf-8").catch(() => "");
+      if (!isValidExistingDoc(diskContent)) {
+        await unlink(absPath).catch(() => {});
+      }
+    }
+  }
 }
 
 /**
@@ -678,12 +699,14 @@ async function runAgentForDoc(
   opts: RunAgentForDocOptions
 ): Promise<string> {
   const existing = opts.existingContent?.trim();
-  if (existing) {
-    await ensureExistingDocOnDisk(workdir, opts.outputRelativePath, existing);
+  if (existing && isValidExistingDoc(existing)) {
+    await prepareDocPathOnDisk(workdir, opts.outputRelativePath, existing);
     return runAgentForSectionUpdate(agent, jobId, prompt, workdir, opts, existing);
   }
+  await prepareDocPathOnDisk(workdir, opts.outputRelativePath, null);
   return runAgentForFullDocCreate(agent, jobId, prompt, workdir, opts);
 }
+
 
 async function runAgentForSectionUpdate(
   agent: Agent,
@@ -715,7 +738,7 @@ async function runAgentForSectionUpdate(
         opts.outputRelativePath,
         opts.docType
       );
-      if (diskContent?.trim() && diskContent.trim() !== existingContent.trim()) {
+      if (diskContent?.trim() && diskContent.trim() !== existingContent.trim() && isValidExistingDoc(diskContent)) {
         lastContent = stripGeneratedDocArtifacts(diskContent, opts.docType);
       } else {
         // Fallback: try to extract markdown from agent JSON, then fall back
@@ -727,7 +750,7 @@ async function runAgentForSectionUpdate(
           fileContentBefore: existingContent,
           docType: opts.docType,
         });
-        if (resolved.trim() && !looksLikeRawAgentOutput(resolved)) {
+        if (resolved.trim() && isValidExistingDoc(resolved)) {
           lastContent = resolved;
         } else {
           lastContent = existingContent;

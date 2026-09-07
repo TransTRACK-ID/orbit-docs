@@ -67,11 +67,23 @@ export function splitMarkdownSections(doc: string): ParsedSection[] {
   return sections;
 }
 
+/**
+ * Wrap bare Mermaid diagram code (missing ```mermaid fences) in proper markdown code fences.
+ */
+export function normalizeMarkdownDiagrams(content: string): string {
+  return content.replace(
+    /(^|\n\n)(?!```)mermaid\s*\n((?:flowchart|sequenceDiagram|classDiagram|erDiagram|stateDiagram|gantt|pie|gitGraph|C4Context)[\s\S]*?)(?=(\n\n(?:[#|*-]|\d+\.|\w+:|```)|$))/gi,
+    (_match, prefix, diagramBody) => `${prefix}\`\`\`mermaid\n${diagramBody.trim()}\n\`\`\``
+  );
+}
+
 function formatSection(headingLine: string, body: string): string {
-  const trimmedBody = body.replace(/^\n+/, "").replace(/\n+$/, "");
+  const normalizedBody = normalizeMarkdownDiagrams(body);
+  const trimmedBody = normalizedBody.replace(/^\n+/, "").replace(/\n+$/, "");
   if (!trimmedBody) return headingLine;
   return `${headingLine}\n\n${trimmedBody}`;
 }
+
 
 function findSectionIndex(sections: ParsedSection[], heading: string): number {
   const normalized = normalizeHeading(heading);
@@ -267,7 +279,7 @@ export function parseDocSectionUpdatePayload(raw: string): DocSectionUpdatePaylo
     }
     const heading = record.heading.trim();
     if (!heading) continue;
-    sections.push({ heading, content: record.content });
+    sections.push({ heading, content: normalizeMarkdownDiagrams(record.content) });
   }
 
   if (sections.length === 0) {
