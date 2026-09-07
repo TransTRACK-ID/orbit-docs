@@ -69,6 +69,7 @@ import {
   looksLikeRawAgentOutput,
   isValidExistingDoc,
 } from "./agent-doc-output";
+import { stripGeneratedDocArtifacts, type GeneratedDocType } from "./generated-doc";
 
 const execAsync = promisify(exec);
 
