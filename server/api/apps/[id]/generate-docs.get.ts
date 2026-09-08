@@ -1,7 +1,7 @@
 import { defineEventHandler, createError, getRouterParam, getQuery } from "h3";
 import { getDb } from "~/server/database";
 import { docGenerationJobs } from "~/server/database/schema";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
 
 export default defineEventHandler(async (event) => {
@@ -23,6 +23,11 @@ export default defineEventHandler(async (event) => {
   const offset =
     typeof query.offset === "string" ? parseInt(query.offset, 10) || 0 : 0;
 
+  const status =
+    typeof query.status === "string" && query.status.length > 0
+      ? query.status
+      : undefined;
+
   const jobs = await db
     .select({
       id: docGenerationJobs.id,
@@ -39,8 +44,16 @@ export default defineEventHandler(async (event) => {
       errorMessage: docGenerationJobs.errorMessage,
     })
     .from(docGenerationJobs)
-    .where(eq(docGenerationJobs.appId, appId))
-    .orderBy(desc(docGenerationJobs.createdAt))
+    .where(
+      status
+        ? and(eq(docGenerationJobs.appId, appId), eq(docGenerationJobs.status, status))
+        : eq(docGenerationJobs.appId, appId)
+    )
+    .orderBy(
+      status === "completed"
+        ? desc(docGenerationJobs.completedAt)
+        : desc(docGenerationJobs.createdAt)
+    )
     .limit(limit)
     .offset(offset);
 

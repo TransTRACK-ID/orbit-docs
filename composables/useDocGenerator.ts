@@ -93,6 +93,10 @@ export const useDocGenerator = () => {
   const eventSource = useState<EventSource | null>("doc-gen-event-source", () => null);
   const trackedAppId = useState<string | null>("doc-gen-tracked-app-id", () => null);
   const activeJobs = useState<TrackedActiveJob[]>("doc-gen-active-jobs", () => []);
+  const lastGeneratedAtByAppId = useState<Record<string, string>>(
+    "doc-gen-last-generated-at",
+    () => ({})
+  );
 
   async function fetchJobs(appId: string, limit?: number, offset?: number) {
     isLoading.value = true;
@@ -476,15 +480,23 @@ export const useDocGenerator = () => {
 
   async function discoverAllActiveJobs(appIds: string[]) {
     const found: TrackedActiveJob[] = [];
+    const lastGenerated: Record<string, string> = {};
 
     await Promise.all(
       appIds.map(async (appId) => {
         try {
-          const data = await $fetch<{ data: DocGenerationJob[] }>(
-            `/api/apps/${appId}/generate-docs`,
-            { query: { limit: "5" } }
+          const [recentData, completedData] = await Promise.all([
+            $fetch<{ data: DocGenerationJob[] }>(`/api/apps/${appId}/generate-docs`, {
+              query: { limit: "5" },
+            }),
+            $fetch<{ data: DocGenerationJob[] }>(`/api/apps/${appId}/generate-docs`, {
+              query: { limit: "1", status: "completed" },
+            }),
+          ]);
+
+          const active = recentData.data.find((job) =>
+            isPendingDocGenerationStatus(job.status)
           );
-          const active = data.data.find((job) => isPendingDocGenerationStatus(job.status));
           if (active) {
             found.push({
               appId,
@@ -495,6 +507,11 @@ export const useDocGenerator = () => {
               currentActivity: active.currentActivity ?? null,
             });
           }
+
+          const lastCompleted = completedData.data[0];
+          if (lastCompleted?.completedAt) {
+            lastGenerated[appId] = lastCompleted.completedAt;
+          }
         } catch {
           // Skip apps we cannot read.
         }
@@ -502,6 +519,7 @@ export const useDocGenerator = () => {
     );
 
     activeJobs.value = found;
+    lastGeneratedAtByAppId.value = lastGenerated;
 
     if (found.length > 0 && !currentJob.value) {
       const first = found[0];
@@ -541,6 +559,7 @@ export const useDocGenerator = () => {
     currentJob,
     currentResult,
     activeJobs,
+    lastGeneratedAtByAppId,
     isLoading,
     isGenerating,
     hasPendingJob,

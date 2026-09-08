@@ -2,6 +2,7 @@
 import { usePageStore } from "~/store/page";
 import DocGenerationFloatingIndicator from "~/components/docs/DocGenerationFloatingIndicator.vue";
 import type { FloatingGenerationJob } from "~/components/docs/DocGenerationFloatingIndicator.vue";
+import { formatDistanceToNow } from "date-fns";
 import {
   DOC_GENERATION_STATUS_LABEL,
 } from "~/utils/doc-generation-status";
@@ -18,6 +19,7 @@ const {
   discoverAllActiveJobs,
   refreshAllActiveJobs,
   cancelJob,
+  lastGeneratedAtByAppId,
 } = useDocGenerator();
 
 const POLL_MS = 5000;
@@ -108,17 +110,15 @@ watch(
   }
 );
 
-function timeAgo(dateStr: string | null) {
-  if (!dateStr) return "";
-  const now = new Date();
-  const d = new Date(dateStr);
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
-  return `${Math.floor(diff / 2419200)} months ago`;
-}
+const appUpdatedLabels = computed(() => {
+  const labels: Record<string, string> = {};
+  for (const [appId, dateStr] of Object.entries(lastGeneratedAtByAppId.value)) {
+    const date = new Date(dateStr);
+    if (Number.isNaN(date.getTime())) continue;
+    labels[appId] = `Updated ${formatDistanceToNow(date, { addSuffix: true })}`;
+  }
+  return labels;
+});
 
 const statusClass: Record<string, string> = {
   active: "pill-green",
@@ -178,7 +178,9 @@ const statusLabel: Record<string, string> = {
               {{ statusLabel[app.status] || app.status }}
             </span>
           </div>
-          <div class="app-card-meta">Updated {{ timeAgo(app.updatedAt) }}</div>
+          <div v-if="appUpdatedLabels[app.id]" class="app-card-meta">
+            {{ appUpdatedLabels[app.id] }}
+          </div>
         </div>
 
         <div v-if="app.description" class="app-card-desc">
