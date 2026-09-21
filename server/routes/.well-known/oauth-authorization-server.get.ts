@@ -2,6 +2,7 @@ import { defineEventHandler } from "h3";
 import {
   getAuthorizationEndpoint,
   getMcpOAuthIssuer,
+  getRegistrationEndpoint,
   getTokenEndpoint,
   isMcpOAuthEnabled,
 } from "~/server/utils/mcp-oauth/config";
@@ -18,6 +19,7 @@ export default defineEventHandler(() => {
     issuer: getMcpOAuthIssuer(),
     authorization_endpoint: getAuthorizationEndpoint(),
     token_endpoint: getTokenEndpoint(),
+    registration_endpoint: getRegistrationEndpoint(),
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],

@@ -75,6 +75,10 @@ export function getTokenEndpoint(): string {
   return `${getMcpOAuthIssuer()}/oauth/token`;
 }
 
+export function getRegistrationEndpoint(): string {
+  return `${getMcpOAuthIssuer()}/oauth/register`;
+}
+
 export function getProtectedResourceMetadataUrl(): string {
   return `${getMcpOAuthIssuer()}/.well-known/oauth-protected-resource/mcp`;
 }

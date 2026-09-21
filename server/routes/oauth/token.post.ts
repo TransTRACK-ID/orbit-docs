@@ -1,16 +1,12 @@
 import { defineEventHandler, readBody, getHeader, createError } from "h3";
 import {
-  getMcpOAuthClientId,
   getMcpResourceUrl,
   isMcpOAuthEnabled,
 } from "~/server/utils/mcp-oauth/config";
 import { consumeAuthorizationCode } from "~/server/utils/mcp-oauth/codes";
 import { verifyPkceS256 } from "~/server/utils/mcp-oauth/pkce";
 import { issueMcpAccessToken, refreshMcpAccessToken } from "~/server/utils/mcp-oauth/tokens";
-import {
-  isRedirectUriAllowed,
-  validateStaticClientCredentials,
-} from "~/server/utils/mcp-oauth/clients";
+import { validateClientCredentials } from "~/server/utils/mcp-oauth/clients";
 
 function parseClientCredentials(
   authHeader: string | undefined,
@@ -98,15 +94,8 @@ export default defineEventHandler(async (event) => {
     throw oauthError(400, "invalid_request", "code, redirect_uri, and client_id are required.");
   }
 
-  const staticClientConfigured = validateStaticClientCredentials(bodyClientId, clientSecret);
-  const expectedClientId = getMcpOAuthClientId();
-
-  if (bodyClientId === expectedClientId) {
-    if (!staticClientConfigured) {
-      throw oauthError(401, "invalid_client", "Client authentication failed.");
-    }
-  } else if (!/^https?:\/\//i.test(bodyClientId)) {
-    throw oauthError(401, "invalid_client", "Unknown client_id.");
+  if (!validateClientCredentials(bodyClientId, clientSecret)) {
+    throw oauthError(401, "invalid_client", "Client authentication failed.");
   }
 
   const record = consumeAuthorizationCode(code);

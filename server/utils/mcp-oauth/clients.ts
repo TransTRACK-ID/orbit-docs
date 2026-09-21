@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   getConfiguredRedirectUris,
   getMcpOAuthClientId,
@@ -9,11 +10,57 @@ interface ClientIdMetadataDocument {
   redirect_uris?: string[];
 }
 
+export interface McpOAuthClient {
+  clientId: string;
+  clientSecret?: string;
+  redirectUris: string[];
+  clientName?: string;
+  tokenEndpointAuthMethod: string;
+}
+
+// Dynamically registered clients (RFC 7591). In-memory like the auth-code
+// store — after a restart clients re-register, which is automatic.
+const registeredClients = new Map<string, McpOAuthClient>();
+
 const cimdCache = new Map<string, { expiresAt: number; redirectUris: string[] }>();
 const CIMD_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function isUrlClientId(clientId: string): boolean {
   return /^https?:\/\//i.test(clientId);
+}
+
+function isLoopbackRedirectUri(redirectUri: string): boolean {
+  try {
+    const url = new URL(redirectUri);
+    if (url.protocol !== "http:") {
+      return false;
+    }
+    return (
+      url.hostname === "localhost" ||
+      url.hostname === "127.0.0.1" ||
+      url.hostname === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isValidRegistrationRedirectUri(redirectUri: string): boolean {
+  try {
+    const url = new URL(redirectUri);
+    if (url.protocol === "https:") {
+      return true;
+    }
+    if (url.protocol === "http:") {
+      return isLoopbackRedirectUri(redirectUri);
+    }
+    // Native/desktop clients register private-use schemes (RFC 8252 §7.1),
+    // e.g. cursor://… — allow any scheme except those that can execute or
+    // leak content in a browser navigation.
+    return !["javascript:", "data:", "file:", "vbscript:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
 }
 
 function isGoogleHostedRedirectUri(redirectUri: string): boolean {
@@ -77,6 +124,85 @@ export function validateStaticClientCredentials(
   return clientId === expectedClientId && clientSecret === expectedClientSecret;
 }
 
+export function resolveClient(clientId: string): McpOAuthClient | undefined {
+  const registered = registeredClients.get(clientId);
+  if (registered) {
+    return registered;
+  }
+
+  const staticClientId = getMcpOAuthClientId();
+  if (staticClientId && staticClientId === clientId) {
+    return {
+      clientId: staticClientId,
+      clientSecret: getMcpOAuthClientSecret(),
+      redirectUris: getConfiguredRedirectUris(),
+      tokenEndpointAuthMethod: "client_secret_basic",
+    };
+  }
+
+  // CIMD: the client_id is an https URL hosting the client metadata document.
+  // These are public clients — PKCE is the only client authentication.
+  if (isUrlClientId(clientId)) {
+    return { clientId, redirectUris: [], tokenEndpointAuthMethod: "none" };
+  }
+
+  return undefined;
+}
+
+/**
+ * RFC 7591 dynamic client registration. Returns the client record or an
+ * error string when the metadata is invalid.
+ */
+export function registerClient(input: {
+  redirectUris: string[];
+  clientName?: string;
+  tokenEndpointAuthMethod?: string;
+}): McpOAuthClient | { error: string } {
+  const redirectUris = input.redirectUris.filter(
+    (uri): uri is string => typeof uri === "string" && uri.length > 0,
+  );
+  if (redirectUris.length === 0 || !redirectUris.every(isValidRegistrationRedirectUri)) {
+    return {
+      error:
+        "redirect_uris must be non-empty https URIs (http allowed on localhost only)",
+    };
+  }
+
+  const authMethod = input.tokenEndpointAuthMethod ?? "client_secret_basic";
+  if (!["none", "client_secret_basic", "client_secret_post"].includes(authMethod)) {
+    return { error: "unsupported token_endpoint_auth_method" };
+  }
+
+  const client: McpOAuthClient = {
+    clientId: `mcp_${randomBytes(16).toString("hex")}`,
+    clientSecret:
+      authMethod === "none" ? undefined : randomBytes(32).toString("base64url"),
+    redirectUris,
+    clientName: input.clientName,
+    tokenEndpointAuthMethod: authMethod,
+  };
+  registeredClients.set(client.clientId, client);
+  return client;
+}
+
+/**
+ * Confidential clients must prove their secret; public clients (dynamic
+ * "none" registrations and CIMD URL client IDs) rely on PKCE alone.
+ */
+export function validateClientCredentials(
+  clientId: string,
+  clientSecret: string | undefined,
+): boolean {
+  const client = resolveClient(clientId);
+  if (!client) {
+    return false;
+  }
+  if (!client.clientSecret) {
+    return true;
+  }
+  return client.clientSecret === clientSecret;
+}
+
 export async function isRedirectUriAllowed(
   clientId: string,
   redirectUri: string,
@@ -84,6 +210,19 @@ export async function isRedirectUriAllowed(
   const configured = getConfiguredRedirectUris();
   if (configured.includes(redirectUri)) {
     return true;
+  }
+
+  const registered = registeredClients.get(clientId);
+  if (registered) {
+    if (registered.redirectUris.includes(redirectUri)) {
+      return true;
+    }
+    // Public clients (native/desktop apps) may bind an ephemeral loopback
+    // port they could not know at registration time (RFC 8252 §7.3).
+    if (!registered.clientSecret && isLoopbackRedirectUri(redirectUri)) {
+      return true;
+    }
+    return false;
   }
 
   const staticClientId = getMcpOAuthClientId();

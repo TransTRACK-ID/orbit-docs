@@ -365,9 +365,34 @@ no changes needed.
 |----------|---------|
 | `GET /oauth/authorize` | Authorization code issuance (consent page) |
 | `POST /oauth/token` | Token exchange (authorization code → JWT) |
+| `POST /oauth/register` | Dynamic client registration (RFC 7591) |
 | `GET /.well-known/oauth-authorization-server` | OAuth server metadata (RFC 8418) |
 | `GET /.well-known/oauth-protected-resource` | Protected resource metadata |
 | `GET /.well-known/oauth-protected-resource/mcp` | RFC 9728 resource metadata |
+
+### Dynamic Client Registration (RFC 7591)
+
+MCP clients that support automatic registration (e.g. Claude, Cursor, MCP
+Inspector) can self-register via `POST /oauth/register` instead of using the
+pre-shared `MCP_OAUTH_CLIENT_ID`/`MCP_OAUTH_CLIENT_SECRET`. The server
+advertises `registration_endpoint` in the authorization server metadata, so
+these clients connect without manual credential entry.
+
+```bash
+curl -X POST https://docs.your-domain.com/oauth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "client_name": "My MCP Client",
+    "redirect_uris": ["http://localhost:8080/callback"],
+    "token_endpoint_auth_method": "none"
+  }'
+```
+
+Registered clients are stored in memory (like authorization codes) — after a
+server restart clients simply re-register. Clients registered with
+`token_endpoint_auth_method: "none"` are public clients authenticated by PKCE
+alone; any other auth method receives a `client_secret` it must present at
+the token endpoint.
 
 ### Nginx / Reverse Proxy
 

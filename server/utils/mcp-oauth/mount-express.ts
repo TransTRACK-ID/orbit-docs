@@ -1,9 +1,9 @@
 import express, { type Request, type Response } from "express";
 import {
   getAuthorizationEndpoint,
-  getMcpOAuthClientId,
   getMcpOAuthIssuer,
   getMcpResourceUrl,
+  getRegistrationEndpoint,
   getTokenEndpoint,
   isMcpOAuthEnabled,
 } from "./config";
@@ -12,7 +12,8 @@ import { verifyPkceS256 } from "./pkce";
 import { issueMcpAccessToken, refreshMcpAccessToken } from "./tokens";
 import {
   isRedirectUriAllowed,
-  validateStaticClientCredentials,
+  registerClient,
+  validateClientCredentials,
 } from "./clients";
 import { renderConsentPage } from "./consent";
 
@@ -177,16 +178,8 @@ async function handleToken(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const staticClientConfigured = validateStaticClientCredentials(bodyClientId, clientSecret);
-  const expectedClientId = getMcpOAuthClientId();
-
-  if (bodyClientId === expectedClientId) {
-    if (!staticClientConfigured) {
-      oauthError(res, 401, "invalid_client", "Client authentication failed.");
-      return;
-    }
-  } else if (!/^https?:\/\//i.test(bodyClientId)) {
-    oauthError(res, 401, "invalid_client", "Unknown client_id.");
+  if (!validateClientCredentials(bodyClientId, clientSecret)) {
+    oauthError(res, 401, "invalid_client", "Client authentication failed.");
     return;
   }
 
@@ -223,6 +216,7 @@ function handleAuthorizationServerMetadata(_req: Request, res: Response): void {
     issuer,
     authorization_endpoint: getAuthorizationEndpoint(),
     token_endpoint: getTokenEndpoint(),
+    registration_endpoint: getRegistrationEndpoint(),
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
@@ -233,6 +227,44 @@ function handleAuthorizationServerMetadata(_req: Request, res: Response): void {
     ],
     scopes_supported: ["mcp:read"],
     client_id_metadata_document_supported: true,
+  });
+}
+
+/**
+ * RFC 7591 dynamic client registration — lets MCP clients self-register
+ * instead of requiring pre-shared credentials.
+ */
+function handleRegister(req: Request, res: Response): void {
+  const body = req.body as Record<string, unknown> | undefined;
+  const redirectUris =
+    body && Array.isArray(body.redirect_uris)
+      ? body.redirect_uris.filter((uri): uri is string => typeof uri === "string")
+      : [];
+
+  const result = registerClient({
+    redirectUris,
+    clientName: typeof body?.client_name === "string" ? body.client_name : undefined,
+    tokenEndpointAuthMethod:
+      typeof body?.token_endpoint_auth_method === "string"
+        ? body.token_endpoint_auth_method
+        : undefined,
+  });
+
+  if ("error" in result) {
+    oauthError(res, 400, "invalid_client_metadata", result.error);
+    return;
+  }
+
+  res.status(201).json({
+    client_id: result.clientId,
+    ...(result.clientSecret ? { client_secret: result.clientSecret } : {}),
+    client_name: result.clientName,
+    redirect_uris: result.redirectUris,
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    token_endpoint_auth_method: result.tokenEndpointAuthMethod,
+    client_id_issued_at: Math.floor(Date.now() / 1000),
+    client_secret_expires_at: 0,
   });
 }
 
@@ -261,6 +293,7 @@ export function mountMcpOAuth(app: express.Application): void {
   app.get("/oauth/authorize", (req, res) => {
     void handleAuthorize(req, res);
   });
+  app.post("/oauth/register", express.json(), handleRegister);
   app.post(
     "/oauth/token",
     express.urlencoded({ extended: false }),
@@ -270,6 +303,6 @@ export function mountMcpOAuth(app: express.Application): void {
   );
 
   console.log(
-    `MCP OAuth enabled (issuer: ${getMcpOAuthIssuer()}, authorize: /oauth/authorize, token: /oauth/token)`,
+    `MCP OAuth enabled (issuer: ${getMcpOAuthIssuer()}, authorize: /oauth/authorize, token: /oauth/token, register: /oauth/register)`,
   );
 }
