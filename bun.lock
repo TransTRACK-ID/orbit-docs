@@ -49,6 +49,7 @@
         "editorjs-toggle-block": "^0.3.16",
         "editorjs-undo": "^2.0.28",
         "express": "^4.22.2",
+        "fflate": "^0.8.3",
         "flowbite": "^2.1.1",
         "gsap": "^3.12.5",
         "highlight.js": "^11.11.1",
@@ -1514,6 +1515,8 @@
     "fdir": ["fdir@6.5.0", "", { "peerDependencies": { "picomatch": "^3 || ^4" } }, ""],
 
     "fetch-blob": ["fetch-blob@3.2.0", "", { "dependencies": { "node-domexception": "^1.0.0", "web-streams-polyfill": "^3.0.3" } }, ""],
+
+    "fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
 
     "file-uri-to-path": ["file-uri-to-path@1.0.0", "", {}, ""],
 

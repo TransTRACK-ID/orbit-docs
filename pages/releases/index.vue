@@ -163,6 +163,26 @@ function editReleaseLabel(r: ReleaseItem): string {
   return "Edit release";
 }
 
+// ── Notion import dialog ───────────────────────────────────────
+const showImportModal = ref(false);
+
+function openImportModal() {
+  showImportModal.value = true;
+}
+
+function closeImportModal() {
+  showImportModal.value = false;
+}
+
+async function onReleaseImported(r: ReleaseItem) {
+  showImportModal.value = false;
+  await fetchReleases({
+    search: searchQuery.value,
+    app: appFilter.value,
+  });
+  await navigateTo(`/releases/${r.id}`);
+}
+
 // ── Share modal ────────────────────────────────────────────────
 const showShareModal = ref(false);
 const shareApp = ref("");
@@ -211,6 +231,10 @@ async function copyShareUrl() {
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
+    if (showImportModal.value) {
+      closeImportModal();
+      return;
+    }
     if (showShareModal.value) {
       closeShareModal();
       return;
@@ -230,14 +254,29 @@ function onKeydown(e: KeyboardEvent) {
           Catatan rilis, pembaruan, dan draft lintas aplikasi.
         </p>
       </div>
-      <button type="button" class="btn btn-primary" @click="openShareModal">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-          <polyline points="16 6 12 2 8 6" />
-          <line x1="12" y1="2" x2="12" y2="15" />
-        </svg>
-        Bagikan
-      </button>
+      <div class="masthead-actions">
+        <button
+          v-if="canWriteReleases"
+          type="button"
+          class="btn btn-secondary"
+          @click="openImportModal"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Impor dari Notion
+        </button>
+        <button type="button" class="btn btn-primary" @click="openShareModal">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+            <polyline points="16 6 12 2 8 6" />
+            <line x1="12" y1="2" x2="12" y2="15" />
+          </svg>
+          Bagikan
+        </button>
+      </div>
     </header>
 
     <div class="filter-strip">
@@ -465,6 +504,13 @@ function onKeydown(e: KeyboardEvent) {
         </div>
       </div>
     </div>
+
+    <ReleasesNotionImportDialog
+      :open="showImportModal"
+      :apps="apps"
+      @close="closeImportModal"
+      @imported="onReleaseImported"
+    />
   </div>
 </template>
 
@@ -479,6 +525,13 @@ function onKeydown(e: KeyboardEvent) {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 16px;
+}
+
+.masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .page-masthead__copy {

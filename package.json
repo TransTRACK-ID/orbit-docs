@@ -71,6 +71,7 @@
     "editorjs-toggle-block": "^0.3.16",
     "editorjs-undo": "^2.0.28",
     "express": "^4.22.2",
+    "fflate": "^0.8.3",
     "flowbite": "^2.1.1",
     "gsap": "^3.12.5",
     "highlight.js": "^11.11.1",
