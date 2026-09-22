@@ -661,6 +661,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
     <!-- Topbar -->
     <header class="topbar">
       <div>
+        <NuxtLink to="/docs/generate" class="back-link">&larr; All Apps</NuxtLink>
         <div class="topbar-title-row">
           <h1>Generate Docs</h1>
           <span
@@ -673,9 +674,6 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
         </div>
         <p v-if="appInfo" class="app-name">{{ appInfo.name }}</p>
       </div>
-      <NuxtLink to="/docs/generate" class="btn btn-ghost">
-        &larr; All Apps
-      </NuxtLink>
     </header>
 
     <!-- Agent Status Alert -->
@@ -1137,11 +1135,19 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
   gap: 32px;
 }
 
-.topbar {
-  display: flex;
+.back-link {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--fg);
 }
 
 .topbar h1 {
@@ -1987,11 +1993,6 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 
 /* ── Responsive ───────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .topbar {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .job-item {
     flex-direction: column;
     align-items: flex-start;

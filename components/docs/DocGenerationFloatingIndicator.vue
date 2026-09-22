@@ -74,11 +74,6 @@ function handleViewJob(appId: string) {
 function phaseLabel(status: string) {
   return DOC_GENERATION_STATUS_LABEL[status] || status;
 }
-
-watch(pendingCount, (count, prev) => {
-  if (count > 1 && prev <= 1) isExpanded.value = true;
-  if (count === 0) isExpanded.value = false;
-});
 </script>
 
 <template>
@@ -156,6 +151,7 @@ watch(pendingCount, (count, prev) => {
         </Transition>
 
         <button
+          v-if="!isExpanded"
           type="button"
           class="gen-float-pill"
           :aria-expanded="isExpanded"
@@ -225,11 +221,6 @@ watch(pendingCount, (count, prev) => {
 .gen-float-pill:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-.gen-float.is-expanded .gen-float-pill {
-  border-color: color-mix(in oklch, oklch(60% 0.16 255) 35%, var(--border));
-  background: color-mix(in oklch, oklch(60% 0.16 255) 4%, var(--surface));
 }
 
 .gen-float-pill-text {

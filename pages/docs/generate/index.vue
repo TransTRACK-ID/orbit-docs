@@ -137,14 +137,12 @@ const statusLabel: Record<string, string> = {
   <div class="generate-docs-landing">
     <header class="topbar">
       <div>
+        <NuxtLink to="/docs" class="back-link">&larr; Back to Docs</NuxtLink>
         <h1>Generate Docs</h1>
         <p class="subtitle">
           Select an app to generate SRS, FSD, and SDD from its repository
         </p>
       </div>
-      <NuxtLink to="/docs" class="btn btn-ghost">
-        &larr; Back to Docs
-      </NuxtLink>
     </header>
 
     <div v-if="isLoading" class="app-grid">
@@ -237,11 +235,22 @@ const statusLabel: Record<string, string> = {
 }
 
 .topbar {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
   margin-bottom: 8px;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--fg);
 }
 
 .topbar h1 {
