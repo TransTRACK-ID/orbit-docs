@@ -4,6 +4,10 @@ import type { EditorJsData } from "~/composables/useEditorJsConverter";
 import { isBareUrl, prepareLinkUrl } from "~/components/editorjs/linkUtils";
 import { armPasteLink } from "~/components/editorjs/InlineLinkTool";
 import TextColorTool from "~/components/editorjs/TextColorTool";
+import CalloutTool from "~/components/editorjs/CalloutTool";
+import StrikethroughTool from "~/components/editorjs/StrikethroughTool";
+import UnderlineTool from "~/components/editorjs/UnderlineTool";
+import { setupNotionShortcuts } from "~/components/editorjs/notionShortcuts";
 import { setEditorImageUploadByFile } from "~/components/editorjs/imageUploadBridge";
 
 interface Props {
@@ -36,6 +40,7 @@ const dragDropInstance = ref<any>(null);
 const undoInstance = ref<any>(null);
 let pasteCleanup: (() => void) | null = null;
 let linkHoverCleanup: (() => void) | null = null;
+let shortcutsCleanup: (() => void) | null = null;
 
 // Guards against the v-model feedback loop:
 //   user types → onChange emits update:modelValue → parent updates
@@ -354,17 +359,21 @@ async function initEditor() {
     tools: {
       header: {
         class: Header,
+        inlineToolbar: true,
         config: { placeholder: "Enter a header", levels: [1, 2, 3], defaultLevel: 2 },
       },
       paragraph: {
         class: Paragraph,
+        inlineToolbar: true,
         config: { placeholder: props.placeholder },
       },
-      list: { class: List, config: { defaultStyle: "unordered" } },
-      nestedList: { class: NestedList, config: { defaultStyle: "unordered" } },
-      checklist: { class: Checklist },
+      list: { class: List, inlineToolbar: true, config: { defaultStyle: "unordered" } },
+      // @editorjs/list already contributes Unordered/Ordered/Checklist entries —
+      // keep these registered for rendering/round-trip but hidden from the menu.
+      nestedList: { class: NestedList, inlineToolbar: true, config: { defaultStyle: "unordered" }, toolbox: false },
+      checklist: { class: Checklist, inlineToolbar: true, toolbox: false },
       code: { class: Code, config: { placeholder: "Enter code" } },
-      quote: { class: Quote, config: { placeholder: "Enter a quote", captionPlaceholder: "Author" } },
+      quote: { class: Quote, inlineToolbar: true, config: { placeholder: "Enter a quote", captionPlaceholder: "Author" } },
       table: { class: Table },
       image: {
         class: SimpleImageTool,
@@ -378,9 +387,13 @@ async function initEditor() {
       inlineCode: { class: InlineCode },
       embed: { class: Embed },
       delimiter: { class: Delimiter },
-      warning: { class: Warning, config: { titlePlaceholder: "Title", messagePlaceholder: "Message" } },
+      warning: { class: Warning, inlineToolbar: true, config: { titlePlaceholder: "Title", messagePlaceholder: "Message" } },
+      callout: { class: CalloutTool, inlineToolbar: true },
+      strikethrough: { class: StrikethroughTool },
+      underline: { class: UnderlineTool },
       toggle: {
         class: ToggleBlock,
+        inlineToolbar: true,
         config: { placeholder: "Toggle title" },
       },
       color: {
@@ -423,6 +436,9 @@ async function initEditor() {
       undoInstance.value = new Undo({ editor });
       setupNotionPasteHandler(editor);
       linkHoverCleanup = setupEditorInteractionGuards();
+      if (editorContainer.value) {
+        shortcutsCleanup = setupNotionShortcuts(editor, editorContainer.value);
+      }
       emit("ready");
     },
     onChange: async () => {
@@ -499,6 +515,8 @@ onBeforeUnmount(() => {
   pasteCleanup = null;
   linkHoverCleanup?.();
   linkHoverCleanup = null;
+  shortcutsCleanup?.();
+  shortcutsCleanup = null;
   if (dragDropInstance.value) {
     dragDropInstance.value = null;
   }
@@ -1376,6 +1394,187 @@ defineExpose({
 
 .editor-js-container .codex-editor__redactor::-webkit-scrollbar-thumb:hover {
   background: var(--muted);
+}
+
+/* ── Callout block (Notion-style) ─────────────────────────── */
+.editor-js-container .cdx-callout {
+  --callout-color: oklch(65% 0.15 250);
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--fg);
+  background: color-mix(in oklch, var(--callout-color) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--callout-color) 20%, transparent);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin: 8px 0;
+}
+
+.editor-js-container .cdx-callout--tip {
+  --callout-color: oklch(65% 0.16 150);
+}
+
+.editor-js-container .cdx-callout--important {
+  --callout-color: oklch(60% 0.18 300);
+}
+
+.editor-js-container .cdx-callout--warning {
+  --callout-color: oklch(70% 0.14 85);
+}
+
+.editor-js-container .cdx-callout--caution {
+  --callout-color: oklch(60% 0.18 25);
+}
+
+.editor-js-container .cdx-callout__icon {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.editor-js-container .cdx-callout__icon:hover:not(:disabled) {
+  background: var(--fg-soft);
+}
+
+.editor-js-container .cdx-callout__icon:disabled {
+  cursor: default;
+}
+
+.editor-js-container .cdx-callout__text {
+  flex: 1;
+  min-width: 0;
+  outline: none;
+}
+
+.editor-js-container .cdx-callout__text:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.editor-js-container .cdx-callout__picker {
+  position: absolute;
+  top: 100%;
+  left: 8px;
+  z-index: 30;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px color-mix(in oklch, var(--fg) 12%, transparent);
+  animation: editorFadeInUp 0.12s ease;
+}
+
+.editor-js-container .cdx-callout__picker-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--fg);
+  text-align: left;
+  cursor: pointer;
+}
+
+.editor-js-container .cdx-callout__picker-option:hover {
+  background: var(--fg-soft);
+}
+
+.editor-js-container .cdx-callout__picker-option--active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ── Notion-style toolbox (slash menu) ────────────────────── */
+/* .ce-popover is only a positioning anchor — the visible panel is
+   .ce-popover__container, sized via the --width/--max-height vars and
+   offset via --popover-left so it aligns under the text column
+   (block content has 48px left padding). */
+.editor-js-container .ce-toolbox .ce-popover {
+  --width: 330px;
+  --max-height: 380px;
+  --color-background: var(--surface);
+  --color-border: var(--border);
+  --color-text-primary: var(--fg);
+  --color-text-secondary: var(--muted);
+  width: 0;
+  max-height: none;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* In narrow mode the popover is right-anchored, so only offset horizontally
+   in the regular layout. */
+.editor-js-container .codex-editor:not(.codex-editor--narrow) .ce-toolbox .ce-popover {
+  --popover-left: 44px;
+}
+
+.editor-js-container .ce-toolbox .ce-popover__container {
+  border-radius: 12px;
+}
+
+.editor-js-container .ce-toolbox .ce-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.editor-js-container .ce-toolbox .ce-popover-item__icon {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.editor-js-container .ce-toolbox .ce-popover-item__icon svg {
+  width: 20px;
+  height: 20px;
+  max-height: 20px;
+}
+
+.editor-js-container .ce-toolbox .ce-popover-item__title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.editor-js-container .ce-toolbox .cdx-search-field {
+  background: var(--bg);
+}
+
+.editor-js-container .ce-toolbox .cdx-search-field__input {
+  color: var(--fg);
 }
 
 </style>

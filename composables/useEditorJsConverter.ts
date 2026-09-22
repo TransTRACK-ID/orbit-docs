@@ -484,20 +484,34 @@ export function markdownToEditorJs(md: string): EditorJsData {
       continue;
     }
 
-    // Quote
+    // Quote / GFM alert (callout)
     if (line.startsWith("> ")) {
       const quoteLines: string[] = [];
       while (i < lines.length && lines[i].startsWith("> ")) {
         quoteLines.push(lines[i].slice(2));
         i++;
       }
-      blocks.push({
-        type: "quote",
-        data: {
-          text: inlineMarkdownToHtml(quoteLines.join("\n")),
-          alignment: "left",
-        },
-      });
+      const alertMatch = (quoteLines[0] ?? "").match(
+        /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*)$/i
+      );
+      if (alertMatch) {
+        const rest = [alertMatch[2], ...quoteLines.slice(1)].join("\n").trim();
+        blocks.push({
+          type: "callout",
+          data: {
+            type: alertMatch[1].toLowerCase(),
+            text: inlineMarkdownToHtml(rest),
+          },
+        });
+      } else {
+        blocks.push({
+          type: "quote",
+          data: {
+            text: inlineMarkdownToHtml(quoteLines.join("\n")),
+            alignment: "left",
+          },
+        });
+      }
       continue;
     }
 
@@ -703,7 +717,10 @@ export function editorJsToMarkdown(data: EditorJsData): string {
           const item = items[idx];
           const content = typeof item === "string" ? item : item.content || "";
           const text = htmlToInlineMarkdown(content);
-          if (style === "ordered") {
+          if (style === "checklist") {
+            const checked = typeof item === "object" && (item.meta?.checked ?? item.checked);
+            out.push(`- [${checked ? "x" : " "}] ${text}`);
+          } else if (style === "ordered") {
             out.push(`${idx + 1}. ${text}`);
           } else {
             out.push(`- ${text}`);
@@ -767,6 +784,15 @@ export function editorJsToMarkdown(data: EditorJsData): string {
         out.push(`> **Warning:** ${block.data.title || ""}`);
         if (block.data.message) {
           out.push(`> ${block.data.message}`);
+        }
+        break;
+      }
+      case "callout": {
+        const type = String(block.data.type || "note").toUpperCase();
+        const text = htmlToInlineMarkdown(block.data.text || "");
+        out.push(`> [!${type}]`);
+        for (const textLine of text.split("\n")) {
+          out.push(`> ${textLine}`);
         }
         break;
       }
@@ -1135,6 +1161,7 @@ function inlineMarkdownToHtml(text: string): string {
     .replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>")
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.*?)\*/g, "<em>$1</em>")
+    .replace(/~~(.*?)~~/g, "<s>$1</s>")
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 }
 
@@ -1160,9 +1187,12 @@ function htmlToInlineMarkdown(html: string): string {
       .replace(/<strong>(.*?)<\/strong>/g, "**$1**")
       .replace(/<em>(.*?)<\/em>/g, "*$1*")
       .replace(/<code>(.*?)<\/code>/g, "`$1`")
+      .replace(/<s>([\s\S]*?)<\/s>/gi, "~~$1~~")
+      .replace(/<del>([\s\S]*?)<\/del>/gi, "~~$1~~")
+      .replace(/<strike>([\s\S]*?)<\/strike>/gi, "~~$1~~")
       .replace(/<br\s*\/?>/g, "\n")
       .replace(/<\/p>/g, "\n")
-      .replace(/<(?!\/?(?:font|span)\b)[^>]+>/gi, "");
+      .replace(/<(?!\/?(?:font|span|u)\b)[^>]+>/gi, "");
   }
 
   const root = document.createElement("div");
@@ -1187,6 +1217,12 @@ function htmlToInlineMarkdown(html: string): string {
         return `*${inner}*`;
       case "code":
         return `\`${inner}\``;
+      case "s":
+      case "del":
+      case "strike":
+        return `~~${inner}~~`;
+      case "u":
+        return `<u>${inner}</u>`;
       case "a": {
         const href = el.getAttribute("href") || "";
         if (!href) return inner;
@@ -1254,6 +1290,14 @@ export function editorJsToHtml(data: EditorJsData): string {
       case "list": {
         const items = block.data.items || [];
         const style = block.data.style || "unordered";
+        if (style === "checklist") {
+          const lis = items.map((item: any) => {
+            const checked = (item.meta?.checked ?? item.checked) ? "checked" : "";
+            return `<li style="list-style:none;"><input type="checkbox" disabled ${checked} style="margin-right:6px;">${item.content || item.text || ""}</li>`;
+          }).join("");
+          out.push(`<ul>${lis}</ul>`);
+          break;
+        }
         const tag = style === "ordered" ? "ol" : "ul";
         const lis = items.map((item: any) => {
           const content = typeof item === "string" ? item : item.content || "";
@@ -1322,6 +1366,14 @@ export function editorJsToHtml(data: EditorJsData): string {
       }
       case "delimiter": {
         out.push("<hr>");
+        break;
+      }
+      case "callout": {
+        const type = String(block.data.type || "note").toLowerCase();
+        const label = type.charAt(0).toUpperCase() + type.slice(1);
+        out.push(
+          `<div class="markdown-alert markdown-alert-${escapeHtml(type)}"><p class="markdown-alert-title">${escapeHtml(label)}</p><p>${block.data.text || ""}</p></div>`
+        );
         break;
       }
       case "nestedList": {

@@ -409,6 +409,82 @@ describe("inline link markdown round-trip", () => {
   });
 });
 
+describe("callout blocks", () => {
+  it("converts GFM alert blockquotes into callout blocks", () => {
+    const md = "> [!TIP]\n> Remember to save often";
+    const data = markdownToEditorJs(md);
+
+    expect(data.blocks).toHaveLength(1);
+    expect(data.blocks[0].type).toBe("callout");
+    expect(data.blocks[0].data.type).toBe("tip");
+    expect(data.blocks[0].data.text).toBe("Remember to save often");
+  });
+
+  it("parses inline GFM alert syntax", () => {
+    const md = "> [!WARNING] Watch out";
+    const data = markdownToEditorJs(md);
+
+    expect(data.blocks[0].type).toBe("callout");
+    expect(data.blocks[0].data.type).toBe("warning");
+    expect(data.blocks[0].data.text).toBe("Watch out");
+  });
+
+  it("round-trips callout blocks through markdown", () => {
+    const data = {
+      blocks: [
+        { type: "callout", data: { type: "note", text: "Ship <strong>fast</strong>" } },
+      ],
+    };
+
+    const markdown = editorJsToMarkdown(data);
+    expect(markdown).toContain("> [!NOTE]");
+    expect(markdown).toContain("**fast**");
+
+    const roundTrip = markdownToEditorJs(markdown);
+    expect(roundTrip.blocks[0].type).toBe("callout");
+    expect(roundTrip.blocks[0].data.type).toBe("note");
+    expect(roundTrip.blocks[0].data.text).toContain("<strong>fast</strong>");
+  });
+
+  it("keeps plain blockquotes as quote blocks", () => {
+    const md = "> Just a regular quote";
+    const data = markdownToEditorJs(md);
+    expect(data.blocks[0].type).toBe("quote");
+  });
+});
+
+describe("strikethrough and underline", () => {
+  it("converts ~~text~~ into <s> markup", () => {
+    const data = markdownToEditorJs("This is ~~gone~~ now");
+    expect(data.blocks[0].data.text).toBe("This is <s>gone</s> now");
+  });
+
+  it("serializes <s> back to ~~ markdown", () => {
+    const data = {
+      blocks: [{ type: "paragraph", data: { text: "a <s>b</s> c" } }],
+    };
+    expect(editorJsToMarkdown(data)).toBe("a ~~b~~ c");
+  });
+
+  it("serializes <del> to ~~ markdown", () => {
+    const data = {
+      blocks: [{ type: "paragraph", data: { text: "a <del>b</del> c" } }],
+    };
+    expect(editorJsToMarkdown(data)).toBe("a ~~b~~ c");
+  });
+
+  it("round-trips <u> underline markup through markdown", () => {
+    const data = {
+      blocks: [{ type: "paragraph", data: { text: "keep <u>this</u> underlined" } }],
+    };
+    const markdown = editorJsToMarkdown(data);
+    expect(markdown).toBe("keep <u>this</u> underlined");
+
+    const roundTrip = markdownToEditorJs(markdown);
+    expect(roundTrip.blocks[0].data.text).toContain("<u>this</u>");
+  });
+});
+
 describe("markdownToEditorJs mermaid", () => {
   it("should convert fenced mermaid blocks to mermaid editor blocks", () => {
     const md = "```mermaid\ngraph TD\n  A --> B\n```";

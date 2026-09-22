@@ -68,6 +68,11 @@ export function allowColorHtmlInMarkdown(text: string): string {
   if (/^<\/(?:a|font|span)\s*>$/i.test(trimmed)) {
     return text;
   }
+  // Underline/strikethrough are safe formatting tags used by the editor's
+  // inline tools — markdown has no native syntax for <u>.
+  if (/^<\/?(?:u|s)\s*>$/i.test(trimmed)) {
+    return text;
+  }
   return escapePreviewHtml(text);
 }
 

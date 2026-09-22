@@ -223,7 +223,7 @@ export default class InlineLinkTool implements InlineTool {
     this.closeActions();
   }
 
-  get shortcut() {
+  static get shortcut() {
     return "CMD+K";
   }
 
