@@ -127,23 +127,26 @@ function phaseLabel(status: string) {
                   @click="handleViewJob(job.appId)"
                 >
                   <span class="gen-float-item-name">{{ job.appName }}</span>
-                  <span class="gen-float-item-phase">{{ phaseLabel(job.status) }}</span>
-                  <div class="gen-float-item-track" aria-hidden="true">
-                    <div
+                  <span class="gen-float-item-meta">
+                    {{ phaseLabel(job.status) }}
+                    <span class="gen-float-item-pct">{{ job.progressPct }}%</span>
+                  </span>
+                  <span class="gen-float-item-track" aria-hidden="true">
+                    <span
                       class="gen-float-item-fill"
                       :style="{ width: `${job.progressPct}%` }"
                     />
-                  </div>
-                  <span class="gen-float-item-pct">{{ job.progressPct }}%</span>
+                  </span>
                 </button>
                 <button
                   v-if="canCancel"
                   type="button"
                   class="gen-float-item-cancel"
-                  aria-label="Cancel generation"
+                  :aria-label="`Cancel generation for ${job.appName}`"
+                  title="Cancel"
                   @click.stop="emit('cancel', job.jobId, job.appId)"
                 >
-                  Cancel
+                  &times;
                 </button>
               </li>
             </ul>
@@ -255,7 +258,7 @@ function phaseLabel(status: string) {
 }
 
 .gen-float-panel {
-  width: min(400px, calc(100vw - 48px));
+  width: min(360px, calc(100vw - 48px));
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -316,33 +319,29 @@ function phaseLabel(status: string) {
 .gen-float-list {
   list-style: none;
   margin: 0;
-  padding: 8px;
+  padding: 4px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
   max-height: min(320px, 50vh);
   overflow-y: auto;
 }
 
 .gen-float-item {
   display: flex;
-  align-items: stretch;
-  gap: 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: color-mix(in oklch, var(--fg) 2%, var(--surface));
-  overflow: hidden;
+  align-items: center;
+  gap: 2px;
 }
 
 .gen-float-item-main {
   flex: 1;
   min-width: 0;
   display: grid;
-  grid-template-columns: 1fr auto;
-  grid-template-rows: auto auto;
-  gap: 4px 10px;
-  padding: 10px 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 8px 10px;
   border: none;
+  border-radius: var(--radius);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -356,7 +355,6 @@ function phaseLabel(status: string) {
 }
 
 .gen-float-item-name {
-  grid-column: 1;
   font-size: 13px;
   font-weight: 600;
   color: var(--fg);
@@ -365,33 +363,33 @@ function phaseLabel(status: string) {
   white-space: nowrap;
 }
 
-.gen-float-item-phase {
-  grid-column: 1;
-  grid-row: 2;
+.gen-float-item-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
   font-size: 11px;
   color: var(--muted);
+  white-space: nowrap;
 }
 
 .gen-float-item-pct {
-  grid-column: 2;
-  grid-row: 1 / span 2;
-  align-self: center;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-size: 12px;
   font-weight: 600;
-  color: var(--muted);
+  color: var(--fg);
 }
 
 .gen-float-item-track {
   grid-column: 1 / -1;
-  height: 4px;
+  display: block;
+  height: 3px;
   background: color-mix(in oklch, var(--fg) 8%, transparent);
   border-radius: 999px;
   overflow: hidden;
 }
 
 .gen-float-item-fill {
+  display: block;
   height: 100%;
   background: oklch(60% 0.16 255);
   border-radius: 999px;
@@ -400,24 +398,34 @@ function phaseLabel(status: string) {
 
 .gen-float-item-cancel {
   flex-shrink: 0;
-  align-self: stretch;
-  padding: 0 10px;
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: none;
-  border-left: 1px solid var(--border);
+  border-radius: 6px;
   background: transparent;
   color: var(--muted);
-  font: inherit;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 15px;
+  line-height: 1;
   cursor: pointer;
+  opacity: 0;
   transition:
+    opacity 0.15s cubic-bezier(0.25, 1, 0.5, 1),
     color 0.15s cubic-bezier(0.25, 1, 0.5, 1),
     background 0.15s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
+.gen-float-item:hover .gen-float-item-cancel,
+.gen-float-item-cancel:focus-visible {
+  opacity: 1;
+}
+
 .gen-float-item-cancel:hover {
   color: oklch(50% 0.16 25);
-  background: color-mix(in oklch, oklch(55% 0.18 25) 6%, transparent);
+  background: color-mix(in oklch, oklch(55% 0.18 25) 10%, transparent);
 }
 
 .gen-float-dot {
@@ -481,6 +489,8 @@ function phaseLabel(status: string) {
   .gen-float-panel-enter-active,
   .gen-float-panel-leave-active,
   .gen-float-item-fill,
+  .gen-float-item-main,
+  .gen-float-item-cancel,
   .gen-float-dot.active {
     transition: none !important;
     animation: none !important;
