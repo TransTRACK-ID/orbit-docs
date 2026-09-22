@@ -18,6 +18,11 @@ const {
   checkConnection,
 } = useAppRepositories();
 
+// repositories is shared app-wide — only render rows owned by this app.
+const appRepositories = computed(() =>
+  repositories.value.filter((r) => r.appId === props.appId)
+);
+
 const showForm = ref(false);
 const editingId = ref<string | null>(null);
 
@@ -49,7 +54,7 @@ const providerLabel = computed(() => {
 });
 
 const editingRepo = computed(() =>
-  editingId.value ? repositories.value.find((r) => r.id === editingId.value) ?? null : null
+  editingId.value ? appRepositories.value.find((r) => r.id === editingId.value) ?? null : null
 );
 
 const canEnableAutoMerge = computed(
@@ -239,12 +244,12 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
 
     <div v-if="isLoading" class="repo-empty">Loading repositories…</div>
 
-    <div v-else-if="repositories.length === 0 && !showForm" class="repo-empty">
+    <div v-else-if="appRepositories.length === 0 && !showForm" class="repo-empty">
       No repositories yet. Add one to get started.
     </div>
 
     <ul v-else class="repo-list">
-      <li v-for="repo in repositories" :key="repo.id" class="repo-item">
+      <li v-for="repo in appRepositories" :key="repo.id" class="repo-item">
         <div class="repo-main">
           <div class="repo-title-row">
             <span class="repo-name">{{ repo.name }}</span>

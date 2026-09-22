@@ -32,7 +32,13 @@ const {
 
 const scheduleIntervalLabel = computed(() => {
   const interval = scheduleSettings.value?.workspaceSchedule.interval;
-  return interval === "hourly" ? "every hour" : "once per day";
+  const labels: Record<string, string> = {
+    hourly: "every hour",
+    daily: "once per day",
+    weekly: "once per week",
+    monthly: "once per month",
+  };
+  return labels[interval ?? "daily"] ?? "once per day";
 });
 
 const scheduleActive = computed(() => {
@@ -108,8 +114,8 @@ onMounted(() => {
 });
 const {
   jobs,
-  currentJob,
-  currentResult,
+  currentJob: sharedCurrentJob,
+  currentResult: sharedCurrentResult,
   isLoading,
   isGenerating,
   fetchJobs,
@@ -121,6 +127,17 @@ const {
   fetchDebugLogs,
   resumeProgressStreamIfNeeded,
 } = useDocGenerator();
+
+// The composable keeps one global "focused" job/result + SSE stream shared
+// across all app pages. Scope what this page renders to jobs owned by THIS
+// app so a generation running on another app can't take over the page.
+const currentJob = computed(() =>
+  sharedCurrentJob.value?.appId === appId ? sharedCurrentJob.value : null
+);
+const currentResult = computed(() =>
+  sharedCurrentResult.value?.appId === appId ? sharedCurrentResult.value : null
+);
+const pageJobs = computed(() => jobs.value.filter((j) => j.appId === appId));
 
 // Fetch app info for display
 const appInfo = ref<{ name: string; repoUrl: string | null } | null>(null);
@@ -138,14 +155,28 @@ async function loadAppInfo() {
 
 // Track configured repositories so the Generate button can be enabled/disabled
 const { repositories, fetchRepositories } = useAppRepositories();
-const repoCount = computed(() => repositories.value.length);
+// repositories is shared app-wide — count only this app's rows.
+const repoCount = computed(
+  () => repositories.value.filter((r) => r.appId === appId).length
+);
 
-onMounted(() => {
+onMounted(async () => {
   $page.setTitle("Generate Docs");
   loadAppInfo();
   fetchRepositories(appId);
-  fetchJobs(appId);
   resumeProgressStreamIfNeeded(appId);
+  try {
+    const jobList = await fetchJobs(appId);
+    // Adopt THIS app's in-flight job (if any) so the page tracks its own
+    // generation even when the shared focused job belongs to another app.
+    const pending = jobList.find((j) => isPendingDocGenerationStatus(j.status));
+    if (pending && sharedCurrentJob.value?.id !== pending.id) {
+      sharedCurrentJob.value = pending;
+      connectToProgressStream(appId, pending.id);
+    }
+  } catch {
+    // fetchJobs already surfaced a toast
+  }
   if (canRunDocGeneration.value) {
     fetchSchedule();
   }
@@ -208,7 +239,7 @@ async function handleViewResult(jobId: string) {
   const job = jobs.value.find((j) => j.id === jobId);
   const wikiPath = wikiOverviewPathFromJob(job);
   if (wikiPath) {
-    currentResult.value = null;
+    sharedCurrentResult.value = null;
     await navigateTo(wikiPath);
     return;
   }
@@ -216,13 +247,13 @@ async function handleViewResult(jobId: string) {
 }
 
 function handleDebugJob(job: DocGenerationJob) {
-  currentJob.value = job;
+  sharedCurrentJob.value = job;
   showDebug.value = true;
   loadDebugLogs();
 }
 
 function handleCloseResult() {
-  currentResult.value = null;
+  sharedCurrentResult.value = null;
 }
 
 const resultJobId = computed(() => currentResult.value?.jobId || null);
@@ -975,7 +1006,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
         </table>
       </div>
 
-      <div v-else-if="jobs.length === 0" class="empty-state">
+      <div v-else-if="pageJobs.length === 0" class="empty-state">
         <p>No generation jobs yet. Start your first one above.</p>
       </div>
 
@@ -993,7 +1024,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
         </thead>
         <tbody>
           <tr
-            v-for="job in jobs"
+            v-for="job in pageJobs"
             :key="job.id"
             :class="{
               'is-selected': currentJob?.id === job.id,

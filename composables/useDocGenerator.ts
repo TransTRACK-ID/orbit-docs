@@ -208,15 +208,20 @@ export const useDocGenerator = () => {
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        currentJob.value = {
-          ...(currentJob.value || {}),
+        const existingJob =
+          currentJob.value?.id === jobId
+            ? currentJob.value
+            : jobs.value.find((j) => j.id === jobId) ?? null;
+
+        const nextJob = {
+          ...(existingJob || {}),
           id: jobId,
           appId,
-          scope: currentJob.value?.scope ?? jobs.value.find((j) => j.id === jobId)?.scope,
+          scope: existingJob?.scope,
           status: data.status,
           progressPct: data.progressPct,
           progressMessage: data.progressMessage,
-          repoRef: data.repoRef ?? currentJob.value?.repoRef ?? null,
+          repoRef: data.repoRef ?? existingJob?.repoRef ?? null,
           completedAt: data.completedAt,
           errorMessage: data.errorMessage,
           currentActivity: data.currentActivity ?? null,
@@ -226,11 +231,17 @@ export const useDocGenerator = () => {
           tokensOutput: data.tokensOutput ?? 0,
         } as DocGenerationJob;
 
+        // Only the job this stream belongs to may own the shared currentJob —
+        // stream events must not stomp a different job the user is viewing.
+        if (!currentJob.value || currentJob.value.id === jobId) {
+          currentJob.value = nextJob;
+        }
+
         const idx = jobs.value.findIndex((j) => j.id === jobId);
         if (idx !== -1) {
           jobs.value[idx] = {
             ...jobs.value[idx],
-            ...currentJob.value,
+            ...nextJob,
           };
         }
 
@@ -253,9 +264,8 @@ export const useDocGenerator = () => {
           trackedAppId.value = null;
 
           if (data.status === "completed") {
-            const scope = currentJob.value?.scope;
             toast.success(
-              scope === "wiki" ? "Wiki site generation completed!" : "Document generation completed!",
+              nextJob.scope === "wiki" ? "Wiki site generation completed!" : "Document generation completed!",
             );
           } else {
             toast.error(data.errorMessage || "Generation failed");
@@ -304,10 +314,12 @@ export const useDocGenerator = () => {
           progressPct: 0,
           progressMessage: "Cancelled by user",
         };
+        // Only tear down the stream when the cancelled job owns it — cancelling
+        // another app's job must not kill this app's live progress stream.
+        disconnectStream();
       }
       removeActiveJob(jobId);
 
-      disconnectStream();
       toast.success("Generation cancelled");
       return true;
     } catch (e: any) {
@@ -361,7 +373,7 @@ export const useDocGenerator = () => {
       const data = await $fetch<{ data: DocGenerationResult }>(
         `/api/apps/${appId}/generate-docs/${jobId}/result`
       );
-      currentResult.value = data.data;
+      currentResult.value = { ...data.data, appId: data.data.appId ?? appId };
       return data.data;
     } catch (e: any) {
       if (e?.statusCode === 401) {
