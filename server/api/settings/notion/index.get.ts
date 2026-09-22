@@ -1,6 +1,6 @@
 import { defineEventHandler } from "h3";
 import { requireTeamAccess } from "~/server/utils/team-access";
-import { getNotionSyncRow } from "~/server/lib/notion/sync";
+import { getNotionSyncRow, isNotionSyncRunStale } from "~/server/lib/notion/sync";
 
 import type { notionSyncSettings } from "~/server/database/schema";
 
@@ -17,7 +17,7 @@ function toPublicSettings(row: typeof notionSyncSettings.$inferSelect) {
     scheduleInterval: row.scheduleInterval,
     connected: row.connected,
     lastSyncAt: row.lastSyncAt?.toISOString() || null,
-    lastSyncStatus: row.lastSyncStatus,
+    lastSyncStatus: isNotionSyncRunStale(row) ? "error" : row.lastSyncStatus,
     lastSyncResult: row.lastSyncResult,
     createdAt: row.createdAt?.toISOString() || null,
     updatedAt: row.updatedAt?.toISOString() || null,

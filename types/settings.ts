@@ -112,7 +112,7 @@ export interface UpdateDocGenerationPayload {
   sddPerRepoEnabled?: boolean;
 }
 
-export type NotionSyncInterval = "hourly" | "daily";
+export type NotionSyncInterval = "hourly" | "daily" | "weekly" | "monthly";
 
 export type NotionSyncStatus = "idle" | "running" | "success" | "error";
 

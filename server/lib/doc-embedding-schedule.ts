@@ -9,6 +9,7 @@ import {
 import {
   getWorkspaceSyncSchedule,
   isSyncIntervalDue,
+  type WorkspaceSyncSchedule,
 } from "~/server/lib/sync-schedule";
 
 export interface DocEmbeddingSchedulePublic {
@@ -22,10 +23,7 @@ export interface DocEmbeddingSchedulePublic {
     candidates: number;
     finishedAt: string;
   } | null;
-  workspaceSchedule: {
-    enabled: boolean;
-    interval: "hourly" | "daily";
-  };
+  workspaceSchedule: WorkspaceSyncSchedule;
   semanticSearchEnabled: boolean;
   hasApiKey: boolean;
 }

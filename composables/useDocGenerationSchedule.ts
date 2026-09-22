@@ -1,4 +1,5 @@
 import { toast } from "vue3-toastify";
+import type { NotionSyncInterval } from "~/types/settings";
 
 export interface DocGenerationScheduleSettings {
   scheduleEnabled: boolean;
@@ -7,7 +8,7 @@ export interface DocGenerationScheduleSettings {
   lastRunJobId: string | null;
   workspaceSchedule: {
     enabled: boolean;
-    interval: "hourly" | "daily";
+    interval: NotionSyncInterval;
   };
 }
 

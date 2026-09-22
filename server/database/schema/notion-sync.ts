@@ -1,6 +1,8 @@
 import { pgTable, text, timestamp, boolean, integer, jsonb } from "drizzle-orm/pg-core";
 
-export type NotionSyncInterval = "hourly" | "daily";
+export const NOTION_SYNC_INTERVALS = ["hourly", "daily", "weekly", "monthly"] as const;
+
+export type NotionSyncInterval = (typeof NOTION_SYNC_INTERVALS)[number];
 
 export type NotionSyncResult = {
   docsCreated: number;
@@ -21,7 +23,9 @@ export const notionSyncSettings = pgTable("notion_sync_settings", {
   versionPropertyName: text("version_property_name").notNull().default("Version"),
   statusPropertyName: text("status_property_name").notNull().default("Status"),
   scheduleEnabled: boolean("schedule_enabled").notNull().default(false),
-  scheduleInterval: text("schedule_interval", { enum: ["hourly", "daily"] })
+  scheduleInterval: text("schedule_interval", {
+    enum: ["hourly", "daily", "weekly", "monthly"],
+  })
     .notNull()
     .default("daily"),
   connected: boolean("connected").notNull().default(false),

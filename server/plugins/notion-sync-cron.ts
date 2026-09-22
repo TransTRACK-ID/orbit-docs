@@ -1,4 +1,9 @@
-import { getNotionSyncRow, runNotionSync, loadNotionSyncConfig } from "~/server/lib/notion/sync";
+import {
+  getNotionSyncRow,
+  runNotionSync,
+  loadNotionSyncConfig,
+  resetStaleNotionSyncRun,
+} from "~/server/lib/notion/sync";
 import {
   getWorkspaceSyncSchedule,
   isSyncIntervalDue,
@@ -9,6 +14,10 @@ import { runScheduledEmbeddingIndexes } from "~/server/lib/doc-embedding-schedul
 export default defineNitroPlugin(() => {
   const tick = async () => {
     try {
+      // A "running" status can outlive its process (restart/crash mid-sync).
+      // Clear stale runs before anything else so manual and scheduled syncs recover.
+      await resetStaleNotionSyncRun();
+
       const workspaceSchedule = await getWorkspaceSyncSchedule();
       if (!workspaceSchedule.enabled) return;
 

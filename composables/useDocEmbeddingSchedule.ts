@@ -1,4 +1,5 @@
 import { toast } from "vue3-toastify";
+import type { NotionSyncInterval } from "~/types/settings";
 
 export interface DocEmbeddingScheduleSettings {
   scheduleEnabled: boolean;
@@ -13,7 +14,7 @@ export interface DocEmbeddingScheduleSettings {
   } | null;
   workspaceSchedule: {
     enabled: boolean;
-    interval: "hourly" | "daily";
+    interval: NotionSyncInterval;
   };
   semanticSearchEnabled: boolean;
   hasApiKey: boolean;

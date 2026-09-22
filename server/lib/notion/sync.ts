@@ -41,6 +41,27 @@ export async function getNotionSyncRow() {
   return rows[0];
 }
 
+export const NOTION_SYNC_RUN_STALE_MS = 30 * 60 * 1000;
+
+export function isNotionSyncRunStale(
+  row: Pick<typeof notionSyncSettings.$inferSelect, "lastSyncStatus" | "updatedAt">,
+  now = Date.now()
+): boolean {
+  if (row.lastSyncStatus !== "running") return false;
+  const updated = row.updatedAt ? new Date(row.updatedAt).getTime() : NaN;
+  return Number.isNaN(updated) || now - updated >= NOTION_SYNC_RUN_STALE_MS;
+}
+
+export async function resetStaleNotionSyncRun(now = Date.now()): Promise<void> {
+  const row = await getNotionSyncRow();
+  if (!isNotionSyncRunStale(row, now)) return;
+  const db = getDb();
+  await db
+    .update(notionSyncSettings)
+    .set({ lastSyncStatus: "error", updatedAt: new Date() })
+    .where(eq(notionSyncSettings.id, row.id));
+}
+
 export async function loadNotionSyncConfig(): Promise<NotionSyncConfig | null> {
   const row = await getNotionSyncRow();
   if (!row.apiKeyEncrypted) return null;
@@ -297,7 +318,7 @@ export async function runNotionSync(): Promise<NotionSyncResult> {
   const db = getDb();
   const row = await getNotionSyncRow();
 
-  if (row.lastSyncStatus === "running") {
+  if (row.lastSyncStatus === "running" && !isNotionSyncRunStale(row)) {
     throw new Error("A sync is already in progress");
   }
 

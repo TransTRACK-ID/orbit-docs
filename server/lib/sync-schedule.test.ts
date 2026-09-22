@@ -17,4 +17,17 @@ describe("sync-schedule", () => {
     expect(isSyncIntervalDue(oldHourly, "hourly", now)).toBe(true);
     expect(isSyncIntervalDue(oldDaily, "daily", now)).toBe(true);
   });
+
+  it("respects weekly and monthly intervals", () => {
+    const now = Date.parse("2026-08-12T12:00:00.000Z");
+    const recentWeekly = new Date(now - SYNC_INTERVAL_MS.weekly + 1000).toISOString();
+    const oldWeekly = new Date(now - SYNC_INTERVAL_MS.weekly - 1000).toISOString();
+    const recentMonthly = new Date(now - SYNC_INTERVAL_MS.monthly + 1000).toISOString();
+    const oldMonthly = new Date(now - SYNC_INTERVAL_MS.monthly - 1000).toISOString();
+
+    expect(isSyncIntervalDue(recentWeekly, "weekly", now)).toBe(false);
+    expect(isSyncIntervalDue(oldWeekly, "weekly", now)).toBe(true);
+    expect(isSyncIntervalDue(recentMonthly, "monthly", now)).toBe(false);
+    expect(isSyncIntervalDue(oldMonthly, "monthly", now)).toBe(true);
+  });
 });

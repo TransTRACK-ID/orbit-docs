@@ -12,6 +12,7 @@ import { assertDocAgentReady } from "~/server/lib/agent-readiness";
 import {
   getWorkspaceSyncSchedule,
   isSyncIntervalDue,
+  type WorkspaceSyncSchedule,
 } from "~/server/lib/sync-schedule";
 
 const TERMINAL_JOB_STATUSES = ["completed", "failed", "cancelled"] as const;
@@ -21,10 +22,7 @@ export interface DocGenerationSchedulePublic {
   lastRunAt: string | null;
   lastRunStatus: string;
   lastRunJobId: string | null;
-  workspaceSchedule: {
-    enabled: boolean;
-    interval: "hourly" | "daily";
-  };
+  workspaceSchedule: WorkspaceSyncSchedule;
 }
 
 export async function getDocGenerationScheduleRow(appId: string) {

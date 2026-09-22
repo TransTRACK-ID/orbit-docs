@@ -1,7 +1,7 @@
 import { defineEventHandler, readBody, createError } from "h3";
 import { eq } from "drizzle-orm";
 import { getDb } from "~/server/database";
-import { notionSyncSettings } from "~/server/database/schema";
+import { notionSyncSettings, NOTION_SYNC_INTERVALS } from "~/server/database/schema";
 import { requireTeamAccess } from "~/server/utils/team-access";
 import { encryptSecret } from "~/server/utils/secret-crypto";
 import { getNotionSyncRow } from "~/server/lib/notion/sync";
@@ -51,8 +51,11 @@ export default defineEventHandler(async (event) => {
     updateData.scheduleEnabled = !!body.scheduleEnabled;
   }
   if (body.scheduleInterval !== undefined) {
-    const interval = body.scheduleInterval === "hourly" ? "hourly" : "daily";
-    updateData.scheduleInterval = interval;
+    updateData.scheduleInterval = (NOTION_SYNC_INTERVALS as readonly string[]).includes(
+      body.scheduleInterval,
+    )
+      ? body.scheduleInterval
+      : "daily";
   }
   if (body.connected !== undefined) {
     updateData.connected = !!body.connected;

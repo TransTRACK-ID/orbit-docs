@@ -59,7 +59,13 @@ const {
 
 const embeddingScheduleIntervalLabel = computed(() => {
   const interval = embeddingScheduleSettings.value?.workspaceSchedule.interval;
-  return interval === "hourly" ? "setiap jam" : "sekali sehari";
+  const labels: Record<string, string> = {
+    hourly: "setiap jam",
+    daily: "sekali sehari",
+    weekly: "sekali seminggu",
+    monthly: "sekali sebulan",
+  };
+  return labels[interval ?? "daily"] ?? "sekali sehari";
 });
 
 const embeddingScheduleActive = computed(() => {

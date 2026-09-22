@@ -1,9 +1,21 @@
-import type { NotionSyncInterval } from "~/server/database/schema/notion-sync";
+import {
+  NOTION_SYNC_INTERVALS,
+  type NotionSyncInterval,
+} from "~/server/database/schema/notion-sync";
 import { getNotionSyncRow } from "~/server/lib/notion/sync";
 
 export const SYNC_INTERVAL_MS: Record<NotionSyncInterval, number> = {
   hourly: 60 * 60 * 1000,
   daily: 24 * 60 * 60 * 1000,
+  weekly: 7 * 24 * 60 * 60 * 1000,
+  monthly: 30 * 24 * 60 * 60 * 1000,
+};
+
+export const SYNC_INTERVAL_LABELS: Record<NotionSyncInterval, string> = {
+  hourly: "every hour",
+  daily: "once per day",
+  weekly: "once per week",
+  monthly: "once per month",
 };
 
 export interface WorkspaceSyncSchedule {
@@ -15,7 +27,9 @@ export async function getWorkspaceSyncSchedule(): Promise<WorkspaceSyncSchedule>
   const row = await getNotionSyncRow();
   return {
     enabled: row.scheduleEnabled,
-    interval: row.scheduleInterval === "hourly" ? "hourly" : "daily",
+    interval: (NOTION_SYNC_INTERVALS as readonly string[]).includes(row.scheduleInterval)
+      ? row.scheduleInterval
+      : "daily",
   };
 }
 
@@ -32,5 +46,5 @@ export function isSyncIntervalDue(
 }
 
 export function formatSyncIntervalLabel(interval: NotionSyncInterval): string {
-  return interval === "hourly" ? "every hour" : "once per day";
+  return SYNC_INTERVAL_LABELS[interval];
 }

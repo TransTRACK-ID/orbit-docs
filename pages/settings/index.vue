@@ -8,6 +8,7 @@ import type {
   UpdateIntegrationsPayload,
   UpdateNotificationsPayload,
   UpdateDocGenerationPayload,
+  NotionSyncInterval,
 } from "~/types/settings";
 import type { SsoProvider, SsoProviderType } from "~/types/sso";
 import { SSO_PROVIDER_METADATA } from "~/types/sso";
@@ -382,7 +383,7 @@ const notionForm = reactive({
   versionPropertyName: "Version",
   statusPropertyName: "Status",
   scheduleEnabled: false,
-  scheduleInterval: "daily" as "hourly" | "daily",
+  scheduleInterval: "daily" as NotionSyncInterval,
 });
 const notionFormDirty = ref(false);
 const hasPopulatedNotion = ref(false);
@@ -456,6 +457,13 @@ function formatSyncTime(iso: string | null | undefined) {
   if (!iso) return "Never";
   return new Date(iso).toLocaleString();
 }
+
+const SYNC_INTERVAL_LABELS: Record<NotionSyncInterval, string> = {
+  hourly: "every hour",
+  daily: "once per day",
+  weekly: "once per week",
+  monthly: "once per month",
+};
 
 const notionCanSync = computed(() => {
   const hasKey =
@@ -1574,7 +1582,7 @@ function getCallbackUrl(provider: SsoProvider): string {
                   <div class="toggle-desc">
                     {{
                       notionForm.scheduleEnabled
-                        ? `Runs ${notionForm.scheduleInterval === 'hourly' ? 'every hour' : 'once per day'} for Notion, enabled Generate Docs apps, and enabled semantic index apps`
+                        ? `Runs ${SYNC_INTERVAL_LABELS[notionForm.scheduleInterval]} for Notion, enabled Generate Docs apps, and enabled semantic index apps`
                         : 'Off — sync only when you run it manually'
                     }}
                   </div>
@@ -1590,6 +1598,8 @@ function getCallbackUrl(provider: SsoProvider): string {
                 >
                   <option value="hourly">Hourly</option>
                   <option value="daily">Daily</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="monthly">Monthly</option>
                 </select>
               </div>
 
