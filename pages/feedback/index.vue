@@ -62,6 +62,18 @@ const showDeleteModal = ref(false);
 const feedbackToDelete = ref<FeedbackItem | null>(null);
 const internalToDelete = ref<InternalFeedbackItem | null>(null);
 
+type FeedbackDetail =
+  | { kind: "public"; item: FeedbackItem }
+  | { kind: "internal"; item: InternalFeedbackItem };
+
+const detailItem = ref<FeedbackDetail | null>(null);
+const internalDetail = computed(() =>
+  detailItem.value?.kind === "internal" ? detailItem.value.item : null
+);
+const publicDetail = computed(() =>
+  detailItem.value?.kind === "public" ? detailItem.value.item : null
+);
+
 const appFilterOptions = computed(() => [
   { id: "", label: "All apps" },
   ...apps.value.map((a) => ({ id: a.id, label: a.name })),
@@ -176,6 +188,19 @@ function closeDeleteModal() {
   showDeleteModal.value = false;
   feedbackToDelete.value = null;
   internalToDelete.value = null;
+}
+
+function openPublicDetail(item: FeedbackItem) {
+  if (!item.comment) return;
+  detailItem.value = { kind: "public", item };
+}
+
+function openInternalDetail(item: InternalFeedbackItem) {
+  detailItem.value = { kind: "internal", item };
+}
+
+function closeDetail() {
+  detailItem.value = null;
 }
 
 async function doDelete() {
@@ -387,7 +412,15 @@ const categoryClass: Record<string, string> = {
               </span>
             </td>
             <td class="comment-cell">
-              <span v-if="item.comment">{{ item.comment }}</span>
+              <button
+                v-if="item.comment"
+                type="button"
+                class="comment-text"
+                title="View full comment"
+                @click="openPublicDetail(item)"
+              >
+                {{ item.comment }}
+              </button>
               <span v-else class="cell-muted">—</span>
             </td>
             <td>
@@ -460,7 +493,14 @@ const categoryClass: Record<string, string> = {
               </span>
             </td>
             <td class="comment-cell">
-              <span>{{ item.comment }}</span>
+              <button
+                type="button"
+                class="comment-text"
+                title="View full comment"
+                @click="openInternalDetail(item)"
+              >
+                {{ item.comment }}
+              </button>
             </td>
             <td>
               <div class="item-title">{{ item.userName }}</div>
@@ -498,6 +538,68 @@ const categoryClass: Record<string, string> = {
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="modal-overlay" :class="{ open: detailItem !== null }" @click.self="closeDetail">
+      <div v-if="detailItem" class="modal-panel detail-modal">
+        <div class="modal-header">
+          <h2>Feedback detail</h2>
+          <button type="button" class="modal-close" aria-label="Close modal" @click="closeDetail">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body detail-body">
+          <p class="detail-comment-text">{{ detailItem.item.comment || "—" }}</p>
+          <dl class="detail-grid">
+            <template v-if="internalDetail">
+              <div class="detail-row">
+                <dt>Category</dt>
+                <dd>
+                  <span :class="['pill', categoryClass[internalDetail.category] || 'pill-muted']">
+                    {{ categoryLabel[internalDetail.category] || internalDetail.category }}
+                  </span>
+                </dd>
+              </div>
+              <div class="detail-row">
+                <dt>Submitted by</dt>
+                <dd>
+                  <span class="detail-by-name">{{ internalDetail.userName }}</span>
+                  <span v-if="internalDetail.userEmail" class="detail-by-email">{{ internalDetail.userEmail }}</span>
+                </dd>
+              </div>
+            </template>
+            <template v-else-if="publicDetail">
+              <div class="detail-row">
+                <dt>Rating</dt>
+                <dd>
+                  <span :class="['pill', publicDetail.helpful ? 'pill-green' : 'pill-red']">
+                    {{ publicDetail.helpful ? "Helpful" : "Not helpful" }}
+                  </span>
+                </dd>
+              </div>
+              <div class="detail-row">
+                <dt>Doc</dt>
+                <dd>
+                  {{ publicDetail.docTitle || "Untitled doc"
+                  }}<span v-if="publicDetail.appName" class="cell-muted"> · {{ publicDetail.appName }}</span>
+                </dd>
+              </div>
+            </template>
+            <div class="detail-row">
+              <dt>Status</dt>
+              <dd>
+                <span :class="['pill', statusClass[detailItem.item.status] || 'pill-amber']">
+                  {{ statusLabel[detailItem.item.status] || detailItem.item.status }}
+                </span>
+              </dd>
+            </div>
+            <div class="detail-row">
+              <dt>Submitted</dt>
+              <dd class="num cell-muted">{{ formatDate(detailItem.item.createdAt) }}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
     </div>
 
     <div class="modal-overlay" :class="{ open: showDeleteModal }" @click.self="closeDeleteModal">
@@ -720,6 +822,30 @@ const categoryClass: Record<string, string> = {
   text-overflow: ellipsis;
 }
 
+.comment-text {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.comment-text:hover {
+  color: var(--accent);
+}
+
+.comment-text:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .cell-muted {
   color: var(--muted);
 }
@@ -914,6 +1040,57 @@ const categoryClass: Record<string, string> = {
 }
 .delete-modal {
   max-width: 420px;
+}
+.detail-modal {
+  max-width: 560px;
+}
+.detail-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.detail-comment-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--fg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.detail-grid {
+  margin: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  column-gap: 16px;
+  row-gap: 10px;
+  align-items: baseline;
+}
+.detail-row {
+  display: contents;
+}
+.detail-grid dt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.detail-grid dd {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.detail-by-name {
+  font-weight: 500;
+}
+.detail-by-email {
+  margin-left: 8px;
+  color: var(--muted);
 }
 .modal-header {
   display: flex;

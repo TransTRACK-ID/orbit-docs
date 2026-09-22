@@ -41,19 +41,6 @@ const filteredReleases = computed(() => {
   });
 });
 
-function formatDate(dateStr: string | null): string {
-  if (!dateStr) return "";
-  const d = new Date(dateStr);
-  const now = new Date();
-  const isToday = d.toDateString() === now.toDateString();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const isYesterday = d.toDateString() === yesterday.toDateString();
-  if (isToday) return "Today";
-  if (isYesterday) return "Yesterday";
-  return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-}
-
 function formatMonthYear(dateStr: string | null): string {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -86,11 +73,15 @@ const categoryConfig: Record<string, { label: string; tagClass: string }> = {
   security: { label: "Security", tagClass: "rl-tag-security" },
 };
 
+function entryDate(r: ReleaseItem): string | null {
+  return r.releaseDate || r.createdAt;
+}
+
 // Group by month
 const groupedByMonth = computed(() => {
   const groups: Record<string, ReleaseItem[]> = {};
   for (const r of filteredReleases.value) {
-    const key = formatMonthYear(r.releaseDate);
+    const key = formatMonthYear(entryDate(r));
     if (!key) continue;
     if (!groups[key]) groups[key] = [];
     groups[key].push(r);
@@ -134,8 +125,9 @@ useSeoMeta({
       <div v-if="!isEmbed" class="rl-search">
         <input
           v-model="search"
-          type="text"
+          type="search"
           placeholder="Search releases…"
+          aria-label="Search releases"
           class="rl-search-input"
         />
       </div>
@@ -158,7 +150,7 @@ useSeoMeta({
         :key="group.month"
         class="rl-month-group"
       >
-        <div class="rl-month-label">{{ group.month }}</div>
+        <h2 class="rl-month-label">{{ group.month }}</h2>
         <div class="rl-entries">
           <article
             v-for="r in group.items"
@@ -166,19 +158,18 @@ useSeoMeta({
             class="rl-entry"
           >
             <div class="rl-entry-header">
-              <div class="rl-entry-date">
-                <span class="rl-entry-day">{{ new Date(r.releaseDate || '').getDate() }}</span>
-                <span class="rl-entry-weekday">{{ new Date(r.releaseDate || '').toLocaleDateString('en-US', { weekday: 'short' }) }}</span>
-              </div>
+              <time v-if="entryDate(r)" class="rl-entry-date" :datetime="entryDate(r) || undefined">
+                <span class="rl-entry-day">{{ new Date(entryDate(r) || '').getDate() }}</span>
+                <span class="rl-entry-weekday">{{ new Date(entryDate(r) || '').toLocaleDateString('en-US', { weekday: 'short' }) }}</span>
+              </time>
               <div class="rl-entry-meta">
                 <span v-if="r.version" class="rl-entry-version">{{ formatDisplayVersion(r.version) }}</span>
                 <span v-if="r.type === 'article'" class="rl-entry-type">Article</span>
               </div>
             </div>
-            <h2 class="rl-entry-title">
-              <NuxtLink v-if="r.type !== 'article'" :to="detailLink(r.id)">{{ formatReleaseHeading(r.appName, r.version, r.heroTitle) }}</NuxtLink>
-              <template v-else>{{ formatReleaseHeading(r.appName, r.version, r.heroTitle) }}</template>
-            </h2>
+            <h3 class="rl-entry-title">
+              <NuxtLink :to="detailLink(r.id)">{{ formatReleaseHeading(r.appName, r.version, r.heroTitle) }}</NuxtLink>
+            </h3>
             <!-- Normal release: colored category badges -->
             <template v-if="r.type !== 'article' && r.categories">
               <div
@@ -316,6 +307,12 @@ useSeoMeta({
 .rl-entry-title a:hover {
   color: var(--accent);
 }
+.rl-entry-title a:focus-visible,
+.rl-entry-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
 .rl-entry-actions {
   margin-top: 16px;
 }
@@ -395,6 +392,7 @@ useSeoMeta({
   font-weight: 600;
   line-height: 1.3;
   color: var(--fg);
+  text-wrap: balance;
   transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -430,27 +428,12 @@ useSeoMeta({
   margin: 24px 0;
   display: block;
 }
-.rl-entry-body :deep(blockquote) {
-  margin: 24px 0;
-  padding: 16px 20px;
-  background: var(--fg-soft);
-  border-radius: 8px;
-  font-style: italic;
-}
-.rl-entry-body :deep(pre) {
-  margin: 24px 0;
-  padding: 16px;
-  background: var(--bg);
-  border-radius: 8px;
-  overflow-x: auto;
-}
-.rl-entry-body :deep(pre code) {
-  background: transparent;
-  padding: 0;
-}
 .rl-entry-body :deep(h1),
 .rl-entry-body :deep(h2),
-.rl-entry-body :deep(h3) {
+.rl-entry-body :deep(h3),
+.rl-entry-body :deep(h4),
+.rl-entry-body :deep(h5),
+.rl-entry-body :deep(h6) {
   font-size: 15px;
   font-weight: 600;
   margin: 0 0 8px;
@@ -478,6 +461,35 @@ useSeoMeta({
 }
 .rl-entry-body :deep(pre) {
   display: none;
+}
+.rl-entry-body :deep(code) {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.rl-entry-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.rl-entry-body :deep(th),
+.rl-entry-body :deep(td) {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.rl-entry-body :deep(th) {
+  background: var(--bg);
+  font-weight: 600;
+}
+.rl-entry-body :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
 }
 
 /* Category badges (normal releases) */
@@ -586,8 +598,11 @@ useSeoMeta({
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rl-entry-link:hover .rl-entry-title {
-    transition: none;
+  .rl-entry-title,
+  .rl-entry-title a,
+  .rl-entry-link,
+  .rl-search-input {
+    transition: none !important;
   }
 }
 </style>

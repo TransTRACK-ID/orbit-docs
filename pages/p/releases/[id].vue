@@ -144,7 +144,7 @@ async function copyEmbedCode() {
             All releases
           </NuxtLink>
           <div class="rd-hero-meta">
-            <span class="rd-hero-date">{{ formatDate(release.releaseDate) }}</span>
+            <span class="rd-hero-date">{{ formatDate(release.releaseDate || release.createdAt) }}</span>
             <span v-if="release.type === 'article'" class="rd-hero-type">Article</span>
           </div>
         </div>
@@ -320,6 +320,14 @@ async function copyEmbedCode() {
   line-height: 1.7;
   color: var(--fg);
 }
+.rd-body :deep(h1) {
+  font-size: 30px;
+  font-weight: 600;
+  margin: 0 0 20px;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--fg);
+}
 .rd-body :deep(h2) {
   font-size: 26px;
   font-weight: 600;
@@ -333,6 +341,20 @@ async function copyEmbedCode() {
   font-weight: 600;
   margin: 32px 0 14px;
   line-height: 1.3;
+  color: var(--fg);
+}
+.rd-body :deep(h4) {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 24px 0 10px;
+  line-height: 1.35;
+  color: var(--fg);
+}
+.rd-body :deep(h5),
+.rd-body :deep(h6) {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 20px 0 8px;
   color: var(--fg);
 }
 .rd-body :deep(p) {
@@ -403,6 +425,28 @@ async function copyEmbedCode() {
 }
 .rd-body :deep(a:hover) {
   text-decoration: underline;
+}
+.rd-body :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 24px 0;
+  font-size: 14px;
+}
+.rd-body :deep(th),
+.rd-body :deep(td) {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.rd-body :deep(th) {
+  background: var(--bg);
+  font-weight: 600;
+}
+.rd-body :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 32px 0;
 }
 
 /* Section */
@@ -559,6 +603,9 @@ async function copyEmbedCode() {
   }
   .rd-body {
     font-size: 15px;
+  }
+  .rd-body :deep(h1) {
+    font-size: 24px;
   }
   .rd-body :deep(h2) {
     font-size: 22px;
