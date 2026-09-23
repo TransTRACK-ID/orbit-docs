@@ -1,5 +1,4 @@
 import jwt from "jsonwebtoken";
-import { randomBytes } from "node:crypto";
 import {
   getMcpOAuthSigningSecret,
   getMcpOAuthTokenExpirySeconds,
@@ -20,19 +19,10 @@ export interface McpRefreshTokenPayload {
   type: "mcp_refresh";
 }
 
-// In-memory refresh token store (same simplicity as auth codes).
-// A refresh token can be used once to get a new access + refresh token pair.
-const refreshTokens = new Map<string, McpRefreshTokenPayload & { expiresAt: number }>();
-const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-
-function purgeExpiredRefreshTokens(): void {
-  const now = Date.now();
-  for (const [token, record] of refreshTokens.entries()) {
-    if (record.expiresAt <= now) {
-      refreshTokens.delete(token);
-    }
-  }
-}
+// Refresh tokens are stateless JWTs so they survive deploys/restarts and work
+// across replicas. Trade-off: no server-side revocation — a refresh token
+// stays valid until its expiry even after rotation issues a new pair.
+const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 export function issueMcpAccessToken(clientId: string, scope: string): {
   accessToken: string;
@@ -52,12 +42,12 @@ export function issueMcpAccessToken(clientId: string, scope: string): {
   });
 
   // Issue a refresh token so Google's account linking can persist the connection.
-  purgeExpiredRefreshTokens();
-  const refreshToken = randomBytes(32).toString("base64url");
-  refreshTokens.set(refreshToken, {
+  const refreshPayload: McpRefreshTokenPayload = {
     ...payload,
     type: "mcp_refresh",
-    expiresAt: Date.now() + REFRESH_TOKEN_TTL_MS,
+  };
+  const refreshToken = jwt.sign(refreshPayload, getMcpOAuthSigningSecret(), {
+    expiresIn: REFRESH_TOKEN_TTL_SECONDS,
   });
 
   return { accessToken, expiresIn, refreshToken };
@@ -80,13 +70,18 @@ export function refreshMcpAccessToken(refreshToken: string): {
   expiresIn: number;
   refreshToken: string;
 } | null {
-  purgeExpiredRefreshTokens();
-  const record = refreshTokens.get(refreshToken);
-  if (!record || record.expiresAt <= Date.now()) {
+  try {
+    const decoded = jwt.verify(
+      refreshToken,
+      getMcpOAuthSigningSecret(),
+    ) as McpRefreshTokenPayload;
+    if (decoded.type !== "mcp_refresh" || decoded.aud !== getMcpResourceUrl()) {
+      return null;
+    }
+
+    // Rotate: issue a new access + refresh token pair for the same subject.
+    return issueMcpAccessToken(decoded.sub, decoded.scope);
+  } catch {
     return null;
   }
-
-  // Rotate: delete old, issue new pair
-  refreshTokens.delete(refreshToken);
-  return issueMcpAccessToken(record.sub, record.scope);
 }
