@@ -68,6 +68,29 @@ function parseAppRefInput(data: {
   };
 }
 
+const MCP_LISTED_ROLES = ["Sales", "Programmer", "IT Support"] as const;
+
+const MCP_ROLE_ALIASES: Record<string, string> = {
+  sales: "Sales",
+  programmer: "Programmer",
+  developer: "Programmer",
+  "it support": "IT Support",
+  it_support: "IT Support",
+  support: "IT Support",
+  management: "Management",
+  manager: "Management",
+  "c level": "C Level",
+  "c-level": "C Level",
+  c_level: "C Level",
+  clevel: "C Level",
+  executive: "C Level",
+};
+
+function normalizeMcpRole(input: string): string {
+  const trimmed = input.trim();
+  return MCP_ROLE_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+}
+
 const MCP_PLATFORM_INSTRUCTIONS = [
   "You are connected to the Orbit Docs platform — a documentation and release management system.",
   "IMPORTANT: 'Orbit Docs' is the platform name, NOT an application in the database.",
@@ -362,11 +385,13 @@ const AskDocsSchema = z
     app_name: optionalString,
     question: z.string().min(1),
     module: optionalString,
+    role: optionalString,
   })
   .transform((data) => ({
     ...parseAppRefInput(data),
     question: data.question,
     module: data.module,
+    role: data.role,
   }))
   .refine((data) => !!(data.appId || data.appName), {
     message: "Provide appId or appName",
@@ -694,6 +719,11 @@ const TOOLS: Tool[] = [
         appName: { type: "string" },
         question: { type: "string", description: "The user's documentation question" },
         module: { type: "string", description: "Optional module scope hint (e.g. auth, mobile)" },
+        role: {
+          type: "string",
+          description:
+            "Requester role used to tailor the answer's structure. Listed roles: Sales, Programmer, IT Support. Other roles are accepted as free text. If omitted, the response returns status role_required with listed_roles.",
+        },
       },
       required: ["question"],
     },
@@ -2220,11 +2250,33 @@ mcpServer.setRequestHandler(
             };
           }
 
+          if (!params.role) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(
+                    {
+                      status: "role_required",
+                      app: { id: app.id, name: app.name },
+                      listed_roles: [...MCP_LISTED_ROLES],
+                    },
+                    null,
+                    2,
+                  ),
+                },
+              ],
+            };
+          }
+
+          const role = normalizeMcpRole(params.role);
+
           const result = await runAskWorkflowAnswer({
             appId: app.id,
             question: params.question,
             module: params.module ?? undefined,
             publishedOnly: false,
+            role,
           });
 
           return {
@@ -2234,6 +2286,7 @@ mcpServer.setRequestHandler(
                 text: JSON.stringify(
                   {
                     app: { id: app.id, name: app.name },
+                    role,
                     answer: result.answer,
                     citations: result.citations,
                     searchPlan: result.searchPlan,

@@ -530,8 +530,9 @@ export function buildAskSynthesisPrompt(params: {
   bindingAdrSummary: string;
   docIndex: AskDocIndex;
   searchPlan: AskSearchPlan;
+  role?: string;
 }): string {
-  const { sources, bindingAdrSummary, docIndex, searchPlan } = params;
+  const { sources, bindingAdrSummary, docIndex, searchPlan, role } = params;
 
   const sourceBlocks = sources
     .map(
@@ -549,7 +550,11 @@ export function buildAskSynthesisPrompt(params: {
     ? `BINDING ARCHITECTURAL DECISIONS:\n${bindingAdrSummary}\n\n`
     : "";
 
-  return `${adrBlock}You are a helpful product documentation assistant for this application.
+  const audienceBlock = role
+    ? `Audience role: ${role}. Structure the answer's format, depth, and emphasis for this role.\n\n`
+    : "";
+
+  return `${adrBlock}${audienceBlock}You are a helpful product documentation assistant for this application.
 
 Use ONLY the retrieved documentation below to answer. Cite sources inline using their citation refs (e.g. [doc:uuid] or [adr:001]).
 
@@ -579,8 +584,9 @@ export async function runAskWorkflowContext(params: {
   userQuestion: string;
   module?: string;
   publishedOnly?: boolean;
+  role?: string;
 }): Promise<AskWorkflowContextResult> {
-  const { appId, userQuestion, module, publishedOnly } = params;
+  const { appId, userQuestion, module, publishedOnly, role } = params;
 
   const docIndex = await buildAskDocIndex(appId, { publishedOnly });
   const searchPlan = await planAskSearches({
@@ -596,6 +602,7 @@ export async function runAskWorkflowContext(params: {
     bindingAdrSummary,
     docIndex,
     searchPlan,
+    role,
   });
 
   return {
@@ -621,12 +628,14 @@ export async function runAskWorkflowAnswer(params: {
   question: string;
   module?: string;
   publishedOnly?: boolean;
+  role?: string;
 }): Promise<AskWorkflowAnswerResult> {
   const context = await runAskWorkflowContext({
     appId: params.appId,
     userQuestion: params.question,
     module: params.module,
     publishedOnly: params.publishedOnly,
+    role: params.role,
   });
 
   let answer: string;
