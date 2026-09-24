@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
 import { copyChangelogToClipboard } from "~/composables/useClipboard";
+import { renderMarkdown, extractHeadings, headingSlug } from "~/composables/useMarkdown";
 import { formatDisplayVersion, formatReleaseHeading } from "~/utils/functions";
 import { getHistoryActionClass, getHistoryActionLabel } from "~/utils/history-actions";
 import type { ReleaseItem, ReleaseFeature, ReleaseMedia, ReleaseCategories, ReleaseVersion } from "~/types";
@@ -29,6 +30,7 @@ const isFetchingList = ref(false);
 
 onMounted(async () => {
   document.addEventListener("keydown", onKeydown);
+  window.addEventListener("beforeunload", onBeforeUnload);
   if (releaseId.value) {
     await fetchRelease(releaseId.value);
     if (release.value?.type === "article") {
@@ -138,7 +140,7 @@ function isMediaPlaceholder(m: ReleaseMedia) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Inline edit mode (Editor.js)
+// Edit mode — technical-editor-style workspace (Editor.js)
 // ═══════════════════════════════════════════════════════════════
 const isEditing = ref(false);
 const editError = ref("");
@@ -152,12 +154,49 @@ const editDraft = reactive<{
   published: false,
 });
 
+const previewOnly = ref(false);
+const rightSidebarTab = ref<"properties" | "versions">("properties");
+const activeHeading = ref("");
+const paneBodyRef = ref<HTMLElement | null>(null);
+
+const editHeadings = computed(() => extractHeadings(editContent.value || ""));
+const previewHtml = computed(() => renderMarkdown(editContent.value || ""));
+
+const hasEditChanges = computed(() => {
+  if (!release.value) return false;
+  return (
+    editContent.value !== (release.value.summary || "")
+    || editDraft.heroTitle !== (release.value.heroTitle || "")
+    || editDraft.published !== release.value.published
+  );
+});
+
+const saveStatusLabel = computed(() => {
+  if (!isEditing.value) return "";
+  if (isUpdating.value) return "Saving…";
+  if (hasEditChanges.value) return "Unsaved changes";
+  return "";
+});
+
+const saveButtonLabel = computed(() =>
+  editDraft.published && !release.value?.published ? "Publish" : "Save Changes"
+);
+
+const lastModified = computed(() => {
+  if (!release.value?.updatedAt) return "";
+  const d = new Date(release.value.updatedAt);
+  return d.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+});
+
 function enterEditMode() {
   if (!release.value) return;
   editDraft.heroTitle = release.value.heroTitle || '';
   editDraft.published = release.value.published;
   editContent.value = release.value.summary || '';
   editError.value = '';
+  previewOnly.value = false;
+  rightSidebarTab.value = "properties";
+  activeHeading.value = "";
   isEditing.value = true;
 }
 
@@ -170,6 +209,7 @@ function uploadReleaseEditorImage(file: File) {
 
 function cancelEdit() {
   isEditing.value = false;
+  previewOnly.value = false;
   editError.value = '';
   editContent.value = '';
 }
@@ -189,7 +229,57 @@ async function saveEdit() {
   });
   await fetchReleaseVersions();
   isEditing.value = false;
+  previewOnly.value = false;
   editContent.value = '';
+}
+
+function togglePreview() {
+  previewOnly.value = !previewOnly.value;
+}
+
+function switchSidebarTab(tab: "properties" | "versions") {
+  rightSidebarTab.value = tab;
+  if (tab === "versions") fetchReleaseVersions();
+}
+
+function scrollElementIntoContainer(container: HTMLElement, el: HTMLElement) {
+  const top =
+    el.getBoundingClientRect().top -
+    container.getBoundingClientRect().top +
+    container.scrollTop -
+    16;
+  container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+}
+
+function scrollToHeading(text: string) {
+  activeHeading.value = text;
+  const container = paneBodyRef.value;
+  if (!container) return;
+
+  if (previewOnly.value) {
+    const slug = headingSlug(text);
+    let el = container.querySelector<HTMLElement>(`#${CSS.escape(slug)}`);
+    if (!el) {
+      for (const heading of container.querySelectorAll<HTMLElement>("h1, h2, h3")) {
+        if (heading.textContent?.trim() === text) {
+          el = heading;
+          break;
+        }
+      }
+    }
+    if (el) {
+      scrollElementIntoContainer(container, el);
+      return;
+    }
+  }
+
+  const headers = container.querySelectorAll<HTMLElement>(".ce-header");
+  for (const header of headers) {
+    if (header.textContent?.trim() === text) {
+      scrollElementIntoContainer(container, header);
+      return;
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -267,6 +357,45 @@ function previewReleaseContent(text: string | null, maxLen = 140) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Version restore
+// ═══════════════════════════════════════════════════════════════
+const restoreConfirmVisible = ref(false);
+const versionToRestore = ref<ReleaseVersion | null>(null);
+const isRestoring = ref(false);
+
+function restoreVersion(version: ReleaseVersion) {
+  if (!canWriteReleases.value) return;
+  versionToRestore.value = version;
+  restoreConfirmVisible.value = true;
+}
+
+async function confirmRestore() {
+  if (!release.value || !versionToRestore.value) return;
+  isRestoring.value = true;
+  try {
+    await updateRelease(release.value.id, {
+      heroTitle: versionToRestore.value.heroTitle ?? "",
+      summary: versionToRestore.value.summary ?? "",
+      versionAction: "restore",
+    });
+    if (release.value) {
+      editDraft.heroTitle = release.value.heroTitle || "";
+      editDraft.published = release.value.published;
+      editContent.value = release.value.summary || "";
+    }
+    await fetchReleaseVersions();
+    cancelRestore();
+  } finally {
+    isRestoring.value = false;
+  }
+}
+
+function cancelRestore() {
+  restoreConfirmVisible.value = false;
+  versionToRestore.value = null;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Delete modal
 // ═══════════════════════════════════════════════════════════════
 const showDeleteModal = ref(false);
@@ -291,12 +420,41 @@ async function doDelete() {
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
     showDeleteModal.value = false;
+    if (restoreConfirmVisible.value) cancelRestore();
     if (showHistoryPanel.value) closeReleaseHistory();
+  }
+  if (!isEditing.value) return;
+  // Ctrl+S / Cmd+S — Save
+  if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+    e.preventDefault();
+    if (canWriteReleases.value && !isUpdating.value) saveEdit();
+  }
+  // Ctrl+P / Cmd+P — Preview toggle
+  if ((e.ctrlKey || e.metaKey) && e.key === "p") {
+    e.preventDefault();
+    togglePreview();
   }
 }
 
+function onBeforeUnload(e: BeforeUnloadEvent) {
+  if (isEditing.value && hasEditChanges.value) {
+    e.preventDefault();
+    e.returnValue = "";
+  }
+}
+
+onBeforeRouteLeave((_to, _from, next) => {
+  if (isEditing.value && hasEditChanges.value) {
+    const ok = window.confirm("You have unsaved changes to this release article. Leave without saving?");
+    next(ok);
+    return;
+  }
+  next();
+});
+
 onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("beforeunload", onBeforeUnload);
   document.body.style.overflow = "";
 });
 </script>
@@ -316,7 +474,276 @@ onBeforeUnmount(() => {
       <NuxtLink to="/releases" class="btn btn-primary">View all releases</NuxtLink>
     </div>
 
-    <!-- Content -->
+    <!-- ═══ EDIT MODE — technical-editor workspace ═══ -->
+    <div v-else-if="isEditing" class="editor-page">
+      <header class="editor-topbar">
+        <div class="flex-gap-md">
+          <button
+            type="button"
+            class="btn btn-ghost back-btn"
+            title="Back to release"
+            @click="cancelEdit"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M19 12H5M12 19l-7-7 7-7"/>
+            </svg>
+          </button>
+          <h1>Release Editor</h1>
+          <span class="pill pill-accent">{{ formatReleaseHeading(release.appName, release.version, editDraft.heroTitle) }}</span>
+          <span class="pill" :class="editDraft.published ? 'pill-green' : 'pill-muted'">
+            {{ editDraft.published ? "Published" : "Draft" }}
+          </span>
+        </div>
+        <div class="flex-gap-sm topbar-actions">
+          <p
+            v-if="saveStatusLabel"
+            class="save-status"
+            :class="{
+              'save-status--saving': saveStatusLabel === 'Saving…',
+              'save-status--dirty': saveStatusLabel === 'Unsaved changes',
+            }"
+            aria-live="polite"
+          >
+            {{ saveStatusLabel }}
+          </p>
+          <button
+            type="button"
+            class="btn btn-ghost"
+            :class="{ active: previewOnly }"
+            @click="togglePreview"
+          >
+            {{ previewOnly ? "Editor" : "Preview" }}
+          </button>
+          <button type="button" class="btn btn-secondary" @click="cancelEdit">Cancel</button>
+          <button
+            v-if="canWriteReleases"
+            type="button"
+            class="btn btn-primary"
+            :disabled="isUpdating"
+            @click="saveEdit"
+          >
+            <span v-if="isUpdating">Saving…</span>
+            <span v-else>{{ saveButtonLabel }}</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="content-area">
+        <div class="doc-shell" :class="{ 'preview-only': previewOnly }">
+          <!-- Outline -->
+          <div class="outline-pane">
+            <div class="outline-header">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6;">
+                <line x1="8" y1="6" x2="21" y2="6"/>
+                <line x1="8" y1="12" x2="21" y2="12"/>
+                <line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/>
+                <line x1="3" y1="12" x2="3.01" y2="12"/>
+                <line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+              <span class="outline-title">Article Outline</span>
+            </div>
+            <ul class="outline-tree" role="list">
+              <li
+                v-for="(h, idx) in editHeadings"
+                :key="idx"
+                :class="['outline-item', `level-${h.level}`, { active: activeHeading === h.text }]"
+                role="listitem"
+                tabindex="0"
+                @click="scrollToHeading(h.text)"
+                @keydown.enter="scrollToHeading(h.text)"
+                @keydown.space.prevent="scrollToHeading(h.text)"
+              >
+                <span class="outline-marker" :class="{ 'level-h1': h.level === 1, 'level-h2': h.level === 2, 'level-h3': h.level === 3 }">H{{ h.level }}</span>
+                <span class="outline-text">{{ h.text }}</span>
+              </li>
+              <li v-if="editHeadings.length === 0" class="outline-empty">
+                <div class="outline-empty-content">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.4">
+                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                  </svg>
+                  <span>No headings yet</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Editor -->
+          <div class="editor-pane">
+            <div ref="paneBodyRef" class="pane-body">
+              <template v-if="!previewOnly">
+                <div v-if="editError" class="error-banner">{{ editError }}</div>
+                <p v-if="canWriteReleases" class="edit-image-hint">
+                  Type <kbd>/</kbd> and choose <strong>Upload image</strong>, click the
+                  <strong>Upload image</strong> button on an image block, or paste from your clipboard.
+                </p>
+                <ClientOnly>
+                  <EditorJs
+                    v-model="editContent"
+                    :read-only="!canWriteReleases"
+                    :upload-image="uploadReleaseEditorImage"
+                    placeholder="Write your release article content..."
+                    style="height:100%;"
+                  />
+                </ClientOnly>
+              </template>
+              <template v-else>
+                <header class="release-hero">
+                  <div class="release-hero-date">{{ formatDate(release.releaseDate) }}</div>
+                  <h1 class="release-hero-title">{{ formatReleaseHeading(release.appName, release.version, editDraft.heroTitle) }}</h1>
+                  <div class="release-hero-meta">
+                    <span class="release-hero-app">{{ release.appName }}</span>
+                    <span v-if="release.version" class="pill pill-accent">{{ formatDisplayVersion(release.version) }}</span>
+                  </div>
+                </header>
+                <MermaidHtml :html="previewHtml" class="preview-body" />
+              </template>
+            </div>
+          </div>
+
+          <!-- Right Sidebar (Properties + Versions tabs) -->
+          <div v-if="!previewOnly" class="right-sidebar">
+            <div class="sidebar-tabs">
+              <button
+                type="button"
+                class="sidebar-tab"
+                :class="{ active: rightSidebarTab === 'properties' }"
+                @click="switchSidebarTab('properties')"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                Properties
+              </button>
+              <button
+                type="button"
+                class="sidebar-tab"
+                :class="{ active: rightSidebarTab === 'versions' }"
+                @click="switchSidebarTab('versions')"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <polyline points="12 6 12 12 16 14"/>
+                </svg>
+                Versions
+                <span v-if="releaseVersions.length > 0" class="tab-badge">{{ releaseVersions.length }}</span>
+              </button>
+            </div>
+
+            <div class="sidebar-tab-panel">
+              <Transition name="tab-fade" mode="out-in">
+                <!-- Properties Panel -->
+                <div v-if="rightSidebarTab === 'properties'" key="properties" class="props-panel">
+                  <div class="props-section">
+                    <div class="props-section-label">Release</div>
+                    <div class="field">
+                      <label for="releaseHeroTitle">Hero title</label>
+                      <input
+                        id="releaseHeroTitle"
+                        v-model="editDraft.heroTitle"
+                        class="input"
+                        placeholder="e.g. Request tracing and deep health checks"
+                        :disabled="!canWriteReleases"
+                      />
+                    </div>
+                    <div class="field field-inline">
+                      <label class="checkbox-label">
+                        <input v-model="editDraft.published" type="checkbox" :disabled="!canWriteReleases" />
+                        Published
+                      </label>
+                    </div>
+                    <p class="field-hint">
+                      Unpublished articles are hidden from the public release pages.
+                    </p>
+                  </div>
+
+                  <div class="props-section">
+                    <div class="props-section-label">Details</div>
+                    <div class="field">
+                      <label for="releaseApp">App</label>
+                      <input id="releaseApp" class="input" :value="release.appName" readonly />
+                    </div>
+                    <div class="field-row">
+                      <div class="field">
+                        <label for="releaseVersion">Version</label>
+                        <input
+                          id="releaseVersion"
+                          class="input num"
+                          :value="release.version ? formatDisplayVersion(release.version) : '—'"
+                          readonly
+                        />
+                      </div>
+                      <div class="field">
+                        <label for="releaseType">Type</label>
+                        <input
+                          id="releaseType"
+                          class="input"
+                          :value="release.type === 'article' ? 'Article' : 'Normal'"
+                          readonly
+                        />
+                      </div>
+                    </div>
+                    <div class="field">
+                      <label for="releaseDate">Release date</label>
+                      <input id="releaseDate" class="input" :value="formatDate(release.releaseDate)" readonly />
+                    </div>
+                    <div class="field">
+                      <label for="releaseModified">Last modified</label>
+                      <input id="releaseModified" class="input num" :value="lastModified" readonly />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Versions Panel -->
+                <div v-else key="versions" class="versions-panel">
+                  <div v-if="isHistoryLoading" class="history-empty">Loading history…</div>
+                  <div v-else-if="releaseVersions.length === 0" class="history-empty">
+                    <p>No history yet</p>
+                    <span class="meta-label">Save or publish to create history entries</span>
+                  </div>
+                  <div
+                    v-for="item in releaseVersions"
+                    :key="item.id"
+                    class="history-item"
+                  >
+                    <div class="history-item-main">
+                      <p class="history-preview">{{ previewReleaseContent(item.summary) }}</p>
+                      <div class="history-meta-row">
+                        <span class="history-time">{{ formatHistoryTime(item.createdAt) }}</span>
+                        <span class="history-actor">{{ item.actor || "Unknown" }}</span>
+                        <span class="pill" :class="getHistoryActionClass(item.action)">{{ getHistoryActionLabel(item.action) }}</span>
+                      </div>
+                    </div>
+                    <div class="history-item-actions">
+                      <button
+                        v-if="releaseVersions.length > 1"
+                        type="button"
+                        class="btn btn-ghost btn-sm"
+                        @click.stop="viewReleaseVersionDiff(item)"
+                      >
+                        View diff
+                      </button>
+                      <button
+                        v-if="canWriteReleases"
+                        type="button"
+                        class="btn btn-ghost btn-sm"
+                        @click.stop="restoreVersion(item)"
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </Transition>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- ═══ VIEW MODE ═══ -->
     <div v-else class="release-content">
       <!-- Local topbar -->
       <header class="topbar">
@@ -338,15 +765,8 @@ onBeforeUnmount(() => {
           </NuxtLink>
           <NuxtLink v-if="release.type === 'normal' && release.versionId && canWriteChangelogs" :to="`/changelogs?versionId=${release.versionId}`" class="btn btn-secondary btn-sm">Edit changelog</NuxtLink>
           <template v-if="release.type === 'article'">
-            <button v-if="!isEditing" type="button" class="btn btn-ghost btn-sm" @click="openReleaseHistory">Version history</button>
-            <button v-if="!isEditing && canWriteReleases" type="button" class="btn btn-secondary btn-sm" @click="enterEditMode">Edit Release Article</button>
-            <template v-else-if="isEditing && canWriteReleases">
-              <button type="button" class="btn btn-secondary btn-sm" @click="cancelEdit">Cancel</button>
-              <button type="button" class="btn btn-primary btn-sm" :disabled="isUpdating" @click="saveEdit">
-                <span v-if="isUpdating">Saving…</span>
-                <span v-else>Save</span>
-              </button>
-            </template>
+            <button type="button" class="btn btn-ghost btn-sm" @click="openReleaseHistory">Version history</button>
+            <button v-if="canWriteReleases" type="button" class="btn btn-secondary btn-sm" @click="enterEditMode">Edit Release Article</button>
           </template>
           <button v-if="canWriteReleases" type="button" class="btn btn-danger btn-sm" @click="confirmDelete">Delete</button>
         </div>
@@ -355,9 +775,7 @@ onBeforeUnmount(() => {
       <!-- Article layout -->
       <div class="article-layout">
         <article class="article-wrap">
-          <!-- VIEW MODE -->
-          <template v-if="!isEditing">
-            <!-- Hero -->
+          <!-- Hero -->
             <header class="release-hero">
               <div class="release-hero-date">{{ formatDate(release.releaseDate) }}</div>
               <h1 class="release-hero-title">{{ formatReleaseHeading(release.appName, release.version, release.heroTitle) }}</h1>
@@ -456,54 +874,6 @@ onBeforeUnmount(() => {
                 </div>
               </section>
             </template>
-          </template>
-
-          <!-- EDIT MODE (Editor.js) -->
-          <template v-else>
-            <div class="edit-form">
-              <div v-if="editError" class="error-banner">{{ editError }}</div>
-
-              <!-- Hero Title -->
-              <div class="form-group">
-                <label>Hero Title</label>
-                <input v-model="editDraft.heroTitle" type="text" placeholder="e.g. Request tracing and deep health checks" />
-              </div>
-
-              <!-- Published Toggle -->
-              <div class="form-row">
-                <label class="flex-gap-sm" style="cursor:pointer;">
-                  <input v-model="editDraft.published" type="checkbox" />
-                  Published
-                </label>
-              </div>
-
-              <!-- Editor.js -->
-              <p v-if="canWriteReleases" class="edit-image-hint">
-                Type <kbd>/</kbd> and choose <strong>Upload image</strong>, click the
-                <strong>Upload image</strong> button on an image block, or paste from your clipboard.
-              </p>
-              <div class="editor-js-release-editor">
-                <ClientOnly>
-                  <EditorJs
-                    v-model="editContent"
-                    :read-only="!canWriteReleases"
-                    :upload-image="uploadReleaseEditorImage"
-                    placeholder="Write your release article content..."
-                    style="min-height:400px;"
-                  />
-                </ClientOnly>
-              </div>
-
-              <!-- Actions -->
-              <div class="form-footer">
-                <button type="button" class="btn btn-secondary" @click="cancelEdit">Cancel</button>
-                <button type="button" class="btn btn-primary" :disabled="isUpdating" @click="saveEdit">
-                  <span v-if="isUpdating">Saving…</span>
-                  <span v-else>Save Changes</span>
-                </button>
-              </div>
-            </div>
-          </template>
 
           <!-- Categories: shown for both normal and article -->
           <template v-if="release.categories">
@@ -610,11 +980,35 @@ onBeforeUnmount(() => {
       :diff="historyDiff"
       :is-loading="isDiffLoading"
       :error="diffError"
-      :has-unsaved-changes="isEditing"
+      :has-unsaved-changes="isEditing && hasEditChanges"
       @close="closeDiff"
       @update:from-id="onDiffFromChange"
       @update:to-id="onDiffToChange"
     />
+
+    <!-- Restore Version Confirmation Modal -->
+    <div class="modal-overlay" :class="{ open: restoreConfirmVisible }" @click.self="cancelRestore">
+      <div class="modal-panel" style="max-width: 420px;">
+        <div class="modal-header">
+          <h2>Restore Version</h2>
+          <button type="button" class="modal-close" aria-label="Close modal" @click="cancelRestore">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="margin: 0; color: var(--muted);">
+            Restore the article content from
+            <strong>{{ formatHistoryTime(versionToRestore?.createdAt ?? null) }}</strong>?
+            The current state will be saved to version history first.
+          </p>
+        </div>
+        <div class="form-footer">
+          <button type="button" class="btn btn-secondary" @click="cancelRestore">Cancel</button>
+          <button type="button" class="btn btn-primary" :disabled="isRestoring" @click="confirmRestore">
+            <span v-if="isRestoring">Restoring…</span>
+            <span v-else>Restore</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div class="modal-overlay" :class="{ open: showDeleteModal }" @click.self="showDeleteModal = false">
       <div class="modal-panel" style="max-width: 420px;">
@@ -661,39 +1055,422 @@ onBeforeUnmount(() => {
   font-size: 20px;
 }
 
-/* ═══ Inline Edit Form ═══════════════════════════════════════════ */
-.edit-form {
-  max-width: 720px;
+/* ═══ Editor workspace (technical-editor layout) ═══════════════ */
+.editor-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 93px);
+  max-height: calc(100vh - 93px);
 }
-.edit-form .form-group {
-  margin-bottom: 20px;
-}
-.edit-form .form-group label {
-  display: block;
-  margin-bottom: 6px;
-  font-weight: 500;
-  font-size: 13px;
-  color: var(--text);
-}
-.edit-form .form-group input,
-.edit-form .form-group textarea {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+
+.editor-topbar {
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 32px;
   background: var(--surface);
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.5;
+  border-bottom: 1px solid var(--border);
+  margin: -32px -32px 0;
 }
-.edit-form .form-group input:focus,
-.edit-form .form-group textarea:focus {
+.editor-topbar h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.back-btn {
+  padding: 6px;
+}
+.topbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.save-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.save-status--saving {
+  color: var(--fg);
+}
+.save-status--dirty {
+  color: oklch(55% 0.12 55);
+}
+.btn-ghost.active {
+  background: var(--fg-soft);
+  color: var(--fg);
+}
+
+.content-area {
+  padding: 24px 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.doc-shell {
+  display: grid;
+  grid-template-columns: 220px 1fr 280px;
+  gap: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.doc-shell.preview-only {
+  grid-template-columns: 220px 1fr;
+}
+.doc-shell.preview-only .right-sidebar {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .doc-shell {
+    grid-template-columns: 1fr;
+  }
+  .doc-shell .outline-pane,
+  .doc-shell .right-sidebar {
+    display: none;
+  }
+}
+
+.outline-pane {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+.outline-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.outline-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.outline-tree {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.outline-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  outline: none;
+  transition: background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  border-left: 2px solid transparent;
+  margin-left: -2px;
+}
+.outline-item:focus-visible {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+}
+.outline-item:hover {
+  background: var(--fg-soft);
+  color: var(--fg);
+}
+.outline-item.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 500;
+}
+.outline-item.level-2 {
+  padding-left: 20px;
+}
+.outline-item.level-3 {
+  padding-left: 32px;
+}
+.outline-marker {
+  font-size: 9px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--fg-soft);
+  color: var(--muted);
+  flex-shrink: 0;
+  line-height: 1;
+}
+.outline-item.active .outline-marker {
+  background: var(--accent);
+  color: var(--surface);
+}
+.outline-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.outline-empty {
+  padding: 24px 8px;
+}
+.outline-empty-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.editor-pane {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  height: 100%;
+}
+.editor-pane:has(.editor-js-wrapper) .pane-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.editor-pane:has(.editor-js-wrapper) .pane-body :deep(.editor-js-wrapper) {
+  flex: 1;
+  min-height: 0;
+  overflow: visible;
+}
+.pane-body {
+  flex: 1;
+  padding: 16px;
+  overflow: auto;
+  min-height: 0;
+}
+.doc-shell.preview-only .editor-pane .pane-body {
+  padding: 24px 32px;
+}
+
+.right-sidebar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 280px;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.sidebar-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  flex: 1;
+  justify-content: center;
+  position: relative;
+}
+.sidebar-tab:hover {
+  color: var(--fg);
+  background: var(--fg-soft);
+}
+.sidebar-tab:active {
+  background: color-mix(in oklch, var(--fg-soft) 70%, transparent);
+  transform: scale(0.98);
+}
+.sidebar-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--accent-soft);
+}
+.sidebar-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  border-radius: var(--radius);
+}
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  line-height: 1;
+}
+.sidebar-tab.active .tab-badge {
+  background: var(--accent);
+  color: var(--surface);
+}
+.sidebar-tab-panel {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+.props-panel {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.versions-panel {
+  padding: 16px;
+  overflow: auto;
+}
+.props-section {
+  margin-bottom: 16px;
+}
+.props-section:last-of-type {
+  margin-bottom: 0;
+}
+.props-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 10px;
+  padding-top: 4px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.field:last-child {
+  margin-bottom: 0;
+}
+.field label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+.field-hint {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  margin: 0;
+}
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.field-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fg);
+  font-weight: 400;
+  cursor: pointer;
+}
+.input,
+.select {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.input:hover,
+.select:hover {
+  border-color: color-mix(in oklch, var(--fg) 30%, var(--border));
+}
+.input:focus,
+.select:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--surface);
 }
-.edit-form .form-row {
-  margin-bottom: 20px;
+.input[readonly] {
+  cursor: default;
+  opacity: 0.7;
 }
+.input[readonly]:hover {
+  border-color: var(--border);
+}
+.input:disabled,
+.select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.tab-fade-enter-active,
+.tab-fade-leave-active {
+  transition: opacity 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tab-fade-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.tab-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
 .block-editor {
   max-width: 720px;
 }
@@ -954,24 +1731,6 @@ onBeforeUnmount(() => {
     width: 100%;
   }
 }
-.error-banner {
-  padding: 10px 12px;
-  margin-bottom: 16px;
-  background: oklch(95% 0.02 25);
-  border: 1px solid oklch(85% 0.05 25);
-  border-radius: 8px;
-  color: oklch(50% 0.15 25);
-  font-size: 13px;
-}
-
-.editor-js-release-editor {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: visible;
-  background: var(--surface);
-  min-height: 400px;
-}
-
 .edit-image-hint {
   margin: 0 0 10px;
   font-size: 12px;
@@ -1638,55 +2397,6 @@ onBeforeUnmount(() => {
   border-top: 1px solid var(--border);
 }
 
-/* Form elements */
-.form-group {
-  margin-bottom: 16px;
-}
-.form-group label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 6px;
-  color: var(--fg);
-}
-.form-group input[type="text"],
-.form-group textarea {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  font: inherit;
-  font-size: 14px;
-  color: var(--fg);
-  transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.form-group input:focus,
-.form-group textarea:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-.form-group textarea {
-  min-height: 80px;
-  resize: vertical;
-}
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-@media (max-width: 600px) {
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-}
-.help-text {
-  display: block;
-  font-size: 12px;
-  color: var(--muted);
-  margin-top: 4px;
-}
 .error-banner {
   background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent);
   color: oklch(50% 0.16 25);
@@ -1717,6 +2427,32 @@ onBeforeUnmount(() => {
   .topbar {
     flex-wrap: wrap;
   }
+  .editor-topbar {
+    margin: -64px -20px 0 -64px;
+    padding: 8px 20px;
+    height: auto;
+    min-height: 56px;
+    flex-wrap: wrap;
+  }
+  .editor-page {
+    height: auto;
+    max-height: none;
+  }
+  .content-area {
+    overflow: visible;
+  }
+  .doc-shell {
+    overflow: visible;
+  }
+  .editor-pane {
+    min-height: 480px;
+  }
+}
+@media (max-width: 480px) {
+  .editor-topbar {
+    margin: -56px -16px 0 -56px;
+    padding: 8px 16px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1727,7 +2463,13 @@ onBeforeUnmount(() => {
   .release-footer-nav a,
   .release-nav-list a,
   .modal-overlay,
-  .modal-panel {
+  .modal-panel,
+  .outline-item,
+  .sidebar-tab,
+  .input,
+  .select,
+  .tab-fade-enter-active,
+  .tab-fade-leave-active {
     transition: none !important;
   }
 }
@@ -1791,6 +2533,11 @@ onBeforeUnmount(() => {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   margin-bottom: 10px;
+}
+
+.history-item-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .history-preview {
