@@ -354,9 +354,15 @@ async function initEditor() {
   const { markdownToEditorJs } = await import("~/composables/useEditorJsConverter");
   const initialData = markdownToEditorJs(props.modelValue || "");
 
-  const editor = new EditorJS({
-    holder: editorContainer.value,
-    tools: {
+  // Notion-style quote: Enter leaves the quote (new paragraph below), Shift+Enter
+  // adds a line break inside it — same as callout.
+  class QuoteTool extends Quote {
+    static get enableLineBreaks() {
+      return false;
+    }
+  }
+
+  const tools = {
       header: {
         class: Header,
         inlineToolbar: true,
@@ -373,7 +379,7 @@ async function initEditor() {
       nestedList: { class: NestedList, inlineToolbar: true, config: { defaultStyle: "unordered" }, toolbox: false },
       checklist: { class: Checklist, inlineToolbar: true, toolbox: false },
       code: { class: Code, config: { placeholder: "Enter code" } },
-      quote: { class: Quote, inlineToolbar: true, config: { placeholder: "Enter a quote", captionPlaceholder: "Author" } },
+      quote: { class: QuoteTool, inlineToolbar: true, config: { placeholder: "Enter a quote", captionPlaceholder: "Author" } },
       table: { class: Table },
       image: {
         class: SimpleImageTool,
@@ -407,7 +413,19 @@ async function initEditor() {
         class: Embed,
         inlineToolbar: true,
       },
-    },
+    };
+
+  // Block tools whose text takes inline formatting; caret-only Cmd/Ctrl+B/I/U
+  // toggles the typing style only inside these (see notionShortcuts.ts).
+  const inlineFormattingTools = new Set(
+    Object.entries(tools)
+      .filter(([, settings]) => "inlineToolbar" in settings && settings.inlineToolbar === true)
+      .map(([name]) => name)
+  );
+
+  const editor = new EditorJS({
+    holder: editorContainer.value,
+    tools,
     tunes: {
       textVariant: TextVariantTune,
       alignment: {
@@ -437,7 +455,7 @@ async function initEditor() {
       setupNotionPasteHandler(editor);
       linkHoverCleanup = setupEditorInteractionGuards();
       if (editorContainer.value) {
-        shortcutsCleanup = setupNotionShortcuts(editor, editorContainer.value);
+        shortcutsCleanup = setupNotionShortcuts(editor, editorContainer.value, inlineFormattingTools);
       }
       emit("ready");
     },
@@ -1543,6 +1561,12 @@ defineExpose({
   gap: 10px;
   padding: 6px 8px;
   border-radius: 8px;
+}
+
+/* Editor.js filters the slash menu by adding .ce-popover-item--hidden; the
+   display:flex above out-specifies its display:none, so restore it. */
+.editor-js-container .ce-toolbox .ce-popover-item--hidden {
+  display: none;
 }
 
 .editor-js-container .ce-toolbox .ce-popover-item__icon {

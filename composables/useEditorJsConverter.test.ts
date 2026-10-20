@@ -443,7 +443,7 @@ describe("callout blocks", () => {
     const roundTrip = markdownToEditorJs(markdown);
     expect(roundTrip.blocks[0].type).toBe("callout");
     expect(roundTrip.blocks[0].data.type).toBe("note");
-    expect(roundTrip.blocks[0].data.text).toContain("<strong>fast</strong>");
+    expect(roundTrip.blocks[0].data.text).toContain("<b>fast</b>");
   });
 
   it("keeps plain blockquotes as quote blocks", () => {
@@ -510,5 +510,63 @@ flowchart TB
     expect(data.blocks[1].type).toBe("mermaid");
     expect(data.blocks[1].data.code).toContain("flowchart TB");
     expect(data.blocks[1].data.code).toContain("subgraph clients");
+  });
+});
+
+describe("inline formatting round-trip", () => {
+  it("converts markdown emphasis to <b>/<i>", () => {
+    expect(markdownToEditorJs("**bold** and *italic* and ***both***").blocks[0].data.text).toBe(
+      "<b>bold</b> and <i>italic</i> and <b><i>both</i></b>"
+    );
+  });
+
+  it("round-trips <b>/<i> through markdown", () => {
+    const markdown = editorJsToMarkdown({
+      blocks: [{ type: "paragraph", data: { text: "<b>bold</b> and <i>italic</i>" } }],
+    });
+    expect(markdown).toBe("**bold** and *italic*");
+    expect(markdownToEditorJs(markdown).blocks[0].data.text).toBe("<b>bold</b> and <i>italic</i>");
+  });
+});
+
+describe("inline delimiter whitespace", () => {
+  it("moves edge whitespace outside emphasis delimiters", () => {
+    const cases: Array<[string, string]> = [
+      ["<b>sample </b>text", "**sample** text"],
+      ["<i>sample </i>text", "*sample* text"],
+      ["<s>Sample </s>– next", "~~Sample~~ – next"],
+      ["a<b> lead</b>", "a **lead**"],
+      ["<b>sample&nbsp;</b>text", "**sample** text"],
+      ["x<b> </b>y", "x y"],
+    ];
+    for (const [html, expected] of cases) {
+      expect(
+        editorJsToMarkdown({ blocks: [{ type: "paragraph", data: { text: html } }] })
+      ).toBe(expected);
+    }
+  });
+});
+
+describe("block separation", () => {
+  it("separates blocks with a blank line so text after a quote or callout stays outside it", () => {
+    const markdown = editorJsToMarkdown({
+      blocks: [
+        { type: "quote", data: { text: "A quote" } },
+        { type: "paragraph", data: { text: "After quote" } },
+        { type: "callout", data: { type: "note", text: "Callout text" } },
+        { type: "paragraph", data: { text: "After callout" } },
+        { type: "paragraph", data: { text: "Second paragraph" } },
+      ],
+    });
+    expect(markdown).toBe(
+      "> A quote\n\nAfter quote\n\n> [!NOTE]\n> Callout text\n\nAfter callout\n\nSecond paragraph"
+    );
+    expect(markdownToEditorJs(markdown).blocks.map((b) => [b.type, b.data.text])).toEqual([
+      ["quote", "A quote"],
+      ["paragraph", "After quote"],
+      ["callout", "Callout text"],
+      ["paragraph", "After callout"],
+      ["paragraph", "Second paragraph"],
+    ]);
   });
 });

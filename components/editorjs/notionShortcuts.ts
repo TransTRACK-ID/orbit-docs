@@ -17,6 +17,10 @@ import type { BlockAPI } from "@editorjs/editorjs";
  *   Cmd/Ctrl+D            → duplicate block
  *   Cmd/Ctrl+Shift+↑/↓    → move block up/down
  *   Cmd/Ctrl+Alt+0..9     → turn into (Notion's option-command digits)
+ *   Cmd/Ctrl+B / I / U    → bold / italic / underline (caret: next typed text)
+ *   Cmd/Ctrl+Shift+X      → strikethrough
+ *   Cmd/Ctrl+K            → link
+ *   Slash menu: Enter inserts the top filtered item
  */
 
 type BlockSpec = { type: string; data: Record<string, any> };
@@ -78,6 +82,23 @@ const TURN_DIGITS: Record<string, BlockBuilder> = {
   "9": (t) => ({ type: "quote", data: { text: t, alignment: "left", caption: "" } }),
 };
 
+type InlineHotkey = {
+  key: string;
+  shift: boolean;
+  /** Inline tool name as registered in EditorJs.vue (= `data-item-name` in the inline toolbar). */
+  tool: string;
+  /** execCommand toggling the typing style when nothing is selected. */
+  caretCommand?: "bold" | "italic" | "underline";
+};
+
+const INLINE_HOTKEYS: InlineHotkey[] = [
+  { key: "b", shift: false, tool: "bold", caretCommand: "bold" },
+  { key: "i", shift: false, tool: "italic", caretCommand: "italic" },
+  { key: "u", shift: false, tool: "underline", caretCommand: "underline" },
+  { key: "k", shift: false, tool: "link" },
+  { key: "x", shift: true, tool: "strikethrough" },
+];
+
 function escapeInline(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -134,7 +155,7 @@ function extractBlockText(data: Record<string, any> | undefined): string {
   return "";
 }
 
-export function setupNotionShortcuts(editor: EditorJS, container: HTMLElement): () => void {
+export function setupNotionShortcuts(editor: EditorJS, container: HTMLElement, inlineFormattingTools: ReadonlySet<string>): () => void {
   const redactor = container.querySelector<HTMLElement>(".codex-editor__redactor");
   if (!redactor) return () => {};
 
@@ -244,6 +265,36 @@ export function setupNotionShortcuts(editor: EditorJS, container: HTMLElement): 
     transform(cur.index, build(escapeInline(text)), "end");
   }
 
+  // ── Cmd/Ctrl+B/I/U/K, Cmd/Ctrl+Shift+X — inline formatting ───
+  // Editor.js 2.31 binds inline-tool shortcuts to `document` once and never
+  // unbinds them, so after an editor instance is destroyed (Preview toggle,
+  // navigation) later instances only get the dead instance's listener.
+  function applyInlineHotkey(hotkey: InlineHotkey) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || !container.contains(selection.anchorNode)) return;
+
+    if (selection.isCollapsed) {
+      // Caret only: toggle the style for the next typed text (Notion/Docs) —
+      // the same command Editor.js's own bold/italic tools run.
+      const cur = currentBlock(editor);
+      if (hotkey.caretCommand && cur && inlineFormattingTools.has(cur.block.name)) {
+        document.execCommand(hotkey.caretCommand);
+      }
+      return;
+    }
+
+    // Selection: activate the inline-toolbar item exactly like a click.
+    const selector = `.ce-inline-toolbar .ce-popover--opened [data-item-name="${hotkey.tool}"]`;
+    const item = container.querySelector<HTMLElement>(selector);
+    if (item) {
+      item.click();
+      return;
+    }
+    // The toolbar opens ~180ms after selectionchange; open it now, click once rendered.
+    editor.inlineToolbar.open();
+    requestAnimationFrame(() => container.querySelector<HTMLElement>(selector)?.click());
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (e.key === " " && !e.ctrlKey && !e.metaKey && !e.altKey) {
       if (handleSpaceTrigger()) {
@@ -268,6 +319,15 @@ export function setupNotionShortcuts(editor: EditorJS, container: HTMLElement): 
 
     if (e.altKey) return;
 
+    const hotkey = INLINE_HOTKEYS.find((h) => h.key === e.key.toLowerCase() && h.shift === e.shiftKey);
+    if (hotkey) {
+      // Also stops Editor.js's own document-level listener (live or stale) from double-toggling.
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      applyInlineHotkey(hotkey);
+      return;
+    }
+
     if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
       e.preventDefault();
       moveBlock(e.key === "ArrowUp" ? -1 : 1);
@@ -284,11 +344,28 @@ export function setupNotionShortcuts(editor: EditorJS, container: HTMLElement): 
     handleInstantTrigger();
   }
 
+  // ── Slash menu: Enter inserts the top match ─────────────────────
+  // Editor.js only activates an item highlighted with ↓/Tab; after typing a
+  // query, Enter inserts the first visible result (Notion).
+  function onContainerKeydown(e: KeyboardEvent) {
+    if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+    if (!(e.target instanceof HTMLInputElement)) return;
+    const toolbox = e.target.closest(".ce-toolbox");
+    if (!toolbox || toolbox.querySelector(".ce-popover-item--focused")) return;
+    const first = toolbox.querySelector<HTMLElement>(".ce-popover-item:not(.ce-popover-item--hidden)");
+    if (!first) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    first.click();
+  }
+
   redactor.addEventListener("keydown", onKeydown, true);
   redactor.addEventListener("input", onInput, true);
+  container.addEventListener("keydown", onContainerKeydown, true);
 
   return () => {
     redactor.removeEventListener("keydown", onKeydown, true);
     redactor.removeEventListener("input", onInput, true);
+    container.removeEventListener("keydown", onContainerKeydown, true);
   };
 }

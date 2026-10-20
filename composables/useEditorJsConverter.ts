@@ -695,9 +695,10 @@ export function markdownToEditorJs(md: string): EditorJsData {
 // ── Editor.js JSON → Markdown ─────────────────────────────────
 export function editorJsToMarkdown(data: EditorJsData): string {
   const blocks = data.blocks || [];
-  const out: string[] = [];
+  const chunks: string[] = [];
 
   for (const block of blocks) {
+    const out: string[] = [];
     switch (block.type) {
       case "header": {
         const level = block.data.level || 2;
@@ -836,9 +837,10 @@ export function editorJsToMarkdown(data: EditorJsData): string {
       default:
         break;
     }
+    if (out.length > 0) chunks.push(out.join("\n"));
   }
 
-  return out.join("\n");
+  return chunks.join("\n\n");
 }
 
 // ── Inline helpers ─────────────────────────────────────────────
@@ -1156,13 +1158,25 @@ export function sanitizeEditorJsData(data: EditorJsData): EditorJsData {
 
 function inlineMarkdownToHtml(text: string): string {
   const decoded = decodeHtmlEntities(text);
+  // Editor.js keeps only its bold/italic tools' <b>/<i> on save; <strong>/<em> get stripped.
   return decoded
     .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*\*(.*?)\*\*\*/g, "<strong><em>$1</em></strong>")
-    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.*?)\*/g, "<em>$1</em>")
+    .replace(/\*\*\*(.*?)\*\*\*/g, "<b><i>$1</i></b>")
+    .replace(/\*\*(.*?)\*\*/g, "<b>$1</b>")
+    .replace(/\*(.*?)\*/g, "<i>$1</i>")
     .replace(/~~(.*?)~~/g, "<s>$1</s>")
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+}
+
+/**
+ * Wrap inline markdown in an emphasis delimiter with edge whitespace moved outside:
+ * `<b>sample </b>` → `**sample** `. CommonMark ignores delimiters touching inner
+ * whitespace (incl. contenteditable's NBSP), so `**sample **` renders literally.
+ */
+function wrapInlineDelimiter(inner: string, delimiter: string): string {
+  const [, leading, content, trailing] = inner.match(/^(\s*)([\s\S]*?)(\s*)$/)!;
+  if (!content) return inner;
+  return `${leading}${delimiter}${content}${delimiter}${trailing}`;
 }
 
 function htmlToInlineMarkdown(html: string): string {
@@ -1211,16 +1225,16 @@ function htmlToInlineMarkdown(html: string): string {
     switch (tag) {
       case "strong":
       case "b":
-        return `**${inner}**`;
+        return wrapInlineDelimiter(inner, "**");
       case "em":
       case "i":
-        return `*${inner}*`;
+        return wrapInlineDelimiter(inner, "*");
       case "code":
         return `\`${inner}\``;
       case "s":
       case "del":
       case "strike":
-        return `~~${inner}~~`;
+        return wrapInlineDelimiter(inner, "~~");
       case "u":
         return `<u>${inner}</u>`;
       case "a": {
