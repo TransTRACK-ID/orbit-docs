@@ -1,5 +1,5 @@
 import vue from "@vitejs/plugin-vue";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -16,6 +16,9 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     setupFiles: ["./vitest.setup.ts"],
+    // Local git clones cloned for doc generation (gitignored scratch) are
+    // not this repo's tests.
+    exclude: [...configDefaults.exclude, "orbit-docs-repositories/**"],
     coverage: {
       include: ["utils/**/*.{js,ts}", "composables/**/*.{js,ts}"],
     },

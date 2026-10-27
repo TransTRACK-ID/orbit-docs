@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { ref, computed, watch, nextTick } from "vue";
+import { useAuth } from "./vitest-imports-mock";
 
 // Mock vue3-toastify globally
 vi.mock("vue3-toastify", () => ({
@@ -25,6 +26,9 @@ vi.mock("vue3-toastify", () => ({
 
 // Mock useIsUnauthorized composable
 (globalThis as any).useIsUnauthorized = vi.fn(() => ref(false));
+
+// Mock useAuth (Nuxt auto-import used as a bare global by stores/composables)
+(globalThis as any).useAuth = useAuth;
 
 // Mock useRoute
 (globalThis as any).useRoute = vi.fn(() =>

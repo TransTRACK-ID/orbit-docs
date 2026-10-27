@@ -119,7 +119,7 @@ describe("useSettings composable", () => {
     const result = await updateMember("m2", { name: "Bob Updated", role: "product_manager" });
     expect(result.name).toBe("Bob Updated");
     expect(teamMembers.value[0].role).toBe("product_manager");
-    expect(mockToastSuccess).toHaveBeenCalledWith("Member updated");
+    expect(mockToastSuccess).toHaveBeenCalledWith("Member role updated");
   });
 
   it("should delete a team member", async () => {

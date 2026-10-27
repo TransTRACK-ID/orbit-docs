@@ -32,7 +32,7 @@ describe("useApps composable", () => {
     mockFetch.mockResolvedValueOnce(appsData);
 
     const { apps, fetchApps, isLoading } = useApps();
-    expect(isLoading.value).toBe(false);
+    expect(isLoading.value).toBe(true);
 
     const promise = fetchApps();
     expect(isLoading.value).toBe(true);

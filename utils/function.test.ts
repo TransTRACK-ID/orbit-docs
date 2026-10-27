@@ -20,11 +20,13 @@ describe("roundToDecimal Function", () => {
 
 describe("formatDate Function", () => {
   it("should format ISO dates correctly", () => {
-    expect(formatDate("2024-01-15T10:30:00Z")).toBe("2024-01-15 10:30:00");
+    // Local-time input (no offset) so the expectation holds in any timezone:
+    // formatDate renders in local time.
+    expect(formatDate("2024-01-15T10:30:00")).toBe("2024-01-15 10:30:00");
   });
 
   it("should support custom output formats", () => {
-    expect(formatDate("2024-01-15T10:30:00Z", "yyyy-MM-dd")).toBe("2024-01-15");
+    expect(formatDate("2024-01-15T10:30:00", "yyyy-MM-dd")).toBe("2024-01-15");
   });
 });
 
