@@ -231,6 +231,17 @@ export function renderMarkdown(md: string): string {
       return `<img src="${href}" alt="${text}" />`;
     };
 
+    // ─── Links: external open in a new tab ─────────────────────
+    renderer.link = function ({ href, title, tokens }: { href: string; title: string | null; tokens: any[] }) {
+      const text = this.parser.parseInline(tokens);
+      const safeHref = href.replace(/"/g, "%22");
+      const titleAttr = title ? ` title="${escapeHtml(title).replace(/"/g, "&quot;")}"` : "";
+      if (/^https?:\/\//i.test(href)) {
+        return `<a href="${safeHref}"${titleAttr} target="_blank" rel="noopener noreferrer">${text}</a>`;
+      }
+      return `<a href="${safeHref}"${titleAttr}>${text}</a>`;
+    };
+
     // ─── Blockquote: detect GFM-style alerts ────────────────────
     renderer.blockquote = function ({ tokens }: { tokens: any[] }) {
       const body = this.parser.parse(tokens);

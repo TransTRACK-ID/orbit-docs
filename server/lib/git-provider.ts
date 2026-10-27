@@ -134,6 +134,68 @@ export function parseRepo(repoUrl: string): ParsedRepo {
   return { host, owner, repo, fullName: `${owner}/${repo}` };
 }
 
+export interface RepoFileUrlInput {
+  provider: GitProvider;
+  repoUrl: string;
+  hostUrl?: string | null;
+  ref: string;
+  path: string; // repo-relative, "/" separated
+  startLine?: number;
+  endLine?: number;
+}
+
+/**
+ * Build a web URL to a file on its git host (GitHub/GitLab, incl. self-hosted),
+ * pinned to `ref`, with an optional validated line-range anchor.
+ * Returns null when the ref/path is empty or the repo URL cannot be parsed.
+ */
+export function buildRepoFileUrl(input: RepoFileUrlInput): string | null {
+  const ref = input.ref?.trim();
+  const path = input.path?.trim();
+  if (!ref || !path) return null;
+
+  let parsed: ParsedRepo;
+  try {
+    parsed = parseRepo(input.repoUrl);
+  } catch {
+    return null;
+  }
+
+  const host = resolveApiHost(input.provider, input.repoUrl, input.hostUrl);
+  const scheme =
+    input.hostUrl?.startsWith("http://") || input.repoUrl.startsWith("http://")
+      ? "http"
+      : "https";
+  const isGitLab =
+    input.provider === "gitlab" ||
+    (input.provider === "github" && parsed.host.includes("gitlab"));
+
+  const encodedPath = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+  const hasStart = input.startLine !== undefined && input.startLine >= 1;
+  const hasEnd =
+    hasStart && input.endLine !== undefined && input.endLine > input.startLine!;
+
+  if (isGitLab) {
+    const anchor = hasStart
+      ? hasEnd
+        ? `#L${input.startLine}-${input.endLine}`
+        : `#L${input.startLine}`
+      : "";
+    return `${scheme}://${host}/${parsed.fullName}/-/blob/${ref}/${encodedPath}${anchor}`;
+  }
+
+  const anchor = hasStart
+    ? hasEnd
+      ? `#L${input.startLine}-L${input.endLine}`
+      : `#L${input.startLine}`
+    : "";
+  return `${scheme}://${host}/${parsed.fullName}/blob/${ref}/${encodedPath}${anchor}`;
+}
+
 /**
  * Build an authenticated HTTPS clone URL embedding the access token.
  * Falls back to the original URL when no token is provided.

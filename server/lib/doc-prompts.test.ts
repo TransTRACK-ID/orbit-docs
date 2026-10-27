@@ -94,6 +94,48 @@ describe("wiki prompts", () => {
     expect(prompt).toMatch(/Do not include analysis, planning, or thinking sentences/);
     expect(prompt).toMatch(/Do not repeat the page title as a markdown heading/);
   });
+
+  it("outline prompt uses repo-dir prefixed sourceFiles example", () => {
+    const prompt = buildWikiOutlinePrompt("ctx", "/repos", "App");
+    expect(prompt).toContain('"<repo-dir>/README.md"');
+    expect(prompt).toContain("each prefixed with the repository directory name");
+  });
+
+  it("page prompt contains source citations block with repo dirs and backticked sources", () => {
+    const prompt = buildWikiPagePrompt(
+      "{{INTRO}}",
+      { slug: "2-api", title: "API", sourceFiles: ["repo-a/src/main.ts"] },
+      "app",
+      [
+        { slug: "1-overview", title: "Overview" },
+        { slug: "2-api", title: "API" },
+      ],
+      "ctx",
+      "/repos",
+      false,
+      { repoDirs: ["repo-a", "repo-b"], docLinks: "- [System Design](/docs/doc-1) — SDD" },
+    );
+    expect(prompt).toContain("Source citations (REQUIRED");
+    expect(prompt).toContain("repo-a, repo-b");
+    expect(prompt).toContain("- `repo-a/src/main.ts`");
+    expect(prompt).toContain("Product documents (use these exact markdown links");
+    expect(prompt).toContain("- [System Design](/docs/doc-1) — SDD");
+  });
+
+  it("page prompt omits product documents block when docLinks empty", () => {
+    const prompt = buildWikiPagePrompt(
+      "{{INTRO}}",
+      { slug: "2-api", title: "API", sourceFiles: ["repo-a/src/main.ts"] },
+      "app",
+      [{ slug: "2-api", title: "API" }],
+      "ctx",
+      "/repos",
+      false,
+      { repoDirs: ["repo-a"], docLinks: "" },
+    );
+    expect(prompt).not.toContain("Product documents (use these exact markdown links");
+    expect(prompt).toContain("Source citations (REQUIRED");
+  });
 });
 
 describe("extractJsonObject", () => {

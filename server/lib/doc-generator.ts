@@ -13,9 +13,10 @@ import {
   docGenerationVersions,
   appRepositories,
   apps,
+  docs,
   users,
 } from "~/server/database/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import { createAgent } from "./agent-factory";
 import type { Agent, AnalyzeOptions } from "./agent-factory";
 import {
@@ -60,6 +61,14 @@ import {
   type WikiPageContent,
 } from "./wiki-site-builder";
 import { sanitizeWikiMarkdown } from "~/utils/wiki-markdown";
+import {
+  linkifyWikiSourceCitations,
+  pruneInvalidWikiLinks,
+} from "~/utils/wiki-source-links";
+import {
+  createWikiSourceCitationResolver,
+  type WikiRepoLinkContext,
+} from "./wiki-source-linker";
 import {
   resolveAgentDocOutput,
   assertValidGeneratedDoc,
@@ -1739,6 +1748,23 @@ export async function generateWikiDocs(
       cloneDirs[repo.repoUrl] = dir;
     }
 
+    const gitMetadata = await collectGitMetadata(repos, cloneDirs);
+    const wikiRepoContexts: WikiRepoLinkContext[] = repos.map((repo) => {
+      const meta = gitMetadata.find((m) => m.repoUrl === repo.repoUrl);
+      return {
+        dirName: getRepoName(repo.repoUrl),
+        cloneDir: cloneDirs[repo.repoUrl],
+        repo: {
+          provider: repo.provider,
+          repoUrl: repo.repoUrl,
+          hostUrl: repo.hostUrl,
+        },
+        ref: meta?.fullSha || meta?.branch || repo.defaultBranch,
+      };
+    });
+    const resolveSourceCitation =
+      createWikiSourceCitationResolver(wikiRepoContexts);
+
     await onProgress({
       status: "analyzing",
       progressPct: 15,
@@ -1776,6 +1802,57 @@ export async function generateWikiDocs(
 
     const overviewTemplate = await loadWikiTemplate("overview");
     const pageTemplate = await loadWikiTemplate("page");
+
+    const docLinkRows = await db
+      .select({
+        id: docs.id,
+        title: docs.title,
+        docType: docs.docType,
+        externalId: docs.externalId,
+      })
+      .from(docs)
+      .where(
+        and(
+          eq(docs.appId, appId),
+          ne(docs.status, "archived"),
+          or(
+            inArray(docs.docType, ["srs", "fsd", "sdd", "adr", "feature"]),
+            and(isNull(docs.docType), isNull(docs.siteId))
+          )
+        )
+      );
+    const DOC_TYPE_RANK: Record<string, number> = {
+      srs: 0,
+      fsd: 1,
+      sdd: 2,
+      adr: 3,
+      feature: 5,
+    };
+    const sortedDocLinkRows = [...docLinkRows].sort((a, b) => {
+      const rankDiff =
+        (a.docType === null ? 4 : (DOC_TYPE_RANK[a.docType] ?? 5)) -
+        (b.docType === null ? 4 : (DOC_TYPE_RANK[b.docType] ?? 5));
+      if (rankDiff !== 0) return rankDiff;
+      return a.title < b.title ? -1 : a.title > b.title ? 1 : 0;
+    });
+    let featureCount = 0;
+    const cappedDocLinkRows = sortedDocLinkRows.filter((row) => {
+      if (row.docType !== "feature") return true;
+      featureCount++;
+      return featureCount <= 200;
+    });
+    const docLinks = cappedDocLinkRows
+      .map((row) => {
+        const safeTitle = row.title.replace(/[\[\]\n]/g, " ");
+        const typeLabel = row.docType ? row.docType.toUpperCase() : "DOC";
+        const external = row.externalId ? ` (${row.externalId})` : "";
+        return `- [${safeTitle}](/docs/${row.id}) — ${typeLabel}${external}`;
+      })
+      .join("\n");
+    const linkContext = {
+      repoDirs: wikiRepoContexts.map((c) => c.dirName),
+      docLinks,
+    };
     const wikiPages: WikiPageContent[] = [];
     const pageCount = plan.pages.length;
 
@@ -1802,6 +1879,7 @@ export async function generateWikiDocs(
           aggregateContext,
           baseDir,
           isOverview,
+          linkContext,
         ),
       );
 
@@ -1809,10 +1887,22 @@ export async function generateWikiDocs(
         partialField: "sdd",
       });
       const title = planPageTitle(pagePlan);
+      const sanitized = sanitizeWikiMarkdown(content, title);
+      const { content: linkedContent, unresolved } =
+        linkifyWikiSourceCitations(sanitized, resolveSourceCitation);
+      const finalContent = pruneInvalidWikiLinks(
+        linkedContent,
+        plan.siteSlug,
+        new Set(plan.pages.map((p) => p.slug))
+      );
+      if (unresolved.length)
+        console.warn(
+          `[wiki] Unresolved source citations on ${pagePlan.slug}: ${unresolved.join(", ")}`
+        );
       wikiPages.push({
         slug: pagePlan.slug,
         title,
-        content: sanitizeWikiMarkdown(content, title),
+        content: finalContent,
         sortOrder: wikiPageSortOrder(pagePlan.slug, i),
       });
       await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });

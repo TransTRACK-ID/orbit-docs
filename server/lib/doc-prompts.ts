@@ -313,7 +313,7 @@ Output ONLY valid JSON (no markdown fences) matching this schema:
       "slug": "1-overview",
       "title": "Overview",
       "group": "Core",
-      "sourceFiles": ["README.md", "src/main.ts"]
+      "sourceFiles": ["<repo-dir>/README.md", "<repo-dir>/src/main.ts"]
     }
   ]
 }
@@ -323,7 +323,7 @@ Rules:
 - Each slug must be unique. Do not list Overview (or any page) more than once.
 - Use numbered slugs: 1-overview, 2-subsystem-name, 3-another-topic (lowercase, hyphens).
 - Group related pages (e.g. Components, Guides, Core). Use 4–12 pages total.
-- sourceFiles: repo-relative paths that anchor each page (README, key modules).
+- sourceFiles: paths relative to ${baseDir}, each prefixed with the repository directory name (the last segment of that repo's "Local path" above), e.g. "my-service/src/main.ts". These anchor each page (README, key modules).
 - siteSlug: lowercase letters, numbers, hyphens only.
 - Cover major subsystems, architecture, and setup—not every file.
 - Output ONLY the JSON object.`;
@@ -336,7 +336,8 @@ export function buildWikiPagePrompt(
   allPages: WikiOutlinePagePlan[],
   aggregateContext: string,
   baseDir: string,
-  isOverview: boolean
+  isOverview: boolean,
+  linkContext?: { repoDirs: string[]; docLinks: string }
 ): string {
   const siblingLinks = allPages
     .filter((p) => p.slug !== page.slug)
@@ -345,8 +346,17 @@ export function buildWikiPagePrompt(
 
   const sourceList =
     page.sourceFiles?.length
-      ? page.sourceFiles.map((f) => `- ${f}`).join("\n")
+      ? page.sourceFiles.map((f) => `- \`${f}\``).join("\n")
       : "- (infer from codebase)";
+
+  const repoDirs =
+    linkContext?.repoDirs?.length
+      ? linkContext.repoDirs
+      : ["the repository directory name"];
+
+  const productDocsBlock = linkContext?.docLinks
+    ? `\nProduct documents (use these exact markdown links whenever you mention one of these documents):\n${linkContext.docLinks}\n`
+    : "";
 
   return `You are writing one page of an internal wiki for a codebase under ${baseDir}.
 
@@ -363,13 +373,20 @@ ${siblingLinks}
 Relevant source files for this page:
 ${sourceList}
 
+Source citations (REQUIRED everywhere you mention a source file — "Relevant source files" and inline in the text):
+- Write each reference as inline code: \`<repo-dir>/<repo-relative-path>:<startLine>-<endLine>\` — e.g. \`rally-server/features/event/events.service.go:40-85\`.
+- <repo-dir> must be one of: ${repoDirs.join(", ")} (the directory names under ${baseDir}).
+- Include the line range of the exact code you read that implements what you describe; use \`:<line>\` for a single line. Omit the range only when the whole file is relevant. Never guess line numbers for code you did not read.
+- Repository documentation files (e.g. .docs/*.md, README.md) are cited the same way.
+- Do not write git/GitHub/GitLab URLs yourself — citations are converted to links automatically.
+${productDocsBlock}
 Template structure:
 ${template}
 
 Instructions:
 - Fill ALL template sections with real content from the codebase.
-- Include a "## Relevant source files" section with a bullet list of repo-relative paths.
-- Link to sibling wiki pages using markdown: /wiki/${siteSlug}/{page-slug}
+- Include a "## Relevant source files" section: one bullet per file as - \`<citation>\` — one-line role of the file, grouped under a bold "**Repository name ( repo-dir )**" line per repository. Include the primary line range for each file when the page covers a specific part of it.
+- Every time you mention another wiki page or a product document by name — anywhere in the text, not only in "Related pages" — link it using the exact markdown links given above. Link to sibling wiki pages using markdown: /wiki/${siteSlug}/{page-slug}
 - On the overview page, include a Mermaid architecture diagram in a fenced \`\`\`mermaid code block.
 - Use tables where helpful. No placeholder text.
 - Do not repeat the page title as a markdown heading — the reader already shows it.

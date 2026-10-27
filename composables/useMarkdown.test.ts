@@ -32,7 +32,7 @@ describe("renderMarkdown", () => {
   it("should render code blocks", () => {
     const md = "```\nconst x = 1;\n```";
     const html = renderMarkdown(md);
-    expect(html).toContain("<pre><code>");
+    expect(html).toContain('<pre><code class="hljs">');
     expect(html).toContain("const x = 1;");
   });
 
@@ -55,7 +55,13 @@ describe("renderMarkdown", () => {
   it("should render links", () => {
     const md = "[link](https://example.com)";
     const html = renderMarkdown(md);
-    expect(html).toContain('<a href="https://example.com">link</a>');
+    expect(html).toContain('<a href="https://example.com" target="_blank" rel="noopener noreferrer">link</a>');
+  });
+
+  it("renders internal wiki links without target", () => {
+    const html = renderMarkdown("[Page](/wiki/site/page)");
+    expect(html).toContain('<a href="/wiki/site/page">Page</a>');
+    expect(html).not.toContain('target="_blank"');
   });
 
   it("should render colored links saved from the editor", () => {
