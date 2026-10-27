@@ -7,7 +7,7 @@ import {
   useMarkdownCopyHandler,
 } from "~/composables/useDocOutline";
 import { useWikiPageMeta } from "~/composables/useWikiPageMeta";
-import { sanitizeWikiMarkdown } from "~/utils/wiki-markdown";
+import { collapseRelevantSourceFiles, sanitizeWikiMarkdown } from "~/utils/wiki-markdown";
 
 definePageMeta({
   layout: false,
@@ -62,7 +62,7 @@ const wikiBody = computed(() => {
 
 const renderedHtml = computed(() => {
   if (!wikiBody.value) return "";
-  return renderMarkdown(wikiBody.value);
+  return collapseRelevantSourceFiles(renderMarkdown(wikiBody.value));
 });
 
 const outlineItems = computed(() =>

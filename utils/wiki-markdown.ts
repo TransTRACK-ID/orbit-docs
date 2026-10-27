@@ -128,3 +128,47 @@ export function sanitizeWikiMarkdown(content: string, title = ""): string {
   text = collapseDuplicateBlocks(text);
   return text.trim();
 }
+
+/**
+ * Wrap each rendered "Relevant source files" section in a native
+ * <details> (collapsed by default) with a file count in the summary.
+ * Pure string transform over rendered HTML; body markup is preserved
+ * byte-for-byte. The original <h2> stays inside the <summary> so its
+ * id remains visible for outline links and scrollspy.
+ */
+export function collapseRelevantSourceFiles(html: string): string {
+  const headingRe = /<h2 id="[^"]+">Relevant source files<\/h2>/g;
+  const matches = [...html.matchAll(headingRe)];
+  if (matches.length === 0) return html;
+
+  interface Segment {
+    start: number;
+    end: number;
+    replacement: string;
+  }
+  const segments: Segment[] = matches.map((m) => {
+    const start = m.index;
+    const headingHtml = m[0];
+    const bodyStart = start + headingHtml.length;
+    const nextH2 = html.indexOf("<h2 ", bodyStart);
+    const end = nextH2 === -1 ? html.length : nextH2;
+    const body = html.slice(bodyStart, end);
+    const count = body.match(/<li[\s>]/g)?.length ?? 0;
+    const countSpan =
+      count >= 1
+        ? `<span class="wiki-source-files-count">${count} file${count === 1 ? "" : "s"}</span>`
+        : "";
+    return {
+      start,
+      end,
+      replacement: `<details class="wiki-source-files"><summary class="wiki-source-files-summary">${headingHtml}${countSpan}</summary><div class="wiki-source-files-body">${body}</div></details>`,
+    };
+  });
+
+  let result = html;
+  for (let i = segments.length - 1; i >= 0; i--) {
+    const seg = segments[i];
+    result = result.slice(0, seg.start) + seg.replacement + result.slice(seg.end);
+  }
+  return result;
+}

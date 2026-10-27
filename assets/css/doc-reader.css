@@ -359,6 +359,39 @@
   scroll-margin-top: 16px;
 }
 
+.doc-body .wiki-source-files {
+  margin: 40px 0 16px;
+}
+
+.doc-body .wiki-source-files-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  cursor: pointer;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.doc-body .wiki-source-files-summary::marker {
+  color: var(--muted);
+}
+
+.doc-body .wiki-source-files-summary h2 {
+  margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.doc-body .wiki-source-files-count {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.doc-body .wiki-source-files-body {
+  padding-top: 12px;
+}
+
 .doc-body h3 {
   font-size: 17px;
   margin: 24px 0 12px;

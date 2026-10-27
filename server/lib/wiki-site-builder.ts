@@ -1,6 +1,6 @@
 import { getDb } from "~/server/database";
 import { docSites, docs, activityLogs } from "~/server/database/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { isValidSiteSlug, slugify } from "~/server/lib/nav-config";
 import type { WikiOutlinePagePlan, WikiSitePlan } from "~/server/lib/doc-prompts";
 import { buildNavConfigFromPlan } from "~/utils/wiki-nav";
@@ -17,6 +17,35 @@ export interface WikiSiteBuildResult {
   siteId: string;
   siteSlug: string;
   pageIds: string[];
+}
+
+export interface ExistingWikiPageRow {
+  id: string;
+  slug: string | null;
+  docType: string | null;
+  source: string;
+  status: string;
+}
+
+/**
+ * Ids of generated wiki pages whose slug is absent from the new plan.
+ * Manual pages, non-wiki docs, archived rows, and slug-less rows are kept:
+ * only a slugged generated wiki page can be proven to be an orphan.
+ */
+export function staleWikiPageIds(
+  existingPages: ExistingWikiPageRow[],
+  keepSlugs: ReadonlySet<string>,
+): string[] {
+  return existingPages
+    .filter(
+      (p) =>
+        p.docType === "wiki" &&
+        p.source === "generated" &&
+        p.status !== "archived" &&
+        !!p.slug &&
+        !keepSlugs.has(p.slug),
+    )
+    .map((p) => p.id);
 }
 
 async function findWikiSiteForApp(appId: string, siteSlug: string) {
@@ -89,7 +118,13 @@ export async function createOrUpdateWikiSite(
   }
 
   const existingPages = await db
-    .select({ id: docs.id, slug: docs.slug })
+    .select({
+      id: docs.id,
+      slug: docs.slug,
+      docType: docs.docType,
+      source: docs.source,
+      status: docs.status,
+    })
     .from(docs)
     .where(eq(docs.siteId, site.id));
 
@@ -137,10 +172,24 @@ export async function createOrUpdateWikiSite(
     }
   }
 
+  const staleIds = staleWikiPageIds(
+    existingPages,
+    new Set(pages.map((p) => p.slug)),
+  );
+  if (staleIds.length > 0) {
+    await db
+      .update(docs)
+      .set({ status: "archived", updatedAt: new Date() })
+      .where(inArray(docs.id, staleIds));
+  }
+
   await db.insert(activityLogs).values({
     appId,
     appName: plan.siteName,
-    action: `Wiki site updated (${pages.length} pages)`,
+    action:
+      staleIds.length === 0
+        ? `Wiki site updated (${pages.length} pages)`
+        : `Wiki site updated (${pages.length} pages, ${staleIds.length} stale archived)`,
     actor,
   });
 
