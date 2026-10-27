@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildListDocsHint } from "./mcp-doc-queries";
+import { buildListDocsHint, formatMcpDocSite } from "./mcp-doc-queries";
 
 describe("buildListDocsHint", () => {
   it("warns when app id is unknown", () => {
@@ -31,5 +31,30 @@ describe("buildListDocsHint", () => {
 
     expect(hint).toContain("draft=121");
     expect(hint).toContain("list_app_documentation");
+  });
+});
+
+describe("formatMcpDocSite", () => {
+  const site = {
+    id: "site-1",
+    appId: "app-1",
+    name: "Wiki",
+    slug: "app-wiki",
+    description: null,
+    status: "draft",
+    navConfig: null,
+    createdAt: null,
+    updatedAt: null,
+    appName: "App",
+  };
+
+  it("marks wiki sites and exposes wikiPath", () => {
+    const result = formatMcpDocSite(site, { isWikiSite: true });
+    expect(result.isWikiSite).toBe(true);
+    expect(result.wikiPath).toBe("/wiki/app-wiki");
+  });
+
+  it("defaults isWikiSite to false", () => {
+    expect(formatMcpDocSite(site).isWikiSite).toBe(false);
   });
 });

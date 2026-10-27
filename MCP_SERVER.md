@@ -24,6 +24,24 @@ The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open p
 > The standalone server (`npm run mcp:start`) supports the same auth modes.
 - **Docker support** for easy deployment
 
+## Which MCP server? (read first)
+
+| Server | Entry point | Implementation | Tools | Status |
+|--------|-------------|----------------|-------|--------|
+| In-Nuxt HTTP MCP (canonical) | `/api/mcp/connect`, `/mcp` | `server/utils/mcp-server.ts` | 23 tools | Canonical — use this for new deployments |
+| Standalone MCP (legacy) | `npm run mcp:start`, `Dockerfile.mcp`, port 41244 | root `mcp-server.ts` | 14 legacy tools | Legacy — no `ask_docs`, no doc-site tools, no wiki awareness — kept for existing deployments; new deployments should use the in-Nuxt endpoint |
+
+### Wiki over MCP
+
+Wiki pages are `docs` rows with `docType = "wiki"` (generated per-app wiki sites served at `/wiki/{siteSlug}/{pageSlug}`). On the in-Nuxt HTTP MCP server:
+
+- `search_docs_content` and `ask_docs` include wiki automatically like other doc types — no opt-in or confirmation step is needed.
+- `list_docs` and `search_docs_content` accept `docType: "wiki"` to isolate wiki pages.
+- `list_doc_sites` and `get_doc_site` return `isWikiSite` (wiki-only sites) and per-page `docType` (`"wiki"` for wiki pages).
+- Link fields: `wikiPath` / `wikiUrl` on docs, sites, and site pages (plus `sharePath` / `shareUrl`, which prefer the wiki link when `MCP_API_KEY` is set).
+
+The standalone legacy server has none of this: no wiki awareness, no `ask_docs`, and no doc-site tools.
+
 ## Available Tools
 
 ### Apps

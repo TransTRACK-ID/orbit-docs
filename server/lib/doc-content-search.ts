@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getDb } from "~/server/database";
-import { docs } from "~/server/database/schema";
+import { docs, docSites } from "~/server/database/schema";
 import { isBindingAdrDoc } from "~/server/lib/adr-queries";
 import { searchDocChunksHybrid } from "~/server/lib/doc-chunk-search";
 import {
@@ -25,6 +25,11 @@ export interface DocContentSearchResult {
   heading?: string;
   chunkId?: string;
   score?: number;
+  slug?: string | null;
+  siteId?: string | null;
+  siteSlug?: string | null;
+  siteStatus?: string | null;
+  siteName?: string | null;
 }
 
 export type DocContentSearchMode = "hybrid" | "keyword";
@@ -81,8 +86,14 @@ export async function searchDocsContent(params: {
       status: docs.status,
       externalId: docs.externalId,
       frontmatter: docs.frontmatter,
+      slug: docs.slug,
+      siteId: docs.siteId,
+      siteSlug: docSites.slug,
+      siteStatus: docSites.status,
+      siteName: docSites.name,
     })
     .from(docs)
+    .leftJoin(docSites, eq(docSites.id, docs.siteId))
     .where(whereClause)
     .limit(Math.max(limit * 3, limit));
 
@@ -94,6 +105,11 @@ export async function searchDocsContent(params: {
     status: row.status,
     externalId: row.externalId,
     frontmatter: row.frontmatter ?? null,
+    slug: row.slug,
+    siteId: row.siteId,
+    siteSlug: row.siteSlug,
+    siteStatus: row.siteStatus,
+    siteName: row.siteName,
     binding: isBindingAdrDoc({
       docType: row.docType,
       status: row.status,
@@ -165,7 +181,12 @@ export async function searchDocsContentHybrid(params: {
     title: `${row.title} › ${row.heading}`,
     content: row.content,
     docType: row.docType,
-    status: "published",
+    status: row.status,
+    slug: row.slug,
+    siteId: row.siteId,
+    siteSlug: row.siteSlug,
+    siteStatus: row.siteStatus,
+    siteName: row.siteName,
     externalId: null,
     heading: row.heading,
     chunkId: row.chunkId,

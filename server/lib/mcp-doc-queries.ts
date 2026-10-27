@@ -63,18 +63,21 @@ export function formatMcpPublicContext() {
   };
 }
 
-export function formatMcpDocSite(site: {
-  id: string;
-  appId: string | null;
-  name: string;
-  slug: string;
-  description: string | null;
-  status: string;
-  navConfig?: unknown;
-  createdAt: Date | string | null;
-  updatedAt: Date | string | null;
-  appName?: string | null;
-}) {
+export function formatMcpDocSite(
+  site: {
+    id: string;
+    appId: string | null;
+    name: string;
+    slug: string;
+    description: string | null;
+    status: string;
+    navConfig?: unknown;
+    createdAt: Date | string | null;
+    updatedAt: Date | string | null;
+    appName?: string | null;
+  },
+  options?: { isWikiSite?: boolean },
+) {
   const links = buildMcpDocSiteLinkFields({
     slug: site.slug,
     status: site.status,
@@ -87,6 +90,7 @@ export function formatMcpDocSite(site: {
     slug: site.slug,
     description: site.description,
     status: site.status,
+    isWikiSite: options?.isWikiSite ?? false,
     navConfig: site.navConfig ?? null,
     createdAt: site.createdAt,
     updatedAt: site.updatedAt,

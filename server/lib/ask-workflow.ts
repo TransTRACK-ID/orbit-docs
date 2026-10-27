@@ -210,15 +210,13 @@ export function heuristicAskPlan(
   const docTypes: string[] = [];
 
   if (availableTypes.has("feature")) docTypes.push("feature");
+  if (availableTypes.has("wiki")) docTypes.push("wiki");
   if (/sdd|design|architecture|technical|api|oauth|auth|jwt|database/.test(q)) {
     if (availableTypes.has("sdd")) docTypes.push("sdd");
     if (availableTypes.has("fsd")) docTypes.push("fsd");
   }
   if (/requirement|srs|scope/.test(q) && availableTypes.has("srs")) {
     docTypes.push("srs");
-  }
-  if (/wiki|guide|how to/.test(q) && availableTypes.has("wiki")) {
-    docTypes.push("wiki");
   }
 
   const searches: AskSearchItem[] = [
@@ -265,6 +263,7 @@ Given a user question and a compact doc index, produce a JSON search plan with u
 Valid docTypes: ${VALID_DOC_TYPES.join(", ")}
 - Use "feature" for knowledge-base / spreadsheet features
 - Use "sdd", "fsd", "srs" for product documentation
+- Use "wiki" for internal wiki pages (guides, architecture overviews, how-tos) — include "wiki" in at least one search whenever wiki docs appear in the index; treat wiki like any other doc type
 - Use "adr" with bindingOnly: true for architectural constraints
 - Use module when the question targets a specific module (from index tags)
 
@@ -344,6 +343,7 @@ async function executeSingleSearch(
 
   const wantsFeature =
     docTypes.length === 0 || docTypes.includes("feature");
+  const wantsWiki = wantsFeature || docTypes.includes("wiki");
   const nonFeatureTypes = docTypes.filter((t) => t !== "feature" && t !== "adr");
   const wantsAdrInContent = docTypes.includes("adr") && !item.bindingOnly;
   const wantsChunkSearch =
@@ -357,7 +357,7 @@ async function executeSingleSearch(
     const chunkDocTypes: string[] = [];
     if (wantsFeature || docTypes.length === 0) chunkDocTypes.push("feature");
     if (nonFeatureTypes.includes("sdd") || docTypes.length === 0) chunkDocTypes.push("sdd");
-    if (nonFeatureTypes.includes("wiki") || docTypes.length === 0) chunkDocTypes.push("wiki");
+    if (wantsWiki) chunkDocTypes.push("wiki");
 
     const chunkRows = await searchDocChunksHybrid({
       appId,
@@ -421,6 +421,7 @@ async function executeSingleSearch(
   if (wantsAdrInContent && !contentDocTypes.includes("adr")) {
     contentDocTypes.push("adr");
   }
+  if (wantsWiki && !contentDocTypes.includes("wiki")) contentDocTypes.push("wiki");
 
   const skipFullDocSearchForChunkTypes =
     wantsChunkSearch &&

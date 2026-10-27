@@ -5,7 +5,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { eq, desc, sql, and, count } from "drizzle-orm";
+import { eq, desc, sql, and, count, inArray } from "drizzle-orm";
 import { db } from "~/server/database";
 import * as schema from "~/server/database/schema";
 import {
@@ -37,6 +37,7 @@ import {
   isMcpInternalLinkMode,
 } from "~/server/lib/mcp-public-urls";
 import type { DocListView } from "~/utils/doc-display";
+import { deriveWikiOnlySiteIds, isWikiOnlySiteFromPages } from "~/utils/wiki-content";
 import {
   formatAdrApiItem,
   formatAdrConstraintSummary,
@@ -103,13 +104,14 @@ const MCP_PLATFORM_INSTRUCTIONS = [
   "2. Call get_workspace_binding_constraints to refresh workspace-wide binding ADRs.",
   "3. When working on a specific app, call get_binding_constraints with that appId or appName.",
   "",
-  "Every app has two kinds of documentation:",
+  "Every app has three kinds of documentation:",
   "- Product documentation: SRS, FSD, SDD, manuals (source = generated or manual).",
   "- Knowledge base: features synced from spreadsheets (source = op_sync, docType = feature). This is the /docs 'Knowledge base' view.",
+  "- Internal wiki: generated multi-page wiki sites (docType = wiki, status = draft), browsed at /wiki/{siteSlug}. Wiki docs count as Product category in list/search tools and are searched automatically.",
   "",
   "To answer any question about an app's documentation, follow this workflow:",
   "1. Call list_apps (no search unless user named a specific app) to find the app and get its id.",
-  "2. For complex or cross doc-type questions, prefer ask_docs with appId/appName and the user's question — it runs Plan → Retrieve → Synthesize server-side across SDD, FSD, features, ADRs, and wiki.",
+  "2. For complex or cross doc-type questions, prefer ask_docs with appId/appName and the user's question — it runs Plan → Retrieve → Synthesize server-side across SDD, FSD, features, ADRs, and wiki. Wiki pages are gathered automatically like other doc types — no separate wiki call or user confirmation is needed.",
   "3. For granular access, call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty. The response includes bindingConstraints with mandatory ADR rules — follow them in every answer.",
   "4. To read a doc's full content, call get_doc with the doc id.",
   "5. To find docs by keyword manually, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
@@ -185,6 +187,7 @@ const ListDocsSchema = z
     app_name: optionalString,
     status: z.enum(["draft", "in_review", "published", "archived"]).optional(),
     category: z.enum(["product", "knowledge"]).optional(),
+    docType: z.enum(["srs", "fsd", "sdd", "git_snapshot", "feature", "adr", "wiki"]).optional(),
     search: optionalString,
     includeContent: z.coerce.boolean().optional().default(false),
     limit: z.coerce.number().min(1).max(100).optional().default(50),
@@ -194,6 +197,7 @@ const ListDocsSchema = z
     ...parseAppRefInput(data),
     status: data.status,
     category: data.category,
+    docType: data.docType,
     search: data.search,
     includeContent: data.includeContent,
     limit: data.limit,
@@ -266,12 +270,14 @@ const SearchDocsContentSchema = z
     appName: optionalString,
     app_name: optionalString,
     category: z.enum(["product", "knowledge"]).optional(),
+    docType: z.enum(["srs", "fsd", "sdd", "git_snapshot", "feature", "adr", "wiki"]).optional(),
     limit: z.coerce.number().min(1).max(20).optional().default(10),
   })
   .transform((data) => ({
     query: data.query,
     ...parseAppRefInput(data),
     category: data.category,
+    docType: data.docType,
     limit: data.limit,
   }));
 
@@ -468,7 +474,7 @@ const TOOLS: Tool[] = [
   {
     name: "list_docs",
     description:
-      "List documentation entries with product/knowledge categorization (matches /docs). Prefer list_app_documentation for the grouped view. Accepts appId or appName. Returns total counts and hints when filters hide results.",
+      "List documentation entries with product/knowledge categorization (matches /docs). Prefer list_app_documentation for the grouped view. Accepts appId or appName. Returns total counts and hints when filters hide results. Use docType to filter to one type (e.g. docType 'wiki' for internal wiki pages).",
     inputSchema: {
       type: "object",
       properties: {
@@ -476,6 +482,7 @@ const TOOLS: Tool[] = [
         appName: { type: "string", description: "Resolve app by name when appId is unknown" },
         status: { type: "string", enum: ["draft", "in_review", "published", "archived"] },
         category: { type: "string", enum: ["product", "knowledge"] },
+        docType: { type: "string", enum: ["srs", "fsd", "sdd", "git_snapshot", "feature", "adr", "wiki"] },
         search: { type: "string" },
         includeContent: { type: "boolean" },
         limit: { type: "number" },
@@ -541,13 +548,14 @@ const TOOLS: Tool[] = [
     name: "search_docs_content",
     description:
       "Hybrid semantic + keyword search inside doc content (feature, SDD, wiki chunks + ILIKE for other types). " +
-      "Supports product/knowledge filtering to match /docs views.",
+      "Supports product/knowledge filtering to match /docs views. Wiki pages are included by default like other doc types; pass docType 'wiki' to search only the wiki.",
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string" },
         appId: { type: "string" },
         category: { type: "string", enum: ["product", "knowledge"] },
+        docType: { type: "string", enum: ["srs", "fsd", "sdd", "git_snapshot", "feature", "adr", "wiki"] },
         limit: { type: "number" },
       },
       required: ["query"],
@@ -636,7 +644,7 @@ const TOOLS: Tool[] = [
   {
     name: "list_doc_sites",
     description:
-      "List doc sites (public documentation portals) with shareable public URLs. Filter by app, status, or name/slug search.",
+      "List doc sites (public documentation portals and internal wiki sites) with shareable URLs. isWikiSite marks wiki-only sites served at /wiki/. Filter by app, status, or name/slug search.",
     inputSchema: {
       type: "object",
       properties: {
@@ -652,7 +660,7 @@ const TOOLS: Tool[] = [
   {
     name: "get_doc_site",
     description:
-      "Get a doc site with its published pages and public URLs. Accepts site id or slug. Use this to give users links to /s/{siteSlug} and /s/{siteSlug}/{pageSlug}.",
+      "Get a doc site with its pages and URLs. Accepts site id or slug. Pages include docType (wiki pages have docType 'wiki'); wiki-only sites have isWikiSite true and link via wikiPath (/wiki/{siteSlug}/{pageSlug}), public sites via /s/{siteSlug}/{pageSlug}.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1165,6 +1173,9 @@ mcpServer.setRequestHandler(
             const categoryCondition = docCategoryCondition(params.category);
             if (categoryCondition) conditions.push(categoryCondition);
           }
+          if (params.docType) {
+            conditions.push(eq(schema.docs.docType, params.docType));
+          }
           if (params.search) {
             conditions.push(sql`${schema.docs.title} ILIKE ${"%" + params.search + "%"}`);
           }
@@ -1207,6 +1218,7 @@ mcpServer.setRequestHandler(
                     filters: {
                       status: params.status ?? null,
                       category: params.category ?? null,
+                      docType: params.docType ?? null,
                       search: params.search ?? null,
                     },
                     total,
@@ -1543,6 +1555,7 @@ mcpServer.setRequestHandler(
             appId: app.id ?? undefined,
             query: params.query,
             category: params.category,
+            docTypes: params.docType ? [params.docType] : undefined,
             limit: params.limit,
           });
 
@@ -1560,16 +1573,16 @@ mcpServer.setRequestHandler(
                 source: null,
                 docType: row.docType,
                 externalId: row.externalId,
-                siteId: null,
-                slug: null,
+                siteId: row.siteId ?? null,
+                slug: row.slug ?? null,
                 frontmatter: row.frontmatter ?? null,
                 createdAt: null,
                 updatedAt: null,
                 appName: app.name,
                 version: null,
-                siteName: null,
-                siteSlug: null,
-                siteStatus: null,
+                siteName: row.siteName ?? null,
+                siteSlug: row.siteSlug ?? null,
+                siteStatus: row.siteStatus ?? null,
               } as McpDocRow,
               { includeContent: true },
             ),
@@ -1987,7 +2000,18 @@ mcpServer.setRequestHandler(
             .limit(params.limit)
             .offset(params.offset);
 
-          const data = rows.map((row) => formatMcpDocSite(row));
+          const wikiOnlySiteIds =
+            rows.length > 0
+              ? deriveWikiOnlySiteIds(
+                  await db
+                    .select({ siteId: schema.docs.siteId, docType: schema.docs.docType })
+                    .from(schema.docs)
+                    .where(inArray(schema.docs.siteId, rows.map((row) => row.id))),
+                )
+              : new Set<string>();
+          const data = rows.map((row) =>
+            formatMcpDocSite(row, { isWikiSite: wikiOnlySiteIds.has(row.id) }),
+          );
 
           return {
             content: [
@@ -2052,6 +2076,7 @@ mcpServer.setRequestHandler(
               title: schema.docs.title,
               slug: schema.docs.slug,
               status: schema.docs.status,
+              docType: schema.docs.docType,
               sortOrder: schema.docs.sortOrder,
               updatedAt: schema.docs.updatedAt,
               siteSlug: schema.docSites.slug,
@@ -2076,6 +2101,7 @@ mcpServer.setRequestHandler(
               title: page.title,
               slug: page.slug,
               status: page.status,
+              docType: page.docType,
               sortOrder: page.sortOrder,
               updatedAt: page.updatedAt,
               publicPath: links.publicPath,
@@ -2095,7 +2121,7 @@ mcpServer.setRequestHandler(
                   {
                     ...formatMcpPublicContext(),
                     data: {
-                      ...formatMcpDocSite(site),
+                      ...formatMcpDocSite(site, { isWikiSite: isWikiOnlySiteFromPages(pageRows) }),
                       pages,
                       publishedPageCount: pages.filter((page) => page.status === "published").length,
                     },

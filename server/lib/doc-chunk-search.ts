@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getDb, pool } from "~/server/database";
-import { docs } from "~/server/database/schema";
+import { docs, docSites } from "~/server/database/schema";
 import { docChunks } from "~/server/database/schema/doc-chunks";
 import { INDEXABLE_DOC_TYPES } from "~/server/lib/doc-chunking";
 import {
@@ -17,6 +17,12 @@ export interface ChunkSearchResult {
   heading: string;
   content: string;
   score: number;
+  status: string;
+  slug: string | null;
+  siteId: string | null;
+  siteSlug: string | null;
+  siteStatus: string | null;
+  siteName: string | null;
 }
 
 function getRrfK(): number {
@@ -145,9 +151,16 @@ async function loadChunksByIds(ids: string[]): Promise<ChunkSearchResult[]> {
       docType: docChunks.docType,
       heading: docChunks.heading,
       content: docChunks.content,
+      status: docs.status,
+      slug: docs.slug,
+      siteId: docs.siteId,
+      siteSlug: docSites.slug,
+      siteStatus: docSites.status,
+      siteName: docSites.name,
     })
     .from(docChunks)
     .innerJoin(docs, eq(docs.id, docChunks.docId))
+    .leftJoin(docSites, eq(docSites.id, docs.siteId))
     .where(inArray(docChunks.id, ids));
 
   const byId = new Map(rows.map((row) => [row.chunkId, row]));
@@ -162,6 +175,12 @@ async function loadChunksByIds(ids: string[]): Promise<ChunkSearchResult[]> {
       heading: row.heading,
       content: row.content,
       score: 0,
+      status: row.status,
+      slug: row.slug,
+      siteId: row.siteId,
+      siteSlug: row.siteSlug,
+      siteStatus: row.siteStatus,
+      siteName: row.siteName,
     }));
 }
 

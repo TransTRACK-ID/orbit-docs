@@ -100,6 +100,23 @@ describe("heuristicAskPlan", () => {
     const plan = heuristicAskPlan("overview", sampleIndex);
     expect(() => AskSearchPlanSchema.parse(plan)).not.toThrow();
   });
+
+  it("includes wiki without keyword trigger when wiki docs exist", () => {
+    const wikiIndex: AskDocIndex = {
+      docs: [
+        ...sampleIndex.docs,
+        { id: "d4", title: "Wiki Overview", docType: "wiki", module: null, status: "draft" },
+      ],
+      bindingAdrs: [],
+    };
+    const plan = heuristicAskPlan("how does telemetry ingestion work?", wikiIndex);
+    expect(plan.searches[0].docTypes).toContain("wiki");
+  });
+
+  it("does not include wiki when no wiki docs exist", () => {
+    const plan = heuristicAskPlan("how does telemetry ingestion work?", sampleIndex);
+    expect(plan.searches[0].docTypes).not.toContain("wiki");
+  });
 });
 
 describe("dedupeAndBudgetSources", () => {
@@ -210,6 +227,8 @@ describe("executeAskRetrieval", () => {
   });
 
   it("routes feature searches to searchFeatureDocs", async () => {
+    const { searchDocsContent } = await import("~/server/lib/doc-content-search");
+    vi.mocked(searchDocsContent).mockResolvedValue({ results: [], total: 0 });
     const { searchFeatureDocs } = await import("~/server/lib/feature-doc-search");
     vi.mocked(searchFeatureDocs).mockResolvedValue([
       {
@@ -230,6 +249,9 @@ describe("executeAskRetrieval", () => {
 
     expect(searchFeatureDocs).toHaveBeenCalledWith(
       expect.objectContaining({ appId: "app-1", query: "oauth", limit: 5 }),
+    );
+    expect(searchDocsContent).toHaveBeenCalledWith(
+      expect.objectContaining({ appId: "app-1", docTypes: ["wiki"] }),
     );
     expect(sources.some((s) => s.id === "f1")).toBe(true);
   });
