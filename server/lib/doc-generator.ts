@@ -49,17 +49,30 @@ import {
   buildDocSectionUpdateRetryPrompt,
   prependAdrConstraints,
   buildWikiOutlinePrompt,
+  buildWikiOutlineExpansionPrompt,
   buildWikiPagePrompt,
+  buildWikiPageExpansionPrompt,
   parseWikiOutlineJson,
+  parseWikiOutlinePagesJson,
+  type WikiOutlinePagePlan,
 } from "./doc-prompts";
 import { formatAdrConstraintSummary, listBindingAdrs } from "./adr-queries";
 import { checkAdrCompliance } from "./adr-verification";
 import {
-  createOrUpdateWikiSite,
+  ensureWikiSite,
+  finalizeWikiSite,
   planPageTitle,
+  upsertWikiPage,
   wikiPageSortOrder,
   type WikiPageContent,
 } from "./wiki-site-builder";
+import {
+  collectWikiRepoInventory,
+  computeWikiPageBudget,
+  formatWikiInventoryContext,
+  readReadmeExcerpt,
+  type WikiRepoInventory,
+} from "./wiki-inventory";
 import { sanitizeWikiMarkdown } from "~/utils/wiki-markdown";
 import {
   linkifyWikiSourceCitations,
@@ -84,6 +97,7 @@ const execAsync = promisify(exec);
 
 const GIT_SNAPSHOT_DOC_PATH = "docs/GIT-SNAPSHOT.md";
 const SDD_INDEX_DOC_PATH = "docs/SDD.md";
+const WIKI_PAGE_CONCURRENCY = 3;
 
 async function withAdrConstraints(
   appId: string,
@@ -1772,16 +1786,24 @@ export async function generateWikiDocs(
     });
     if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
 
-    const repoSummaries: string[] = [];
+    const inventoryRepos: Array<{
+      name: string;
+      repoUrl: string;
+      dir: string;
+      inventory: WikiRepoInventory;
+      readmeExcerpt: string;
+    }> = [];
     for (const repo of repos) {
       const dir = cloneDirs[repo.repoUrl];
-      const structure = await getRepoStructure(dir);
-      const keyFiles = await getKeyFileNames(dir);
-      repoSummaries.push(
-        `### Repository: ${repo.name} (${repo.repoUrl})\nLocal path: ${dir}\nKey files: ${keyFiles.join(", ") || "none"}\nStructure:\n${structure}`,
-      );
+      const inventory = await collectWikiRepoInventory(dir);
+      const readmeExcerpt = await readReadmeExcerpt(dir);
+      inventoryRepos.push({ name: repo.name, repoUrl: repo.repoUrl, dir, inventory, readmeExcerpt });
     }
-    const aggregateContext = `This product is composed of ${repos.length} repositories. Analyze ALL of them.\n\n${repoSummaries.join("\n\n")}`;
+    const { outlineContext, pageContext } = formatWikiInventoryContext(inventoryRepos);
+    const budget = computeWikiPageBudget(
+      inventoryRepos.reduce((sum, r) => sum + r.inventory.totalFiles, 0),
+      inventoryRepos.reduce((sum, r) => sum + r.inventory.moduleCount, 0),
+    );
 
     await onProgress({
       status: "generating_wiki_outline",
@@ -1792,13 +1814,52 @@ export async function generateWikiDocs(
 
     const outlinePrompt = await withAdrConstraints(
       appId,
-      buildWikiOutlinePrompt(aggregateContext, baseDir, appName),
+      buildWikiOutlinePrompt(outlineContext, baseDir, appName, budget),
     );
     const outlineRaw = await runAgentAnalyze(agent, jobId, outlinePrompt, baseDir, {
       partialField: "sdd",
     });
     const plan = parseWikiOutlineJson(outlineRaw);
     await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
+
+    if (plan.pages.length < budget.min) {
+      try {
+        const expansionPrompt = buildWikiOutlineExpansionPrompt(
+          appName,
+          plan.pages,
+          budget.min - plan.pages.length,
+          plan.pages.length + 1,
+        );
+        const expansionRaw = await runAgentAnalyze(agent, jobId, expansionPrompt, baseDir, {
+          partialField: "sdd",
+        });
+        const extraPages = parseWikiOutlinePagesJson(
+          expansionRaw,
+          new Set(plan.pages.map((p) => p.slug)),
+        );
+        plan.pages.push(...extraPages);
+        await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
+      } catch (err) {
+        console.warn(
+          `[wiki] Outline expansion failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    if (plan.pages.length > budget.max) {
+      const originalCount = plan.pages.length;
+      const overviewPage = plan.pages.find((p) => p.slug === "1-overview");
+      const others = plan.pages.filter((p) => p.slug !== "1-overview").slice(0, budget.max - 1);
+      plan.pages = overviewPage ? [overviewPage, ...others] : plan.pages.slice(0, budget.max);
+      console.warn(`[wiki] Outline truncated from ${originalCount} to ${budget.max} pages`);
+    }
+
+    await onProgress({
+      status: "generating_wiki_outline",
+      progressPct: 28,
+      progressMessage: `Wiki outline ready: ${plan.pages.length} pages`,
+    });
+
+    const site = await ensureWikiSite(appId, plan, actor);
 
     const overviewTemplate = await loadWikiTemplate("overview");
     const pageTemplate = await loadWikiTemplate("page");
@@ -1853,69 +1914,169 @@ export async function generateWikiDocs(
       repoDirs: wikiRepoContexts.map((c) => c.dirName),
       docLinks,
     };
-    const wikiPages: WikiPageContent[] = [];
     const pageCount = plan.pages.length;
+    const succeededBySlug = new Map<string, { pagePlan: WikiOutlinePagePlan; page: WikiPageContent }>();
+    const failed: string[] = [];
+    let nextIndex = 0;
+    let completedCount = 0;
+    let cancelError: Error | null = null;
 
-    for (let i = 0; i < plan.pages.length; i++) {
-      const pagePlan = plan.pages[i];
+    async function generateOneWikiPage(pagePlan: WikiOutlinePagePlan, index: number): Promise<void> {
+      if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
       const isOverview = pagePlan.slug === "1-overview";
-      const pct = 30 + Math.round(((i + 1) / pageCount) * 60);
+      const template = isOverview ? overviewTemplate : pageTemplate;
+      const title = planPageTitle(pagePlan);
+      let sanitized = "";
+      let generated = false;
 
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const pagePrompt = await withAdrConstraints(
+            appId,
+            buildWikiPagePrompt(
+              template,
+              pagePlan,
+              plan.siteSlug,
+              plan.pages,
+              pageContext,
+              baseDir,
+              isOverview,
+              linkContext,
+            ),
+          );
+          const content = await runAgentAnalyze(agent, jobId, pagePrompt, baseDir, {
+            partialField: "sdd",
+          });
+          const candidate = sanitizeWikiMarkdown(content, title);
+          if (!candidate.trim()) throw new Error("Empty page content");
+          sanitized = candidate;
+          generated = true;
+          break;
+        } catch (err) {
+          if (err instanceof Error && err.message === "Generation cancelled") throw err;
+          if (attempt < 2) {
+            console.warn(
+              `[wiki] Page ${pagePlan.slug} attempt ${attempt} failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+      }
+
+      let persisted = false;
+      if (generated) {
+        const threshold = isOverview ? 3000 : 2500;
+        if (sanitized.length < threshold) {
+          try {
+            const expansionPrompt = buildWikiPageExpansionPrompt(pagePlan, plan.siteSlug, sanitized);
+            const expandedRaw = await runAgentAnalyze(agent, jobId, expansionPrompt, baseDir, {
+              partialField: "sdd",
+            });
+            const expanded = sanitizeWikiMarkdown(expandedRaw, title);
+            if (expanded.length > sanitized.length) sanitized = expanded;
+          } catch (err) {
+            if (err instanceof Error && err.message === "Generation cancelled") throw err;
+            // Keep the original page; expansion is best-effort.
+          }
+        }
+
+        try {
+          const { content: linkedContent, unresolved } =
+            linkifyWikiSourceCitations(sanitized, resolveSourceCitation);
+          const finalContent = pruneInvalidWikiLinks(
+            linkedContent,
+            plan.siteSlug,
+            new Set(plan.pages.map((p) => p.slug)),
+          );
+          if (unresolved.length)
+            console.warn(
+              `[wiki] Unresolved source citations on ${pagePlan.slug}: ${unresolved.join(", ")}`,
+            );
+          const pageContent: WikiPageContent = {
+            slug: pagePlan.slug,
+            title,
+            content: finalContent,
+            sortOrder: wikiPageSortOrder(pagePlan.slug, index),
+          };
+          await upsertWikiPage(site.siteId, appId, pageContent, actor);
+          succeededBySlug.set(pagePlan.slug, { pagePlan, page: pageContent });
+          persisted = true;
+          await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
+        } catch (err) {
+          if (err instanceof Error && err.message === "Generation cancelled") throw err;
+          console.warn(
+            `[wiki] Page ${pagePlan.slug} failed to persist: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
+      if (!persisted) failed.push(pagePlan.slug);
+      completedCount++;
       await onProgress({
         status: "generating_wiki_pages",
-        progressPct: pct,
-        progressMessage: `Generating wiki page: ${pagePlan.title} (${i + 1}/${pageCount})...`,
+        progressPct: 30 + Math.round((completedCount / pageCount) * 60),
+        progressMessage: `Generating wiki pages... (${completedCount}/${pageCount})`,
       });
-      if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
-
-      const template = isOverview ? overviewTemplate : pageTemplate;
-      const pagePrompt = await withAdrConstraints(
-        appId,
-        buildWikiPagePrompt(
-          template,
-          pagePlan,
-          plan.siteSlug,
-          plan.pages,
-          aggregateContext,
-          baseDir,
-          isOverview,
-          linkContext,
-        ),
-      );
-
-      const content = await runAgentAnalyze(agent, jobId, pagePrompt, baseDir, {
-        partialField: "sdd",
-      });
-      const title = planPageTitle(pagePlan);
-      const sanitized = sanitizeWikiMarkdown(content, title);
-      const { content: linkedContent, unresolved } =
-        linkifyWikiSourceCitations(sanitized, resolveSourceCitation);
-      const finalContent = pruneInvalidWikiLinks(
-        linkedContent,
-        plan.siteSlug,
-        new Set(plan.pages.map((p) => p.slug))
-      );
-      if (unresolved.length)
-        console.warn(
-          `[wiki] Unresolved source citations on ${pagePlan.slug}: ${unresolved.join(", ")}`
-        );
-      wikiPages.push({
-        slug: pagePlan.slug,
-        title,
-        content: finalContent,
-        sortOrder: wikiPageSortOrder(pagePlan.slug, i),
-      });
-      await updateJobLiveProgress(jobId, { partialContent: null, currentActivity: null });
     }
 
-    const result = await createOrUpdateWikiSite(appId, plan, wikiPages, actor);
+    async function wikiWorker(): Promise<void> {
+      while (!cancelError) {
+        const index = nextIndex++;
+        if (index >= plan.pages.length) return;
+        try {
+          await generateOneWikiPage(plan.pages[index], index);
+        } catch (err) {
+          if (err instanceof Error && err.message === "Generation cancelled") {
+            cancelError = err;
+            return;
+          }
+          throw err;
+        }
+      }
+    }
 
+    await Promise.all(
+      Array.from({ length: Math.min(WIKI_PAGE_CONCURRENCY, pageCount) }, () => wikiWorker()),
+    );
+    if (cancelError) throw cancelError;
     if (await isJobCancelled(jobId)) throw new Error("Generation cancelled");
+
+    const succeededSlugs = new Set(succeededBySlug.keys());
+    const succeededPagePlans = plan.pages.filter((p) => succeededSlugs.has(p.slug));
+    const failedSlugs = plan.pages.map((p) => p.slug).filter((slug) => !succeededSlugs.has(slug));
+
+    if (failedSlugs.length > 0) {
+      for (const pagePlan of succeededPagePlans) {
+        const record = succeededBySlug.get(pagePlan.slug);
+        if (!record) continue;
+        const repruned = pruneInvalidWikiLinks(record.page.content, plan.siteSlug, succeededSlugs);
+        if (repruned !== record.page.content) {
+          const updatedPage = { ...record.page, content: repruned };
+          await upsertWikiPage(site.siteId, appId, updatedPage, actor);
+          succeededBySlug.set(pagePlan.slug, { pagePlan, page: updatedPage });
+        }
+      }
+    }
+
+    await finalizeWikiSite(site.siteId, appId, plan, succeededPagePlans, actor, {
+      archiveStale: failedSlugs.length === 0,
+    });
+
+    const succeededCount = succeededBySlug.size;
+    if (!succeededSlugs.has("1-overview") || failedSlugs.length / pageCount > 0.2) {
+      throw new Error(
+        `Wiki generation incomplete: ${succeededCount}/${pageCount} pages generated (failed: ${failedSlugs.join(", ")})`,
+      );
+    }
+
     await updateJobCompletion(jobId, true);
     await onProgress({
       status: "completed",
       progressPct: 100,
-      progressMessage: `Wiki site ready at /wiki/${result.siteSlug}/1-overview`,
+      progressMessage:
+        `Wiki site ready at /wiki/${site.siteSlug}/1-overview` +
+        (failedSlugs.length
+          ? ` (${failedSlugs.length} page(s) failed: ${failedSlugs.join(", ")})`
+          : ""),
     });
   } catch (error) {
     const errorMessage =

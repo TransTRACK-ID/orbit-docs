@@ -20,6 +20,12 @@ export function collectReferencedSlugs(cfg: NavConfig): string[] {
   return [...slugs];
 }
 
+/** True when a group or any descendant group references a visible page slug. */
+export function navGroupHasVisiblePages(group: NavGroup, visible: ReadonlySet<string>): boolean {
+  if ((group.pages || []).some((slug) => visible.has(slug))) return true;
+  return (group.groups || []).some((sub) => navGroupHasVisiblePages(sub, visible));
+}
+
 export function publishedPageSlugs(
   pages: Array<{ slug: string | null }>,
 ): string[] {

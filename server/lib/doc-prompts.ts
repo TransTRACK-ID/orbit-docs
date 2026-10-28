@@ -16,6 +16,13 @@ export const DOC_REVISION_HISTORY_NOTE = `If the document has a "## Riwayat Revi
 export const MERMAID_SYNTAX_RULES =
   'Mermaid syntax rules: connect one node to several targets with & (A --> B & C & D) — never write the word "and" between node IDs. Quote labels containing punctuation: ID["..."]. Write subgraphs as subgraph id["Title"].';
 
+export const WIKI_PAGE_DEPTH_RULES = `Depth requirements:
+- Read every file listed under "Relevant source files for this page" before writing, and follow imports/references one level out when needed to explain behavior. Cite only code you actually read.
+- Target 900–1600 words of body content (overview: 1200–2000). Every template section must contain substantive prose — never a one-line summary. Do not pad: if a section runs short, read more source files and cover another behavior instead.
+- "How it works" must trace one concrete end-to-end example through the real code path (entry point → key functions → side effects), naming the actual functions/files involved.
+- Include at least one markdown table (components, configuration, interfaces, or data model — whichever fits the sources).
+- Prefer specifics from the code (function names, table/column names, env vars, status codes, queue names) over generic descriptions.`;
+
 export function buildDocFileOutputInstructions(relativePath: string): string {
   return `IMPORTANT — HOW TO DELIVER THE DOCUMENT (required for large documents):
 1. Write the COMPLETE document to \`${relativePath}\` using the write tool (create or replace the entire file).
@@ -289,7 +296,7 @@ Instructions:
 export interface WikiOutlinePagePlan {
   slug: string;
   title: string;
-  group?: string;
+  groupPath?: string[];
   sourceFiles?: string[];
 }
 
@@ -302,7 +309,8 @@ export interface WikiSitePlan {
 export function buildWikiOutlinePrompt(
   aggregateContext: string,
   baseDir: string,
-  appName: string
+  appName: string,
+  budget: { min: number; max: number }
 ): string {
   return `You are an expert software architect. Analyze the codebase under ${baseDir} and design an internal wiki site plan for the product "${appName}".
 
@@ -316,7 +324,7 @@ Output ONLY valid JSON (no markdown fences) matching this schema:
     {
       "slug": "1-overview",
       "title": "Overview",
-      "group": "Core",
+      "groupPath": ["Core", "Architecture"],
       "sourceFiles": ["<repo-dir>/README.md", "<repo-dir>/src/main.ts"]
     }
   ]
@@ -325,11 +333,50 @@ Output ONLY valid JSON (no markdown fences) matching this schema:
 Rules:
 - The first page MUST be slug "1-overview" titled "Overview".
 - Each slug must be unique. Do not list Overview (or any page) more than once.
-- Use numbered slugs: 1-overview, 2-subsystem-name, 3-another-topic (lowercase, hyphens).
-- Group related pages (e.g. Components, Guides, Core). Use 4–12 pages total.
-- sourceFiles: paths relative to ${baseDir}, each prefixed with the repository directory name (the last segment of that repo's "Local path" above), e.g. "my-service/src/main.ts". These anchor each page (README, key modules).
+- Use numbered slugs: 1-overview, 2-subsystem-name, 3-another-topic (lowercase, hyphens), numbered sequentially in reading order of the tree.
+- Plan between ${budget.min} and ${budget.max} pages total. This wiki is a deep reference, not a summary: err toward ${budget.max} for large codebases.
+- Give every major module, subsystem, or bounded context its own page. When a page would cover two independently understandable subsystems, split it into two pages.
+- groupPath organises pages into a tree of 1–3 category labels, outermost first (e.g. ["Video Generation", "Carousel", "Rendering"]). Every non-overview page MUST have a groupPath of 2–3 levels; use 1 level only for cross-cutting pages (e.g. Getting Started, Glossary). Reuse identical label strings for pages in the same branch.
+- Cover, where the codebase has them: architecture, data model & storage, API surface, authentication & authorization, background jobs/queues, configuration & environment, testing strategy, deployment & operations, and third-party integrations — each as its own page, not merged into a subsystem page.
+- sourceFiles: 3–8 paths per page (overview: 3–6), the files a reader must open to verify the page. Paths relative to ${baseDir}, each prefixed with the repository directory name (the last segment of that repo's "Local path" above), e.g. "my-service/src/main.ts". These anchor each page (README, key modules).
 - siteSlug: lowercase letters, numbers, hyphens only.
-- Cover major subsystems, architecture, and setup—not every file.
+- Output ONLY the JSON object.`;
+}
+
+export function buildWikiOutlineExpansionPrompt(
+  appName: string,
+  existing: WikiOutlinePagePlan[],
+  missingCount: number,
+  nextNumber: number
+): string {
+  const existingList = existing
+    .map((p) => `- ${p.slug} — ${p.title} (${(p.groupPath ?? []).join(" / ")})`)
+    .join("\n");
+  return `You are an expert software architect. The internal wiki outline for the product "${appName}" is too short. Propose ONLY additional pages that deepen it.
+
+Existing pages (do NOT repeat any slug or title from this list):
+${existingList}
+
+Output ONLY valid JSON (no markdown fences) matching this schema:
+{
+  "pages": [
+    {
+      "slug": "${nextNumber}-subsystem-name",
+      "title": "Page title",
+      "groupPath": ["Core", "Architecture"],
+      "sourceFiles": ["<repo-dir>/src/main.ts"]
+    }
+  ]
+}
+
+Rules:
+- Propose at least ${missingCount} additional pages.
+- Number slugs sequentially starting at ${nextNumber}: ${nextNumber}-topic, ${nextNumber + 1}-topic (lowercase, hyphens), numbered sequentially in reading order of the tree.
+- No slug or title may collide with the existing pages list above.
+- groupPath organises pages into a tree of 1–3 category labels, outermost first. Every page MUST have a groupPath of 2–3 levels; use 1 level only for cross-cutting pages. Reuse identical label strings for pages in the same branch.
+- Deepen existing branches before opening new top-level categories.
+- Give every major module, subsystem, or bounded context its own page. When a page would cover two independently understandable subsystems, split it into two pages.
+- sourceFiles: 3–8 paths per page, the files a reader must open to verify the page, each prefixed with the repository directory name.
 - Output ONLY the JSON object.`;
 }
 
@@ -343,9 +390,35 @@ export function buildWikiPagePrompt(
   isOverview: boolean,
   linkContext?: { repoDirs: string[]; docLinks: string }
 ): string {
-  const siblingLinks = allPages
-    .filter((p) => p.slug !== page.slug)
+  const samePath = (a?: string[], b?: string[]) =>
+    JSON.stringify(a ?? []) === JSON.stringify(b ?? []);
+  let siblingPages: WikiOutlinePagePlan[];
+  if (page.groupPath?.length) {
+    const overview = allPages.filter((p) => p.slug === "1-overview" && p.slug !== page.slug);
+    const full = allPages.filter(
+      (p) => p.slug !== page.slug && p.slug !== "1-overview" && samePath(p.groupPath, page.groupPath),
+    );
+    const firstLevel = allPages.filter(
+      (p) =>
+        p.slug !== page.slug &&
+        p.slug !== "1-overview" &&
+        !samePath(p.groupPath, page.groupPath) &&
+        p.groupPath?.[0] === page.groupPath?.[0],
+    );
+    siblingPages = [...overview, ...full, ...firstLevel].slice(0, 15);
+  } else {
+    const overview = allPages.filter((p) => p.slug === "1-overview" && p.slug !== page.slug);
+    const rest = allPages.filter((p) => p.slug !== page.slug && p.slug !== "1-overview");
+    siblingPages = [...overview, ...rest].slice(0, 15);
+  }
+  const siblingLinks = siblingPages
     .map((p) => `- [${p.title}](/wiki/${siteSlug}/${p.slug})`)
+    .join("\n");
+  const siteStructure = allPages
+    .map(
+      (p) =>
+        `- ${(p.groupPath?.length ? p.groupPath.join(" › ") : "—")} › [${p.title}](/wiki/${siteSlug}/${p.slug})`,
+    )
     .join("\n");
 
   const sourceList =
@@ -371,6 +444,9 @@ Page title: ${page.title}
 Site slug: ${siteSlug}
 Is overview page: ${isOverview ? "yes" : "no"}
 
+Site structure (all pages; link with /wiki/${siteSlug}/{slug} when you mention one):
+${siteStructure}
+
 Sibling pages (use these exact markdown links in "Related pages" or cross-references):
 ${siblingLinks}
 
@@ -383,6 +459,8 @@ Source citations (REQUIRED everywhere you mention a source file — "Relevant so
 - Include the line range of the exact code you read that implements what you describe; use \`:<line>\` for a single line. Omit the range only when the whole file is relevant. Never guess line numbers for code you did not read.
 - Repository documentation files (e.g. .docs/*.md, README.md) are cited the same way.
 - Do not write git/GitHub/GitLab URLs yourself — citations are converted to links automatically.
+
+${WIKI_PAGE_DEPTH_RULES}
 ${productDocsBlock}
 Template structure:
 ${template}
@@ -393,11 +471,41 @@ Instructions:
 - Every time you mention another wiki page or a product document by name — anywhere in the text, not only in "Related pages" — link it using the exact markdown links given above. Link to sibling wiki pages using markdown: /wiki/${siteSlug}/{page-slug}
 - On the overview page, include a Mermaid architecture diagram in a fenced \`\`\`mermaid code block.
 - ${MERMAID_SYNTAX_RULES}
-- Use tables where helpful. No placeholder text.
+- No placeholder text.
 - Do not repeat the page title as a markdown heading — the reader already shows it.
 - Do not include analysis, planning, or thinking sentences.
 - Do not add a second document or duplicate headings.
 - Output ONLY the completed markdown document. No preamble.`;
+}
+
+export function buildWikiPageExpansionPrompt(
+  page: WikiOutlinePagePlan,
+  siteSlug: string,
+  existingContent: string
+): string {
+  const sourceList =
+    page.sourceFiles?.length
+      ? page.sourceFiles.map((f) => `- \`${f}\``).join("\n")
+      : "- (infer from codebase)";
+  return `You are expanding one page of an internal wiki (site slug: ${siteSlug}). The page below is too thin.
+
+Page slug: ${page.slug}
+Page title: ${page.title}
+
+Relevant source files for this page:
+${sourceList}
+
+Instructions:
+- Re-read every source file listed above, plus neighboring files (imports, callers, callees) needed to explain behavior.
+- Keep every existing heading from the page below, in the same order.
+- Deepen each section following these rules:
+${WIKI_PAGE_DEPTH_RULES}
+- ${MERMAID_SYNTAX_RULES}
+- Do not repeat the page title as a markdown heading — the reader already shows it.
+- Output ONLY the complete expanded markdown document. No preamble.
+
+Existing page:
+${existingContent}`;
 }
 
 /** Pull a JSON object out of agent output that may include prose or markdown fences. */
@@ -455,6 +563,41 @@ export function extractJsonObject(raw: string): string {
   throw new Error("Wiki outline response contained incomplete JSON");
 }
 
+function normaliseWikiPages(rawPages: unknown, seen: Set<string>): WikiOutlinePagePlan[] {
+  if (!Array.isArray(rawPages)) return [];
+  const pages: WikiOutlinePagePlan[] = [];
+  for (const page of rawPages) {
+    if (!page || typeof page.slug !== "string") continue;
+    const slug = page.slug.trim();
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+
+    const next: WikiOutlinePagePlan = {
+      slug,
+      title: typeof page.title === "string" && page.title.trim() ? page.title.trim() : slug,
+    };
+    let groupPath: string[] = [];
+    if (Array.isArray(page.groupPath)) {
+      groupPath = page.groupPath
+        .filter((label: unknown): label is string => typeof label === "string")
+        .map((label: string) => label.trim())
+        .filter((label: string) => label.length > 0)
+        .slice(0, 3);
+    } else if (typeof page.group === "string" && page.group.trim()) {
+      groupPath = [page.group.trim()];
+    }
+    if (groupPath.length) next.groupPath = groupPath;
+    if (Array.isArray(page.sourceFiles)) {
+      const sourceFiles = page.sourceFiles.filter(
+        (file: unknown): file is string => typeof file === "string" && file.trim().length > 0,
+      );
+      if (sourceFiles.length) next.sourceFiles = sourceFiles;
+    }
+    pages.push(next);
+  }
+  return pages;
+}
+
 export function parseWikiOutlineJson(raw: string): WikiSitePlan {
   const jsonText = extractJsonObject(raw);
   let parsed: WikiSitePlan;
@@ -469,29 +612,7 @@ export function parseWikiOutlineJson(raw: string): WikiSitePlan {
     throw new Error("Wiki outline JSON is missing siteName, siteSlug, or pages");
   }
 
-  const seen = new Set<string>();
-  const pages: WikiOutlinePagePlan[] = [];
-  for (const page of parsed.pages) {
-    if (!page || typeof page.slug !== "string") continue;
-    const slug = page.slug.trim();
-    if (!slug || seen.has(slug)) continue;
-    seen.add(slug);
-
-    const next: WikiOutlinePagePlan = {
-      slug,
-      title: typeof page.title === "string" && page.title.trim() ? page.title.trim() : slug,
-    };
-    if (typeof page.group === "string" && page.group.trim()) {
-      next.group = page.group.trim();
-    }
-    if (Array.isArray(page.sourceFiles)) {
-      const sourceFiles = page.sourceFiles.filter(
-        (file): file is string => typeof file === "string" && file.trim().length > 0,
-      );
-      if (sourceFiles.length) next.sourceFiles = sourceFiles;
-    }
-    pages.push(next);
-  }
+  const pages = normaliseWikiPages(parsed.pages, new Set<string>());
 
   if (pages.length === 0) {
     throw new Error("Wiki outline JSON is missing siteName, siteSlug, or pages");
@@ -502,4 +623,18 @@ export function parseWikiOutlineJson(raw: string): WikiSitePlan {
     siteSlug: String(parsed.siteSlug),
     pages,
   };
+}
+
+export function parseWikiOutlinePagesJson(
+  raw: string,
+  seenSlugs: ReadonlySet<string>
+): WikiOutlinePagePlan[] {
+  try {
+    const jsonText = extractJsonObject(raw);
+    const parsed = JSON.parse(jsonText) as { pages?: unknown };
+    if (!parsed || !Array.isArray(parsed.pages)) return [];
+    return normaliseWikiPages(parsed.pages, new Set<string>(seenSlugs));
+  } catch {
+    return [];
+  }
 }

@@ -3,41 +3,74 @@ import { slugify } from "~/utils/nav-client";
 
 export interface WikiNavPage {
   slug: string;
-  group?: string;
+  groupPath?: string[];
+}
+
+interface NavNode {
+  label: string;
+  id: string;
+  pages: string[];
+  children: Map<string, NavNode>;
 }
 
 /**
  * Build site nav from a wiki outline. Each page appears once: grouped pages
- * stay in their group; ungrouped pages go in the top-level `pages` list.
+ * walk/create their groupPath chain (1–3 labels) and land in the leaf node;
+ * ungrouped pages go in the top-level `pages` list. A node may hold both its
+ * own `pages` and child `groups`.
  * Overview is not pinned into both a group and `pages`.
  */
 export function buildNavConfigFromPlan(plan: { pages: WikiNavPage[] }): NavConfig {
-  const groupMap = new Map<string, string[]>();
+  const roots = new Map<string, NavNode>();
   const ungrouped: string[] = [];
   const seen = new Set<string>();
+  let groupCounter = 0;
+
+  function createNode(labelPath: string[]): NavNode {
+    groupCounter++;
+    const joined = labelPath.map((segment) => slugify(segment)).join("-");
+    const id = joined || `group-${groupCounter}`;
+    return { label: labelPath[labelPath.length - 1], id, pages: [], children: new Map() };
+  }
 
   for (const page of plan.pages) {
     const slug = page.slug?.trim();
     if (!slug || seen.has(slug)) continue;
     seen.add(slug);
 
-    const groupLabel = page.group?.trim();
-    if (!groupLabel) {
+    const labels = (page.groupPath ?? [])
+      .map((label) => (typeof label === "string" ? label.trim() : ""))
+      .filter((label) => label.length > 0);
+
+    if (!labels.length) {
       ungrouped.push(slug);
       continue;
     }
-    if (!groupMap.has(groupLabel)) groupMap.set(groupLabel, []);
-    groupMap.get(groupLabel)!.push(slug);
+
+    let level = roots;
+    let node: NavNode | undefined;
+    const pathSoFar: string[] = [];
+    for (const label of labels) {
+      pathSoFar.push(label);
+      node = level.get(label);
+      if (!node) {
+        node = createNode([...pathSoFar]);
+        level.set(label, node);
+      }
+      level = node.children;
+    }
+    node!.pages.push(slug);
   }
 
-  const groups: NavGroup[] = [...groupMap.entries()].map(([label, pages], index) => ({
-    id: slugify(label) || `group-${index + 1}`,
-    label,
-    pages,
-  }));
+  function toNavGroup(node: NavNode): NavGroup {
+    const group: NavGroup = { id: node.id, label: node.label };
+    if (node.pages.length) group.pages = node.pages;
+    if (node.children.size) group.groups = [...node.children.values()].map(toNavGroup);
+    return group;
+  }
 
   return {
-    groups,
+    groups: [...roots.values()].map(toNavGroup),
     pages: ungrouped,
     external: [],
   };

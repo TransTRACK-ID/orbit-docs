@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWikiOutlineExpansionPrompt,
   buildWikiOutlinePrompt,
+  buildWikiPageExpansionPrompt,
   buildWikiPagePrompt,
   extractJsonObject,
   parseWikiOutlineJson,
+  parseWikiOutlinePagesJson,
   prependAdrConstraints,
 } from "./doc-prompts";
 
@@ -68,15 +71,26 @@ describe("parseWikiOutlineJson", () => {
     });
 
     expect(parseWikiOutlineJson(raw).pages).toEqual([
-      { slug: "1-overview", title: "Overview", group: "Core" },
-      { slug: "2-api", title: "API", group: "Core" },
+      { slug: "1-overview", title: "Overview", groupPath: ["Core"] },
+      { slug: "2-api", title: "API", groupPath: ["Core"] },
     ]);
+  });
+
+  it("caps groupPath at 3 levels and drops non-string labels", () => {
+    const raw = JSON.stringify({
+      siteName: "X",
+      siteSlug: "x",
+      pages: [
+        { slug: "1-overview", title: "Overview", groupPath: ["A", 42, " B ", "", "C", "D"] },
+      ],
+    });
+    expect(parseWikiOutlineJson(raw).pages[0].groupPath).toEqual(["A", "B", "C"]);
   });
 });
 
 describe("wiki prompts", () => {
   it("requires unique outline slugs", () => {
-    const prompt = buildWikiOutlinePrompt("ctx", "/repos", "App");
+    const prompt = buildWikiOutlinePrompt("ctx", "/repos", "App", { min: 40, max: 60 });
     expect(prompt).toMatch(/slug must be unique/i);
   });
 
@@ -109,9 +123,73 @@ describe("wiki prompts", () => {
   });
 
   it("outline prompt uses repo-dir prefixed sourceFiles example", () => {
-    const prompt = buildWikiOutlinePrompt("ctx", "/repos", "App");
+    const prompt = buildWikiOutlinePrompt("ctx", "/repos", "App", { min: 40, max: 60 });
     expect(prompt).toContain('"<repo-dir>/README.md"');
     expect(prompt).toContain("each prefixed with the repository directory name");
+  });
+
+  it("outline prompt uses the size-scaled budget and no legacy cap", () => {
+    const prompt = buildWikiOutlinePrompt("ctx", "/repos", "App", { min: 40, max: 60 });
+    expect(prompt).toContain("between 40 and 60 pages");
+    expect(prompt).not.toContain("4–12");
+    expect(prompt).toContain('"groupPath": ["Core", "Architecture"]');
+  });
+
+  it("expansion parser skips seen slugs and returns [] on garbage", () => {
+    const raw = JSON.stringify({
+      pages: [
+        { slug: "1-overview", title: "Overview", groupPath: ["Core"] },
+        { slug: "5-extra", title: "Extra", groupPath: ["Core", "Deep"] },
+      ],
+    });
+    expect(parseWikiOutlinePagesJson(raw, new Set(["1-overview"]))).toEqual([
+      { slug: "5-extra", title: "Extra", groupPath: ["Core", "Deep"] },
+    ]);
+    expect(parseWikiOutlinePagesJson("not json at all", new Set())).toEqual([]);
+    expect(parseWikiOutlinePagesJson("", new Set())).toEqual([]);
+  });
+
+  it("expansion prompt lists existing pages and demands at least missingCount more", () => {
+    const prompt = buildWikiOutlineExpansionPrompt(
+      "App",
+      [{ slug: "1-overview", title: "Overview", groupPath: ["Core", "Arch"] }],
+      5,
+      2,
+    );
+    expect(prompt).toContain("- 1-overview — Overview (Core / Arch)");
+    expect(prompt).toContain("at least 5 additional pages");
+    expect(prompt).toContain("starting at 2");
+  });
+
+  it("page prompt contains depth rules and scoped siblings plus full site structure", () => {
+    const pages = [
+      { slug: "1-overview", title: "Overview" },
+      { slug: "2-auth", title: "Auth", groupPath: ["Core", "Auth"] },
+      { slug: "3-tokens", title: "Tokens", groupPath: ["Core", "Auth"] },
+      { slug: "4-billing", title: "Billing", groupPath: ["Billing"] },
+    ];
+    const prompt = buildWikiPagePrompt("{{INTRO}}", pages[1], "app", pages, "ctx", "/repos", false);
+    expect(prompt).toContain("900–1600 words");
+    const siblingBlock = prompt.split("Sibling pages")[1].split("Relevant source files")[0];
+    expect(siblingBlock).toContain("[Tokens](/wiki/app/3-tokens)");
+    expect(siblingBlock).toContain("[Overview](/wiki/app/1-overview)");
+    expect(siblingBlock).not.toContain("Billing");
+    const structureBlock = prompt.split("Site structure")[1].split("Sibling pages")[0];
+    expect(structureBlock).toContain("[Billing](/wiki/app/4-billing)");
+    expect(structureBlock).toContain("Core › Auth › [Tokens]");
+    expect(prompt).toContain("How it works");
+  });
+
+  it("page expansion prompt keeps headings instruction and depth rules", () => {
+    const prompt = buildWikiPageExpansionPrompt(
+      { slug: "2-auth", title: "Auth", sourceFiles: ["repo/src/auth.ts"] },
+      "app",
+      "## How it works\n\nshort",
+    );
+    expect(prompt).toContain("Keep every existing heading");
+    expect(prompt).toContain("900–1600 words");
+    expect(prompt).toContain("## How it works");
+    expect(prompt).toContain("Output ONLY the complete expanded markdown document");
   });
 
   it("page prompt contains source citations block with repo dirs and backticked sources", () => {

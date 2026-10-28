@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import type { NavConfig, NavGroup, NavOpenApiOperation } from "~/server/database/schema";
+import type { NavConfig, NavOpenApiOperation } from "~/server/database/schema";
 import {
+  navGroupHasVisiblePages,
   resolveFallbackPageSlugs,
   resolvePagesSectionSlugs,
   slugify,
 } from "~/utils/nav-client";
+import SiteNavGroup from "./SiteNavGroup.vue";
 
 /**
  * Module-scoped so sidebar scroll survives component remounts (page ↔ API
@@ -124,11 +126,6 @@ function publishedSlugs(slugs: string[] | undefined): string[] {
   return slugs.filter((s) => publishedSlugSet.value.has(s));
 }
 
-function groupHasPages(group: NavGroup): boolean {
-  if (publishedSlugs(group.pages).length > 0) return true;
-  return (group.groups || []).some((sub) => groupHasPages(sub));
-}
-
 const fallbackPageSlugs = computed(() =>
   resolveFallbackPageSlugs(props.navConfig, props.pages),
 );
@@ -161,7 +158,7 @@ const hasDocNav = computed(
   () =>
     pagesSectionSlugs.value.length > 0
     || fallbackPageSlugs.value.length > 0
-    || (props.navConfig?.groups || []).some((g) => groupHasPages(g)),
+    || (props.navConfig?.groups || []).some((g) => navGroupHasVisiblePages(g, publishedSlugSet.value)),
 );
 
 const hasAnyNavItems = computed(
@@ -279,38 +276,18 @@ function escapeRegExp(value: string): string {
       role="list"
       @scroll.passive="onNavScroll"
     >
-      <template v-for="group in navConfig?.groups || []" :key="group.id">
-        <li v-if="groupHasPages(group)" class="site-nav-section">
-          <div class="site-nav-section-title">{{ group.label }}</div>
-          <ul class="site-nav-links" role="list">
-            <li v-for="slug in publishedSlugs(group.pages)" :key="`${group.id}-${slug}`">
-              <NuxtLink :to="href(slug)" :class="{ active: isActive(slug) }">
-                {{ pageTitle(slug) }}
-                <span
-                  v-if="showStatus && pageStatusLabel(slug)"
-                  class="site-nav-status"
-                >{{ pageStatusLabel(slug) }}</span>
-              </NuxtLink>
-            </li>
-            <template v-for="sub in group.groups || []" :key="sub.id">
-              <li v-if="groupHasPages(sub)" class="site-nav-nested">
-                <div class="site-nav-nested-title">{{ sub.label }}</div>
-                <ul class="site-nav-links" role="list">
-                  <li v-for="slug in publishedSlugs(sub.pages)" :key="`${sub.id}-${slug}`">
-                    <NuxtLink :to="href(slug)" :class="{ active: isActive(slug) }">
-                      {{ pageTitle(slug) }}
-                      <span
-                        v-if="showStatus && pageStatusLabel(slug)"
-                        class="site-nav-status"
-                      >{{ pageStatusLabel(slug) }}</span>
-                    </NuxtLink>
-                  </li>
-                </ul>
-              </li>
-            </template>
-          </ul>
-        </li>
-      </template>
+      <SiteNavGroup
+        v-for="group in navConfig?.groups || []"
+        :key="group.id"
+        :group="group"
+        :depth="1"
+        :page-titles="pageTitles"
+        :page-statuses="pageStatuses"
+        :published-slug-set="publishedSlugSet"
+        :base-path="basePath"
+        :active-page-slug="activePageSlug"
+        :show-status="showStatus"
+      />
 
       <li v-if="showPagesSection" class="site-nav-section">
         <div class="site-nav-section-title">Pages</div>

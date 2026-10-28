@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   collectReferencedSlugs,
+  navGroupHasVisiblePages,
   resolveFallbackPageSlugs,
   resolvePagesSectionSlugs,
   unlistedPublishedSlugs,
@@ -55,6 +56,18 @@ describe("nav-client", () => {
           groups: [{ id: "g1", label: "G", pages: ["a"], groups: [{ id: "g2", label: "S", pages: ["b"] }] }],
         }).sort(),
       ).toEqual(["a", "b"]);
+    });
+  });
+
+  describe("navGroupHasVisiblePages", () => {
+    it("finds visible pages in deeply nested groups", () => {
+      const group = {
+        id: "a",
+        label: "A",
+        groups: [{ id: "a-b", label: "B", groups: [{ id: "a-b-c", label: "C", pages: ["intro"] }] }],
+      };
+      expect(navGroupHasVisiblePages(group, new Set(["intro"]))).toBe(true);
+      expect(navGroupHasVisiblePages(group, new Set(["other"]))).toBe(false);
     });
   });
 

@@ -69,14 +69,12 @@ async function findWikiSiteForApp(appId: string, siteSlug: string) {
   return byApp;
 }
 
-export async function createOrUpdateWikiSite(
+export async function ensureWikiSite(
   appId: string,
   plan: WikiSitePlan,
-  pages: WikiPageContent[],
   actor: string,
 ): Promise<WikiSiteBuildResult> {
   const db = getDb();
-  const navConfig = buildNavConfigFromPlan(plan);
   const siteSlug = isValidSiteSlug(plan.siteSlug) ? plan.siteSlug : slugify(plan.siteName);
 
   let site = await findWikiSiteForApp(appId, siteSlug);
@@ -87,7 +85,6 @@ export async function createOrUpdateWikiSite(
       .set({
         name: plan.siteName,
         description: `Generated wiki for ${plan.siteName}`,
-        navConfig,
         updatedAt: new Date(),
       })
       .where(eq(docSites.id, site.id))
@@ -103,7 +100,7 @@ export async function createOrUpdateWikiSite(
         description: `Generated wiki for ${plan.siteName}`,
         appId,
         status: "draft",
-        navConfig,
+        navConfig: buildNavConfigFromPlan(plan),
       })
       .returning()
       .then((r) => r[0]);
@@ -117,88 +114,124 @@ export async function createOrUpdateWikiSite(
     });
   }
 
-  const existingPages = await db
-    .select({
-      id: docs.id,
-      slug: docs.slug,
-      docType: docs.docType,
-      source: docs.source,
-      status: docs.status,
-    })
+  return {
+    siteId: site.id,
+    siteSlug: site.slug,
+    pageIds: [],
+  };
+}
+
+export async function upsertWikiPage(
+  siteId: string,
+  appId: string,
+  page: WikiPageContent,
+  actor: string,
+): Promise<string> {
+  const db = getDb();
+
+  const existing = await db
+    .select({ id: docs.id })
     .from(docs)
-    .where(eq(docs.siteId, site.id));
+    .where(and(eq(docs.siteId, siteId), eq(docs.slug, page.slug)))
+    .limit(1)
+    .then((r) => r[0] || null);
 
-  const existingBySlug = new Map(
-    existingPages.filter((p) => p.slug).map((p) => [p.slug!, p.id]),
-  );
-
-  const pageIds: string[] = [];
-
-  for (const page of pages) {
-    const existingId = existingBySlug.get(page.slug);
-    if (existingId) {
-      await db
-        .update(docs)
-        .set({
-          title: page.title,
-          content: page.content,
-          sortOrder: page.sortOrder,
-          docType: "wiki",
-          source: "generated",
-          updatedAt: new Date(),
-        })
-        .where(eq(docs.id, existingId));
-      onDocContentSaved({ id: existingId, docType: "wiki", content: page.content });
-      pageIds.push(existingId);
-    } else {
-      const inserted = await db
-        .insert(docs)
-        .values({
-          appId,
-          siteId: site.id,
-          title: page.title,
-          slug: page.slug,
-          content: page.content,
-          status: "draft",
-          source: "generated",
-          docType: "wiki",
-          sortOrder: page.sortOrder,
-          author: actor,
-        })
-        .returning({ id: docs.id })
-        .then((r) => r[0]);
-      onDocContentSaved({ id: inserted.id, docType: "wiki", content: page.content });
-      pageIds.push(inserted.id);
-    }
-  }
-
-  const staleIds = staleWikiPageIds(
-    existingPages,
-    new Set(pages.map((p) => p.slug)),
-  );
-  if (staleIds.length > 0) {
+  if (existing) {
     await db
       .update(docs)
-      .set({ status: "archived", updatedAt: new Date() })
-      .where(inArray(docs.id, staleIds));
+      .set({
+        title: page.title,
+        content: page.content,
+        sortOrder: page.sortOrder,
+        docType: "wiki",
+        source: "generated",
+        updatedAt: new Date(),
+      })
+      .where(eq(docs.id, existing.id));
+    onDocContentSaved({ id: existing.id, docType: "wiki", content: page.content });
+    return existing.id;
+  }
+
+  const inserted = await db
+    .insert(docs)
+    .values({
+      appId,
+      siteId,
+      title: page.title,
+      slug: page.slug,
+      content: page.content,
+      status: "draft",
+      source: "generated",
+      docType: "wiki",
+      sortOrder: page.sortOrder,
+      author: actor,
+    })
+    .returning({ id: docs.id })
+    .then((r) => r[0]);
+  onDocContentSaved({ id: inserted.id, docType: "wiki", content: page.content });
+  return inserted.id;
+}
+
+export async function finalizeWikiSite(
+  siteId: string,
+  appId: string,
+  plan: WikiSitePlan,
+  succeeded: WikiOutlinePagePlan[],
+  actor: string,
+  opts: { archiveStale: boolean },
+): Promise<{ archivedCount: number }> {
+  const db = getDb();
+  const navConfig = buildNavConfigFromPlan({ pages: succeeded });
+
+  await db
+    .update(docSites)
+    .set({
+      name: plan.siteName,
+      description: `Generated wiki for ${plan.siteName}`,
+      navConfig,
+      updatedAt: new Date(),
+    })
+    .where(eq(docSites.id, siteId));
+
+  let archivedCount = 0;
+  if (opts.archiveStale) {
+    const existingPages = await db
+      .select({
+        id: docs.id,
+        slug: docs.slug,
+        docType: docs.docType,
+        source: docs.source,
+        status: docs.status,
+      })
+      .from(docs)
+      .where(eq(docs.siteId, siteId));
+
+    const staleIds = staleWikiPageIds(
+      existingPages,
+      new Set(plan.pages.map((p) => p.slug)),
+    );
+    if (staleIds.length > 0) {
+      await db
+        .update(docs)
+        .set({ status: "archived", updatedAt: new Date() })
+        .where(inArray(docs.id, staleIds));
+    }
+    archivedCount = staleIds.length;
   }
 
   await db.insert(activityLogs).values({
     appId,
     appName: plan.siteName,
     action:
-      staleIds.length === 0
-        ? `Wiki site updated (${pages.length} pages)`
-        : `Wiki site updated (${pages.length} pages, ${staleIds.length} stale archived)`,
+      archivedCount === 0
+        ? `Wiki site updated (${succeeded.length} pages)`
+        : `Wiki site updated (${succeeded.length} pages, ${archivedCount} stale archived)`,
     actor,
   });
 
-  return {
-    siteId: site.id,
-    siteSlug: site.slug,
-    pageIds,
-  };
+  return { archivedCount };
 }
+
 
 export function wikiPageSortOrder(slug: string, index: number): number {
   const match = slug.match(/^(\d+)-/);
