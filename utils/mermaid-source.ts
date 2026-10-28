@@ -20,18 +20,83 @@ export function decodeMermaidEntities(source: string): string {
   return current;
 }
 
+function repairEdgeAndChains(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => {
+      if (
+        !line.includes("-->") &&
+        !line.includes("---") &&
+        !line.includes("-.->") &&
+        !line.includes("==>")
+      ) {
+        return line;
+      }
+      let result = "";
+      let inQuotes = false;
+      let depth = 0;
+      let inPipe = false;
+      let i = 0;
+      while (i < line.length) {
+        const ch = line[i];
+        if (ch === '"') {
+          inQuotes = !inQuotes;
+          result += ch;
+          i += 1;
+          continue;
+        }
+        if (!inQuotes) {
+          if (ch === "|" && depth === 0) {
+            inPipe = !inPipe;
+            result += ch;
+            i += 1;
+            continue;
+          }
+          if (!inPipe) {
+            if (ch === "[" || ch === "(" || ch === "{") {
+              depth += 1;
+              result += ch;
+              i += 1;
+              continue;
+            }
+            if (ch === "]" || ch === ")" || ch === "}") {
+              depth = Math.max(0, depth - 1);
+              result += ch;
+              i += 1;
+              continue;
+            }
+          }
+        }
+        if (!inQuotes && !inPipe && depth === 0 && /\s/.test(ch)) {
+          const match = /^\s+and\s+/.exec(line.slice(i));
+          if (match) {
+            result += " & ";
+            i += match[0].length;
+            continue;
+          }
+        }
+        result += ch;
+        i += 1;
+      }
+      return result;
+    })
+    .join("\n");
+}
+
 /** Normalize AI-generated mermaid before parse/render. */
 export function normalizeMermaidSource(source: string): string {
-  return decodeMermaidEntities(
-    source
-      .replace(/^\uFEFF/, "")
-      .replace(/\r\n/g, "\n")
-      .replace(/^```(?:mermaid)?\s*\n?/i, "")
-      .replace(/\n?```\s*$/i, "")
-      .replace(/[\u201c\u201d]/g, '"')
-      .replace(/[\u2018\u2019]/g, "'")
-      .replace(/\u00a0/g, " ")
-      .trim()
+  return repairEdgeAndChains(
+    decodeMermaidEntities(
+      source
+        .replace(/^\uFEFF/, "")
+        .replace(/\r\n/g, "\n")
+        .replace(/^```(?:mermaid)?\s*\n?/i, "")
+        .replace(/\n?```\s*$/i, "")
+        .replace(/[\u201c\u201d]/g, '"')
+        .replace(/[\u2018\u2019]/g, "'")
+        .replace(/\u00a0/g, " ")
+        .trim()
+    )
   );
 }
 

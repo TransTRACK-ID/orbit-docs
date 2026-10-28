@@ -13,13 +13,17 @@ rather than silently overwriting the ADR's intent.`;
 
 export const DOC_REVISION_HISTORY_NOTE = `If the document has a "## Riwayat Revisi" or "Revision History" section, preserve it and append a new row for this update (version, date, brief change summary, author "Orbit Docs Agent").`;
 
+export const MERMAID_SYNTAX_RULES =
+  'Mermaid syntax rules: connect one node to several targets with & (A --> B & C & D) — never write the word "and" between node IDs. Quote labels containing punctuation: ID["..."]. Write subgraphs as subgraph id["Title"].';
+
 export function buildDocFileOutputInstructions(relativePath: string): string {
   return `IMPORTANT — HOW TO DELIVER THE DOCUMENT (required for large documents):
 1. Write the COMPLETE document to \`${relativePath}\` using the write tool (create or replace the entire file).
 2. Include EVERY section with full content. Never truncate, summarize, or use placeholders like "[...]", "[truncated]", or "full N-line document in ...".
 3. ${DOC_REVISION_HISTORY_NOTE}
 4. Your final chat message must be exactly one line: DOC_WRITTEN: ${relativePath}
-5. Do NOT paste the full document in chat — the file on disk is the authoritative output.`;
+5. Do NOT paste the full document in chat — the file on disk is the authoritative output.
+6. ${MERMAID_SYNTAX_RULES}`;
 }
 
 export function buildDocSectionUpdateInstructions(relativePath: string): string {
@@ -39,7 +43,7 @@ export function buildDocSectionUpdateInstructions(relativePath: string): string 
 4. Include ONLY sections you actually changed. Omit unchanged sections entirely.
 5. Use the exact heading text from the existing file (including numbering), e.g. "## 5. Routing & Halaman".
 6. Each section's content must be complete for that section — no placeholders or "[...]".
-7. Diagrams and code blocks inside section content MUST use proper markdown code fences: use \`\`\`mermaid ... \`\`\` for Mermaid diagrams, \`\`\`ts ... \`\`\` for code. Never emit bare un-fenced "mermaid" text.
+7. Diagrams and code blocks inside section content MUST use proper markdown code fences: use \`\`\`mermaid ... \`\`\` for Mermaid diagrams, \`\`\`ts ... \`\`\` for code. Never emit bare un-fenced "mermaid" text. ${MERMAID_SYNTAX_RULES}
 8. If the file at \`${relativePath}\` is damaged, contains only prior error JSON, or has no section headings to patch, write the COMPLETE document to \`${relativePath}\` using the write tool and reply exactly: DOC_WRITTEN: ${relativePath}
 9. The system will merge your patches into the existing document and append a revision-history row.
 10. Do NOT write the full file with the write tool if the existing file has valid sections. Do NOT paste the full document in chat.`;
@@ -388,6 +392,7 @@ Instructions:
 - Include a "## Relevant source files" section: one bullet per file as - \`<citation>\` — one-line role of the file, grouped under a bold "**Repository name ( repo-dir )**" line per repository. Include the primary line range for each file when the page covers a specific part of it.
 - Every time you mention another wiki page or a product document by name — anywhere in the text, not only in "Related pages" — link it using the exact markdown links given above. Link to sibling wiki pages using markdown: /wiki/${siteSlug}/{page-slug}
 - On the overview page, include a Mermaid architecture diagram in a fenced \`\`\`mermaid code block.
+- ${MERMAID_SYNTAX_RULES}
 - Use tables where helpful. No placeholder text.
 - Do not repeat the page title as a markdown heading — the reader already shows it.
 - Do not include analysis, planning, or thinking sentences.

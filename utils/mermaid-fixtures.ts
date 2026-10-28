@@ -34,3 +34,62 @@ export const fullDiagram = `flowchart TB
         UI["Dashboard, maps, evidence,<br/>alarms, reports, master data"]
         Nitro["Nitro server routes<br/>(session, Traccar proxy)"]
     end`;
+
+export const reportedAndChainDiagram = `flowchart TB
+    subgraph users [Users and integrators]
+        WEB[Web browsers]
+        MOB[Mobile / driver apps]
+        WB[Weight bridge and TMS]
+        TEL[Telematics provider]
+    end
+
+subgraph fe [logistic-service-integrator-frontend]
+        NUXT[Nuxt 2 SPA port 3000]
+        VUEX[Vuex store modules]
+        AUTH_FE["@nuxtjs/auth-next Bearer token"]
+    end
+
+subgraph edge [Edge]
+        TRAEFIK[Traefik reverse proxy]
+    end
+
+subgraph be [logistic-service-integrator-server]
+        FRANKEN[FrankenPHP Laravel HTTP]
+        API["/api/v1 v2 v3"]
+        MW[Middleware Sanctum roles apikey]
+        SVC[Domain Services]
+        MODELS[Eloquent Entity and Table models]
+    end
+
+subgraph async [Background]
+        JOBS[Supervisor container]
+        HORIZON[Laravel Horizon]
+        CRON[schedule:work]
+    end
+
+subgraph data [Data and files]
+        PG[(PostgreSQL)]
+        REDIS[(Redis)]
+        S3[(AWS S3)]
+    end
+
+subgraph ext [External services]
+        MAP[Mapbox directions]
+        FMS[FMS and Traccar]
+        NOTIFY[FCM and WhatsApp]
+        OTHER[reCAPTCHA Sentry TMS mirror]
+    end
+
+WEB --> TRAEFIK --> NUXT
+    NUXT --> VUEX
+    NUXT --> AUTH_FE
+    AUTH_FE -->|HTTPS BACKEND_URL| TRAEFIK
+    TRAEFIK --> FRANKEN --> API --> MW --> SVC --> MODELS --> PG
+    MOB --> TRAEFIK
+    WB --> TRAEFIK
+    TEL -->|POST webhook/telematic| TRAEFIK
+    SVC --> REDIS
+    JOBS --> HORIZON --> REDIS
+    JOBS --> CRON
+    SVC --> S3
+    SVC --> MAP and FMS and NOTIFY and OTHER`;

@@ -95,6 +95,19 @@ describe("wiki prompts", () => {
     expect(prompt).toMatch(/Do not repeat the page title as a markdown heading/);
   });
 
+  it("page prompt contains the mermaid and-chain rule", () => {
+    const prompt = buildWikiPagePrompt(
+      "{{INTRO}}",
+      { slug: "1-overview", title: "Overview" },
+      "app",
+      [{ slug: "1-overview", title: "Overview" }],
+      "ctx",
+      "/repos",
+      true,
+    );
+    expect(prompt).toContain('never write the word "and" between node IDs');
+  });
+
   it("outline prompt uses repo-dir prefixed sourceFiles example", () => {
     const prompt = buildWikiOutlinePrompt("ctx", "/repos", "App");
     expect(prompt).toContain('"<repo-dir>/README.md"');

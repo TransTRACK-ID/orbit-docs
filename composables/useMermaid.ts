@@ -111,7 +111,8 @@ async function renderMermaidNode(
       node.innerHTML = svg;
       const stage = wrapRenderedMermaidNode(node);
       attachMermaidPanZoom(stage);
-    } catch {
+    } catch (error) {
+      console.warn("[mermaid] Failed to render diagram", error);
       cleanupMermaidRenderArtifacts(id);
       if (isLiveNode(node, container)) {
         showMermaidFallback(node, source);
