@@ -434,35 +434,55 @@ function escapeRegExp(value: string): string {
   overscroll-behavior: contain;
 }
 
+/* Matches SiteNavGroup level 1: eyebrow label + hairline separation. */
 .site-nav-section {
-  margin-top: 20px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
 }
 
 .site-nav-section:first-child {
-  margin-top: 4px;
+  margin-top: 2px;
+  padding-top: 0;
+  border-top: none;
 }
 
 .site-nav-section-title {
-  padding: 0 12px 6px;
+  padding: 0 10px;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--muted);
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  color: color-mix(in oklch, var(--muted) 82%, var(--fg));
+  cursor: default;
 }
 
+/* The API trigger IS interactive, so it takes the section-subhead
+   treatment (sans semibold ink), not the eyebrow. */
 .site-nav-section-title--inline {
   padding: 0;
+  margin-bottom: 0;
   flex: 1;
   text-align: left;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  color: var(--fg);
+  cursor: pointer;
 }
 
 .site-nav-section-trigger {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: calc(100% - 8px);
-  margin: 0 4px;
-  padding: 0 8px 6px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 10px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -472,29 +492,32 @@ function escapeRegExp(value: string): string {
 }
 
 .site-nav-section-trigger:hover {
-  background: color-mix(in oklch, var(--fg) 4%, transparent);
+  background: var(--fg-soft);
 }
 
 .site-nav-section-trigger:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 0;
+  outline-offset: -2px;
 }
 
 .site-nav-links {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 
 .site-nav-links :deep(a) {
   display: block;
-  margin: 0 2px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   font-size: 13px;
   font-weight: 400;
   line-height: 1.4;
+  overflow-wrap: break-word;
   border-radius: 8px;
-  color: color-mix(in oklch, var(--muted) 90%, var(--fg));
+  color: color-mix(in oklch, var(--muted) 88%, var(--fg));
   text-decoration: none;
   transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
     background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -502,28 +525,23 @@ function escapeRegExp(value: string): string {
 
 .site-nav-links :deep(a:hover) {
   color: var(--fg);
-  background: color-mix(in oklch, var(--fg) 6%, transparent);
+  background: var(--fg-soft);
+}
+
+.site-nav-links :deep(a:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  color: var(--fg);
 }
 
 .site-nav-links :deep(a.active) {
   color: var(--accent);
-  font-weight: 500;
-  background: color-mix(in oklch, var(--accent) 8%, transparent);
+  font-weight: 550;
+  background: var(--accent-soft);
 }
 
 .site-nav-links--api {
-  padding-left: 4px;
-}
-
-.site-nav-nested {
-  margin-top: 8px;
-}
-
-.site-nav-nested-title {
-  padding: 4px 12px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--muted);
+  padding-left: 0;
 }
 
 .site-nav-meta {
@@ -578,29 +596,28 @@ function escapeRegExp(value: string): string {
 .site-nav-tag-trigger {
   display: flex;
   align-items: center;
-  width: calc(100% - 8px);
-  margin: 0 4px;
-  padding: 5px 8px 5px 12px;
+  width: 100%;
+  margin: 0;
+  padding: 5px 10px;
   border: none;
   background: transparent;
   cursor: pointer;
   font: inherit;
-  color: var(--muted);
+  color: color-mix(in oklch, var(--fg) 78%, var(--muted));
   text-align: left;
   border-radius: 8px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-size: 12px;
+  font-weight: 550;
 }
 
 .site-nav-tag-trigger:hover {
   color: var(--fg);
-  background: color-mix(in oklch, var(--fg) 5%, transparent);
+  background: var(--fg-soft);
 }
 
 .site-nav-tag-trigger:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 0;
+  outline-offset: -2px;
 }
 
 .site-nav-tag-label {
@@ -615,7 +632,7 @@ function escapeRegExp(value: string): string {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 2px 6px;
+  margin: 1px 0 0;
   padding: 6px 10px;
   font-size: 13px;
   color: var(--muted);

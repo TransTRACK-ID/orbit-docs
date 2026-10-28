@@ -60,6 +60,18 @@ describe("SiteNavGroup", () => {
     expect(wrapper.find("li").exists()).toBe(false);
   });
 
+
+  it("marks domains and sections as labels without indent styles", () => {
+    const wrapper = mountGroup(["4-core", "2-render", "3-upload"]);
+    expect(wrapper.find(".site-nav-domain-label").text()).toBe("Video Generation");
+    expect(wrapper.findAll(".site-nav-group-label").map((el) => el.text())).toEqual([
+      "Carousel",
+      "Rendering",
+      "Upload",
+    ]);
+    expect(wrapper.html()).not.toContain("margin");
+  });
+
   it("hides branches with no visible pages but keeps visible siblings", () => {
     const wrapper = mountGroup(["3-upload"]);
     const hrefs = wrapper.findAll("a").map((a) => a.attributes("href"));
