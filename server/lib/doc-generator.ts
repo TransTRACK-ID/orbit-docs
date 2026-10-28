@@ -1860,6 +1860,8 @@ export async function generateWikiDocs(
     });
 
     const site = await ensureWikiSite(appId, plan, actor);
+    // Prompts and link pruning must target the persisted slug, not the outline's guess.
+    plan.siteSlug = site.siteSlug;
 
     const overviewTemplate = await loadWikiTemplate("overview");
     const pageTemplate = await loadWikiTemplate("page");
@@ -2051,7 +2053,7 @@ export async function generateWikiDocs(
         const repruned = pruneInvalidWikiLinks(record.page.content, plan.siteSlug, succeededSlugs);
         if (repruned !== record.page.content) {
           const updatedPage = { ...record.page, content: repruned };
-          await upsertWikiPage(site.siteId, appId, updatedPage, actor);
+          await upsertWikiPage(site.siteId, appId, updatedPage, actor, { snapshot: false });
           succeededBySlug.set(pagePlan.slug, { pagePlan, page: updatedPage });
         }
       }
@@ -2059,6 +2061,7 @@ export async function generateWikiDocs(
 
     await finalizeWikiSite(site.siteId, appId, plan, succeededPagePlans, actor, {
       archiveStale: failedSlugs.length === 0,
+      created: site.created,
     });
 
     const succeededCount = succeededBySlug.size;

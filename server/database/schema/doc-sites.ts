@@ -1,5 +1,5 @@
-import { pgTable, text, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { pgTable, text, timestamp, integer, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { relations, sql } from "drizzle-orm";
 import { apps } from "./apps";
 import { docs } from "./apps";
 
@@ -82,22 +82,31 @@ export interface NormalizedOpenApiOperation {
   deprecated: boolean;
 }
 
-export const docSites = pgTable("doc_sites", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  appId: text("app_id").references(() => apps.id, { onDelete: "cascade" }),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  description: text("description"),
-  status: text("status", { enum: ["draft", "published", "archived"] })
-    .notNull()
-    .default("draft"),
-  navConfig: jsonb("nav_config").$type<NavConfig>().default({}),
-  openapiSpec: text("openapi_spec"),
-  openapiFormat: text("openapi_format", { enum: ["json", "yaml"] }),
-  openapiNormalized: jsonb("openapi_normalized").$type<NormalizedOpenApi>(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+export const docSites = pgTable(
+  "doc_sites",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    appId: text("app_id").references(() => apps.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    description: text("description"),
+    status: text("status", { enum: ["draft", "published", "archived"] })
+      .notNull()
+      .default("draft"),
+    kind: text("kind", { enum: ["manual", "wiki"] }).notNull().default("manual"),
+    navConfig: jsonb("nav_config").$type<NavConfig>().default({}),
+    openapiSpec: text("openapi_spec"),
+    openapiFormat: text("openapi_format", { enum: ["json", "yaml"] }),
+    openapiNormalized: jsonb("openapi_normalized").$type<NormalizedOpenApi>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("doc_sites_wiki_app_unique")
+      .on(table.appId)
+      .where(sql`${table.kind} = 'wiki' and ${table.status} <> 'archived' and ${table.appId} is not null`),
+  ],
+);
 
 export const docSitesRelations = relations(docSites, ({ one, many }) => ({
   app: one(apps, {

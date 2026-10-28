@@ -1,10 +1,11 @@
 import { getDb } from "~/server/database";
 import { docSites, docs, activityLogs } from "~/server/database/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, ne } from "drizzle-orm";
 import { isValidSiteSlug, slugify } from "~/server/lib/nav-config";
 import type { WikiOutlinePagePlan, WikiSitePlan } from "~/server/lib/doc-prompts";
 import { buildNavConfigFromPlan } from "~/utils/wiki-nav";
 import { onDocContentSaved } from "~/server/lib/doc-embedding-hooks";
+import { createDocVersionSnapshot } from "~/server/lib/doc-version-snapshot";
 
 export interface WikiPageContent {
   slug: string;
@@ -17,6 +18,7 @@ export interface WikiSiteBuildResult {
   siteId: string;
   siteSlug: string;
   pageIds: string[];
+  created: boolean;
 }
 
 export interface ExistingWikiPageRow {
@@ -25,6 +27,37 @@ export interface ExistingWikiPageRow {
   docType: string | null;
   source: string;
   status: string;
+}
+
+export function pickCanonicalWikiSite<
+  T extends { id: string; createdAt: Date | null; updatedAt: Date | null },
+>(sites: T[]): T | null {
+  if (sites.length === 0) return null;
+  const time = (d: Date | null): number => (d ? d.getTime() : 0);
+  return sites.reduce((best, site) => {
+    const bestKey: [number, number, string] = [
+      time(best.updatedAt ?? best.createdAt),
+      time(best.createdAt),
+      best.id,
+    ];
+    const siteKey: [number, number, string] = [
+      time(site.updatedAt ?? site.createdAt),
+      time(site.createdAt),
+      site.id,
+    ];
+    if (siteKey[0] !== bestKey[0]) return siteKey[0] > bestKey[0] ? site : best;
+    if (siteKey[1] !== bestKey[1]) return siteKey[1] > bestKey[1] ? site : best;
+    return siteKey[2] > bestKey[2] ? site : best;
+  });
+}
+
+export function firstFreeWikiSlug(base: string, taken: ReadonlySet<string>): string | null {
+  const candidates = [
+    base,
+    `${base}-wiki`,
+    ...Array.from({ length: 8 }, (_, i) => `${base}-${i + 2}`),
+  ];
+  return candidates.find((c) => !taken.has(c)) ?? null;
 }
 
 /**
@@ -48,25 +81,15 @@ export function staleWikiPageIds(
     .map((p) => p.id);
 }
 
-async function findWikiSiteForApp(appId: string, siteSlug: string) {
+async function findWikiSiteForApp(appId: string) {
   const db = getDb();
-  const bySlug = await db
+  const rows = await db
     .select()
     .from(docSites)
-    .where(eq(docSites.slug, siteSlug))
-    .limit(1)
-    .then((r) => r[0] || null);
-
-  if (bySlug && bySlug.appId === appId) return bySlug;
-
-  const byApp = await db
-    .select()
-    .from(docSites)
-    .where(and(eq(docSites.appId, appId), eq(docSites.slug, siteSlug)))
-    .limit(1)
-    .then((r) => r[0] || null);
-
-  return byApp;
+    .where(
+      and(eq(docSites.appId, appId), eq(docSites.kind, "wiki"), ne(docSites.status, "archived")),
+    );
+  return pickCanonicalWikiSite(rows);
 }
 
 export async function ensureWikiSite(
@@ -75,11 +98,11 @@ export async function ensureWikiSite(
   actor: string,
 ): Promise<WikiSiteBuildResult> {
   const db = getDb();
-  const siteSlug = isValidSiteSlug(plan.siteSlug) ? plan.siteSlug : slugify(plan.siteName);
+  const preferredSlug =
+    (isValidSiteSlug(plan.siteSlug) ? plan.siteSlug : slugify(plan.siteName)) || "wiki";
 
-  let site = await findWikiSiteForApp(appId, siteSlug);
-
-  if (site) {
+  const existing = await findWikiSiteForApp(appId);
+  if (existing) {
     const updated = await db
       .update(docSites)
       .set({
@@ -87,38 +110,48 @@ export async function ensureWikiSite(
         description: `Generated wiki for ${plan.siteName}`,
         updatedAt: new Date(),
       })
-      .where(eq(docSites.id, site.id))
+      .where(eq(docSites.id, existing.id))
       .returning()
       .then((r) => r[0]);
-    site = updated;
-  } else {
+    return { siteId: updated.id, siteSlug: updated.slug, pageIds: [], created: false };
+  }
+
+  const candidates = [
+    preferredSlug,
+    `${preferredSlug}-wiki`,
+    ...Array.from({ length: 8 }, (_, i) => `${preferredSlug}-${i + 2}`),
+  ];
+  const takenRows = await db
+    .select({ slug: docSites.slug })
+    .from(docSites)
+    .where(inArray(docSites.slug, candidates));
+  const slug = firstFreeWikiSlug(preferredSlug, new Set(takenRows.map((r) => r.slug)));
+  if (!slug) {
+    throw new Error(`Could not allocate a wiki site slug from "${preferredSlug}"`);
+  }
+
+  try {
     const created = await db
       .insert(docSites)
       .values({
         name: plan.siteName,
-        slug: siteSlug,
+        slug,
         description: `Generated wiki for ${plan.siteName}`,
         appId,
         status: "draft",
+        kind: "wiki",
         navConfig: buildNavConfigFromPlan(plan),
       })
       .returning()
       .then((r) => r[0]);
-    site = created;
-
-    await db.insert(activityLogs).values({
-      appId,
-      appName: plan.siteName,
-      action: "Wiki site created",
-      actor,
-    });
+    return { siteId: created.id, siteSlug: created.slug, pageIds: [], created: true };
+  } catch (err: unknown) {
+    const winner = await findWikiSiteForApp(appId);
+    if (winner) {
+      return { siteId: winner.id, siteSlug: winner.slug, pageIds: [], created: false };
+    }
+    throw err;
   }
-
-  return {
-    siteId: site.id,
-    siteSlug: site.slug,
-    pageIds: [],
-  };
 }
 
 export async function upsertWikiPage(
@@ -126,17 +159,30 @@ export async function upsertWikiPage(
   appId: string,
   page: WikiPageContent,
   actor: string,
+  opts?: { snapshot?: boolean },
 ): Promise<string> {
   const db = getDb();
 
   const existing = await db
-    .select({ id: docs.id })
+    .select({ id: docs.id, title: docs.title, content: docs.content })
     .from(docs)
     .where(and(eq(docs.siteId, siteId), eq(docs.slug, page.slug)))
     .limit(1)
     .then((r) => r[0] || null);
 
   if (existing) {
+    if (
+      opts?.snapshot !== false &&
+      (existing.title !== page.title || (existing.content || "") !== page.content)
+    ) {
+      await createDocVersionSnapshot(
+        db,
+        existing.id,
+        { title: existing.title, content: existing.content },
+        actor,
+        "save",
+      );
+    }
     await db
       .update(docs)
       .set({
@@ -168,6 +214,15 @@ export async function upsertWikiPage(
     })
     .returning({ id: docs.id })
     .then((r) => r[0]);
+  if (opts?.snapshot !== false) {
+    await createDocVersionSnapshot(
+      db,
+      inserted.id,
+      { title: page.title, content: page.content },
+      actor,
+      "save",
+    );
+  }
   onDocContentSaved({ id: inserted.id, docType: "wiki", content: page.content });
   return inserted.id;
 }
@@ -178,7 +233,7 @@ export async function finalizeWikiSite(
   plan: WikiSitePlan,
   succeeded: WikiOutlinePagePlan[],
   actor: string,
-  opts: { archiveStale: boolean },
+  opts: { archiveStale: boolean; created: boolean },
 ): Promise<{ archivedCount: number }> {
   const db = getDb();
   const navConfig = buildNavConfigFromPlan({ pages: succeeded });
@@ -219,13 +274,14 @@ export async function finalizeWikiSite(
     archivedCount = staleIds.length;
   }
 
+  const verb = opts.created ? "created" : "updated";
   await db.insert(activityLogs).values({
     appId,
     appName: plan.siteName,
     action:
       archivedCount === 0
-        ? `Wiki site updated (${succeeded.length} pages)`
-        : `Wiki site updated (${succeeded.length} pages, ${archivedCount} stale archived)`,
+        ? `Wiki site ${verb} (${succeeded.length} pages)`
+        : `Wiki site ${verb} (${succeeded.length} pages, ${archivedCount} stale archived)`,
     actor,
   });
 
