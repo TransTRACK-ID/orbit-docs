@@ -2,7 +2,7 @@ import { pgTable, text, timestamp, integer, index, uniqueIndex } from "drizzle-o
 import { relations } from "drizzle-orm";
 import { docs } from "./apps";
 
-/** Section-level chunks for hybrid semantic search (pgvector column managed via raw SQL). */
+/** Section-level chunks for hybrid semantic search (`embedding` vector and `search_tsv` columns managed via raw SQL). */
 export const docChunks = pgTable(
   "doc_chunks",
   {
@@ -16,6 +16,7 @@ export const docChunks = pgTable(
     chunkIndex: integer("chunk_index").notNull(),
     content: text("content").notNull(),
     contentHash: text("content_hash").notNull(),
+    embeddingModel: text("embedding_model"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
   },

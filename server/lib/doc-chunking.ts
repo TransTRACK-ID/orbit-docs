@@ -1,13 +1,21 @@
 import { splitMarkdownSections } from "~/server/lib/doc-section-merge";
 
-export const INDEXABLE_DOC_TYPES = ["feature", "sdd", "wiki"] as const;
+export const INDEXABLE_DOC_TYPES = [
+  "feature",
+  "sdd",
+  "wiki",
+  "srs",
+  "fsd",
+  "adr",
+  "git_snapshot",
+] as const;
 export type IndexableDocType = (typeof INDEXABLE_DOC_TYPES)[number];
 
 export function indexableDocTypesForCategory(
   category?: "product" | "knowledge",
 ): IndexableDocType[] {
   if (category === "knowledge") return ["feature"];
-  if (category === "product") return ["sdd", "wiki"];
+  if (category === "product") return INDEXABLE_DOC_TYPES.filter((type) => type !== "feature");
   return [...INDEXABLE_DOC_TYPES];
 }
 

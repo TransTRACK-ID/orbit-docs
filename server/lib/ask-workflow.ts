@@ -11,8 +11,10 @@ import {
 } from "~/server/lib/adr-queries";
 import { createChatAgent } from "~/server/lib/agent-factory";
 import { searchDocChunksHybrid } from "~/server/lib/doc-chunk-search";
+import { INDEXABLE_DOC_TYPES } from "~/server/lib/doc-chunking";
 import { isSemanticSearchEnabled } from "~/server/lib/doc-embeddings";
 import { searchDocsContent } from "~/server/lib/doc-content-search";
+import { grepDocs } from "~/server/lib/doc-file-tools";
 import { searchFeatureDocs } from "~/server/lib/feature-doc-search";
 import { getCustomOpenAI } from "~/server/lib/openai";
 import { formatAdrNumber, parseAdrFrontmatter } from "~/types/adr";
@@ -115,6 +117,16 @@ function adrCitationRef(row: AdrDocRow): string {
 
 function docCitationRef(id: string): string {
   return `[doc:${id}]`;
+}
+
+/** Quoted phrases and code/ID-like tokens (FEAT-123, user_id, /api/v1/orders, getUserById) worth an exact grep. */
+export function extractExactTokens(query: string): string[] {
+  const quoted = [...query.matchAll(/["`]([^"`]{2,80})["`]/g)].map((m) => m[1]!.trim());
+  const idLike = query.match(/[\p{L}\p{N}]+(?:[-_./:#][\p{L}\p{N}]+)+/gu) ?? [];
+  const camelCase = query.match(/\b[a-z]+[A-Z][A-Za-z0-9]*\b/g) ?? [];
+  return [...new Set([...quoted, ...idLike, ...camelCase])]
+    .filter((token) => token.length >= 4)
+    .slice(0, 2);
 }
 
 function normalizeDocTypes(docTypes?: string[]): string[] {
@@ -346,19 +358,44 @@ async function executeSingleSearch(
   const wantsWiki = wantsFeature || docTypes.includes("wiki");
   const nonFeatureTypes = docTypes.filter((t) => t !== "feature" && t !== "adr");
   const wantsAdrInContent = docTypes.includes("adr") && !item.bindingOnly;
-  const wantsChunkSearch =
-    isSemanticSearchEnabled() &&
-    (wantsFeature ||
-      nonFeatureTypes.includes("sdd") ||
-      nonFeatureTypes.includes("wiki") ||
-      (docTypes.length === 0 && !item.bindingOnly));
+  // ADRs stay on the dedicated path so they keep [adr:NNN] citations.
+  const chunkDocTypes = INDEXABLE_DOC_TYPES.filter(
+    (type) =>
+      type !== "adr" &&
+      (docTypes.length === 0 ||
+        docTypes.includes(type) ||
+        (type === "wiki" && wantsWiki)),
+  );
+  const wantsChunkSearch = isSemanticSearchEnabled() && chunkDocTypes.length > 0;
+
+  for (const token of extractExactTokens(item.query)) {
+    const matches = await grepDocs({
+      app: { id: appId, name: null },
+      pattern: token,
+      contextLines: 3,
+      maxResults: 4,
+      maxPerDoc: 2,
+      publishedOnly: options.publishedOnly,
+    }).then(
+      (result) => result.matches,
+      (err) => {
+        console.error("[ask-workflow] exact-token grep failed:", err);
+        return [];
+      },
+    );
+    for (const match of matches) {
+      results.push({
+        id: match.docId,
+        title: `${match.title} › line ${match.line}`,
+        content: [...match.contextBefore, match.text, ...match.contextAfter].join("\n").trim(),
+        docType: match.docType,
+        citationRef: docCitationRef(match.docId),
+        sectionHeading: `line ${match.line}`,
+      });
+    }
+  }
 
   if (wantsChunkSearch) {
-    const chunkDocTypes: string[] = [];
-    if (wantsFeature || docTypes.length === 0) chunkDocTypes.push("feature");
-    if (nonFeatureTypes.includes("sdd") || docTypes.length === 0) chunkDocTypes.push("sdd");
-    if (wantsWiki) chunkDocTypes.push("wiki");
-
     const chunkRows = await searchDocChunksHybrid({
       appId,
       query: item.query,
@@ -426,7 +463,7 @@ async function executeSingleSearch(
   const skipFullDocSearchForChunkTypes =
     wantsChunkSearch &&
     results.some((r) => r.sectionHeading) &&
-    !contentDocTypes.some((t) => t !== "sdd" && t !== "feature" && t !== "wiki");
+    !contentDocTypes.some((t) => !(chunkDocTypes as string[]).includes(t));
 
   if (
     !skipFullDocSearchForChunkTypes &&

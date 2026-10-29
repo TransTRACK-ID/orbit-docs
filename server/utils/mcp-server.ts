@@ -14,6 +14,12 @@ import {
   type McpDocRow,
 } from "~/server/lib/mcp-doc-payload";
 import { searchDocsContentHybrid } from "~/server/lib/doc-content-search";
+import {
+  buildDocPathIndex,
+  grepDocs,
+  listDocTree,
+  readDocSection,
+} from "~/server/lib/doc-file-tools";
 import { runAskWorkflowAnswer } from "~/server/lib/ask-workflow";
 import {
   listFeatureDocIndex,
@@ -87,6 +93,23 @@ const MCP_ROLE_ALIASES: Record<string, string> = {
   executive: "C Level",
 };
 
+function jsonResult(payload: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
+  };
+}
+
+function appNotFoundResult(params: { appId?: string; appName?: string }) {
+  return {
+    ...jsonResult({
+      error: "App not found",
+      appId: params.appId ?? null,
+      appName: params.appName ?? null,
+    }),
+    isError: true,
+  };
+}
+
 function normalizeMcpRole(input: string): string {
   const trimmed = input.trim();
   return MCP_ROLE_ALIASES[trimmed.toLowerCase()] ?? trimmed;
@@ -114,7 +137,7 @@ const MCP_PLATFORM_INSTRUCTIONS = [
   "2. For complex or cross doc-type questions, prefer ask_docs with appId/appName and the user's question — it runs Plan → Retrieve → Synthesize server-side across SDD, FSD, features, ADRs, and wiki. Wiki pages are gathered automatically like other doc types — no separate wiki call or user confirmation is needed.",
   "3. For granular access, call list_app_documentation with appId OR appName to get the grouped /docs view. This returns EVERY Knowledge base feature (title, id, externalId, module) plus all Product docs — do not assume it is empty. The response includes bindingConstraints with mandatory ADR rules — follow them in every answer.",
   "4. To read a doc's full content, call get_doc with the doc id.",
-  "5. To find docs by keyword manually, call search_feature_docs (Knowledge base only) or search_docs_content (all docs).",
+  "5. To find context manually, pick the search style that fits: search_docs_content (RAG over chunks; mode hybrid/semantic/keyword) for conceptual questions; grep_docs for exact names, IDs, endpoints, or error strings; list_doc_tree to browse docs/wiki as files, then read_doc_section to read a heading or line range. search_feature_docs searches the Knowledge base only.",
   isMcpInternalLinkMode()
     ? "6. To share links with users, prefer sharePath/shareUrl on docs and doc sites (internal wiki at /wiki/{siteSlug}/{pageSlug}). MCP_API_KEY is set — doc site pages include wikiPath for drafts. Use publicPath/publicUrl only for externally published pages (/s/, /p/). Call list_doc_sites or get_doc_site for site navigation."
     : "6. To share links with users, use publicUrl/publicPath on docs and doc sites. Call list_doc_sites or get_doc_site for published site URLs (/s/{siteSlug}). Published docs return /p/{id} or /s/{siteSlug}/{pageSlug} when part of a published site.",
@@ -271,6 +294,7 @@ const SearchDocsContentSchema = z
     app_name: optionalString,
     category: z.enum(["product", "knowledge"]).optional(),
     docType: z.enum(["srs", "fsd", "sdd", "git_snapshot", "feature", "adr", "wiki"]).optional(),
+    mode: z.enum(["hybrid", "keyword", "semantic"]).optional().default("hybrid"),
     limit: z.coerce.number().min(1).max(20).optional().default(10),
   })
   .transform((data) => ({
@@ -278,8 +302,92 @@ const SearchDocsContentSchema = z
     ...parseAppRefInput(data),
     category: data.category,
     docType: data.docType,
+    mode: data.mode,
     limit: data.limit,
   }));
+
+const DOC_TYPE_ENUM = z.enum(["srs", "fsd", "sdd", "git_snapshot", "feature", "adr", "wiki"]);
+
+const ListDocTreeSchema = z
+  .object({
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    category: z.enum(["product", "knowledge"]).optional(),
+    docType: DOC_TYPE_ENUM.optional(),
+    prefix: optionalString,
+    includeOutline: z.coerce.boolean().optional().default(true),
+    limit: z.coerce.number().min(1).max(500).optional().default(200),
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    category: data.category,
+    docType: data.docType,
+    prefix: data.prefix,
+    includeOutline: data.includeOutline,
+    limit: data.limit,
+  }))
+  .refine((data) => !!(data.appId || data.appName), {
+    message: "Provide appId or appName",
+  });
+
+const GrepDocsSchema = z
+  .object({
+    pattern: z.string().min(1).max(200),
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    regex: z.coerce.boolean().optional().default(false),
+    caseSensitive: z.coerce.boolean().optional().default(false),
+    category: z.enum(["product", "knowledge"]).optional(),
+    docType: DOC_TYPE_ENUM.optional(),
+    contextLines: z.coerce.number().min(0).max(5).optional().default(2),
+    maxResults: z.coerce.number().min(1).max(200).optional().default(50),
+    maxPerDoc: z.coerce.number().min(1).max(50).optional().default(10),
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    pattern: data.pattern,
+    regex: data.regex,
+    caseSensitive: data.caseSensitive,
+    category: data.category,
+    docType: data.docType,
+    contextLines: data.contextLines,
+    maxResults: data.maxResults,
+    maxPerDoc: data.maxPerDoc,
+  }))
+  .refine((data) => !!(data.appId || data.appName), {
+    message: "Provide appId or appName",
+  });
+
+const ReadDocSectionSchema = z
+  .object({
+    docId: optionalString,
+    id: optionalString,
+    path: optionalString,
+    appId: optionalString,
+    app_id: optionalString,
+    appName: optionalString,
+    app_name: optionalString,
+    heading: optionalString,
+    startLine: z.coerce.number().int().min(1).optional(),
+    endLine: z.coerce.number().int().min(1).optional(),
+    maxLines: z.coerce.number().int().min(1).max(1000).optional().default(400),
+  })
+  .transform((data) => ({
+    ...parseAppRefInput(data),
+    docId: data.docId ?? data.id,
+    path: data.path,
+    heading: data.heading,
+    startLine: data.startLine,
+    endLine: data.endLine,
+    maxLines: data.maxLines,
+  }))
+  .refine((data) => !!(data.docId || data.path), {
+    message: "Provide docId or path",
+  });
 
 const ListReleasesSchema = z.object({
   appId: z.string(),
@@ -547,18 +655,86 @@ const TOOLS: Tool[] = [
   {
     name: "search_docs_content",
     description:
-      "Hybrid semantic + keyword search inside doc content (feature, SDD, wiki chunks + ILIKE for other types). " +
-      "Supports product/knowledge filtering to match /docs views. Wiki pages are included by default like other doc types; pass docType 'wiki' to search only the wiki.",
+      "RAG search over section-level chunks of every doc type (SRS, FSD, SDD, ADR, git snapshot, feature, wiki). " +
+      "mode 'hybrid' (default) fuses full-text ranking with vector similarity; 'semantic' = vector only (conceptual questions, paraphrases, cross-language); 'keyword' = full-text only. " +
+      "Response searchMode reports what actually ran (falls back to keyword when the embedding service is offline). " +
+      "Each result has a virtual path usable with read_doc_section. For exact names, IDs, error strings, or code identifiers prefer grep_docs. " +
+      "Supports product/knowledge filtering to match /docs views; pass docType 'wiki' to search only the wiki.",
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string" },
         appId: { type: "string" },
+        appName: { type: "string" },
         category: { type: "string", enum: ["product", "knowledge"] },
         docType: { type: "string", enum: ["srs", "fsd", "sdd", "git_snapshot", "feature", "adr", "wiki"] },
+        mode: { type: "string", enum: ["hybrid", "keyword", "semantic"], default: "hybrid" },
         limit: { type: "number" },
       },
       required: ["query"],
+    },
+  },
+  {
+    name: "list_doc_tree",
+    description:
+      "List an app's docs and wiki pages as a virtual file tree (like `ls -R`): " +
+      "/{app}/product/{docType}/{name}.md, /{app}/knowledge/feature/{externalId}.md, /{app}/wiki/{siteSlug}/{pageSlug}.md. " +
+      "Each entry includes docId, line count, and a heading outline with line numbers (levels 1-3). " +
+      "Use it to orient before reading, then call read_doc_section with a path + heading or line range. Accepts appId or appName.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        appId: { type: "string" },
+        appName: { type: "string" },
+        category: { type: "string", enum: ["product", "knowledge"] },
+        docType: { type: "string", enum: ["srs", "fsd", "sdd", "git_snapshot", "feature", "adr", "wiki"] },
+        prefix: { type: "string", description: "Only paths starting with this prefix, e.g. /order-planning/wiki/" },
+        includeOutline: { type: "boolean", default: true },
+        limit: { type: "number", default: 200 },
+      },
+    },
+  },
+  {
+    name: "grep_docs",
+    description:
+      "Exact text search across an app's doc contents, like ripgrep: returns every matching line with path, docId, line number, and surrounding context lines. " +
+      "Use for exact names, feature IDs, endpoint paths, config keys, error messages, or regex patterns where semantic search is imprecise. " +
+      "Literal match by default; set regex true for POSIX-style regular expressions. Case-insensitive unless caseSensitive is true. Accepts appId or appName.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        pattern: { type: "string", description: "Literal text or regex (max 200 chars)" },
+        appId: { type: "string" },
+        appName: { type: "string" },
+        regex: { type: "boolean", default: false },
+        caseSensitive: { type: "boolean", default: false },
+        category: { type: "string", enum: ["product", "knowledge"] },
+        docType: { type: "string", enum: ["srs", "fsd", "sdd", "git_snapshot", "feature", "adr", "wiki"] },
+        contextLines: { type: "number", default: 2, description: "Lines before/after each match (0-5)" },
+        maxResults: { type: "number", default: 50 },
+        maxPerDoc: { type: "number", default: 10 },
+      },
+      required: ["pattern"],
+    },
+  },
+  {
+    name: "read_doc_section",
+    description:
+      "Read part of a doc like reading a file: by docId or virtual path (from list_doc_tree / grep_docs / search_docs_content), " +
+      "then either a heading (returns that section including its subsections) or a startLine/endLine range. " +
+      "Output lines are numbered so you can follow up with precise ranges. Without heading or range, returns the doc from the top (max 400 lines by default).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        docId: { type: "string" },
+        path: { type: "string" },
+        appId: { type: "string" },
+        appName: { type: "string" },
+        heading: { type: "string" },
+        startLine: { type: "number" },
+        endLine: { type: "number" },
+        maxLines: { type: "number", default: 400 },
+      },
     },
   },
   {
@@ -1556,9 +1732,11 @@ mcpServer.setRequestHandler(
             query: params.query,
             category: params.category,
             docTypes: params.docType ? [params.docType] : undefined,
+            mode: params.mode,
             limit: params.limit,
           });
 
+          const paths = app.id ? await buildDocPathIndex({ id: app.id, name: app.name }) : null;
           const data = results.map((row) => ({
             ...formatMcpDoc(
               {
@@ -1586,6 +1764,7 @@ mcpServer.setRequestHandler(
               } as McpDocRow,
               { includeContent: true },
             ),
+            ...(paths?.get(row.id) ? { path: paths.get(row.id) } : {}),
             ...(row.heading ? { heading: row.heading } : {}),
             ...(row.chunkId ? { chunkId: row.chunkId } : {}),
             ...(row.score != null ? { score: row.score } : {}),
@@ -1609,6 +1788,70 @@ mcpServer.setRequestHandler(
               },
             ],
           };
+        }
+
+        case "list_doc_tree": {
+          const params = ListDocTreeSchema.parse(args);
+          const app = await resolveAppRef(db, { appId: params.appId, appName: params.appName });
+          if (!app.found) return appNotFoundResult(params);
+
+          const tree = await listDocTree({
+            app: { id: app.id, name: app.name },
+            category: params.category,
+            docType: params.docType,
+            prefix: params.prefix,
+            includeOutline: params.includeOutline,
+            limit: params.limit,
+          });
+          return jsonResult({ app: { id: app.id, name: app.name }, ...tree });
+        }
+
+        case "grep_docs": {
+          const params = GrepDocsSchema.parse(args);
+          const app = await resolveAppRef(db, { appId: params.appId, appName: params.appName });
+          if (!app.found) return appNotFoundResult(params);
+
+          const result = await grepDocs({
+            app: { id: app.id, name: app.name },
+            pattern: params.pattern,
+            regex: params.regex,
+            caseSensitive: params.caseSensitive,
+            category: params.category,
+            docType: params.docType,
+            contextLines: params.contextLines,
+            maxResults: params.maxResults,
+            maxPerDoc: params.maxPerDoc,
+          });
+          return jsonResult({
+            app: { id: app.id, name: app.name },
+            pattern: params.pattern,
+            count: result.matches.length,
+            ...result,
+          });
+        }
+
+        case "read_doc_section": {
+          const params = ReadDocSectionSchema.parse(args);
+          let appRef: { id: string | null; name: string | null } | undefined;
+          if (params.appId || params.appName) {
+            const app = await resolveAppRef(db, { appId: params.appId, appName: params.appName });
+            if (!app.found) return appNotFoundResult(params);
+            appRef = { id: app.id, name: app.name };
+          }
+
+          const result = await readDocSection({
+            docId: params.docId,
+            path: params.path,
+            app: appRef,
+            heading: params.heading,
+            startLine: params.startLine,
+            endLine: params.endLine,
+            maxLines: params.maxLines,
+          });
+          if ("error" in result) {
+            return { ...jsonResult(result), isError: true };
+          }
+          return jsonResult(result);
         }
 
         case "list_releases": {

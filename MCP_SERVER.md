@@ -61,7 +61,10 @@ The standalone legacy server has none of this: no wiki awareness, no `ask_docs`,
 |------|-------------|
 | `list_docs` | List docs with filters (app, status, title search) and pagination |
 | `get_doc` | Get full doc with content, app, version, available versions, and doc version history |
-| `search_docs_content` | Full-text search inside doc content (not just titles) |
+| `search_docs_content` | Full-text search inside doc content (not just titles); in-Nuxt server adds RAG `mode` (`hybrid` / `semantic` / `keyword`) |
+| `list_doc_tree` | In-Nuxt server: docs and wiki as a virtual file tree with heading outlines |
+| `grep_docs` | In-Nuxt server: literal/regex line search with context lines (ripgrep-style) |
+| `read_doc_section` | In-Nuxt server: read a doc by id or virtual path, by heading or line range |
 | `list_architectural_decisions` | List ADRs for an app; `bindingOnly=true` returns published + accepted constraints |
 | `get_binding_constraints` | Compact summary of binding ADRs for prompt injection before design tasks |
 
