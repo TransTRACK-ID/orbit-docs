@@ -2,6 +2,7 @@ import { pool } from "~/server/database";
 import { getDb } from "~/server/database";
 import { apps, appVersions, activityLogs, docs, owners, workspaceSettings, teamMembers, integrationSettings, notificationSettings, apiKeys, users } from "~/server/database/schema";
 import { count } from "drizzle-orm";
+import { getEmbeddingDimensions, parseVectorTypeDimensions } from "~/server/lib/doc-embeddings";
 
 export default defineNitroPlugin(async () => {
   try {
@@ -121,6 +122,7 @@ export default defineNitroPlugin(async () => {
   await pool.query(`CREATE INDEX IF NOT EXISTS docs_site_id_idx ON docs (site_id)`);
 
   // pgvector for semantic doc chunk search
+  const embeddingDimensions = getEmbeddingDimensions();
   try {
     await pool.query(`CREATE EXTENSION IF NOT EXISTS vector`);
   } catch (err: any) {
@@ -137,7 +139,7 @@ export default defineNitroPlugin(async () => {
       chunk_index INTEGER NOT NULL,
       content TEXT NOT NULL,
       content_hash TEXT NOT NULL,
-      embedding vector(1536),
+      embedding vector(${embeddingDimensions}),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       UNIQUE (doc_id, chunk_index)
@@ -145,6 +147,27 @@ export default defineNitroPlugin(async () => {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS doc_chunks_app_doc_type_idx ON doc_chunks (app_id, doc_type)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS doc_chunks_doc_id_idx ON doc_chunks (doc_id)`);
+  await pool.query(`ALTER TABLE doc_chunks ADD COLUMN IF NOT EXISTS embedding_model TEXT`);
+  await pool.query(`
+    ALTER TABLE doc_chunks ADD COLUMN IF NOT EXISTS search_tsv tsvector
+    GENERATED ALWAYS AS (to_tsvector('simple', coalesce(heading, '') || ' ' || coalesce(content, ''))) STORED
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS doc_chunks_search_tsv_idx ON doc_chunks USING gin (search_tsv)`);
+
+  const embeddingColumn = await pool.query<{ type: string }>(`
+    SELECT format_type(atttypid, atttypmod) AS type
+    FROM pg_attribute
+    WHERE attrelid = 'doc_chunks'::regclass AND attname = 'embedding' AND NOT attisdropped
+  `);
+  const currentDimensions = parseVectorTypeDimensions(embeddingColumn.rows[0]?.type);
+  if (currentDimensions !== null && currentDimensions !== embeddingDimensions) {
+    console.warn(
+      `[db-init] doc_chunks.embedding is vector(${currentDimensions}), expected vector(${embeddingDimensions}); clearing chunks for re-embedding`,
+    );
+    await pool.query(`DROP INDEX IF EXISTS doc_chunks_embedding_hnsw_idx`);
+    await pool.query(`DELETE FROM doc_chunks`);
+    await pool.query(`ALTER TABLE doc_chunks ALTER COLUMN embedding TYPE vector(${embeddingDimensions})`);
+  }
   try {
     await pool.query(`
       CREATE INDEX IF NOT EXISTS doc_chunks_embedding_hnsw_idx

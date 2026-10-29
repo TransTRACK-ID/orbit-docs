@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb } from "~/server/database";
 import { docEmbeddingSchedule } from "~/server/database/schema/doc-embedding-schedule";
 import {
-  hasEmbeddingApiKey,
+  isEmbeddingConfigured,
   isSemanticSearchEnabled,
   reindexPendingAndStaleDocEmbeddings,
 } from "~/server/lib/doc-embeddings";
@@ -61,7 +61,7 @@ export async function getDocEmbeddingSchedulePublic(
     lastRunResult: row.lastRunResult ?? null,
     workspaceSchedule,
     semanticSearchEnabled: isSemanticSearchEnabled(),
-    hasApiKey: hasEmbeddingApiKey(),
+    hasApiKey: isEmbeddingConfigured(),
   };
 }
 
@@ -81,7 +81,7 @@ export async function updateDocEmbeddingSchedule(appId: string, scheduleEnabled:
 }
 
 export async function runScheduledEmbeddingIndexForApp(appId: string): Promise<boolean> {
-  if (!isSemanticSearchEnabled() || !hasEmbeddingApiKey()) {
+  if (!isSemanticSearchEnabled() || !isEmbeddingConfigured()) {
     return false;
   }
 
@@ -141,7 +141,7 @@ export async function runScheduledEmbeddingIndexes(): Promise<void> {
   const workspaceSchedule = await getWorkspaceSyncSchedule();
   if (!workspaceSchedule.enabled) return;
 
-  if (!isSemanticSearchEnabled() || !hasEmbeddingApiKey()) {
+  if (!isSemanticSearchEnabled() || !isEmbeddingConfigured()) {
     return;
   }
 
