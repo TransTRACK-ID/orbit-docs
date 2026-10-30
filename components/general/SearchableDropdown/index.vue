@@ -195,8 +195,13 @@ function onClickOutside(e: MouseEvent) {
   }
 }
 
-function onScrollResize() {
-  if (isOpen.value) close(false);
+function onScrollResize(e: Event) {
+  if (!isOpen.value) return;
+  const target = e.target;
+  if (target instanceof Node && menuRef.value?.contains(target)) {
+    return;
+  }
+  updateMenuPosition();
 }
 
 onMounted(() => {
