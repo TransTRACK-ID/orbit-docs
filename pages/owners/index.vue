@@ -15,6 +15,8 @@ definePageMeta({
 });
 
 const $page = usePageStore();
+const { can } = usePermissions();
+const canManage = computed(() => can("owners:write"));
 onBeforeMount(() => {
   $page.setTitle("Owners");
 });
@@ -185,7 +187,7 @@ function formatDate(dateStr: string | null) {
           placeholder="Search owners…"
           aria-label="Search owners"
         />
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
+        <button v-if="canManage" type="button" class="btn btn-primary" @click="openCreateModal">
           + New Owner
         </button>
       </div>
@@ -221,7 +223,8 @@ function formatDate(dateStr: string | null) {
 
     <div v-else-if="filteredOwners.length === 0" class="empty-state">
       <p v-if="searchQuery.trim()">No owners match your search.</p>
-      <p v-else>No owners yet. Create one to get started.</p>
+      <p v-else-if="canManage">No owners yet. Create one to get started.</p>
+      <p v-else>No owners yet.</p>
     </div>
 
     <div v-else class="card" style="padding: 0; overflow: hidden;">
@@ -232,7 +235,7 @@ function formatDate(dateStr: string | null) {
             <th>Email</th>
             <th>Role</th>
             <th>Updated</th>
-            <th style="width: 100px; text-align: right;">Actions</th>
+            <th v-if="canManage" style="width: 100px; text-align: right;">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -246,7 +249,7 @@ function formatDate(dateStr: string | null) {
               <span v-else class="cell-muted">—</span>
             </td>
             <td class="num cell-muted">{{ formatDate(owner.updatedAt) }}</td>
-            <td style="text-align: right;">
+            <td v-if="canManage" style="text-align: right;">
               <div class="row-actions">
                 <button
                   class="btn btn-ghost btn-sm action-btn"

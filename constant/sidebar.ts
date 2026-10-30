@@ -99,7 +99,7 @@ export const sidebarMenu: ISidebar[] = [
     route: "/owners",
     icon: markRaw(IconsUser),
     active: false,
-    permission: "apps:write",
+    permission: "owners:read",
     group: "admin",
   },
   {

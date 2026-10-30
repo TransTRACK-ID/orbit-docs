@@ -16,6 +16,9 @@ const emit = defineEmits<{
   (e: "update:modelValue", value: string): void;
 }>();
 
+const { can } = usePermissions();
+const canManage = computed(() => can("owners:write"));
+
 const owners = ref<Owner[]>([]);
 const isLoading = ref(false);
 const dropdownOpen = ref(false);
@@ -401,6 +404,7 @@ async function deleteOwner() {
               {{ o.name }}
             </span>
             <button
+              v-if="canManage"
               type="button"
               class="owner-edit-btn"
               :aria-label="`Edit ${o.name}`"
@@ -420,6 +424,7 @@ async function deleteOwner() {
           </div>
         </div>
 
+        <template v-if="canManage">
         <div class="dropdown-divider" />
         <button type="button" class="add-owner-btn" @click="openAdd">
           <svg
@@ -436,6 +441,7 @@ async function deleteOwner() {
           </svg>
           Add new owner
         </button>
+        </template>
         </div>
       </Transition>
     </Teleport>

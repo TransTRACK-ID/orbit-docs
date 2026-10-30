@@ -2,10 +2,11 @@ import { defineEventHandler, getQuery } from "h3";
 import { getDb } from "~/server/database";
 import { owners } from "~/server/database/schema";
 import { desc, sql } from "drizzle-orm";
-import { requirePermission } from "~/server/utils/rbac";
+import { requireAnyPermission } from "~/server/utils/rbac";
 
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, "apps:read");
+  // App editors pick an owner in the app form, so they need the list too.
+  await requireAnyPermission(event, ["owners:read", "apps:write"]);
   const db = getDb();
   const query = getQuery(event);
   const search = typeof query.search === "string" ? query.search : "";

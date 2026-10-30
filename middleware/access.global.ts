@@ -10,7 +10,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   const routePermissionMap: Record<string, string> = {
     "/apps": "apps:read",
-    "/owners": "apps:write",
+    "/owners": "owners:read",
     "/versions": "versions:read",
     "/releases": "releases:read",
     "/changelogs": "changelogs:read",

@@ -19,6 +19,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     ],
   },
   {
+    id: "owners",
+    label: "Owners",
+    permissions: [
+      { key: "owners:read", label: "View", description: "Browse app owners" },
+      { key: "owners:write", label: "Manage", description: "Create, update, and remove owners" },
+    ],
+  },
+  {
     id: "versions",
     label: "Versions",
     permissions: [
@@ -162,6 +170,7 @@ function keys(...items: PermissionKey[]): Record<PermissionKey, boolean> {
 export const DEFAULT_ROLE_PERMISSION_MATRIX: RolePermissionMatrix = {
   viewer: keys(
     "apps:read",
+    "owners:read",
     "versions:read",
     "releases:read",
     "changelogs:read",
@@ -174,6 +183,7 @@ export const DEFAULT_ROLE_PERMISSION_MATRIX: RolePermissionMatrix = {
   ),
   tech_writer: keys(
     "apps:read",
+    "owners:read",
     "versions:read",
     "releases:read",
     "changelogs:read",
@@ -191,6 +201,8 @@ export const DEFAULT_ROLE_PERMISSION_MATRIX: RolePermissionMatrix = {
   product_manager: keys(
     "apps:read",
     "apps:write",
+    "owners:read",
+    "owners:write",
     "versions:read",
     "versions:write",
     "versions:publish",
@@ -218,6 +230,8 @@ export const DEFAULT_ROLE_PERMISSION_MATRIX: RolePermissionMatrix = {
     "apps:read",
     "apps:write",
     "apps:delete",
+    "owners:read",
+    "owners:write",
     "versions:read",
     "versions:write",
     "versions:publish",
@@ -288,6 +302,7 @@ export function roleHasPermission(
 
 export const ROUTE_PERMISSIONS: Record<string, PermissionKey> = {
   "/apps": "apps:read",
+  "/owners": "owners:read",
   "/versions": "versions:read",
   "/releases": "releases:read",
   "/changelogs": "changelogs:read",

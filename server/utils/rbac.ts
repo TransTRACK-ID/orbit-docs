@@ -182,6 +182,35 @@ export async function requirePermission(
   return context;
 }
 
+export async function requireAnyPermission(
+  event: H3Event,
+  permissions: PermissionKey[]
+): Promise<AuthContext> {
+  const context = await getAuthContext(event);
+
+  if (context.isSuperAdmin) {
+    return context;
+  }
+
+  if (!context.role) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Forbidden",
+      message: "You are not a member of this workspace.",
+    });
+  }
+
+  if (!permissions.some((p) => roleHasPermission(context.role!, p, context.matrix))) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Forbidden",
+      message: `Missing permission: ${permissions.join(" or ")}`,
+    });
+  }
+
+  return context;
+}
+
 export async function requireSuperAdmin(event: H3Event): Promise<AuthContext> {
   const context = await getAuthContext(event);
 

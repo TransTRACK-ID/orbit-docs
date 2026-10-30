@@ -4,7 +4,7 @@ import { owners } from "~/server/database/schema";
 import { requirePermission } from "~/server/utils/rbac";
 
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, "apps:write");
+  await requirePermission(event, "owners:write");
   const db = getDb();
   const body = await readBody(event);
 

@@ -27,6 +27,28 @@ describe("permissions", () => {
     );
   });
 
+  it("lets every role view owners but only PM and admin manage them by default", () => {
+    expect(roleHasPermission("viewer", "owners:read", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(true);
+    expect(roleHasPermission("tech_writer", "owners:write", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(
+      false
+    );
+    expect(roleHasPermission("product_manager", "owners:write", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(
+      true
+    );
+    expect(roleHasPermission("admin", "owners:write", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(true);
+  });
+
+  it("lets every role view owners but only PM and admin manage them by default", () => {
+    expect(roleHasPermission("viewer", "owners:read", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(true);
+    expect(roleHasPermission("tech_writer", "owners:write", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(
+      false
+    );
+    expect(roleHasPermission("product_manager", "owners:write", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(
+      true
+    );
+    expect(roleHasPermission("admin", "owners:write", DEFAULT_ROLE_PERMISSION_MATRIX)).toBe(true);
+  });
+
   it("merges stored overrides without dropping defaults", () => {
     const merged = mergeMatrixWithDefaults({
       viewer: { "docs:write": true },

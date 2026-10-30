@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { requirePermission } from "~/server/utils/rbac";
 
 export default defineEventHandler(async (event) => {
-  await requirePermission(event, "apps:read");
+  await requirePermission(event, "owners:read");
   const db = getDb();
   const id = getRouterParam(event, "id");
 

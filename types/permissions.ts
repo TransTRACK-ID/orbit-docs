@@ -4,6 +4,8 @@ export type PermissionKey =
   | "apps:read"
   | "apps:write"
   | "apps:delete"
+  | "owners:read"
+  | "owners:write"
   | "versions:read"
   | "versions:write"
   | "versions:publish"
