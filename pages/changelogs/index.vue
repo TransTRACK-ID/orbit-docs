@@ -1655,10 +1655,10 @@ function canViewHistoryDiff(): boolean {
   background: var(--muted);
 }
 .history-dot-publish {
-  background: oklch(65% 0.18 145);
+  background: var(--success);
 }
 .history-dot-amber {
-  background: oklch(65% 0.15 75);
+  background: var(--warning);
 }
 .history-dot-purple {
   background: oklch(55% 0.2 295);
@@ -1890,7 +1890,7 @@ function canViewHistoryDiff(): boolean {
 }
 .pill-red {
   background: color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent);
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
 }
 
 /* Empty state / onboarding */
@@ -2072,31 +2072,31 @@ function canViewHistoryDiff(): boolean {
   border-color: var(--fg);
 }
 .format-hint-tag.tag-added {
-  background: color-mix(in oklch, oklch(65% 0.14 145) 8%, transparent);
-  border-color: color-mix(in oklch, oklch(65% 0.14 145) 20%, var(--border));
-  color: oklch(50% 0.12 145);
+  background: color-mix(in oklch, var(--success) 8%, transparent);
+  border-color: color-mix(in oklch, var(--success) 20%, var(--border));
+  color: var(--success-text);
 }
 .format-hint-tag.tag-added:hover {
-  background: color-mix(in oklch, oklch(65% 0.14 145) 15%, transparent);
-  border-color: color-mix(in oklch, oklch(65% 0.14 145) 35%, var(--border));
+  background: color-mix(in oklch, var(--success) 15%, transparent);
+  border-color: color-mix(in oklch, var(--success) 35%, var(--border));
 }
 .format-hint-tag.tag-fixed {
   background: color-mix(in oklch, var(--info-text) 8%, transparent);
   border-color: color-mix(in oklch, var(--info-text) 20%, var(--border));
-  color: oklch(45% 0.12 255);
+  color: var(--info-text);
 }
 .format-hint-tag.tag-fixed:hover {
   background: color-mix(in oklch, var(--info-text) 15%, transparent);
   border-color: color-mix(in oklch, var(--info-text) 35%, var(--border));
 }
 .format-hint-tag.tag-changed {
-  background: color-mix(in oklch, oklch(70% 0.12 85) 8%, transparent);
-  border-color: color-mix(in oklch, oklch(70% 0.12 85) 20%, var(--border));
-  color: oklch(55% 0.10 85);
+  background: color-mix(in oklch, var(--warning) 8%, transparent);
+  border-color: color-mix(in oklch, var(--warning) 20%, var(--border));
+  color: var(--warning-text);
 }
 .format-hint-tag.tag-changed:hover {
-  background: color-mix(in oklch, oklch(70% 0.12 85) 15%, transparent);
-  border-color: color-mix(in oklch, oklch(70% 0.12 85) 35%, var(--border));
+  background: color-mix(in oklch, var(--warning) 15%, transparent);
+  border-color: color-mix(in oklch, var(--warning) 35%, var(--border));
 }
 .format-hint-tag.tag-deprecated {
   background: color-mix(in oklch, oklch(60% 0.14 300) 8%, transparent);
@@ -2108,13 +2108,13 @@ function canViewHistoryDiff(): boolean {
   border-color: color-mix(in oklch, oklch(60% 0.14 300) 35%, var(--border));
 }
 .format-hint-tag.tag-security {
-  background: color-mix(in oklch, oklch(60% 0.14 25) 8%, transparent);
-  border-color: color-mix(in oklch, oklch(60% 0.14 25) 20%, var(--border));
-  color: oklch(50% 0.12 25);
+  background: color-mix(in oklch, var(--error) 8%, transparent);
+  border-color: color-mix(in oklch, var(--error) 20%, var(--border));
+  color: var(--error-text);
 }
 .format-hint-tag.tag-security:hover {
-  background: color-mix(in oklch, oklch(60% 0.14 25) 15%, transparent);
-  border-color: color-mix(in oklch, oklch(60% 0.14 25) 35%, var(--border));
+  background: color-mix(in oklch, var(--error) 15%, transparent);
+  border-color: color-mix(in oklch, var(--error) 35%, var(--border));
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1545,7 +1545,7 @@ h2 {
   border-color: oklch(55% 0.16 25);
 }
 .btn-danger:hover {
-  background: oklch(50% 0.18 25);
+  background: var(--error-text);
 }
 
 .card {
@@ -1586,7 +1586,7 @@ h2 {
   color: var(--muted);
 }
 .pill-red {
-  background: color-mix(in oklch, oklch(55% 0.2 25) 12%, transparent);
+  background: color-mix(in oklch, var(--error) 12%, transparent);
   color: var(--error-text);
 }
 .pill-purple {
@@ -2253,7 +2253,7 @@ h2 {
   color: oklch(55% 0.14 300);
 }
 .rl-tag-security {
-  background: color-mix(in oklch, oklch(55% 0.2 25) 12%, transparent);
+  background: color-mix(in oklch, var(--error) 12%, transparent);
   color: var(--error-text);
 }
 .rl-tag-muted {

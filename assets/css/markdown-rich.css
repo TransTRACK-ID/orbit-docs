@@ -31,7 +31,7 @@
 .hljs-literal,
 .hljs-doctag,
 .hljs-regexp {
-  color: oklch(50% 0.16 255);
+  color: var(--info-text);
 }
 
 .hljs-title,
@@ -48,7 +48,7 @@
 .hljs-template-variable,
 .hljs-class .hljs-title,
 .hljs-type {
-  color: oklch(55% 0.14 80);
+  color: var(--warning-text);
 }
 
 .hljs-symbol,
@@ -171,7 +171,7 @@
   background: color-mix(in oklch, var(--info) 8%, transparent);
 }
 .markdown-alert-note .markdown-alert-title {
-  color: oklch(55% 0.16 255);
+  color: var(--info);
 }
 .dark .markdown-alert-note {
   background: color-mix(in oklch, var(--info) 12%, transparent);
@@ -212,11 +212,11 @@
 
 /* ── WARNING ─────────────────────────────────────────────────── */
 .markdown-alert-warning {
-  border-color: oklch(70% 0.16 85);
-  background: color-mix(in oklch, oklch(70% 0.16 85) 8%, transparent);
+  border-color: var(--warning);
+  background: color-mix(in oklch, var(--warning) 8%, transparent);
 }
 .markdown-alert-warning .markdown-alert-title {
-  color: oklch(60% 0.14 85);
+  color: var(--warning-text);
 }
 .dark .markdown-alert-warning {
   background: color-mix(in oklch, oklch(70% 0.16 85) 12%, transparent);
@@ -268,8 +268,8 @@
 }
 
 .task-list-checkbox:checked {
-  background: oklch(55% 0.16 255);
-  border-color: oklch(55% 0.16 255);
+  background: var(--info);
+  border-color: var(--info);
 }
 
 .task-list-checkbox:checked::after {

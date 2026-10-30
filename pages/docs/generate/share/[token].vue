@@ -180,7 +180,7 @@ useSeoMeta({
 }
 
 .share-page-state--error .share-page-state-title {
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
 }
 </style>
 

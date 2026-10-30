@@ -2085,9 +2085,9 @@ const lastModified = computed(() => {
 }
 
 .adr-binding-preview.binding {
-  border-color: color-mix(in oklch, oklch(45% 0.12 145) 35%, var(--border));
-  color: oklch(45% 0.12 145);
-  background: oklch(97% 0.03 145);
+  border-color: color-mix(in oklch, var(--success-text) 35%, var(--border));
+  color: var(--success-text);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
 }
 
 .embed-status {
@@ -2129,12 +2129,12 @@ const lastModified = computed(() => {
 }
 
 .embed-status--indexed .embed-status-dot {
-  background: oklch(45% 0.12 145);
+  background: var(--success-text);
 }
 
 .embed-status--pending .embed-status-dot,
 .embed-status--stale .embed-status-dot {
-  background: oklch(55% 0.14 75);
+  background: var(--warning-text);
 }
 
 .embed-status--no_api_key .embed-status-dot {

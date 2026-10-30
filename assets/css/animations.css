@@ -70,10 +70,10 @@
 
 @keyframes pulse-dot {
   0%, 100% {
-    box-shadow: 0 0 0 3px color-mix(in oklch, oklch(60% 0.2 145) 25%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklch, var(--success) 25%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 6px color-mix(in oklch, oklch(60% 0.2 145) 10%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in oklch, var(--success) 10%, transparent);
   }
 }
 

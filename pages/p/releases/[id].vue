@@ -480,24 +480,24 @@ async function copyEmbedCode() {
   border-radius: 6px;
 }
 .rd-tag-added {
-  background: color-mix(in oklch, oklch(65% 0.14 145) 8%, transparent);
-  color: oklch(50% 0.12 145);
+  background: color-mix(in oklch, var(--success) 8%, transparent);
+  color: var(--success-text);
 }
 .rd-tag-fixed {
   background: color-mix(in oklch, var(--info-text) 8%, transparent);
-  color: oklch(45% 0.12 255);
+  color: var(--info-text);
 }
 .rd-tag-changed {
-  background: color-mix(in oklch, oklch(70% 0.12 85) 8%, transparent);
-  color: oklch(55% 0.10 85);
+  background: color-mix(in oklch, var(--warning) 8%, transparent);
+  color: var(--warning-text);
 }
 .rd-tag-deprecated {
   background: color-mix(in oklch, oklch(60% 0.14 300) 8%, transparent);
   color: oklch(50% 0.12 300);
 }
 .rd-tag-security {
-  background: color-mix(in oklch, oklch(60% 0.14 25) 8%, transparent);
-  color: oklch(50% 0.12 25);
+  background: color-mix(in oklch, var(--error) 8%, transparent);
+  color: var(--error-text);
 }
 .rd-tag-muted {
   background: var(--fg-soft);

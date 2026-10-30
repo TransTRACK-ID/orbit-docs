@@ -556,18 +556,18 @@ const responseStatusClass = (statusCode: string): string => {
 }
 
 .status-2xx {
-  background: color-mix(in oklch, oklch(55% 0.16 145) 12%, transparent);
-  color: oklch(55% 0.16 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success);
 }
 
 .status-3xx {
-  background: color-mix(in oklch, oklch(55% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.16 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info);
 }
 
 .status-4xx {
-  background: color-mix(in oklch, oklch(60% 0.16 85) 15%, transparent);
-  color: oklch(60% 0.16 85);
+  background: color-mix(in oklch, var(--warning-text) 15%, transparent);
+  color: var(--warning-text);
 }
 
 .status-5xx {

@@ -220,7 +220,7 @@ const groupCount = computed(() => groups.value.length);
   padding: 2px 10px;
   border-radius: 100px;
   background: color-mix(in oklch, var(--warning) 18%, transparent);
-  color: oklch(45% 0.12 85);
+  color: var(--warning-text);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.02em;

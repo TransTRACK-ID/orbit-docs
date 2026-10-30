@@ -1536,8 +1536,8 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 .block-action-danger:hover {
-  background: oklch(95% 0.02 25);
-  color: oklch(50% 0.15 25);
+  background: color-mix(in oklch, var(--error) 8%, transparent);
+  color: var(--error-text);
 }
 .block-content {
   padding: 12px;
@@ -1836,7 +1836,7 @@ onBeforeUnmount(() => {
   border-color: oklch(55% 0.16 25);
 }
 .btn-danger:hover {
-  background: oklch(50% 0.18 25);
+  background: var(--error-text);
 }
 
 /* ═══ Pills ════════════════════════════════════════════════════ */
@@ -1858,12 +1858,12 @@ onBeforeUnmount(() => {
   color: var(--success-text);
 }
 .pill-amber {
-  background: color-mix(in oklch, oklch(70% 0.14 85) 12%, transparent);
-  color: oklch(55% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 .pill-red {
   background: color-mix(in oklch, oklch(60% 0.18 25) 12%, transparent);
-  color: oklch(55% 0.14 25);
+  color: var(--error);
 }
 .pill-purple {
   background: color-mix(in oklch, oklch(60% 0.16 300) 12%, transparent);

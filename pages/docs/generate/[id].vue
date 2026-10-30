@@ -1414,8 +1414,8 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .logs-dot.active {
-  background: oklch(60% 0.2 145);
-  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(60% 0.2 145) 25%, transparent);
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--success) 25%, transparent);
   animation: pulse-dot 1.5s ease-in-out infinite;
 }
 
@@ -1428,8 +1428,8 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 @keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklch, oklch(60% 0.2 145) 25%, transparent); }
-  50% { box-shadow: 0 0 0 6px color-mix(in oklch, oklch(60% 0.2 145) 10%, transparent); }
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklch, var(--success) 25%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--success) 10%, transparent); }
 }
 
 .logs-count {
@@ -1513,8 +1513,8 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .activity-row.stale {
-  background: color-mix(in oklch, oklch(70% 0.16 75) 8%, transparent);
-  border-color: color-mix(in oklch, oklch(70% 0.16 75) 30%, transparent);
+  background: color-mix(in oklch, var(--warning) 8%, transparent);
+  border-color: color-mix(in oklch, var(--warning) 30%, transparent);
 }
 
 .activity-spinner {
@@ -1529,7 +1529,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 
 .activity-row.stale .activity-spinner {
   animation-duration: 2.5s;
-  border-top-color: oklch(70% 0.16 75);
+  border-top-color: var(--warning);
 }
 
 @keyframes activity-spin {
@@ -1561,8 +1561,8 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .meta-pill.meta-warn {
-  background: color-mix(in oklch, oklch(70% 0.16 75) 14%, transparent);
-  color: oklch(55% 0.14 75);
+  background: color-mix(in oklch, var(--warning) 14%, transparent);
+  color: var(--warning-text);
 }
 
 .preview-toggle {
@@ -1572,7 +1572,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 .warn-msg {
   margin: 0;
   font-size: 12px;
-  color: oklch(55% 0.14 75);
+  color: var(--warning-text);
   line-height: 1.45;
 }
 
@@ -1678,7 +1678,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 
 .pill-danger {
   background: color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent);
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
 }
 
 .pill-muted {
@@ -1725,7 +1725,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .btn-danger:hover {
-  background: oklch(50% 0.18 25);
+  background: var(--error-text);
 }
 
 .btn-ghost {
@@ -1881,7 +1881,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .debug-session-error .debug-text {
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
 }
 
 .debug-cursor-error .debug-type,
@@ -1891,7 +1891,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 
 .debug-cursor-error .debug-text,
 .debug-cursor-stderr .debug-text {
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
 }
 
 .debug-session-idle .debug-type {

@@ -189,7 +189,7 @@ function publishedSlugs(slugs: string[] | undefined): string[] {
   padding: 1px 5px;
   border-radius: 999px;
   vertical-align: middle;
-  background: color-mix(in oklch, oklch(65% 0.14 85) 20%, transparent);
-  color: oklch(48% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 20%, transparent);
+  color: var(--warning-text);
 }
 </style>

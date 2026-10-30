@@ -541,7 +541,7 @@ h2 {
   border-color: oklch(55% 0.16 25);
 }
 .btn-danger:hover {
-  background: oklch(50% 0.18 25);
+  background: var(--error-text);
 }
 .action-btn {
   padding: 4px;

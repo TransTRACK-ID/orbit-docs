@@ -230,13 +230,13 @@ watch(
 }
 
 .review-status-btn.status-approved.active {
-  color: oklch(45% 0.12 145);
+  color: var(--success-text);
   border-color: color-mix(in oklch, var(--success) 35%, var(--border));
   background: color-mix(in oklch, var(--success) 10%, var(--surface));
 }
 
 .review-status-btn.status-changes_requested.active {
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
   border-color: color-mix(in oklch, oklch(55% 0.16 25) 35%, var(--border));
   background: color-mix(in oklch, oklch(55% 0.16 25) 10%, var(--surface));
 }

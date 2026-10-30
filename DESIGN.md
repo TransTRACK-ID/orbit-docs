@@ -13,7 +13,7 @@ colors:
   success: "oklch(60% 0.18 145)"
   success-text: "oklch(50% 0.14 145)"
   warning: "oklch(75% 0.14 85)"
-  warning-text: "oklch(60% 0.12 85)"
+  warning-text: "oklch(50% 0.12 85)"
   info: "oklch(60% 0.16 255)"
   info-text: "oklch(55% 0.14 255)"
   error: "oklch(55% 0.18 25)"

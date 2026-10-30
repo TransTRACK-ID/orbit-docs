@@ -647,7 +647,7 @@ async function handleReopenComment(commentId: string) {
 }
 
 .repo-meta-warn {
-  color: oklch(52% 0.12 75);
+  color: var(--warning-text);
   max-width: 320px;
   text-align: right;
   line-height: 1.4;
@@ -655,7 +655,7 @@ async function handleReopenComment(commentId: string) {
 }
 
 .repo-meta-error {
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
   max-width: 280px;
   text-align: right;
   line-height: 1.4;
@@ -671,15 +671,15 @@ async function handleReopenComment(commentId: string) {
 }
 
 .repo-pr-status--success {
-  color: oklch(45% 0.12 145);
+  color: var(--success-text);
 }
 
 .repo-pr-status--warn {
-  color: oklch(50% 0.1 75);
+  color: var(--warning-text);
 }
 
 .repo-pr-status--error {
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
 }
 
 .repo-pr-status--muted {
@@ -739,7 +739,7 @@ async function handleReopenComment(commentId: string) {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   background: color-mix(in oklch, oklch(55% 0.16 25) 14%, var(--surface));
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
 }
 
 .doc-tab-badge {
@@ -754,7 +754,7 @@ async function handleReopenComment(commentId: string) {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   background: color-mix(in oklch, oklch(55% 0.16 25) 14%, var(--surface));
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
 }
 
 .viewer-empty {

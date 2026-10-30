@@ -32,7 +32,7 @@
   --od-success-text: oklch(50% 0.14 145);
   --od-success-soft: color-mix(in oklch, var(--od-success) 10%, transparent);
   --od-warning: oklch(75% 0.14 85);
-  --od-warning-text: oklch(60% 0.12 85);
+  --od-warning-text: oklch(50% 0.12 85);
   --od-info: oklch(60% 0.16 255);
   --od-info-text: oklch(55% 0.14 255);
 

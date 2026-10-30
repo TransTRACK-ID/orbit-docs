@@ -899,7 +899,7 @@ defineExpose({
   border-radius: var(--radius);
   background: color-mix(in oklch, var(--warning) 10%, transparent);
   border: 1px solid color-mix(in oklch, var(--warning) 24%, transparent);
-  color: oklch(50% 0.12 85);
+  color: var(--warning-text);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -1416,7 +1416,7 @@ defineExpose({
 
 /* ── Callout block (Notion-style) ─────────────────────────── */
 .editor-js-container .cdx-callout {
-  --callout-color: oklch(65% 0.15 250);
+  --callout-color: var(--info);
   position: relative;
   display: flex;
   align-items: flex-start;
@@ -1433,7 +1433,7 @@ defineExpose({
 }
 
 .editor-js-container .cdx-callout--tip {
-  --callout-color: oklch(65% 0.16 150);
+  --callout-color: var(--success);
 }
 
 .editor-js-container .cdx-callout--important {
@@ -1441,7 +1441,7 @@ defineExpose({
 }
 
 .editor-js-container .cdx-callout--warning {
-  --callout-color: oklch(70% 0.14 85);
+  --callout-color: var(--warning);
 }
 
 .editor-js-container .cdx-callout--caution {

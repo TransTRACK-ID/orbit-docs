@@ -260,9 +260,9 @@ useHead(() => ({
   font-family: var(--font-mono);
   text-align: center;
 }
-.method-get { background: color-mix(in oklch, oklch(65% 0.15 145) 18%, transparent); color: oklch(45% 0.13 145); }
+.method-get { background: color-mix(in oklch, var(--success) 18%, transparent); color: var(--success-text); }
 .method-post { background: color-mix(in oklch, var(--info) 18%, transparent); color: var(--info-text); }
-.method-put { background: color-mix(in oklch, oklch(70% 0.15 85) 18%, transparent); color: oklch(48% 0.13 85); }
+.method-put { background: color-mix(in oklch, var(--warning) 18%, transparent); color: var(--warning-text); }
 .method-patch { background: color-mix(in oklch, oklch(70% 0.14 60) 18%, transparent); color: oklch(50% 0.12 60); }
 .method-delete { background: color-mix(in oklch, var(--error) 18%, transparent); color: var(--error-text); }
 .method-other { background: var(--fg-soft); color: var(--muted); }

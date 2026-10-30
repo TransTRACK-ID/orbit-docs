@@ -741,8 +741,8 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
 }
 
 .pill-warn {
-  background: color-mix(in oklch, oklch(75% 0.15 85) 20%, transparent);
-  color: oklch(45% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 20%, transparent);
+  color: var(--warning-text);
 }
 
 .btn {
@@ -856,11 +856,11 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
 }
 
 .check-error .check-message {
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
 }
 
 .check-success .check-message {
-  color: oklch(45% 0.12 145);
+  color: var(--success-text);
 }
 
 .check-details {

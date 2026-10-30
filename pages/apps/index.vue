@@ -875,7 +875,7 @@ const statusLabel: Record<string, string> = {
   border-radius: var(--radius);
   background: color-mix(in oklch, var(--info) 10%, var(--surface));
   font-size: 12px;
-  color: oklch(45% 0.12 255);
+  color: var(--info-text);
 }
 
 .app-version-strip__by {

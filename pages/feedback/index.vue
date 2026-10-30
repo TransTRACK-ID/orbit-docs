@@ -844,7 +844,7 @@ const categoryClass: Record<string, string> = {
 }
 .pill-red {
   background: color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent);
-  color: oklch(50% 0.14 25);
+  color: var(--error-text);
 }
 .pill-amber {
   background: color-mix(in oklch, var(--warning) 12%, transparent);
@@ -947,7 +947,7 @@ const categoryClass: Record<string, string> = {
   border-color: oklch(55% 0.16 25);
 }
 .btn-danger:hover {
-  background: oklch(50% 0.18 25);
+  background: var(--error-text);
 }
 .btn:disabled {
   opacity: 0.6;

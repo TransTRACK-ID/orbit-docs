@@ -59,7 +59,7 @@
   border-color: oklch(55% 0.16 25);
 }
 .btn-danger:hover:not(:disabled) {
-  background: oklch(50% 0.18 25);
+  background: var(--error-text);
 }
 .btn-sm {
   padding: 5px 11px;

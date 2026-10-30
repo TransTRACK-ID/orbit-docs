@@ -722,7 +722,7 @@ tr.is-selected {
 }
 
 .adr-binding-yes {
-  color: oklch(45% 0.12 145);
+  color: var(--success-text);
   font-weight: 700;
 }
 
@@ -776,18 +776,18 @@ tr.is-selected {
 }
 
 .pill-green {
-  background: oklch(95% 0.04 145);
-  color: oklch(45% 0.12 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 
 .pill-blue {
-  background: oklch(95% 0.04 250);
-  color: oklch(50% 0.12 250);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 
 .pill-amber {
-  background: oklch(95% 0.04 85);
-  color: oklch(50% 0.1 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 
 .btn {

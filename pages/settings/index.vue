@@ -2355,7 +2355,7 @@ function getCallbackUrl(provider: SsoProvider): string {
   border-color: var(--error);
 }
 .btn-danger:hover:not(:disabled) {
-  background: oklch(45% 0.18 25);
+  background: var(--error-text);
 }
 .btn-sm {
   padding: 6px 12px;
@@ -2456,16 +2456,16 @@ function getCallbackUrl(provider: SsoProvider): string {
   font-weight: 500;
 }
 .pill-green {
-  background: oklch(95% 0.04 145);
-  color: oklch(45% 0.12 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 .pill-blue {
-  background: oklch(95% 0.04 250);
-  color: oklch(50% 0.12 250);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 .pill-amber {
-  background: oklch(95% 0.04 85);
-  color: oklch(50% 0.1 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 .pill-red {
   background: color-mix(in oklch, var(--error) 12%, transparent);
