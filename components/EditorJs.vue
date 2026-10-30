@@ -1295,7 +1295,7 @@ defineExpose({
 
 /* Text variant tune styles */
 .editor-js-container .cdx-block[data-tune="text-variant"] {
-  border-left: 3px solid var(--accent);
+  border: 1px solid color-mix(in oklch, var(--accent) 25%, transparent);
   background: var(--accent-soft);
   border-radius: var(--radius);
   padding: 12px 16px;

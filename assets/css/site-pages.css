@@ -135,6 +135,7 @@
 .sites-page .pill-green { background: color-mix(in oklch, oklch(65% 0.15 145) 15%, transparent); color: oklch(45% 0.13 145); }
 .sites-page .pill-blue { background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent); color: oklch(55% 0.14 255); }
 .sites-page .pill-amber { background: color-mix(in oklch, oklch(75% 0.15 75) 15%, transparent); color: oklch(45% 0.13 75); }
+.sites-page .pill-accent { background: var(--accent-soft); color: var(--accent); }
 
 .sites-page .modal-overlay {
   position: fixed;
@@ -296,6 +297,7 @@
 }
 .site-editor .pill-green { background: color-mix(in oklch, oklch(65% 0.15 145) 15%, transparent); color: oklch(45% 0.13 145); }
 .site-editor .pill-blue { background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent); color: oklch(55% 0.14 255); }
+.site-editor .pill-accent { background: var(--accent-soft); color: var(--accent); }
 
 .site-editor .spec-textarea {
   min-height: 280px;

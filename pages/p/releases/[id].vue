@@ -409,7 +409,7 @@ async function copyEmbedCode() {
   overflow-x: auto;
 }
 .rd-body :deep(code) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 14px;
   background: var(--bg);
   padding: 2px 6px;

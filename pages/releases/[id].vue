@@ -1622,18 +1622,18 @@ onBeforeUnmount(() => {
 }
 .block-code-lang {
   width: 180px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 .block-code-textarea {
   min-height: 120px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
 }
 .block-quote-textarea {
   min-height: 60px;
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--border);
   padding-left: 12px;
 }
 .block-divider-preview {
@@ -1980,7 +1980,7 @@ onBeforeUnmount(() => {
 .article-body blockquote {
   margin: 24px 0;
   padding: 12px 20px;
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--border);
   background: var(--bg);
   border-radius: 0 8px 8px 0;
   font-style: italic;
@@ -1993,7 +1993,7 @@ onBeforeUnmount(() => {
   overflow-x: auto;
 }
 .article-body code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   background: var(--bg);
   padding: 2px 6px;
