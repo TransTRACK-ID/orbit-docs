@@ -196,6 +196,15 @@ function timeAgo(dateStr: string | null) {
           <NuxtLink :to="`/docs?siteId=${site.id}`" class="site-card-action">
             View docs →
           </NuxtLink>
+          <button
+            v-if="canWriteDocSites"
+            type="button"
+            class="site-card-delete"
+            @click.stop.prevent="confirmDelete(site)"
+          >
+            <IconsTrash size="14" />
+            Delete
+          </button>
         </div>
       </NuxtLink>
     </div>

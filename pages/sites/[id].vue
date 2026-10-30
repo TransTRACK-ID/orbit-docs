@@ -28,6 +28,7 @@ const {
   fetchDocSite,
   fetchSitePages,
   updateDocSite,
+  deleteDocSite,
   generateOpenApi,
   clearOpenApi,
 } = useDocSites();
@@ -50,6 +51,8 @@ const openapiResult = ref<{ operationsCount: number; tags: string[] } | null>(nu
 const slugError = ref("");
 const nameError = ref(false);
 const loaded = ref(false);
+const showDeleteModal = ref(false);
+const isDeleting = ref(false);
 let prevName = "";
 
 const newPageTitle = ref("");
@@ -359,6 +362,24 @@ async function removeApiReference() {
   }
 }
 
+function confirmDelete() {
+  showDeleteModal.value = true;
+}
+
+async function doDelete() {
+  if (!currentSite.value || isDeleting.value) return;
+  isDeleting.value = true;
+  try {
+    await deleteDocSite(currentSite.value.id);
+    showDeleteModal.value = false;
+    await router.push("/sites");
+  } catch {
+    // toast handled in composable
+  } finally {
+    isDeleting.value = false;
+  }
+}
+
 function onSpecFile(e: Event) {
   const input = e.target as HTMLInputElement;
   const file = input.files?.[0];
@@ -395,6 +416,15 @@ function onSpecFile(e: Event) {
         >
           Public View
         </NuxtLink>
+        <button
+          v-if="canWriteDocSites && currentSite"
+          type="button"
+          class="btn btn-danger"
+          :disabled="isDeleting"
+          @click="confirmDelete"
+        >
+          Delete
+        </button>
         <button v-if="canWriteDocSites" type="button" class="btn btn-primary" :disabled="isSaving" @click="save">
           <span v-if="isSaving">Saving…</span>
           <span v-else>Save</span>
@@ -638,6 +668,24 @@ function onSpecFile(e: Event) {
           >
             <span v-if="isBindingPage">Adding…</span>
             <span v-else>Add selected{{ selectedCount ? ` (${selectedCount})` : "" }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showDeleteModal" class="modal-overlay" @click="showDeleteModal = false">
+      <div class="modal-dialog" @click.stop>
+        <div class="modal-header">
+          <h3>Delete doc site</h3>
+          <p class="modal-desc">
+            Delete <strong>{{ currentSite?.name }}</strong>? Docs in this site will be unbound, not deleted. This cannot be undone.
+          </p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" @click="showDeleteModal = false">Cancel</button>
+          <button type="button" class="btn btn-danger" :disabled="isDeleting" @click="doDelete">
+            <span v-if="isDeleting">Deleting…</span>
+            <span v-else>Delete</span>
           </button>
         </div>
       </div>
