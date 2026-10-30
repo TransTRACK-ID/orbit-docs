@@ -10,10 +10,35 @@ import {
   isIndexableDocType,
   type IndexableDocType,
 } from "~/server/lib/doc-chunking";
-import { getCustomOpenAI } from "~/server/lib/openai";
+import { getEmbeddingClient } from "~/server/lib/openai";
 
-const EMBEDDING_DIMENSIONS = 1536;
-const EMBEDDING_BATCH_SIZE = 64;
+function readPositiveIntEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  const parsed = raw ? Number.parseInt(raw, 10) : Number.NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function getEmbeddingDimensions(): number {
+  return readPositiveIntEnv("EMBEDDING_DIMENSIONS", 1536);
+}
+
+/** Parses `vector(1024)` from pg `format_type`; null when the column type is unknown. */
+export function parseVectorTypeDimensions(type: string | null | undefined): number | null {
+  const match = type?.match(/^vector\((\d+)\)$/);
+  return match ? Number.parseInt(match[1]!, 10) : null;
+}
+
+function getEmbeddingBatchSize(): number {
+  return readPositiveIntEnv("EMBEDDING_BATCH_SIZE", 32);
+}
+
+function getQueryEmbeddingTimeoutMs(): number {
+  return readPositiveIntEnv("EMBEDDING_TIMEOUT_MS", 3000);
+}
+
+function getIndexEmbeddingTimeoutMs(): number {
+  return readPositiveIntEnv("EMBEDDING_INDEX_TIMEOUT_MS", 120_000);
+}
 
 export function isSemanticSearchEnabled(): boolean {
   return (process.env.SEMANTIC_SEARCH ?? "true").toLowerCase() !== "false";
@@ -23,12 +48,16 @@ export function isEmbedOnSaveEnabled(): boolean {
   return (process.env.EMBED_ON_SAVE ?? "true").toLowerCase() !== "false";
 }
 
-export function hasEmbeddingApiKey(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+export function isEmbeddingConfigured(): boolean {
+  return Boolean(process.env.EMBEDDING_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim());
 }
 
-function getEmbeddingModelName(): string {
-  return process.env.OPENAI_EMBEDDING_MODEL?.trim() || "text-embedding-3-small";
+export function getEmbeddingModelName(): string {
+  return (
+    process.env.EMBEDDING_MODEL?.trim() ||
+    process.env.OPENAI_EMBEDDING_MODEL?.trim() ||
+    "text-embedding-3-small"
+  );
 }
 
 export function contentHash(text: string): string {
@@ -39,22 +68,37 @@ function formatVector(values: number[]): string {
   return `[${values.join(",")}]`;
 }
 
-export async function embedTexts(texts: string[]): Promise<number[][]> {
+export async function embedTexts(
+  texts: string[],
+  options: { purpose?: "query" | "index" } = {},
+): Promise<number[][]> {
   if (texts.length === 0) return [];
-  if (!hasEmbeddingApiKey()) {
-    throw new Error("OPENAI_API_KEY is required for embeddings");
+  if (!isEmbeddingConfigured()) {
+    throw new Error("EMBEDDING_API_KEY (or OPENAI_API_KEY) is required for embeddings");
   }
 
-  const model = getCustomOpenAI().embedding(getEmbeddingModelName());
+  const isQuery = options.purpose === "query";
+  const timeoutMs = isQuery ? getQueryEmbeddingTimeoutMs() : getIndexEmbeddingTimeoutMs();
+  const model = getEmbeddingClient().embedding(getEmbeddingModelName());
+  const batchSize = getEmbeddingBatchSize();
   const allEmbeddings: number[][] = [];
 
-  for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
-    const batch = texts.slice(i, i + EMBEDDING_BATCH_SIZE);
+  for (let i = 0; i < texts.length; i += batchSize) {
+    const batch = texts.slice(i, i + batchSize);
     const { embeddings } = await embedMany({
       model,
       values: batch,
+      maxRetries: isQuery ? 0 : 2,
+      abortSignal: AbortSignal.timeout(timeoutMs),
     });
     allEmbeddings.push(...embeddings);
+  }
+
+  const expected = getEmbeddingDimensions();
+  if (allEmbeddings.some((e) => e.length !== expected)) {
+    throw new Error(
+      `Unexpected embedding dimensions from ${getEmbeddingModelName()} (expected ${expected}, set EMBEDDING_DIMENSIONS)`,
+    );
   }
 
   return allEmbeddings;
@@ -106,7 +150,7 @@ export async function indexDocChunks(docId: string): Promise<IndexDocChunksResul
     return { indexed: 0, skipped: true, reason: "empty_content" };
   }
 
-  if (!hasEmbeddingApiKey()) {
+  if (!isEmbeddingConfigured()) {
     return { indexed: 0, skipped: true, reason: "missing_api_key" };
   }
 
@@ -116,50 +160,47 @@ export async function indexDocChunks(docId: string): Promise<IndexDocChunksResul
     return { indexed: 0, skipped: true, reason: "no_chunks" };
   }
 
-  const embeddings = await embedTexts(chunks.map((c) => c.content));
-  if (embeddings.some((e) => e.length !== EMBEDDING_DIMENSIONS)) {
-    throw new Error(`Unexpected embedding dimensions (expected ${EMBEDDING_DIMENSIONS})`);
-  }
-
-  await deleteDocChunks(docId);
+  const embeddings = await embedTexts(
+    chunks.map((c) => c.content),
+    { purpose: "index" },
+  );
 
   const now = new Date();
-  const insertValues = chunks.map((chunk, i) => ({
-    id: crypto.randomUUID(),
-    docId: row.id,
-    appId: row.appId,
-    docType: row.docType,
-    heading: chunk.heading,
-    chunkIndex: chunk.chunkIndex,
-    content: chunk.content,
-    contentHash: contentHash(chunk.content),
-    createdAt: now,
-    updatedAt: now,
-    embedding: embeddings[i]!,
-  }));
-
-  for (const value of insertValues) {
-    await pool.query(
-      `INSERT INTO doc_chunks (
-        id, doc_id, app_id, doc_type, heading, chunk_index, content, content_hash, embedding, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::vector, $10, $11)`,
-      [
-        value.id,
-        value.docId,
-        value.appId,
-        value.docType,
-        value.heading,
-        value.chunkIndex,
-        value.content,
-        value.contentHash,
-        formatVector(value.embedding),
-        value.createdAt,
-        value.updatedAt,
-      ],
-    );
+  const embeddingModel = getEmbeddingModelName();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM doc_chunks WHERE doc_id = $1", [row.id]);
+    for (const [i, chunk] of chunks.entries()) {
+      await client.query(
+        `INSERT INTO doc_chunks (
+          id, doc_id, app_id, doc_type, heading, chunk_index, content, content_hash,
+          embedding, embedding_model, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::vector, $10, $11, $11)`,
+        [
+          crypto.randomUUID(),
+          row.id,
+          row.appId,
+          row.docType,
+          chunk.heading,
+          chunk.chunkIndex,
+          chunk.content,
+          contentHash(chunk.content),
+          formatVector(embeddings[i]!),
+          embeddingModel,
+          now,
+        ],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
 
-  return { indexed: insertValues.length, skipped: false };
+  return { indexed: chunks.length, skipped: false };
 }
 
 const pendingDocIds = new Set<string>();
@@ -231,7 +272,7 @@ export async function getDocEmbeddingStatus(docId: string): Promise<DocEmbedding
     };
   }
 
-  if (!hasEmbeddingApiKey()) {
+  if (!isEmbeddingConfigured()) {
     return {
       status: "no_api_key",
       chunkCount: 0,
@@ -243,6 +284,7 @@ export async function getDocEmbeddingStatus(docId: string): Promise<DocEmbedding
   const stored = await db
     .select({
       contentHash: docChunks.contentHash,
+      embeddingModel: docChunks.embeddingModel,
       updatedAt: docChunks.updatedAt,
     })
     .from(docChunks)
@@ -262,7 +304,9 @@ export async function getDocEmbeddingStatus(docId: string): Promise<DocEmbedding
   const expectedHashes = expected.map((chunk) => contentHash(chunk.content)).sort();
   const storedHashes = stored.map((chunk) => chunk.contentHash).sort();
 
+  const currentModel = getEmbeddingModelName();
   const hashesMatch =
+    stored.every((chunk) => chunk.embeddingModel === currentModel) &&
     expectedHashes.length === storedHashes.length &&
     expectedHashes.every((hash, index) => hash === storedHashes[index]);
 
@@ -344,16 +388,20 @@ export async function getEmbeddingWorkspaceStats(params?: {
     .select({
       docId: docChunks.docId,
       contentHash: docChunks.contentHash,
+      embeddingModel: docChunks.embeddingModel,
     })
     .from(docChunks)
     .innerJoin(docs, eq(docs.id, docChunks.docId))
     .where(and(...chunkConditions));
 
+  const currentModel = getEmbeddingModelName();
   const hashesByDoc = new Map<string, string[]>();
+  const otherModelDocIds = new Set<string>();
   for (const row of chunkRows) {
     const list = hashesByDoc.get(row.docId) ?? [];
     list.push(row.contentHash);
     hashesByDoc.set(row.docId, list);
+    if (row.embeddingModel !== currentModel) otherModelDocIds.add(row.docId);
   }
 
   const byDocType = Object.fromEntries(
@@ -377,7 +425,10 @@ export async function getEmbeddingWorkspaceStats(params?: {
       continue;
     }
 
-    if (matchesStoredChunkHashes(row.content || "", docType, storedHashes)) {
+    if (
+      !otherModelDocIds.has(row.id) &&
+      matchesStoredChunkHashes(row.content || "", docType, storedHashes)
+    ) {
       indexedDocs += 1;
       byDocType[docType].indexed += 1;
     } else {
@@ -395,7 +446,7 @@ export async function getEmbeddingWorkspaceStats(params?: {
   return {
     semanticSearchEnabled: isSemanticSearchEnabled(),
     embedOnSaveEnabled: isEmbedOnSaveEnabled(),
-    hasApiKey: hasEmbeddingApiKey(),
+    hasApiKey: isEmbeddingConfigured(),
     embeddingModel: getEmbeddingModelName(),
     indexableDocs: indexableRows.length,
     indexedDocs,
@@ -480,7 +531,7 @@ export function getEmbeddingConfig() {
   return {
     semanticSearchEnabled: isSemanticSearchEnabled(),
     embedOnSaveEnabled: isEmbedOnSaveEnabled(),
-    hasApiKey: hasEmbeddingApiKey(),
+    hasApiKey: isEmbeddingConfigured(),
     embeddingModel: getEmbeddingModelName(),
   };
 }
@@ -496,7 +547,7 @@ export interface ReindexPendingAndStaleResult {
 export async function reindexPendingAndStaleDocEmbeddings(
   appId: string,
 ): Promise<ReindexPendingAndStaleResult> {
-  if (!isSemanticSearchEnabled() || !hasEmbeddingApiKey()) {
+  if (!isSemanticSearchEnabled() || !isEmbeddingConfigured()) {
     return { candidates: 0, indexed: 0, skipped: 0, failed: 0 };
   }
 

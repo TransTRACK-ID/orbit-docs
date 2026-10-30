@@ -2,15 +2,8 @@ import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { getDb } from "~/server/database";
 import { docs, docSites } from "~/server/database/schema";
 import { isBindingAdrDoc } from "~/server/lib/adr-queries";
-import { searchDocChunksHybrid } from "~/server/lib/doc-chunk-search";
-import {
-  indexableDocTypesForCategory,
-  isIndexableDocType,
-} from "~/server/lib/doc-chunking";
-import {
-  hasEmbeddingApiKey,
-  isSemanticSearchEnabled,
-} from "~/server/lib/doc-embeddings";
+import { searchDocChunks, type ChunkSearchMode } from "~/server/lib/doc-chunk-search";
+import { indexableDocTypesForCategory } from "~/server/lib/doc-chunking";
 import { docCategoryCondition } from "~/server/lib/mcp-doc-queries";
 
 export interface DocContentSearchResult {
@@ -32,7 +25,7 @@ export interface DocContentSearchResult {
   siteName?: string | null;
 }
 
-export type DocContentSearchMode = "hybrid" | "keyword";
+export type DocContentSearchMode = ChunkSearchMode;
 
 export async function searchDocsContent(params: {
   appId?: string;
@@ -143,6 +136,7 @@ export async function searchDocsContentHybrid(params: {
   category?: "product" | "knowledge";
   publishedOnly?: boolean;
   limit?: number;
+  mode?: DocContentSearchMode;
 }): Promise<{
   results: DocContentSearchResult[];
   total: number;
@@ -151,12 +145,7 @@ export async function searchDocsContentHybrid(params: {
   const limit = params.limit ?? 10;
   const query = params.query.trim();
 
-  if (
-    !query ||
-    !params.appId ||
-    !isSemanticSearchEnabled() ||
-    !hasEmbeddingApiKey()
-  ) {
+  if (!query || !params.appId) {
     const legacy = await searchDocsContent(params);
     return { ...legacy, searchMode: "keyword" };
   }
@@ -165,16 +154,18 @@ export async function searchDocsContentHybrid(params: {
     (type) => !params.docTypes?.length || params.docTypes.includes(type),
   );
 
-  const chunkRows =
+  const chunkSearch =
     indexableTypes.length > 0
-      ? await searchDocChunksHybrid({
+      ? await searchDocChunks({
           appId: params.appId,
           query,
           docTypes: indexableTypes,
           publishedOnly: params.publishedOnly,
           limit,
+          mode: params.mode,
         })
-      : [];
+      : { results: [], searchMode: "keyword" as const };
+  const chunkRows = chunkSearch.results;
 
   const chunkResults: DocContentSearchResult[] = chunkRows.map((row) => ({
     id: row.docId,
@@ -193,17 +184,15 @@ export async function searchDocsContentHybrid(params: {
     score: row.score,
   }));
 
-  const nonIndexableDocTypes = params.docTypes?.filter((type) => !isIndexableDocType(type));
-
-  const keywordSupplement = await searchDocsContent({
-    ...params,
-    docTypes: nonIndexableDocTypes?.length ? nonIndexableDocTypes : undefined,
-    limit: Math.max(limit - chunkResults.length, 0) || limit,
-  });
-
-  const filteredKeyword = keywordSupplement.results.filter(
-    (row) => !isIndexableDocType(row.docType),
-  );
+  // Docs not chunked yet (pending embedding) or of other types still surface via doc-level matching.
+  const chunkDocIds = new Set(chunkResults.map((row) => row.id));
+  const remaining = limit - chunkResults.length;
+  const filteredKeyword =
+    params.mode === "semantic" || remaining <= 0
+      ? []
+      : (await searchDocsContent({ ...params, limit: remaining + chunkDocIds.size })).results
+          .filter((row) => !chunkDocIds.has(row.id))
+          .slice(0, remaining);
 
   if (chunkResults.length === 0 && filteredKeyword.length === 0) {
     const fallback = await searchDocsContent(params);
@@ -215,6 +204,6 @@ export async function searchDocsContentHybrid(params: {
   return {
     results: merged,
     total: merged.length,
-    searchMode: chunkResults.length > 0 ? "hybrid" : "keyword",
+    searchMode: chunkResults.length > 0 ? chunkSearch.searchMode : "keyword",
   };
 }

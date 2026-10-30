@@ -19,3 +19,19 @@ export function getCustomOpenAI() {
   }
   return openaiInstance;
 }
+
+let embeddingInstance: ReturnType<typeof createOpenAI> | null = null;
+
+/** OpenAI-compatible client for embeddings; EMBEDDING_* falls back to OPENAI_*. */
+export function getEmbeddingClient() {
+  if (!embeddingInstance) {
+    embeddingInstance = createOpenAI({
+      baseURL:
+        process.env.EMBEDDING_BASE_URL?.trim() ||
+        process.env.OPENAI_API_BASE_URL ||
+        "https://api.openai.com/v1",
+      apiKey: process.env.EMBEDDING_API_KEY?.trim() || process.env.OPENAI_API_KEY || "",
+    });
+  }
+  return embeddingInstance;
+}

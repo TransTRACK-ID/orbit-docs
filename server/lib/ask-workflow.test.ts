@@ -4,6 +4,7 @@ import {
   buildAskSynthesisPrompt,
   buildCitations,
   dedupeAndBudgetSources,
+  extractExactTokens,
   heuristicAskPlan,
   isAskWorkflowEnabled,
   matchesKeywords,
@@ -22,6 +23,10 @@ vi.mock("~/server/lib/doc-content-search", () => ({
 
 vi.mock("~/server/lib/doc-chunk-search", () => ({
   searchDocChunksHybrid: vi.fn(),
+}));
+
+vi.mock("~/server/lib/doc-file-tools", () => ({
+  grepDocs: vi.fn(async () => ({ matches: [], docsMatched: 0, truncated: false })),
 }));
 
 vi.mock("~/server/lib/adr-queries", () => ({
@@ -61,6 +66,20 @@ describe("isAskWorkflowEnabled", () => {
   it("can be disabled", () => {
     process.env.ASK_WORKFLOW = "false";
     expect(isAskWorkflowEnabled()).toBe(false);
+  });
+});
+
+describe("extractExactTokens", () => {
+  it("picks quoted phrases and code/ID-like tokens", () => {
+    expect(extractExactTokens('What does "invalid_grant" mean for FEAT-123?')).toEqual([
+      "invalid_grant",
+      "FEAT-123",
+    ]);
+    expect(extractExactTokens("where is getUserById used")).toEqual(["getUserById"]);
+  });
+
+  it("ignores plain natural-language questions", () => {
+    expect(extractExactTokens("how does login work, e.g. with SSO")).toEqual([]);
   });
 });
 

@@ -19,11 +19,12 @@ JWT-based auth for all API routes.
 `;
 
 describe("isIndexableDocType", () => {
-  it("allows feature, sdd, and wiki", () => {
+  it("allows every stored doc type", () => {
     expect(isIndexableDocType("feature")).toBe(true);
     expect(isIndexableDocType("sdd")).toBe(true);
     expect(isIndexableDocType("wiki")).toBe(true);
-    expect(isIndexableDocType("fsd")).toBe(false);
+    expect(isIndexableDocType("fsd")).toBe(true);
+    expect(isIndexableDocType("prd")).toBe(false);
     expect(isIndexableDocType(null)).toBe(false);
   });
 });
