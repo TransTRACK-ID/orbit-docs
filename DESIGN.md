@@ -13,8 +13,11 @@ colors:
   success: "oklch(60% 0.18 145)"
   success-text: "oklch(50% 0.14 145)"
   warning: "oklch(75% 0.14 85)"
+  warning-text: "oklch(60% 0.12 85)"
   info: "oklch(60% 0.16 255)"
+  info-text: "oklch(55% 0.14 255)"
   error: "oklch(55% 0.18 25)"
+  error-text: "oklch(50% 0.16 25)"
 typography:
   display:
     fontFamily: "-apple-system, BlinkMacSystemFont, \"Inter\", \"Segoe UI\", system-ui, sans-serif"
@@ -35,6 +38,11 @@ typography:
   body:
     fontFamily: "-apple-system, BlinkMacSystemFont, \"Inter\", \"Segoe UI\", system-ui, sans-serif"
     fontSize: "14px"
+    fontWeight: 400
+    lineHeight: 1.5
+  body-sm:
+    fontFamily: "-apple-system, BlinkMacSystemFont, \"Inter\", \"Segoe UI\", system-ui, sans-serif"
+    fontSize: "13px"
     fontWeight: 400
     lineHeight: 1.5
   label:
@@ -133,6 +141,8 @@ A cool blue-gray neutral field with one warm signal accent. Status colors are se
 - **Signal Blue** (`oklch(60% 0.16 255)`): Informational pills, in-review states.
 - **Alert Red** (`oklch(55% 0.18 25)`): Errors, danger actions, destructive confirm.
 
+Each status has a fill token and a darker `-text` token for text on soft backgrounds: `--success` / `--success-text`, `--warning` / `--warning-text`, `--info` / `--info-text`, `--error` / `--error-text`. Soft backgrounds mix the fill token: `color-mix(in oklch, var(--success) 12%, transparent)`.
+
 ### Named Rules
 
 **The One Accent Rule.** The warm coral accent appears on primary actions, selection, and focus only. It must not wallpaper backgrounds, headings, or decorative chrome. If more than ~10% of a viewport reads as accent, pull back.
@@ -153,6 +163,7 @@ A cool blue-gray neutral field with one warm signal accent. Status colors are se
 - **Headline** (600, 18–22px, 1.3): Section card titles (`card-title`), modal headings.
 - **Title** (600, 15–16px, 1.35): Sidebar site names, list item emphasis.
 - **Body** (400, 14px, 1.5): Default UI copy, form labels, table cells. Prose in docs caps at 65–75ch in reader layouts.
+- **Body Small** (400–500, 13px, 1.5): Dense UI copy: card descriptions, helper text, secondary table text, reader sidebar links, compact buttons and menus.
 - **Label** (500, 11px mono, 0.04em tracking, uppercase): Table column headers, meta labels, version stamps.
 
 ### Named Rules
@@ -226,6 +237,7 @@ Orbit Docs is flat by default. Depth is conveyed through surface color steps (`-
 ### Do:
 
 - **Do** use semantic tokens (`--bg`, `--surface`, `--fg`, `--accent`) so light and dark modes stay aligned.
+- **Do** use status tokens (`--success`, `--warning`, `--info`, `--error` and their `-text` pairs) instead of writing OKLCH status values inline.
 - **Do** keep primary actions as `.btn-primary` with the warm accent; secondary paths as ghost or secondary.
 - **Do** use borders and tonal hovers before reaching for shadows.
 - **Do** respect `prefers-reduced-motion` for app transitions (already scoped to `#__nuxt`).
