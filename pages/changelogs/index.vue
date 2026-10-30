@@ -755,7 +755,7 @@ function canViewHistoryDiff(): boolean {
         <div class="selector-group" :class="{ 'selector-disabled': !selectedAppId || versions.length === 0 }">
           <div class="selector-label-row">
             <span class="selector-label">Version</span>
-            <NuxtLink v-if="selectedAppId && versions.length === 0" to="/versions" class="selector-inline-hint">
+            <NuxtLink v-if="selectedAppId && versions.length === 0" :to="`/versions?app=${selectedAppId}`" class="selector-inline-hint">
               No versions. Add one
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M7 17L17 7M17 7H7M17 7v10"/></svg>
             </NuxtLink>
@@ -888,7 +888,7 @@ function canViewHistoryDiff(): boolean {
             No apps yet. <NuxtLink to="/apps" class="cta-link">Create your first app</NuxtLink> to get started.
           </p>
           <p v-else-if="selectedAppId && versions.length === 0" class="cta-hint">
-            This app has no versions. <NuxtLink to="/versions" class="cta-link">Add a version</NuxtLink> first.
+            This app has no versions. <NuxtLink :to="`/versions?app=${selectedAppId}`" class="cta-link">Add a version</NuxtLink> first.
           </p>
           <p v-else class="cta-hint">Select an app and version from the top bar to start editing.</p>
         </div>

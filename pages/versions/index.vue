@@ -37,7 +37,6 @@ const route = useRoute();
 const router = useRouter();
 
 // App filter: "" = all apps (aligned with /docs and /releases); app id when scoped
-$page.hydrateSelection();
 const appFilter = ref((route.query.app as string) || "");
 
 watch(
@@ -57,20 +56,9 @@ function syncUrlQuery() {
 onMounted(async () => {
   await fetchApps();
   const appQuery = route.query.app as string;
-  const persistedAppId = $page.selectedAppId;
-
-  if (appQuery && apps.value.find((a) => a.id === appQuery)) {
-    appFilter.value = appQuery;
-  } else if (!appQuery && persistedAppId && apps.value.find((a) => a.id === persistedAppId)) {
-    appFilter.value = persistedAppId;
-  } else if (!appQuery) {
-    appFilter.value = "";
-  }
+  appFilter.value = appQuery && apps.value.find((a) => a.id === appQuery) ? appQuery : "";
 
   await fetchVersions(appFilter.value || undefined);
-  if (appFilter.value) {
-    $page.setSelectedAppId(appFilter.value);
-  }
   document.addEventListener("keydown", onKeydown);
 });
 
@@ -80,7 +68,6 @@ onBeforeUnmount(() => {
 
 watch(appFilter, async (id) => {
   await fetchVersions(id || undefined);
-  if (id) $page.setSelectedAppId(id);
   selectedVersions.value = [];
   activeDetailVersion.value = null;
   syncUrlQuery();
