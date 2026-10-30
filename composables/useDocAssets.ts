@@ -28,27 +28,37 @@ function errorMessage(error: unknown, fallback: string): string {
   return err?.data?.message || err?.message || fallback;
 }
 
-/** PUT straight to the presigned S3 URL; XHR because fetch has no upload progress. */
-function putWithProgress(
+/** POST multipart to Orbit (same origin as images). Progress via XHR upload events. */
+function uploadViaServer(
   url: string,
   file: File,
-  headers: Record<string, string>,
   onProgress?: (fraction: number) => void,
-): Promise<void> {
+): Promise<DocAsset> {
   return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append("file", file);
     const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value);
+    xhr.open("POST", url);
+    xhr.withCredentials = true;
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress?.(event.loaded / event.total);
     };
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`Upload to storage failed (HTTP ${xhr.status})`));
-    xhr.onerror = () =>
-      reject(new Error("Upload to storage failed. Check the bucket CORS policy allows PUT from this origin."));
-    xhr.send(file);
+    xhr.onload = () => {
+      let message = `Upload failed (HTTP ${xhr.status})`;
+      try {
+        const body = JSON.parse(xhr.responseText) as { data?: DocAsset; message?: string };
+        if (xhr.status >= 200 && xhr.status < 300 && body.data) {
+          resolve(body.data);
+          return;
+        }
+        message = body.message || message;
+      } catch {
+        /* non-JSON error body */
+      }
+      reject(new Error(message));
+    };
+    xhr.onerror = () => reject(new Error("Upload failed. Check your network connection and try again."));
+    xhr.send(formData);
   });
 }
 
@@ -81,27 +91,16 @@ export function useDocAssets(docId: Ref<string>) {
   }
 
   async function uploadAsset(file: File, onProgress?: (fraction: number) => void): Promise<DocAsset> {
-    const contentType = file.type || "application/octet-stream";
-    let assetId = "";
+    if (!docId.value) throw new Error("Upload failed");
     try {
-      const reserved = await $fetch<{
-        data: { assetId: string; uploadUrl: string; headers: Record<string, string> };
-      }>(`/api/docs/${docId.value}/assets/upload-url`, {
-        method: "POST",
-        body: { fileName: file.name, contentType, size: file.size },
-      });
-      assetId = reserved.data.assetId;
-      await putWithProgress(reserved.data.uploadUrl, file, reserved.data.headers, onProgress);
-      const completed = await $fetch<{ data: DocAsset }>(
-        `/api/docs/${docId.value}/assets/${assetId}/complete`,
-        { method: "POST" },
+      const asset = await uploadViaServer(
+        `/api/docs/${docId.value}/assets/upload`,
+        file,
+        onProgress,
       );
-      assets.value = [completed.data, ...assets.value.filter((a) => a.id !== assetId)];
-      return completed.data;
+      assets.value = [asset, ...assets.value.filter((a) => a.id !== asset.id)];
+      return asset;
     } catch (error) {
-      if (assetId) {
-        void $fetch(`/api/docs/${docId.value}/assets/${assetId}`, { method: "DELETE" }).catch(() => {});
-      }
       throw new Error(errorMessage(error, "Upload failed"));
     }
   }

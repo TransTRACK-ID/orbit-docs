@@ -447,6 +447,50 @@ export async function uploadDocImage(docId: string, buffer: Buffer, contentType:
   return imageId;
 }
 
+/** Stores a doc PDF or video attachment (same path as images: through Orbit, not browser PUT). */
+export async function uploadDocAssetObject(
+  docId: string,
+  assetId: string,
+  buffer: Buffer,
+  contentType: string,
+  kind: DocAssetKind,
+): Promise<void> {
+  const normalized = normalizeMime(contentType);
+  if (!DOC_ASSET_TYPES[kind].has(normalized)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: `Declared type ${normalized} does not match ${kind} attachment`,
+    });
+  }
+  const maxBytes = getDocAssetMaxBytes(kind);
+  if (buffer.byteLength > maxBytes) {
+    throw createError({
+      statusCode: 413,
+      statusMessage: "Payload Too Large",
+      message: `File exceeds the ${Math.round(maxBytes / (1024 * 1024))} MB limit for ${kind === "pdf" ? "PDF" : "video"} attachments`,
+    });
+  }
+  if (!matchesDocAssetSignature(kind, buffer.subarray(0, 16))) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: "File contents do not match a supported PDF or video format",
+    });
+  }
+
+  const { client, config } = getS3Client();
+  await client.send(
+    new PutObjectCommand({
+      Bucket: config.bucket,
+      Key: buildDocAssetKey(docId, assetId),
+      Body: buffer,
+      ContentType: normalized,
+      ContentLength: buffer.byteLength,
+    }),
+  );
+}
+
 export async function createDocImageDownloadUrl(key: string): Promise<string> {
   const { client, config } = getS3Client();
   return getSignedUrl(client, new GetObjectCommand({ Bucket: config.bucket, Key: key }), {
