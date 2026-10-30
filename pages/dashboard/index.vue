@@ -1,16 +1,10 @@
 <script setup lang="ts">
-import { usePageStore } from "~/store/page";
-
 definePageMeta({
   auth: true,
-});
-
-const $page = usePageStore();
-onBeforeMount(() => {
-  $page.setTitle("Dashboard");
+  redirect: "/apps",
 });
 </script>
 
 <template>
-  <div class="text-gray-500">dashboard pages</div>
+  <div />
 </template>
