@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { DocVersion } from "~/composables/useDocs";
 import { getHistoryActionClass, getHistoryActionLabel } from "~/utils/history-actions";
+import { timeAgo } from "~/utils/ui";
 
 const props = defineProps<{
   versions: DocVersion[];
@@ -16,18 +17,6 @@ function formatDate(dateStr: string | null) {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-function timeAgo(dateStr: string | null) {
-  if (!dateStr) return "";
-  const now = new Date();
-  const d = new Date(dateStr);
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
-  return `${Math.floor(diff / 604800)} weeks ago`;
 }
 
 function onRestore(version: DocVersion) {

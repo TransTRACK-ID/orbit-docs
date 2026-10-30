@@ -2,6 +2,7 @@
 import { usePageStore } from "~/store/page";
 import type { AppItem } from "~/composables/useApps";
 import GeneralLogoUploadField from "~/components/general/LogoUploadField.vue";
+import { timeAgo } from "~/utils/ui";
 
 definePageMeta({
   auth: true,
@@ -330,32 +331,6 @@ function formatDate(dateStr: string | null) {
 
 function versionAuthor(app: AppItem): string | null {
   return app.latestVersion?.createdBy || app.owner || null;
-}
-
-function timeAgo(dateStr: string | null) {
-  if (!dateStr) return "";
-  const now = new Date();
-  const d = new Date(dateStr);
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) {
-    const m = Math.floor(diff / 60);
-    return `${m} min ago`;
-  }
-  if (diff < 86400) {
-    const h = Math.floor(diff / 3600);
-    return `${h} ${h === 1 ? "hour" : "hours"} ago`;
-  }
-  if (diff < 604800) {
-    const days = Math.floor(diff / 86400);
-    return `${days} ${days === 1 ? "day" : "days"} ago`;
-  }
-  if (diff < 2419200) {
-    const weeks = Math.floor(diff / 604800);
-    return `${weeks} ${weeks === 1 ? "week" : "weeks"} ago`;
-  }
-  const months = Math.floor(diff / 2419200);
-  return `${months} ${months === 1 ? "month" : "months"} ago`;
 }
 
 function appUpdatedLabel(app: AppItem) {

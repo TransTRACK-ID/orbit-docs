@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { usePageStore } from "~/store/page";
+import { plainTextPreview } from "~/utils/ui";
 
 interface ApiDocCollection {
   id: string;
@@ -172,8 +173,8 @@ function getMethodBg(method: string): string {
             <h3 class="card-title">{{ collection.name }}</h3>
             <span v-if="collection.publicSlug" class="slug-badge" :title="collection.publicSlug">{{ collection.publicSlug }}</span>
           </div>
-          <p v-if="collection.description" class="card-desc">
-            {{ collection.description }}
+          <p v-if="plainTextPreview(collection.description)" class="card-desc">
+            {{ plainTextPreview(collection.description) }}
           </p>
           <div class="card-footer">
             <div class="stats">
@@ -375,6 +376,7 @@ function getMethodBg(method: string): string {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .endpoint-count {
@@ -384,6 +386,7 @@ function getMethodBg(method: string): string {
 
 .method-badges {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 
@@ -395,9 +398,11 @@ function getMethodBg(method: string): string {
   border-radius: 4px;
   line-height: 1;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .doc-mode {
+  flex-shrink: 0;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;

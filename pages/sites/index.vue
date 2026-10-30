@@ -2,6 +2,7 @@
 import { usePageStore } from "~/store/page";
 import type { DocSiteItem } from "~/composables/useDocSites";
 import { slugify } from "~/utils/nav-client";
+import { timeAgo } from "~/utils/ui";
 
 definePageMeta({
   auth: true,
@@ -125,15 +126,9 @@ const statusLabel: Record<string, string> = {
   archived: "Archived",
 };
 
-function timeAgo(dateStr: string | null) {
-  if (!dateStr) return "";
-  const now = new Date();
-  const d = new Date(dateStr);
-  const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
+function siteDescription(site: { description?: string | null }) {
+  if (/^Generated wiki for /.test(site.description ?? "")) return "";
+  return site.description ?? "";
 }
 </script>
 
@@ -196,11 +191,11 @@ function timeAgo(dateStr: string | null) {
         <div class="site-card-slug num">
           {{ preferInternalWiki ? `/wiki/${site.slug}` : `/s/${site.slug}` }}
         </div>
-        <div v-if="site.description" class="site-card-desc">{{ site.description }}</div>
+        <div v-if="siteDescription(site)" class="site-card-desc">{{ siteDescription(site) }}</div>
         <div class="site-card-meta">
           <span v-if="site.app">{{ site.app.name }}</span>
           <span v-else>Unbound</span>
-          <span>· Updated {{ timeAgo(site.updatedAt) }}</span>
+          <span> · Updated {{ timeAgo(site.updatedAt) }}</span>
         </div>
         <div class="site-card-actions" @click.stop>
           <NuxtLink :to="`/wiki/${site.slug}`" class="site-card-action">
