@@ -66,6 +66,12 @@ const editorSiteId = ref("");
 const editorSlug = ref("");
 let prevTitleForSlug = "";
 
+const OUTLINE_MIN_WIDTH = 1280;
+const showOutline = ref(true);
+onMounted(() => {
+  showOutline.value = window.innerWidth >= OUTLINE_MIN_WIDTH;
+});
+
 function titleForSlug(): string {
   return editorTitle.value.trim() || editorFmTitle.value.trim();
 }
@@ -484,6 +490,7 @@ function scrollElementIntoContainer(container: HTMLElement, el: HTMLElement) {
 
 function scrollToHeading(text: string) {
   activeHeading.value = text;
+  if (window.innerWidth < OUTLINE_MIN_WIDTH) showOutline.value = false;
   const container = paneBodyRef.value;
   if (!container) return;
 
@@ -765,7 +772,7 @@ const lastModified = computed(() => {
 <template>
   <div class="editor-page">
     <header class="topbar">
-      <div class="flex-gap-md">
+      <div class="flex-gap-md topbar-title">
         <button
           type="button"
           class="btn btn-ghost back-btn"
@@ -776,8 +783,8 @@ const lastModified = computed(() => {
             <path d="M19 12H5M12 19l-7-7 7-7"/>
           </svg>
         </button>
-        <h1>Technical Editor</h1>
-        <span class="pill pill-blue">{{ appName }}</span>
+        <h1 :title="editorTitle || undefined">{{ editorTitle.trim() || "Untitled doc" }}</h1>
+        <span v-if="appName" class="pill pill-blue">{{ appName }}</span>
       </div>
       <div class="flex-gap-sm topbar-actions">
         <p
@@ -800,6 +807,16 @@ const lastModified = computed(() => {
         >
           Public View
         </NuxtLink>
+        <button
+          type="button"
+          class="btn btn-ghost"
+          :class="{ active: showOutline }"
+          :aria-pressed="showOutline"
+          aria-controls="doc-outline"
+          @click="showOutline = !showOutline"
+        >
+          Outline
+        </button>
         <button
           type="button"
           class="btn btn-ghost"
@@ -862,9 +879,13 @@ const lastModified = computed(() => {
         </button>
       </div>
 
-      <div v-else class="doc-shell" :class="{ 'preview-only': previewOnly }">
+      <div
+        v-else
+        class="doc-shell"
+        :class="{ 'preview-only': previewOnly, 'has-outline': showOutline }"
+      >
         <!-- Outline -->
-        <div class="outline-pane">
+        <div v-show="showOutline" id="doc-outline" class="outline-pane">
           <div class="outline-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.6;">
               <line x1="8" y1="6" x2="21" y2="6"/>
@@ -1417,16 +1438,29 @@ const lastModified = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   padding: 0 32px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   margin: -32px -32px 0;
 }
+.topbar-title {
+  flex: 1;
+  min-width: 0;
+}
+.topbar-title .pill {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
 .topbar h1 {
   margin: 0;
-  font-size: 20px;
+  min-width: 0;
+  font-size: 18px;
   font-weight: 600;
   color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .back-btn {
@@ -1445,7 +1479,7 @@ const lastModified = computed(() => {
 }
 
 .topbar-actions {
-  flex-wrap: wrap;
+  flex-shrink: 0;
   justify-content: flex-end;
 }
 
@@ -1536,31 +1570,53 @@ const lastModified = computed(() => {
 }
 
 .doc-shell {
+  position: relative;
   display: grid;
-  grid-template-columns: 220px 1fr 280px;
+  grid-template-columns: minmax(0, 1fr) 280px;
   gap: 24px;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
+.doc-shell.has-outline {
+  grid-template-columns: 220px minmax(0, 1fr) 280px;
+}
 .doc-shell.preview-only {
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: minmax(0, 1fr);
+}
+.doc-shell.preview-only.has-outline {
+  grid-template-columns: 220px minmax(0, 1fr);
 }
 .doc-shell.preview-only .right-sidebar {
   display: none;
 }
-@media (max-width: 1400px) {
-  .doc-shell {
-    grid-template-columns: 220px 1fr 280px;
+@media (max-width: 1279px) {
+  .doc-shell.has-outline {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+  .doc-shell.preview-only.has-outline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .doc-shell .outline-pane {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 5;
+    width: 240px;
+    box-shadow: 0 8px 24px color-mix(in oklch, var(--fg) 12%, transparent);
   }
 }
 @media (max-width: 1100px) {
-  .doc-shell {
-    grid-template-columns: 1fr;
-  }
-  .doc-shell .outline-pane,
-  .doc-shell .right-sidebar {
+  .topbar-title .pill {
     display: none;
+  }
+  .doc-shell,
+  .doc-shell.has-outline {
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+  .doc-shell .right-sidebar {
+    min-width: 0;
   }
 }
 
