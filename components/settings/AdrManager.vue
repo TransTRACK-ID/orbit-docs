@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { toast } from "vue3-toastify";
-import { formatDistanceToNow } from "date-fns";
+import { timeAgo } from "~/utils/ui";
 import type { AdrStatus } from "~/types/adr";
 import { ADR_STATUSES, WORKSPACE_ADR_LABEL } from "~/types/adr";
 
@@ -114,15 +114,14 @@ const summary = computed(() => {
   const counts = {
     binding: 0,
     proposed: 0,
+    accepted: 0,
     superseded: 0,
     deprecated: 0,
   };
 
   for (const adr of filteredAdrs.value) {
     if (adr.binding) counts.binding += 1;
-    else if (adr.adrStatus === "proposed") counts.proposed += 1;
-    else if (adr.adrStatus === "superseded") counts.superseded += 1;
-    else if (adr.adrStatus === "deprecated") counts.deprecated += 1;
+    counts[adr.adrStatus] += 1;
   }
 
   return counts;
@@ -296,7 +295,7 @@ async function confirmSupersede() {
 
 function relativeTime(dateStr: string | null) {
   if (!dateStr) return "—";
-  return formatDistanceToNow(new Date(dateStr), { addSuffix: true });
+  return timeAgo(dateStr);
 }
 
 watch(selectedAppId, () => {
@@ -342,10 +341,11 @@ onMounted(async () => {
       </div>
 
       <div class="adr-summary">
-        <span class="adr-summary-item"><strong>{{ summary.binding }}</strong> binding</span>
         <span class="adr-summary-item"><strong>{{ summary.proposed }}</strong> proposed</span>
+        <span class="adr-summary-item"><strong>{{ summary.accepted }}</strong> accepted</span>
         <span class="adr-summary-item"><strong>{{ summary.superseded }}</strong> superseded</span>
         <span class="adr-summary-item"><strong>{{ summary.deprecated }}</strong> deprecated</span>
+        <span class="adr-summary-item"><strong>{{ summary.binding }}</strong> binding</span>
       </div>
     </div>
 

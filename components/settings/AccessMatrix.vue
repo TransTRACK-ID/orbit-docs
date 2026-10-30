@@ -201,6 +201,8 @@ const groupCount = computed(() => groups.value.length);
 .access-matrix .desc {
   margin: 0;
   max-width: 62ch;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .access-matrix-meta {
@@ -327,6 +329,11 @@ const groupCount = computed(() => groups.value.length);
 
 .access-permission-cell {
   padding: 14px 16px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--fg);
 }
 
 .access-permission-label {

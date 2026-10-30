@@ -9,6 +9,7 @@ import type {
   UpdateNotificationsPayload,
   UpdateDocGenerationPayload,
   NotionSyncInterval,
+  NotionSyncStatus,
 } from "~/types/settings";
 import type { SsoProvider, SsoProviderType } from "~/types/sso";
 import { SSO_PROVIDER_METADATA } from "~/types/sso";
@@ -457,6 +458,12 @@ function formatSyncTime(iso: string | null | undefined) {
   if (!iso) return "Never";
   return new Date(iso).toLocaleString();
 }
+
+const syncStatusPill: Record<Exclude<NotionSyncStatus, "idle">, { label: string; class: string }> = {
+  running: { label: "Running", class: "pill-blue" },
+  success: { label: "Succeeded", class: "pill-green" },
+  error: { label: "Finished with errors", class: "pill-red" },
+};
 
 const SYNC_INTERVAL_LABELS: Record<NotionSyncInterval, string> = {
   hourly: "every hour",
@@ -1219,7 +1226,7 @@ function getCallbackUrl(provider: SsoProvider): string {
           <div class="setting-section">
             <h3>Document Generation</h3>
             <p class="desc">
-              Choose which document types are generated when you run Generate Docs for an app.
+              Choose which document types are generated when you run Generate Docs for an app. Changes save automatically.
             </p>
 
             <div v-if="isLoadingDocGeneration" class="skeleton-wrap">
@@ -1617,9 +1624,13 @@ function getCallbackUrl(provider: SsoProvider): string {
                 </button>
                 <span class="notion-sync-meta">
                   Last sync: {{ formatSyncTime(notionSettings?.lastSyncAt) }}
-                  <template v-if="notionSettings?.lastSyncStatus">
-                    · {{ notionSettings.lastSyncStatus }}
-                  </template>
+                  <span
+                    v-if="notionSettings?.lastSyncStatus && notionSettings.lastSyncStatus !== 'idle'"
+                    class="pill"
+                    :class="syncStatusPill[notionSettings.lastSyncStatus].class"
+                  >
+                    {{ syncStatusPill[notionSettings.lastSyncStatus].label }}
+                  </span>
                 </span>
               </div>
               <p v-if="notionSyncHint" class="notion-sync-hint">{{ notionSyncHint }}</p>
@@ -1633,6 +1644,9 @@ function getCallbackUrl(provider: SsoProvider): string {
                   <span>{{ notionSettings.lastSyncResult.releasesCreated }} releases created</span>
                   <span>{{ notionSettings.lastSyncResult.releasesUpdated }} releases updated</span>
                 </div>
+                <p v-if="notionSettings.lastSyncResult.errors?.length" class="notion-sync-errors-title">
+                  {{ notionSettings.lastSyncResult.errors.length }} item{{ notionSettings.lastSyncResult.errors.length === 1 ? "" : "s" }} could not be synced
+                </p>
                 <ul v-if="notionSettings.lastSyncResult.errors?.length" class="notion-sync-errors">
                   <li v-for="(err, i) in notionSettings.lastSyncResult.errors.slice(0, 8)" :key="i">
                     {{ err }}
@@ -2235,6 +2249,7 @@ function getCallbackUrl(provider: SsoProvider): string {
 .form-group input[type="text"],
 .form-group input[type="email"],
 .form-group input[type="url"],
+.form-group input[type="password"],
 .form-group textarea,
 .form-group select {
   width: 100%;
@@ -2451,6 +2466,10 @@ function getCallbackUrl(provider: SsoProvider): string {
 .pill-amber {
   background: oklch(95% 0.04 85);
   color: oklch(50% 0.1 85);
+}
+.pill-red {
+  background: color-mix(in oklch, var(--error) 12%, transparent);
+  color: var(--error-text);
 }
 
 .integration-card {
@@ -2846,6 +2865,9 @@ function getCallbackUrl(provider: SsoProvider): string {
   flex-wrap: wrap;
 }
 .notion-sync-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 13px;
   color: var(--muted);
 }
@@ -2871,11 +2893,17 @@ function getCallbackUrl(provider: SsoProvider): string {
   font-size: 13px;
   color: var(--fg);
 }
-.notion-sync-errors {
+.notion-sync-errors-title {
   margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--error-text);
+}
+.notion-sync-errors {
+  margin: 6px 0 0;
   padding-left: 18px;
   font-size: 12px;
-  color: oklch(50% 0.14 25);
+  color: var(--muted);
   line-height: 1.5;
 }
 </style>
