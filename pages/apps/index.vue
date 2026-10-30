@@ -73,8 +73,23 @@ function toggleAppMenu(appId: string) {
   openAppMenu.value = openAppMenu.value === appId ? null : appId;
 }
 
+const route = useRoute();
+const router = useRouter();
+
+async function openModalFromQuery() {
+  const editId = route.query.edit as string | undefined;
+  const deleteId = route.query.delete as string | undefined;
+  if (!editId && !deleteId) return;
+  const { edit: _edit, delete: _delete, ...rest } = route.query;
+  router.replace({ query: rest });
+  const target = apps.value.find((a) => a.id === (editId || deleteId));
+  if (!target) return;
+  if (editId && canEditApp.value) await openEditModal(target);
+  else if (deleteId && canDeleteApp.value) confirmDelete(target);
+}
+
 onMounted(() => {
-  fetchApps();
+  fetchApps().then(openModalFromQuery);
   fetchStats();
   fetchActivities();
   document.addEventListener("click", onDocClick);
@@ -451,7 +466,9 @@ const statusLabel: Record<string, string> = {
           <div class="app-card__identity">
             <AppLogo :name="app.name" :logo-url="app.logoUrl" />
             <div class="app-card__titles">
-              <h3 class="app-card__name">{{ app.name }}</h3>
+              <h3 class="app-card__name">
+                <NuxtLink :to="`/apps/${app.id}`" class="app-card__link">{{ app.name }}</NuxtLink>
+              </h3>
               <p class="app-card__meta">{{ appUpdatedLabel(app) }}</p>
             </div>
           </div>
@@ -920,7 +937,29 @@ const statusLabel: Record<string, string> = {
   flex-direction: column;
   gap: 14px;
   min-height: 168px;
+  position: relative;
   transition: border-color 0.15s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.app-card__link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-card__link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.app-card__link:focus-visible {
+  outline: none;
+}
+
+.app-card:has(.app-card__link:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .app-card:hover {
@@ -981,6 +1020,8 @@ const statusLabel: Record<string, string> = {
 }
 
 .app-card__foot {
+  position: relative;
+  z-index: 1;
   margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--border);
