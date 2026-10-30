@@ -1,0 +1,123 @@
+/* Shared page header (components/general/PageHeader.vue).
+ * Global, not scoped: scoped styles can fail to inject on SPA route changes
+ * with page transitions enabled.
+ */
+
+.page-header .page-masthead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.page-header .page-masthead__copy {
+  min-width: 0;
+}
+
+.page-header .page-masthead h1 {
+  margin: 0 0 4px;
+  font-weight: 600;
+  font-size: 20px;
+  color: var(--fg);
+}
+
+.page-header .page-subtitle {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.page-header .page-masthead__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.page-header .filter-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.page-header .search-wrap {
+  position: relative;
+  flex: 1 1 240px;
+  min-width: 200px;
+  max-width: 360px;
+}
+
+.page-header .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.page-header .search {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+}
+
+.page-header .stats-bar {
+  display: flex;
+  gap: 24px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-header .stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.page-header .stat-num {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.page-header .stat-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+@media (max-width: 768px) {
+  .page-header .page-masthead {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-header .page-masthead__actions {
+    width: 100%;
+  }
+
+  .page-header .page-masthead__actions .btn-primary {
+    width: 100%;
+  }
+
+  .page-header .filter-strip {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-header .search-wrap {
+    max-width: none;
+    flex-basis: auto;
+  }
+
+  .page-header .stats-bar {
+    gap: 16px;
+  }
+}

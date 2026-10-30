@@ -100,6 +100,14 @@ const internalCategoryOptions = computed(() => [
   { id: "docs", label: "Documentation" },
 ]);
 
+const activeSearch = computed({
+  get: () => (activeTab.value === "public" ? searchQuery.value : internalSearchQuery.value),
+  set: (value: string) => {
+    if (activeTab.value === "public") searchQuery.value = value;
+    else internalSearchQuery.value = value;
+  },
+});
+
 const tabSubtitle = computed(() => {
   if (activeTab.value === "internal") {
     return "About Orbit Docs, from signed-in team members";
@@ -245,57 +253,73 @@ const categoryClass: Record<string, string> = {
 
 <template>
   <div class="feedback-page">
-    <header class="topbar">
-      <div class="flex-gap-md topbar-title">
-        <h1>Feedback</h1>
-        <span class="text-muted-sm">{{ tabSubtitle }}</span>
-      </div>
-      <div v-if="activeTab === 'public'" class="flex-gap-md">
-        <input
-          v-model="searchQuery"
-          class="search"
-          placeholder="Search feedback…"
-          aria-label="Search feedback"
-        />
-        <GeneralSearchableDropdown
-          v-model="appFilter"
-          :options="appFilterOptions"
-          placeholder="Filter by app…"
-          search-placeholder="Search apps…"
-        />
-      </div>
-      <div v-else class="flex-gap-md">
-        <input
-          v-model="internalSearchQuery"
-          class="search"
-          placeholder="Search Orbit Docs feedback…"
-          aria-label="Search Orbit Docs feedback"
-        />
-      </div>
-    </header>
-
-    <div v-if="canReadInternalFeedback" class="feedback-tabs" role="tablist" aria-label="Feedback source">
-      <button
-        type="button"
-        role="tab"
-        class="feedback-tab"
-        :class="{ active: activeTab === 'public' }"
-        :aria-selected="activeTab === 'public'"
-        @click="activeTab = 'public'"
-      >
-        Public docs
-      </button>
-      <button
-        type="button"
-        role="tab"
-        class="feedback-tab"
-        :class="{ active: activeTab === 'internal' }"
-        :aria-selected="activeTab === 'internal'"
-        @click="activeTab = 'internal'"
-      >
-        Internal · Orbit Docs
-      </button>
-    </div>
+    <GeneralPageHeader
+      v-model:search="activeSearch"
+      title="Feedback"
+      :subtitle="tabSubtitle"
+      :search-placeholder="activeTab === 'public' ? 'Search feedback…' : 'Search Orbit Docs feedback…'"
+    >
+      <template v-if="canReadInternalFeedback" #nav>
+        <div class="feedback-tabs" role="tablist" aria-label="Feedback source">
+          <button
+            type="button"
+            role="tab"
+            class="feedback-tab"
+            :class="{ active: activeTab === 'public' }"
+            :aria-selected="activeTab === 'public'"
+            @click="activeTab = 'public'"
+          >
+            Public docs
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="feedback-tab"
+            :class="{ active: activeTab === 'internal' }"
+            :aria-selected="activeTab === 'internal'"
+            @click="activeTab = 'internal'"
+          >
+            Internal · Orbit Docs
+          </button>
+        </div>
+      </template>
+      <template #filters>
+        <template v-if="activeTab === 'public'">
+          <GeneralSearchableDropdown
+            v-model="appFilter"
+            :options="appFilterOptions"
+            placeholder="Filter by app…"
+            search-placeholder="Search apps…"
+          />
+          <GeneralSearchableDropdown
+            v-model="statusFilter"
+            :options="statusFilterOptions"
+            placeholder="All statuses"
+            search-placeholder="Filter status…"
+          />
+          <GeneralSearchableDropdown
+            v-model="helpfulFilter"
+            :options="helpfulFilterOptions"
+            placeholder="All ratings"
+            search-placeholder="Filter rating…"
+          />
+        </template>
+        <template v-else>
+          <GeneralSearchableDropdown
+            v-model="internalStatusFilter"
+            :options="statusFilterOptions"
+            placeholder="All statuses"
+            search-placeholder="Filter status…"
+          />
+          <GeneralSearchableDropdown
+            v-model="internalCategoryFilter"
+            :options="internalCategoryOptions"
+            placeholder="All categories"
+            search-placeholder="Filter category…"
+          />
+        </template>
+      </template>
+    </GeneralPageHeader>
 
     <div class="row-between">
       <div>
@@ -330,34 +354,6 @@ const categoryClass: Record<string, string> = {
             · admin only
           </p>
         </template>
-      </div>
-      <div v-if="activeTab === 'public'" class="flex-gap-sm filter-group">
-        <GeneralSearchableDropdown
-          v-model="statusFilter"
-          :options="statusFilterOptions"
-          placeholder="All statuses"
-          search-placeholder="Filter status…"
-        />
-        <GeneralSearchableDropdown
-          v-model="helpfulFilter"
-          :options="helpfulFilterOptions"
-          placeholder="All ratings"
-          search-placeholder="Filter rating…"
-        />
-      </div>
-      <div v-else class="flex-gap-sm filter-group">
-        <GeneralSearchableDropdown
-          v-model="internalStatusFilter"
-          :options="statusFilterOptions"
-          placeholder="All statuses"
-          search-placeholder="Filter status…"
-        />
-        <GeneralSearchableDropdown
-          v-model="internalCategoryFilter"
-          :options="internalCategoryOptions"
-          placeholder="All categories"
-          search-placeholder="Filter category…"
-        />
       </div>
     </div>
 
@@ -634,49 +630,9 @@ const categoryClass: Record<string, string> = {
   /* inherits global tokens */
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.topbar h1 {
-  margin: 0;
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--fg);
-}
-
-.flex-gap-sm {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.flex-gap-md {
-  display: flex;
-  gap: 16px;
-  align-items: center;
-}
-
 .text-muted-sm {
   color: var(--muted);
   font-size: 13px;
-}
-
-.search {
-  width: 320px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  font: inherit;
-  font-size: 14px;
-  color: var(--fg);
-}
-.search:focus {
-  outline: 2px solid var(--accent-soft);
-  border-color: var(--accent);
 }
 
 .row-between {
@@ -696,10 +652,6 @@ const categoryClass: Record<string, string> = {
 
 .section-sub {
   margin: 4px 0 0;
-}
-
-.filter-group {
-  flex-shrink: 0;
 }
 
 .card {
@@ -940,10 +892,6 @@ const categoryClass: Record<string, string> = {
   outline-offset: 2px;
 }
 
-.topbar-title {
-  flex-wrap: wrap;
-}
-
 .btn {
   display: inline-flex;
   align-items: center;
@@ -1140,15 +1088,8 @@ const categoryClass: Record<string, string> = {
 }
 
 @media (max-width: 768px) {
-  .search {
-    width: 180px;
-  }
-  .topbar,
   .row-between {
     flex-wrap: wrap;
-  }
-  .filter-group {
-    width: 100%;
   }
 }
 
@@ -1156,7 +1097,6 @@ const categoryClass: Record<string, string> = {
   .modal-overlay,
   .modal-panel,
   .btn,
-  .search,
   .select,
   .loading-spinner {
     transition: none !important;

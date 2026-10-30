@@ -101,6 +101,18 @@ async function doDelete() {
   }
 }
 
+const siteStats = computed(() => {
+  const sites = docSites.value.filter((s) => !s.isWikiSite);
+  const drafts = sites.filter((s) => s.status === "draft").length;
+  const wikis = docSites.value.length - sites.length;
+  return [
+    { label: sites.length === 1 ? "Doc site" : "Doc sites", value: sites.length },
+    { label: "Published", value: sites.filter((s) => s.status === "published").length },
+    { label: drafts === 1 ? "Draft" : "Drafts", value: drafts },
+    { label: wikis === 1 ? "Wiki" : "Wikis", value: wikis },
+  ];
+});
+
 const statusClass: Record<string, string> = {
   draft: "pill-blue",
   published: "pill-green",
@@ -127,22 +139,23 @@ function timeAgo(dateStr: string | null) {
 
 <template>
   <div class="sites-page">
-    <header class="topbar">
-      <h1>Doc Sites</h1>
-      <div style="display:flex;align-items:center;gap:16px;">
-        <input
-          v-model="searchQuery"
-          class="search"
-          placeholder="Search doc sites…"
-          aria-label="Search doc sites"
-        />
-        <button v-if="canWriteDocSites" type="button" class="btn btn-primary" @click="openCreateModal">
+    <GeneralPageHeader
+      v-model:search="searchQuery"
+      title="Doc Sites"
+      subtitle="Published documentation websites built from your docs."
+      search-placeholder="Search doc sites…"
+      search-label="Search doc sites"
+      :stats="siteStats"
+      stats-label="Doc site summary"
+    >
+      <template v-if="canWriteDocSites" #actions>
+        <button type="button" class="btn btn-primary" @click="openCreateModal">
           + New Doc Site
         </button>
-      </div>
-    </header>
+      </template>
+    </GeneralPageHeader>
 
-    <div class="row-between" style="margin-bottom:20px;">
+    <div class="row-between">
       <div style="display:flex;align-items:center;gap:12px;">
         <h2>Your doc sites</h2>
         <span v-if="searchQuery" class="result-count">

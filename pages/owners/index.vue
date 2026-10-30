@@ -40,6 +40,11 @@ const isEditing = ref(false);
 const ownerToDelete = ref<Owner | null>(null);
 const isDeleting = ref(false);
 
+const ownerStats = computed(() => [
+  { label: "Total owners", value: owners.value.length },
+  { label: "With email", value: owners.value.filter((o) => o.email).length },
+]);
+
 const filteredOwners = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   if (!q) return owners.value;
@@ -177,33 +182,21 @@ function formatDate(dateStr: string | null) {
 
 <template>
   <div class="owners-page">
-    <!-- Topbar -->
-    <header class="topbar">
-      <h1>Owners</h1>
-      <div style="display:flex;align-items:center;gap:16px;">
-        <input
-          v-model="searchQuery"
-          class="search"
-          placeholder="Search owners…"
-          aria-label="Search owners"
-        />
-        <button v-if="canManage" type="button" class="btn btn-primary" @click="openCreateModal">
+    <GeneralPageHeader
+      v-model:search="searchQuery"
+      title="Owners"
+      subtitle="People accountable for each app. Pick an owner when you create or edit an app."
+      search-placeholder="Search owners…"
+      search-label="Search owners"
+      :stats="ownerStats"
+      stats-label="Owner summary"
+    >
+      <template v-if="canManage" #actions>
+        <button type="button" class="btn btn-primary" @click="openCreateModal">
           + New Owner
         </button>
-      </div>
-    </header>
-
-    <!-- Stats -->
-    <div class="stats-bar">
-      <div class="stat">
-        <span class="stat-num">{{ owners.length }}</span>
-        <span class="stat-label">Total Owners</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num">{{ filteredOwners.length }}</span>
-        <span class="stat-label">Shown</span>
-      </div>
-    </div>
+      </template>
+    </GeneralPageHeader>
 
     <!-- Owners Table -->
     <div class="row-between" style="margin-bottom:16px;">
@@ -410,24 +403,10 @@ function formatDate(dateStr: string | null) {
   /* Inherits global semantic tokens from :root — no local overrides so dark mode works */
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-.topbar h1 {
-  margin: 0;
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--fg);
-}
-
 h2 {
   margin: 0;
   font-weight: 600;
-  font-size: 20px;
+  font-size: 18px;
   color: var(--fg);
 }
 
@@ -436,21 +415,6 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-}
-
-.search {
-  width: 320px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  font: inherit;
-  font-size: 14px;
-  color: var(--fg);
-}
-.search:focus {
-  outline: 2px solid var(--accent-soft);
-  border-color: var(--accent);
 }
 
 .card {
@@ -480,30 +444,6 @@ h2 {
 .num {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-}
-
-.stats-bar {
-  display: flex;
-  gap: 24px;
-  align-items: baseline;
-  margin-bottom: 32px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border);
-}
-.stat {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.stat-num {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-}
-.stat-label {
-  font-size: 14px;
-  color: var(--muted);
 }
 
 .ds-table {
@@ -741,14 +681,8 @@ h2 {
   .card,
   .modal-overlay,
   .modal,
-  .btn,
-  .search {
+  .btn {
     transition: none !important;
-  }
-}
-@media (max-width: 768px) {
-  .search {
-    width: 180px;
   }
 }
 </style>
