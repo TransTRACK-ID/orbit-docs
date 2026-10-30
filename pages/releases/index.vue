@@ -249,14 +249,17 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="releases-page">
-    <header class="page-masthead">
-      <div class="page-masthead__copy">
-        <h1>Releases</h1>
-        <p class="page-subtitle">
-          Release notes, updates, and drafts across every app.
-        </p>
-      </div>
-      <div class="masthead-actions">
+    <GeneralPageHeader
+      v-model:search="searchQuery"
+      title="Releases"
+      search-placeholder="Search releases…"
+      search-label="Search releases"
+    >
+      <template #subtitle>
+        Release notes across every app. A release is created when you add a version in
+        <NuxtLink to="/versions" class="subtitle-link">Versions</NuxtLink>.
+      </template>
+      <template #actions>
         <button
           v-if="canWriteReleases"
           type="button"
@@ -270,37 +273,24 @@ function onKeydown(e: KeyboardEvent) {
           </svg>
           Import from Notion
         </button>
-        <button type="button" class="btn btn-primary" @click="openShareModal">
+        <button type="button" class="btn btn-secondary" @click="openShareModal">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
             <polyline points="16 6 12 2 8 6" />
             <line x1="12" y1="2" x2="12" y2="15" />
           </svg>
-          Share
+          Share public page
         </button>
-      </div>
-    </header>
-
-    <div class="filter-strip">
-      <div class="search-wrap">
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
-          <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
-        <input
-          v-model="searchQuery"
-          class="search"
-          placeholder="Search releases..."
-          aria-label="Search releases"
+      </template>
+      <template #filters>
+        <GeneralSearchableDropdown
+          v-model="appFilter"
+          :options="appFilterOptions"
+          placeholder="All apps"
+          search-placeholder="Search apps..."
         />
-      </div>
-      <GeneralSearchableDropdown
-        v-model="appFilter"
-        :options="appFilterOptions"
-        placeholder="All apps"
-        search-placeholder="Search apps..."
-      />
-    </div>
+      </template>
+    </GeneralPageHeader>
 
     <main class="release-timeline" aria-live="polite">
       <GeneralSkeletonReleaseTimeline v-if="isLoading" />
@@ -318,7 +308,7 @@ function onKeydown(e: KeyboardEvent) {
           <time class="release-rail__date" :datetime="r.releaseDate || r.createdAt || undefined">
             {{ formatTimelineDate(r.releaseDate || r.createdAt) }}
           </time>
-          <span class="release-rail__label">Released</span>
+          <span class="release-rail__label">{{ r.published ? "Released" : r.releaseDate ? "Release date" : "Created" }}</span>
         </div>
 
         <div class="release-main">
@@ -521,78 +511,10 @@ function onKeydown(e: KeyboardEvent) {
   /* inherits global tokens */
 }
 
-.page-masthead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.masthead-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.page-masthead__copy {
-  min-width: 0;
-}
-
-.page-masthead h1 {
-  margin: 0 0 4px;
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--fg);
-}
-
-.page-subtitle {
-  margin: 0;
-  max-width: 52ch;
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.filter-strip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-}
-
-.search-wrap {
-  position: relative;
-  flex: 1 1 240px;
-  min-width: 200px;
-  max-width: 360px;
-}
-
-.search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--muted);
-  pointer-events: none;
-}
-
-.search {
-  width: 100%;
-  padding: 8px 12px 8px 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  font: inherit;
-  font-size: 14px;
-  color: var(--fg);
-}
-
-.search:focus {
-  outline: 2px solid var(--accent-soft);
-  border-color: var(--accent);
+.subtitle-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .release-timeline {
@@ -1179,21 +1101,6 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 @media (max-width: 768px) {
-  .page-masthead {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filter-strip {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-wrap {
-    max-width: none;
-    flex-basis: auto;
-  }
-
   .release-entry {
     grid-template-columns: 1fr;
     gap: 10px;

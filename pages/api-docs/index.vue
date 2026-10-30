@@ -24,6 +24,7 @@ definePageMeta({
 
 const $page = usePageStore();
 const router = useRouter();
+const NuxtLink = resolveComponent("NuxtLink");
 
 const collections = ref<ApiDocCollection[]>([]);
 const isLoading = ref(false);
@@ -61,19 +62,22 @@ onMounted(() => {
 /* ── Search debounce ───────────────────────────────────────── */
 let searchTimeout: ReturnType<typeof setTimeout> | null = null;
 
-function onSearchInput() {
+watch(searchQuery, () => {
   if (searchTimeout) clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
     fetchCollections();
   }, 300);
-}
+});
+
+const collectionStats = computed(() => {
+  const endpoints = collections.value.reduce((sum, c) => sum + c.stats.totalEndpoints, 0);
+  return [
+    { label: collections.value.length === 1 ? "Collection" : "Collections", value: collections.value.length },
+    { label: endpoints === 1 ? "Endpoint" : "Endpoints", value: endpoints },
+  ];
+});
 
 /* ── Navigate to collection docs ────────────────────────────── */
-function viewCollection(slug: string) {
-  if (!slug) return;
-  isNavigating.value = true;
-  router.push(`/api-docs/${slug}`);
-}
 
 function viewDocsFromInput() {
   const slug = slugInput.value.trim();
@@ -114,36 +118,15 @@ function getMethodBg(method: string): string {
 <template>
   <div class="api-docs-landing">
     <div class="landing-content">
-      <!-- Header -->
-      <div class="landing-header">
-        <div class="landing-icon">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="16 18 22 12 16 6" />
-            <polyline points="8 6 2 12 8 18" />
-          </svg>
-        </div>
-        <h1 class="landing-title">API Documentation</h1>
-        <p class="landing-desc">
-          Browse published API documentation collections from Postrack.
-        </p>
-      </div>
-
-      <!-- Search -->
-      <div class="search-box">
-        <div class="input-wrap">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search collections..."
-            class="search-input"
-            @input="onSearchInput"
-          />
-        </div>
-      </div>
+      <GeneralPageHeader
+        v-model:search="searchQuery"
+        title="API Docs"
+        subtitle="Published API documentation collections from Postrack."
+        search-placeholder="Search collections…"
+        search-label="Search API collections"
+        :stats="isLoading || listError ? [] : collectionStats"
+        stats-label="API docs summary"
+      />
 
       <!-- Collections Grid -->
       <div v-if="isLoading" class="collections-grid">
@@ -177,15 +160,17 @@ function getMethodBg(method: string): string {
       </div>
 
       <div v-else class="collections-grid">
-        <div
+        <component
+          :is="collection.publicSlug ? NuxtLink : 'div'"
           v-for="collection in collections"
           :key="collection.id"
+          :to="collection.publicSlug ? `/api-docs/${collection.publicSlug}` : undefined"
           class="collection-card"
-          @click="viewCollection(collection.publicSlug || '')"
+          :class="{ 'is-disabled': !collection.publicSlug }"
         >
           <div class="card-header">
             <h3 class="card-title">{{ collection.name }}</h3>
-            <span v-if="collection.publicSlug" class="slug-badge">{{ collection.publicSlug }}</span>
+            <span v-if="collection.publicSlug" class="slug-badge" :title="collection.publicSlug">{{ collection.publicSlug }}</span>
           </div>
           <p v-if="collection.description" class="card-desc">
             {{ collection.description }}
@@ -211,7 +196,7 @@ function getMethodBg(method: string): string {
             </div>
             <span class="doc-mode">{{ collection.docMode }}</span>
           </div>
-        </div>
+        </component>
       </div>
 
       <!-- Direct Slug Entry -->
@@ -248,54 +233,9 @@ function getMethodBg(method: string): string {
 </template>
 
 <style scoped>
-.api-docs-landing {
-  padding: 32px;
-  max-width: 960px;
-  margin: 0 auto;
-}
-
 .landing-content {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-}
-
-.landing-header {
-  text-align: center;
-}
-
-.landing-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-lg, 12px);
-  background: var(--accent-soft, color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent));
-  color: var(--accent, oklch(55% 0.16 25));
-  margin-bottom: 16px;
-}
-
-.landing-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--fg, oklch(20% 0.02 250));
-  margin: 0 0 8px;
-  letter-spacing: -0.02em;
-}
-
-.landing-desc {
-  font-size: 14px;
-  color: var(--muted, oklch(55% 0.015 250));
-  margin: 0;
-  line-height: 1.6;
-}
-
-/* Search */
-.search-box {
-  max-width: 480px;
-  margin: 0 auto;
-  width: 100%;
 }
 
 .input-wrap {
@@ -319,7 +259,6 @@ function getMethodBg(method: string): string {
   flex-shrink: 0;
 }
 
-.search-input,
 .slug-input {
   flex: 1;
   border: none;
@@ -331,7 +270,6 @@ function getMethodBg(method: string): string {
   min-width: 0;
 }
 
-.search-input::placeholder,
 .slug-input::placeholder {
   color: var(--muted, oklch(55% 0.015 250));
 }
@@ -348,6 +286,8 @@ function getMethodBg(method: string): string {
   border: 1px solid var(--border, oklch(90% 0.006 250));
   border-radius: var(--radius-lg, 12px);
   padding: 20px;
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
   display: flex;
@@ -363,6 +303,21 @@ function getMethodBg(method: string): string {
 
 .collection-card:active {
   transform: translateY(0);
+}
+
+.collection-card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.collection-card.is-disabled {
+  cursor: default;
+}
+
+.collection-card.is-disabled:hover {
+  border-color: var(--border);
+  box-shadow: none;
+  transform: none;
 }
 
 .card-header {
@@ -388,7 +343,10 @@ function getMethodBg(method: string): string {
   border: 1px solid var(--border, oklch(90% 0.006 250));
   border-radius: 4px;
   color: var(--muted, oklch(55% 0.015 250));
-  flex-shrink: 0;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .card-desc {
@@ -583,10 +541,6 @@ function getMethodBg(method: string): string {
 }
 
 @media (max-width: 640px) {
-  .api-docs-landing {
-    padding: 20px;
-  }
-
   .collections-grid {
     grid-template-columns: 1fr;
   }
