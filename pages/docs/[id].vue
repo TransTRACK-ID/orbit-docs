@@ -7,6 +7,10 @@ import type { AdrStatus } from "~/types/adr";
 import { ADR_STATUSES } from "~/types/adr";
 import { isAdrDoc as checkIsAdrDoc, isWikiDoc as checkIsWikiDoc } from "~/utils/doc-display";
 import { isForbiddenWikiDocStatus } from "~/utils/wiki-content";
+import { setVideoToolBridge } from "~/components/editorjs/videoBridge";
+import type { TranscriptSegment, VideoBlockData } from "~/utils/video-block";
+import type { DocAsset } from "~/composables/useDocAssets";
+import type { PdfImportMode } from "~/components/docs/DocAttachments.vue";
 
 definePageMeta({
   auth: true,
@@ -115,14 +119,73 @@ const adrDeciderInputValue = ref("");
 const siblingAdrs = ref<Array<{ id: string; displayLabel: string }>>([]);
 const tagInputVisible = ref(false);
 const tagInputValue = ref("");
-const previewOnly = ref(false);
+type ViewMode = "edit" | "split" | "preview";
+const VIEW_MODES: Array<{ id: ViewMode; label: string }> = [
+  { id: "edit", label: "Edit" },
+  { id: "split", label: "Split" },
+  { id: "preview", label: "Preview" },
+];
+const viewMode = ref<ViewMode>("edit");
+const previewOnly = computed(() => viewMode.value === "preview");
+
+const SIDEBAR_MIN = 260;
+const SIDEBAR_MAX = 480;
+const SIDEBAR_DEFAULT = 280;
+const sidebarCollapsed = ref(false);
+const sidebarWidth = ref(SIDEBAR_DEFAULT);
+const showSidebar = computed(() => viewMode.value === "edit" && !sidebarCollapsed.value);
+
+function setSidebarWidth(width: number) {
+  sidebarWidth.value = Math.round(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, width)));
+  localStorage.setItem("docEditor.sidebarWidth", String(sidebarWidth.value));
+}
+
+function toggleSidebar() {
+  if (viewMode.value !== "edit") {
+    viewMode.value = "edit";
+    sidebarCollapsed.value = false;
+  } else {
+    sidebarCollapsed.value = !sidebarCollapsed.value;
+  }
+  localStorage.setItem("docEditor.sidebarCollapsed", sidebarCollapsed.value ? "1" : "0");
+}
+
+function startSidebarResize(e: PointerEvent) {
+  const handle = e.currentTarget as HTMLElement;
+  const startX = e.clientX;
+  const startWidth = sidebarWidth.value;
+  handle.setPointerCapture(e.pointerId);
+  const onMove = (move: PointerEvent) => setSidebarWidth(startWidth + (startX - move.clientX));
+  const onUp = () => {
+    handle.removeEventListener("pointermove", onMove);
+    handle.removeEventListener("pointerup", onUp);
+    handle.removeEventListener("pointercancel", onUp);
+  };
+  handle.addEventListener("pointermove", onMove);
+  handle.addEventListener("pointerup", onUp);
+  handle.addEventListener("pointercancel", onUp);
+}
+
+function onSidebarResizeKeydown(e: KeyboardEvent) {
+  if (e.key === "ArrowLeft") setSidebarWidth(sidebarWidth.value + 16);
+  else if (e.key === "ArrowRight") setSidebarWidth(sidebarWidth.value - 16);
+  else return;
+  e.preventDefault();
+}
+
+onMounted(() => {
+  const storedWidth = Number(localStorage.getItem("docEditor.sidebarWidth"));
+  if (Number.isFinite(storedWidth) && storedWidth > 0) setSidebarWidth(storedWidth);
+  sidebarCollapsed.value = localStorage.getItem("docEditor.sidebarCollapsed") === "1";
+});
 const toastMsg = ref("");
 const toastVisible = ref(false);
 const shortcutsVisible = ref(false);
 const activeHeading = ref("");
 const docLoading = ref(false);
 const docNotFound = ref(false);
-const rightSidebarTab = ref<'properties' | 'versions'>('properties');
+type SidebarTab = 'properties' | 'attachments' | 'versions';
+const rightSidebarTab = ref<SidebarTab>('properties');
 const restoreConfirmVisible = ref(false);
 const embeddingStatus = ref<{
   status: string;
@@ -358,7 +421,7 @@ const saveStatusLabel = computed(() => {
   if (saveState.value === "error" || isDirty.value || saveState.value === "pending") {
     return "Unsaved changes";
   }
-  if (saveState.value === "saved") return "All changes saved";
+  if (saveState.value === "saved") return "Saved";
   return "";
 });
 
@@ -375,8 +438,22 @@ function showToast(msg: string) {
 }
 
 function togglePreview() {
-  previewOnly.value = !previewOnly.value;
-  showToast(previewOnly.value ? "Preview mode" : "Split view");
+  viewMode.value = previewOnly.value ? "edit" : "preview";
+}
+
+function cycleViewMode() {
+  const index = VIEW_MODES.findIndex((mode) => mode.id === viewMode.value);
+  const next = VIEW_MODES[(index + 1) % VIEW_MODES.length]!;
+  viewMode.value = next.id;
+  showToast(`${next.label} view`);
+}
+
+function focusEditorBody() {
+  paneBodyRef.value?.querySelector<HTMLElement>(".codex-editor [contenteditable='true']")?.focus();
+}
+
+function showEditor() {
+  if (previewOnly.value) viewMode.value = "edit";
 }
 
 async function saveDraft() {
@@ -443,6 +520,109 @@ function generatePDF() {
 
 const previewRef = ref<{ container: HTMLElement | null } | null>(null);
 const paneBodyRef = ref<HTMLElement | null>(null);
+const editorRef = ref<{ insertBlock: (type: string, data: Record<string, unknown>) => void } | null>(null);
+const splitPreviewRef = ref<HTMLElement | null>(null);
+let splitSyncFrame = 0;
+
+/** Split view: keeps the preview aligned to the heading at the top of the editor. */
+function syncSplitPreview() {
+  if (viewMode.value !== "split" || splitSyncFrame) return;
+  splitSyncFrame = requestAnimationFrame(() => {
+    splitSyncFrame = 0;
+    const editorPane = paneBodyRef.value;
+    const preview = splitPreviewRef.value;
+    if (!editorPane || !preview) return;
+    const editorTop = editorPane.getBoundingClientRect().top;
+    const headers = Array.from(editorPane.querySelectorAll<HTMLElement>(".ce-header"));
+    let index = -1;
+    let offset = 0;
+    headers.forEach((header, i) => {
+      const top = header.getBoundingClientRect().top - editorTop;
+      if (top <= 32) {
+        index = i;
+        offset = top;
+      }
+    });
+    if (index < 0) {
+      preview.scrollTop = 0;
+      return;
+    }
+    const target = preview.querySelectorAll<HTMLElement>(".markdown-content :is(h1, h2, h3, h4, h5, h6)")[index];
+    if (!target) return;
+    const targetTop = target.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop;
+    preview.scrollTop = targetTop - offset;
+  });
+}
+
+const docAssets = useDocAssets(docId);
+const previewAsset = ref<DocAsset | null>(null);
+const isSharingAsset = ref(false);
+const importingAssetId = ref<string | null>(null);
+const transcriptVideo = ref<VideoBlockData | null>(null);
+let onTranscriptSave: ((segments: TranscriptSegment[]) => void) | null = null;
+
+async function togglePdfShare(enabled: boolean) {
+  const asset = previewAsset.value;
+  if (!asset || isSharingAsset.value) return;
+  isSharingAsset.value = true;
+  try {
+    previewAsset.value = await docAssets.setShareEnabled(asset.id, enabled);
+    showToast(enabled ? "Public link is on" : "Public link turned off");
+  } catch {
+    showToast("Couldn't update the public link. Try again.");
+  } finally {
+    isSharingAsset.value = false;
+  }
+}
+
+async function importPdfIntoEditor(asset: DocAsset, mode: PdfImportMode) {
+  if (!docId.value || importingAssetId.value) return;
+  importingAssetId.value = asset.id;
+  try {
+    const { markdown } = await docAssets.importPdf(asset.id);
+    const current = editorContent.value.trim();
+    if (mode === "replace" && current) {
+      if (autosaveEnabled.value && hasPendingChanges()) await flushSave({ silent: true });
+      await updateDoc(docId.value, { title: editorTitle.value, versionAction: "save" }, { silent: true });
+      await fetchDocVersions(docId.value);
+    }
+    showEditor();
+    editorContent.value = mode === "append" && current ? `${editorContent.value.trimEnd()}\n\n${markdown}` : markdown;
+    showToast(mode === "append" && current ? "PDF text added to the end" : "PDF text imported");
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : "PDF import failed");
+  } finally {
+    importingAssetId.value = null;
+  }
+}
+
+async function uploadDocImage(file: File): Promise<string> {
+  try {
+    return await docAssets.uploadImage(file);
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : "Image upload failed");
+    throw error;
+  }
+}
+
+async function insertVideoBlock(asset: DocAsset) {
+  if (previewOnly.value) {
+    showEditor();
+    await nextTick();
+  }
+  editorRef.value?.insertBlock("video", { assetId: asset.id, title: asset.title, segments: [] });
+}
+
+function saveTranscript(segments: TranscriptSegment[]) {
+  onTranscriptSave?.(segments);
+  closeTranscript();
+  showToast("Transcript saved");
+}
+
+function closeTranscript() {
+  transcriptVideo.value = null;
+  onTranscriptSave = null;
+}
 
 function removeTag(index: number) {
   editorTags.value.splice(index, 1);
@@ -529,7 +709,7 @@ function toggleShortcuts() {
   }
 }
 
-function switchSidebarTab(tab: 'properties' | 'versions') {
+function switchSidebarTab(tab: SidebarTab) {
   rightSidebarTab.value = tab;
 }
 
@@ -592,8 +772,13 @@ function onKeydown(e: KeyboardEvent) {
     e.preventDefault();
     togglePreview();
   }
-  // Ctrl+? / Cmd+? — Shortcuts
+  // Ctrl+/ / Cmd+/ — Edit, Split, Preview
   if ((e.ctrlKey || e.metaKey) && e.key === "/") {
+    e.preventDefault();
+    cycleViewMode();
+  }
+  // Ctrl+? / Cmd+? — Shortcuts
+  if ((e.ctrlKey || e.metaKey) && e.key === "?") {
     e.preventDefault();
     toggleShortcuts();
   }
@@ -688,6 +873,7 @@ async function loadDoc() {
     }
     await fetchDocVersions(docId.value);
     await fetchEmbeddingStatus();
+    void docAssets.fetchAssets();
   } catch {
     docNotFound.value = true;
   } finally {
@@ -705,9 +891,21 @@ onMounted(() => {
   document.addEventListener("keydown", onKeydown);
   document.addEventListener("keydown", onTagRemoveKeydown);
   window.addEventListener("beforeunload", onBeforeUnload);
+  setVideoToolBridge({
+    upload: async (file, onProgress) => {
+      const asset = await docAssets.uploadAsset(file, onProgress);
+      return { assetId: asset.id, title: asset.title };
+    },
+    openTranscript: (data, onSave) => {
+      transcriptVideo.value = data;
+      onTranscriptSave = onSave;
+    },
+  });
 });
 
 onBeforeUnmount(() => {
+  setVideoToolBridge(null);
+  if (splitSyncFrame) cancelAnimationFrame(splitSyncFrame);
   document.removeEventListener("keydown", onKeydown);
   document.removeEventListener("keydown", onTagRemoveKeydown);
   window.removeEventListener("beforeunload", onBeforeUnload);
@@ -793,7 +991,7 @@ const lastModified = computed(() => {
           :class="{
             'save-status--saving': saveStatusLabel === 'Saving…',
             'save-status--dirty': saveStatusLabel === 'Unsaved changes',
-            'save-status--saved': saveStatusLabel === 'All changes saved',
+            'save-status--saved': saveStatusLabel === 'Saved',
           }"
           aria-live="polite"
         >
@@ -820,11 +1018,26 @@ const lastModified = computed(() => {
         <button
           type="button"
           class="btn btn-ghost"
-          :class="{ active: previewOnly }"
-          @click="togglePreview"
+          :class="{ active: showSidebar }"
+          :aria-pressed="showSidebar"
+          aria-controls="doc-sidebar"
+          @click="toggleSidebar"
         >
-          {{ previewOnly ? "Editor" : "Preview" }}
+          Panel
         </button>
+        <div class="view-switch" role="group" aria-label="View mode">
+          <button
+            v-for="mode in VIEW_MODES"
+            :key="mode.id"
+            type="button"
+            class="view-switch-btn"
+            :class="{ active: viewMode === mode.id }"
+            :aria-pressed="viewMode === mode.id"
+            @click="viewMode = mode.id"
+          >
+            {{ mode.label }}
+          </button>
+        </div>
         <button
           v-if="canEditDoc"
           type="button"
@@ -882,7 +1095,8 @@ const lastModified = computed(() => {
       <div
         v-else
         class="doc-shell"
-        :class="{ 'preview-only': previewOnly, 'has-outline': showOutline }"
+        :class="{ 'no-sidebar': !showSidebar, split: viewMode === 'split', 'has-outline': showOutline }"
+        :style="{ '--doc-sidebar-w': `${sidebarWidth}px` }"
       >
         <!-- Outline -->
         <div v-show="showOutline" id="doc-outline" class="outline-pane">
@@ -925,27 +1139,64 @@ const lastModified = computed(() => {
 
         <!-- Editor -->
         <div class="editor-pane">
-          <div ref="paneBodyRef" class="pane-body">
-            <ClientOnly>
-              <EditorJs
-                v-if="!previewOnly"
-                v-model="editorContent"
-                :read-only="!canEditDoc"
-                placeholder="Write your technical documentation..."
-                style="height:100%;"
+          <div ref="paneBodyRef" class="pane-body" @scroll.passive="syncSplitPreview">
+            <article v-if="previewOnly" class="doc-body doc-canvas">
+              <h1 class="doc-body-title">{{ editorTitle.trim() || "Untitled doc" }}</h1>
+              <ClientOnly>
+                <MermaidHtml ref="previewRef" :html="renderedHtml" class="markdown-content markdown-body" />
+              </ClientOnly>
+            </article>
+            <div v-else class="doc-canvas doc-canvas--editor">
+              <textarea
+                v-if="canEditDoc"
+                v-model="editorTitle"
+                class="doc-canvas-title"
+                rows="1"
+                placeholder="Untitled doc"
+                aria-label="Document title"
+                @keydown.enter.prevent="focusEditorBody"
               />
-              <MermaidHtml
-                v-else
-                ref="previewRef"
-                :html="renderedHtml"
-                class="preview-body"
-              />
-            </ClientOnly>
+              <h1 v-else class="doc-canvas-title">{{ editorTitle.trim() || "Untitled doc" }}</h1>
+              <ClientOnly>
+                <EditorJs
+                  ref="editorRef"
+                  v-model="editorContent"
+                  :read-only="!canEditDoc"
+                  :upload-image="uploadDocImage"
+                  enable-video
+                  placeholder="Write, or press / for blocks"
+                />
+              </ClientOnly>
+            </div>
           </div>
         </div>
 
-        <!-- Right Sidebar (Properties + Versions tabs) -->
-        <div v-if="!previewOnly" class="right-sidebar">
+        <div v-if="viewMode === 'split'" class="editor-pane split-preview-pane" aria-label="Preview">
+          <div ref="splitPreviewRef" class="pane-body">
+            <article class="doc-body doc-canvas">
+              <h1 class="doc-body-title">{{ editorTitle.trim() || "Untitled doc" }}</h1>
+              <ClientOnly>
+                <MermaidHtml :html="renderedHtml" class="markdown-content markdown-body" />
+              </ClientOnly>
+            </article>
+          </div>
+        </div>
+
+        <!-- Right Sidebar (Properties, Files, Versions tabs) -->
+        <div v-if="showSidebar" id="doc-sidebar" class="right-sidebar">
+          <div
+            class="sidebar-resize"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize panel"
+            :aria-valuenow="sidebarWidth"
+            :aria-valuemin="SIDEBAR_MIN"
+            :aria-valuemax="SIDEBAR_MAX"
+            tabindex="0"
+            @pointerdown.prevent="startSidebarResize"
+            @keydown="onSidebarResizeKeydown"
+            @dblclick="setSidebarWidth(SIDEBAR_DEFAULT)"
+          />
           <div class="sidebar-tabs">
             <button
               type="button"
@@ -958,6 +1209,18 @@ const lastModified = computed(() => {
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
               Properties
+            </button>
+            <button
+              type="button"
+              class="sidebar-tab"
+              :class="{ active: rightSidebarTab === 'attachments' }"
+              @click="switchSidebarTab('attachments')"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+              </svg>
+              Files
+              <span v-if="docAssets.assets.value.length > 0" class="tab-badge">{{ docAssets.assets.value.length }}</span>
             </button>
             <button
               type="button"
@@ -1355,6 +1618,19 @@ const lastModified = computed(() => {
               </div>
             </div>
 
+            <div v-else-if="rightSidebarTab === 'attachments'" key="attachments">
+              <DocsDocAttachments
+                :store="docAssets"
+                :can-edit="canEditDoc"
+                :doc-has-content="!!editorContent.trim()"
+                :importing-id="importingAssetId"
+                @preview="previewAsset = $event"
+                @import="importPdfIntoEditor"
+                @insert-video="insertVideoBlock"
+                @notify="showToast"
+              />
+            </div>
+
             <!-- Versions Panel -->
             <div v-else key="versions" class="versions-panel">
               <DocsVersionTimeline
@@ -1411,6 +1687,20 @@ const lastModified = computed(() => {
       </div>
     </div>
 
+    <DocsPdfPreviewModal
+      :asset="previewAsset"
+      :can-edit="canEditDoc"
+      :is-sharing="isSharingAsset"
+      @close="previewAsset = null"
+      @toggle-share="togglePdfShare"
+    />
+
+    <DocsVideoTranscriptEditor
+      :video="transcriptVideo"
+      @save="saveTranscript"
+      @close="closeTranscript"
+    />
+
     <!-- Toast -->
     <div class="toast" :class="{ show: toastVisible }">
       {{ toastMsg }}
@@ -1419,7 +1709,7 @@ const lastModified = computed(() => {
     <!-- Shortcuts hint -->
     <div class="shortcuts-hint" :class="{ show: shortcutsVisible }">
       <strong>Keyboard shortcuts</strong><br />
-      Ctrl+S — {{ isPublished ? 'Save changes' : 'Save draft' }} · Ctrl+P — Preview · Ctrl+? — Show shortcuts
+      Ctrl+S {{ isPublished ? 'Save changes' : 'Save draft' }} · Ctrl+/ Edit, Split, Preview · Ctrl+K Link · / Blocks · Ctrl+? Shortcuts
     </div>
   </div>
 </template>
@@ -1572,30 +1862,37 @@ const lastModified = computed(() => {
 .doc-shell {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) var(--doc-sidebar-w, 280px);
   gap: 24px;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
 .doc-shell.has-outline {
-  grid-template-columns: 220px minmax(0, 1fr) 280px;
+  grid-template-columns: 220px minmax(0, 1fr) var(--doc-sidebar-w, 280px);
 }
-.doc-shell.preview-only {
+.doc-shell.no-sidebar {
   grid-template-columns: minmax(0, 1fr);
 }
-.doc-shell.preview-only.has-outline {
+.doc-shell.no-sidebar.has-outline {
   grid-template-columns: 220px minmax(0, 1fr);
 }
-.doc-shell.preview-only .right-sidebar {
-  display: none;
+.doc-shell.split {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.doc-shell.split.has-outline {
+  grid-template-columns: 220px minmax(0, 1fr) minmax(0, 1fr);
 }
 @media (max-width: 1279px) {
   .doc-shell.has-outline {
-    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr) var(--doc-sidebar-w, 280px);
   }
-  .doc-shell.preview-only.has-outline {
+  .doc-shell.no-sidebar.has-outline {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .doc-shell.split.has-outline {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
   .doc-shell .outline-pane {
     position: absolute;
@@ -1753,17 +2050,142 @@ const lastModified = computed(() => {
   height: 100%;
 }
 
-.editor-pane:has(.editor-js-wrapper) .pane-body {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
+/* The pane scrolls (not Editor.js) so the inline title moves with the content. */
+.editor-pane .pane-body :deep(.editor-js-wrapper),
+.editor-pane .pane-body :deep(.editor-js-container),
+.editor-pane .pane-body :deep(.codex-editor) {
+  height: auto;
+  flex: none;
 }
 
-.editor-pane:has(.editor-js-wrapper) .pane-body :deep(.editor-js-wrapper) {
-  flex: 1;
-  min-height: 0;
+.editor-pane .pane-body :deep(.editor-js-container) {
+  padding: 0;
+}
+
+.editor-pane .pane-body :deep(.codex-editor__redactor) {
   overflow: visible;
+}
+
+.doc-canvas {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px 96px;
+}
+
+/* Editor blocks keep a 48px handle gutter; widen so the text column matches the preview. */
+.doc-canvas--editor {
+  max-width: calc(720px + 48px);
+}
+
+.doc-canvas :deep(.ce-block__content) {
+  padding-right: 0;
+}
+
+.doc-canvas-title {
+  display: block;
+  width: 100%;
+  margin: 0 0 16px;
+  /* Lines up with Editor.js block text, which sits after the 48px handle gutter. */
+  padding: 0 0 0 48px;
+  border: 0;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  font-family: var(--font-display);
+  font-size: var(--prose-h1);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--fg);
+}
+
+.doc-canvas-title::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.doc-canvas-title:focus {
+  outline: none;
+}
+
+.split-preview-pane {
+  background: var(--bg);
+}
+
+.view-switch {
+  display: inline-flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.view-switch-btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--easing-standard), color var(--motion-fast) var(--easing-standard);
+}
+
+.view-switch-btn:hover {
+  color: var(--fg);
+}
+
+.view-switch-btn.active {
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--fg) 10%, transparent);
+}
+
+.view-switch-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.sidebar-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.sidebar-resize::after {
+  content: "";
+  position: absolute;
+  top: 12px;
+  bottom: 12px;
+  left: 2px;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background var(--motion-fast) var(--easing-standard);
+}
+
+.sidebar-resize:hover::after,
+.sidebar-resize:focus-visible::after {
+  background: var(--accent);
+}
+
+.sidebar-resize:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-switch-btn,
+  .sidebar-resize::after {
+    transition: none;
+  }
 }
 .pane-header {
   padding: 12px 16px;
@@ -1781,10 +2203,6 @@ const lastModified = computed(() => {
   overflow: auto;
   min-height: 0;
 }
-.doc-shell.preview-only .editor-pane .pane-body {
-  padding: 24px 32px;
-}
-
 .toolbar {
   display: flex;
   align-items: center;
@@ -1832,109 +2250,15 @@ const lastModified = computed(() => {
   outline: none;
 }
 
-.preview-body {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--fg);
-}
-.preview-body :deep(h1) {
-  font-size: 24px;
-  margin-bottom: 16px;
-  font-weight: 600;
-}
-.preview-body :deep(h2) {
-  font-size: 18px;
-  margin: 24px 0 12px;
-  font-weight: 600;
-}
-.preview-body :deep(h3) {
-  font-size: 16px;
-  margin: 16px 0 8px;
-  font-weight: 600;
-}
-.preview-body :deep(ul) {
-  padding-left: 20px;
-  list-style-type: disc;
-}
-.preview-body :deep(ol) {
-  padding-left: 20px;
-  list-style-type: decimal;
-}
-.preview-body :deep(li) {
-  margin: 4px 0;
-}
-.preview-body :deep(code) {
-  background: var(--bg);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-}
-.preview-body :deep(pre) {
-  background: var(--bg);
-  padding: 12px;
-  border-radius: var(--radius);
-  overflow: auto;
-}
-.preview-body :deep(pre code) {
-  background: none;
-  padding: 0;
-}
-.preview-body :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 12px 0;
-}
-.preview-body :deep(th),
-.preview-body :deep(td) {
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  text-align: left;
-}
-.preview-body :deep(th) {
-  background: var(--bg);
-  font-weight: 600;
-}
-.preview-body :deep(blockquote) {
-  border-left: 3px solid var(--border);
-  margin: 12px 0;
-  padding-left: 16px;
-  color: var(--muted);
-}
-.preview-body :deep(hr) {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 24px 0;
-}
-.preview-body :deep(img) {
-  max-width: 100%;
-  border-radius: var(--radius);
-}
-.preview-body :deep(a:where(:not(:has(font[color]), :not(:has(span[style*="color"]))))) {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.preview-body :deep(a font[color]) {
-  text-decoration: inherit;
-}
-
-.preview-body :deep(a span[style*="color"]) {
-  text-decoration: inherit;
-}
-.preview-body :deep(input[type="checkbox"]) {
-  margin-right: 6px;
-}
-
 .right-sidebar {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  position: relative;
   display: flex;
   flex-direction: column;
-  min-width: 280px;
+  min-width: 0;
   min-height: 0;
   height: 100%;
   max-height: 100%;

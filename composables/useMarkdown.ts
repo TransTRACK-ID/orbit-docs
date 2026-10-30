@@ -2,6 +2,7 @@ import { marked } from "marked";
 import { parse as parseYaml } from "yaml";
 import { allowColorHtmlInMarkdown } from "~/composables/inlineColorHtml";
 import { mermaidPreHtml } from "~/utils/mermaid-source";
+import { formatTimestamp, parseVideoBlock, videoFileUrl, type VideoBlockData } from "~/utils/video-block";
 
 export interface DocFrontmatter {
   title?: string;
@@ -273,7 +274,13 @@ export function renderMarkdown(md: string): string {
       return `<li>${body}</li>\n`;
     };
 
-    return marked.parse(prepared, { async: false, renderer, gfm: true, breaks: false }) as string;
+    return splitVideoBlocks(prepared)
+      .map((part) =>
+        part.kind === "video"
+          ? renderVideoBlockHtml(part.data)
+          : (marked.parse(part.text, { async: false, renderer, gfm: true, breaks: false }) as string),
+      )
+      .join("");
   } catch (e: any) {
     console.error("Marked parsing error:", e);
     return `<div style="color:red; font-weight:bold; padding: 1rem; border: 1px solid red; background: #fff0f0;">Marked Error: ${e.message}</div><pre>${md}</pre>`;
@@ -285,6 +292,53 @@ function escapeHtml(text: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+type MarkdownPart = { kind: "markdown"; text: string } | { kind: "video"; data: VideoBlockData };
+
+/** Splits out `:::video` blocks (outside code fences) so they render as players, not paragraphs. */
+export function splitVideoBlocks(md: string): MarkdownPart[] {
+  const lines = md.split("\n");
+  const parts: MarkdownPart[] = [];
+  let buffer: string[] = [];
+  let inFence = false;
+
+  const flush = () => {
+    if (buffer.length) parts.push({ kind: "markdown", text: buffer.join("\n") });
+    buffer = [];
+  };
+
+  for (let i = 0; i < lines.length; ) {
+    const line = lines[i]!;
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    const video = !inFence ? parseVideoBlock(lines, i) : null;
+    if (video) {
+      flush();
+      parts.push({ kind: "video", data: video.data });
+      i = video.next;
+      continue;
+    }
+    buffer.push(line);
+    i++;
+  }
+  flush();
+  return parts;
+}
+
+export function renderVideoBlockHtml(data: VideoBlockData): string {
+  const attr = (value: string) => escapeHtml(value).replace(/"/g, "&quot;");
+  const title = data.title.trim();
+  const caption = title ? `<figcaption class="doc-video-caption">${escapeHtml(title)}</figcaption>` : "";
+  const segments = data.segments
+    .map((segment) => {
+      const stamp = formatTimestamp(segment.start);
+      return `<li><button type="button" class="doc-video-ts" data-seek="${segment.start}" aria-label="Play from ${stamp}">${stamp}</button><span>${escapeHtml(segment.text)}</span></li>`;
+    })
+    .join("");
+  const transcript = data.segments.length
+    ? `<details class="doc-video-transcript"><summary>Transcript <span class="doc-video-count">${data.segments.length} segment${data.segments.length === 1 ? "" : "s"}</span></summary><ol class="doc-video-segments">${segments}</ol></details>`
+    : "";
+  return `<figure class="doc-video" data-asset-id="${attr(data.assetId)}"><video class="doc-video-player" controls preload="metadata" playsinline src="${attr(videoFileUrl(data.assetId))}"${title ? ` aria-label="${attr(title)}"` : ""}></video>${caption}${transcript}</figure>\n`;
 }
 
 function inlineMd(text: string): string {

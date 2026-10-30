@@ -607,6 +607,7 @@ ${indexSample || "_No docs indexed._"}
 Rules:
 - Answer from retrieved content and binding ADRs only.
 - Cite with [doc:id] or [adr:NNN] when stating facts.
+- Video transcripts appear as \`:::video <assetId> <title>\` blocks with \`[mm:ss]\` or \`[mm:ss-mm:ss]\` lines. When a fact comes from one, say where it is said in the video and link to that moment: [<title> at mm:ss](/docs/<docId>?video=<assetId>&t=<start seconds>), next to the [doc:id] citation.
 - If the answer is not in context, say so and suggest which doc type or module to check.
 - Do not explore the filesystem or invent documentation.`;
 }

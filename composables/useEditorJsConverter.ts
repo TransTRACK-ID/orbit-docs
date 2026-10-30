@@ -6,6 +6,7 @@ import {
   serializeColoredSpan,
 } from "~/composables/inlineColorHtml";
 import { mermaidPreHtml } from "~/utils/mermaid-source";
+import { isVideoBlockOpenLine, parseVideoBlock, serializeVideoBlock } from "~/utils/video-block";
 
 export interface EditorJsData {
   time?: number;
@@ -27,6 +28,9 @@ const NOTION_IMAGE_EXT_RE = /\.(?:gif|jpe?g|png|webp|tiff|svg|bmp)$/i;
 export function isLoadableImageUrl(url: string): boolean {
   const value = url.trim();
   if (/^\/api\/(public\/)?releases\/[^/]+\/media\/[^/]+$/i.test(value)) {
+    return true;
+  }
+  if (/^\/api\/doc-images\/[^/]+\/[^/]+$/i.test(value)) {
     return true;
   }
   return /^(https?:|data:image\/|blob:)/i.test(value);
@@ -582,6 +586,14 @@ export function markdownToEditorJs(md: string): EditorJsData {
       continue;
     }
 
+    // Uploaded video with transcript (:::video <assetId> <title>)
+    const video = parseVideoBlock(lines, i);
+    if (video) {
+      blocks.push({ type: "video", data: { ...video.data } });
+      i = video.next;
+      continue;
+    }
+
     // Toggle block (using HTML details/summary syntax)
     const toggleMatch = line.match(/^<details>\s*<summary>(.+)<\/summary>\s*$/);
     if (toggleMatch || line.trim().startsWith(":::toggle")) {
@@ -680,6 +692,7 @@ export function markdownToEditorJs(md: string): EditorJsData {
       i < lines.length
       && lines[i].trim()
       && !lines[i].match(/^(#{1,3}|>|[-*]|\d+\.|```|!\[|---|\||:::toggle)/)
+      && !isVideoBlockOpenLine(lines[i])
       && !lines[i].match(/^!([^!\[\n]+\.(?:gif|jpe?g|png|webp|tiff|svg|bmp))$/i)
       && !isMermaidStartLine(lines[i])
     ) {
@@ -832,6 +845,18 @@ export function editorJsToMarkdown(data: EditorJsData): string {
         out.push("```mermaid");
         out.push(block.data.code || "");
         out.push("```");
+        break;
+      }
+      case "video": {
+        if (block.data.assetId) {
+          out.push(
+            serializeVideoBlock({
+              assetId: block.data.assetId,
+              title: block.data.title || "",
+              segments: Array.isArray(block.data.segments) ? block.data.segments : [],
+            }),
+          );
+        }
         break;
       }
       default:

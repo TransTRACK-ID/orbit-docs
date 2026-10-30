@@ -143,6 +143,18 @@
   --warning-text: var(--od-warning-text);
   --info: var(--od-info);
   --info-text: var(--od-info-text);
+
+  /* Document prose (shared by the editor, preview, and public reader) */
+  --prose-h1: 32px;
+  --prose-h2: 22px;
+  --prose-h3: 17px;
+  --prose-body: 14px;
+  --prose-line-height: 1.7;
+
+  /* Motion and focus */
+  --motion-fast: 150ms;
+  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --shadow-focus: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
 }
 
 .dark {

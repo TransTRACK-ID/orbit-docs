@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  carryVideoHeaders,
   chunkMarkdownForEmbedding,
   isIndexableDocType,
   secondarySplitContent,
@@ -79,5 +80,14 @@ describe("secondarySplitContent", () => {
     expect(parts.length).toBeGreaterThan(1);
     expect(parts.join("\n\n")).toContain("AAAA");
     expect(parts.join("\n\n")).toContain("BBBB");
+  });
+});
+
+describe("carryVideoHeaders", () => {
+  it("repeats the open video header on split transcript parts", () => {
+    const header = ":::video 3f2b8c1e-5d4a-4c7b-9e1f-2a3b4c5d6e7f Demo";
+    const parts = carryVideoHeaders([`Intro\n\n${header}\n[00:00] One`, "[01:05] Two\n:::", "After"]);
+    expect(parts[1]).toBe(`${header}\n[01:05] Two\n:::`);
+    expect(parts[2]).toBe("After");
   });
 });

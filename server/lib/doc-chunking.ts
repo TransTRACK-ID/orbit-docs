@@ -81,6 +81,19 @@ export function secondarySplitContent(content: string, maxChars: number): string
   return parts.length > 0 ? parts : [trimmed.slice(0, maxChars)];
 }
 
+/** Repeats an open `:::video` header on continuation parts so split transcript lines keep their video. */
+export function carryVideoHeaders(parts: string[]): string[] {
+  let openHeader: string | null = null;
+  return parts.map((part) => {
+    const out = openHeader && !part.startsWith(":::video") ? `${openHeader}\n${part}` : part;
+    for (const line of part.split("\n")) {
+      if (/^:::video\s/.test(line)) openHeader = line.trim();
+      else if (line.trim() === ":::") openHeader = null;
+    }
+    return out;
+  });
+}
+
 export function isIndexableDocType(docType: string | null | undefined): docType is IndexableDocType {
   return Boolean(docType && INDEXABLE_DOC_TYPES.includes(docType as IndexableDocType));
 }
@@ -152,7 +165,7 @@ export function chunkMarkdownForEmbedding(
   if (sections.length === 0) {
     const preamble = content.trim();
     if (!preamble) return [];
-    for (const part of secondarySplitContent(preamble, maxChars)) {
+    for (const part of carryVideoHeaders(secondarySplitContent(preamble, maxChars))) {
       chunks.push({
         heading: "(document)",
         chunkIndex: chunkIndex++,
@@ -163,7 +176,7 @@ export function chunkMarkdownForEmbedding(
   }
 
   for (const section of sections) {
-    const parts = secondarySplitContent(section.raw, maxChars);
+    const parts = carryVideoHeaders(secondarySplitContent(section.raw, maxChars));
     for (const part of parts) {
       chunks.push({
         heading: section.headingLine.replace(/^#+\s*/, "").trim() || section.headingLine,

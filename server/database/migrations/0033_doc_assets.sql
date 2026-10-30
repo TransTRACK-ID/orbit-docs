@@ -1,0 +1,3 @@
+CREATE TABLE IF NOT EXISTS doc_assets (id TEXT PRIMARY KEY, doc_id TEXT NOT NULL REFERENCES docs(id) ON DELETE CASCADE, kind TEXT NOT NULL, s3_key TEXT NOT NULL, mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL DEFAULT 0, file_name TEXT NOT NULL, title TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'pending', share_token TEXT, share_enabled BOOLEAN NOT NULL DEFAULT false, shared_at TIMESTAMP WITH TIME ZONE, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS doc_assets_doc_id_idx ON doc_assets (doc_id);
+CREATE UNIQUE INDEX IF NOT EXISTS doc_assets_share_token_unique ON doc_assets (share_token);

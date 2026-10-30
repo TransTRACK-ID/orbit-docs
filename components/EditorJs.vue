@@ -17,6 +17,8 @@ interface Props {
   autofocus?: boolean;
   minHeight?: string;
   uploadImage?: (file: File) => Promise<string>;
+  /** Registers the uploaded-video block; the host page must set the video tool bridge. */
+  enableVideo?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -323,6 +325,7 @@ async function initEditor() {
     { default: IndentTune },
     { default: DragDrop },
     { default: Undo },
+    { default: VideoTool },
   ] = await Promise.all([
     import("@editorjs/editorjs"),
     import("@editorjs/header"),
@@ -348,6 +351,7 @@ async function initEditor() {
     import("editorjs-indent-tune"),
     import("editorjs-drag-drop"),
     import("editorjs-undo"),
+    import("~/components/editorjs/VideoTool"),
   ]);
 
   // Convert initial markdown to Editor.js data
@@ -409,10 +413,7 @@ async function initEditor() {
         class: MermaidTool,
         config: { placeholder: "Enter Mermaid diagram code" },
       },
-      video: {
-        class: Embed,
-        inlineToolbar: true,
-      },
+      ...(props.enableVideo ? { video: { class: VideoTool } } : {}),
     };
 
   // Block tools whose text takes inline formatting; caret-only Cmd/Ctrl+B/I/U
@@ -558,6 +559,15 @@ defineExpose({
     const { editorJsToMarkdown } = await import("~/composables/useEditorJsConverter");
     return editorJsToMarkdown(data);
   },
+  /** Inserts a block after the focused block (or at the end) and scrolls it into view. */
+  insertBlock(type: string, data: Record<string, unknown>) {
+    const editor = editorInstance.value;
+    if (!editor || !isReady.value) return;
+    const current = editor.blocks.getCurrentBlockIndex();
+    const index = current >= 0 ? current + 1 : editor.blocks.getBlocksCount();
+    const block = editor.blocks.insert(type, data, {}, index, true);
+    block?.holder?.scrollIntoView({ behavior: "smooth", block: "center" });
+  },
 });
 </script>
 
@@ -697,27 +707,27 @@ defineExpose({
 }
 
 .editor-js-container .ce-header.ce-header--h1 {
-  font-size: 28px;
+  font-size: var(--prose-h1);
   font-weight: 800;
   margin-bottom: 16px;
 }
 
 .editor-js-container .ce-header.ce-header--h2 {
-  font-size: 22px;
+  font-size: var(--prose-h2);
   font-weight: 700;
   margin: 24px 0 12px;
 }
 
 .editor-js-container .ce-header.ce-header--h3 {
-  font-size: 18px;
+  font-size: var(--prose-h3);
   font-weight: 700;
   margin: 20px 0 10px;
 }
 
 .editor-js-container .ce-paragraph {
   font-family: inherit;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: var(--prose-body);
+  line-height: var(--prose-line-height);
   color: var(--fg);
   padding: 0;
   margin: 0 0 12px;
@@ -1599,6 +1609,125 @@ defineExpose({
 
 .editor-js-container .ce-toolbox .cdx-search-field__input {
   color: var(--fg);
+}
+
+/* Uploaded video block */
+.editor-js-container .cdx-video {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.editor-js-container .cdx-video__player {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  border-radius: var(--radius);
+  background: oklch(15% 0.01 250);
+}
+
+.editor-js-container .cdx-video__title {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.editor-js-container .cdx-video__title:focus {
+  outline: none;
+  color: var(--fg);
+}
+
+.editor-js-container .cdx-video__transcript-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--motion-fast) var(--easing-standard), border-color var(--motion-fast) var(--easing-standard);
+}
+
+.editor-js-container .cdx-video__transcript-btn:hover {
+  background: var(--fg-soft);
+}
+
+.editor-js-container .cdx-video__transcript-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.editor-js-container .cdx-video__upload {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) var(--easing-standard), color var(--motion-fast) var(--easing-standard);
+}
+
+.editor-js-container .cdx-video__upload:hover,
+.editor-js-container .cdx-video__upload:focus-within {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.editor-js-container .cdx-video__upload--busy {
+  cursor: progress;
+  pointer-events: none;
+}
+
+.editor-js-container .cdx-video__upload--error {
+  border-color: var(--od-error);
+  color: var(--od-error-text);
+}
+
+.editor-js-container .cdx-video__upload-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.editor-js-container .cdx-video__progress {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--fg-soft);
+  overflow: hidden;
+}
+
+.editor-js-container .cdx-video__progress-bar {
+  height: 100%;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--motion-fast) linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .editor-js-container .cdx-video__transcript-btn,
+  .editor-js-container .cdx-video__upload,
+  .editor-js-container .cdx-video__progress-bar {
+    transition: none;
+  }
 }
 
 </style>

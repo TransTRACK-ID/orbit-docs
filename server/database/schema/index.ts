@@ -13,3 +13,4 @@ export * from "./internal-feedback";
 export * from "./notion-sync";
 export * from "./permissions";
 export * from "./doc-chunks";
+export * from "./doc-assets";
