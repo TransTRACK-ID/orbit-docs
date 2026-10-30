@@ -1570,16 +1570,16 @@ h2 {
   font-weight: 500;
 }
 .pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 .pill-amber {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
-  color: oklch(60% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 .pill-muted {
   background: var(--fg-soft);
@@ -1587,7 +1587,7 @@ h2 {
 }
 .pill-red {
   background: color-mix(in oklch, oklch(55% 0.2 25) 12%, transparent);
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 .pill-purple {
   background: color-mix(in oklch, oklch(60% 0.18 300) 12%, transparent);
@@ -2068,12 +2068,12 @@ h2 {
   font-weight: 400;
 }
 .input-error {
-  border-color: oklch(55% 0.18 25) !important;
-  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
+  border-color: var(--error) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--error) 20%, transparent) !important;
 }
 .error-msg {
   display: none;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -2167,13 +2167,13 @@ h2 {
   }
 }
 .error-banner {
-  background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent);
-  color: oklch(50% 0.16 25);
+  background: color-mix(in oklch, var(--error) 8%, transparent);
+  color: var(--error-text);
   padding: 10px 12px;
   border-radius: var(--radius);
   font-size: 13px;
   margin-bottom: 16px;
-  border: 1px solid color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent);
+  border: 1px solid color-mix(in oklch, var(--error) 20%, transparent);
 }
 .help-text {
   display: block;
@@ -2237,16 +2237,16 @@ h2 {
 
 /* Tag color classes - reused across detail panel and compare modal */
 .rl-tag-added {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 .rl-tag-fixed {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 .rl-tag-changed {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
-  color: oklch(60% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 .rl-tag-deprecated {
   background: color-mix(in oklch, oklch(60% 0.18 300) 12%, transparent);
@@ -2254,7 +2254,7 @@ h2 {
 }
 .rl-tag-security {
   background: color-mix(in oklch, oklch(55% 0.2 25) 12%, transparent);
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 .rl-tag-muted {
   background: var(--fg-soft);

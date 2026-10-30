@@ -231,8 +231,8 @@ watch(
 
 .review-status-btn.status-approved.active {
   color: oklch(45% 0.12 145);
-  border-color: color-mix(in oklch, oklch(60% 0.18 145) 35%, var(--border));
-  background: color-mix(in oklch, oklch(60% 0.18 145) 10%, var(--surface));
+  border-color: color-mix(in oklch, var(--success) 35%, var(--border));
+  background: color-mix(in oklch, var(--success) 10%, var(--surface));
 }
 
 .review-status-btn.status-changes_requested.active {

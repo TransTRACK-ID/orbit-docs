@@ -135,6 +135,14 @@
   --font-mono: var(--od-font-mono);
   --radius: var(--od-radius);
   --radius-lg: var(--od-radius-lg);
+  --error: var(--od-error);
+  --error-text: var(--od-error-text);
+  --success: var(--od-success);
+  --success-text: var(--od-success-text);
+  --warning: var(--od-warning);
+  --warning-text: var(--od-warning-text);
+  --info: var(--od-info);
+  --info-text: var(--od-info-text);
 }
 
 .dark {

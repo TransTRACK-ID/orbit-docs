@@ -59,12 +59,12 @@
 .hljs-selector-attr,
 .hljs-selector-pseudo,
 .hljs-link {
-  color: oklch(55% 0.18 25);
+  color: var(--error);
 }
 
 .hljs-built_in,
 .hljs-deletion {
-  color: oklch(55% 0.18 25);
+  color: var(--error);
 }
 
 .hljs-formula {
@@ -167,14 +167,14 @@
 
 /* ── NOTE ────────────────────────────────────────────────────── */
 .markdown-alert-note {
-  border-color: oklch(60% 0.16 255);
-  background: color-mix(in oklch, oklch(60% 0.16 255) 8%, transparent);
+  border-color: var(--info);
+  background: color-mix(in oklch, var(--info) 8%, transparent);
 }
 .markdown-alert-note .markdown-alert-title {
   color: oklch(55% 0.16 255);
 }
 .dark .markdown-alert-note {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
 }
 .dark .markdown-alert-note .markdown-alert-title {
   color: oklch(70% 0.14 255);
@@ -182,14 +182,14 @@
 
 /* ── TIP ─────────────────────────────────────────────────────── */
 .markdown-alert-tip {
-  border-color: oklch(60% 0.18 145);
-  background: color-mix(in oklch, oklch(60% 0.18 145) 8%, transparent);
+  border-color: var(--success);
+  background: color-mix(in oklch, var(--success) 8%, transparent);
 }
 .markdown-alert-tip .markdown-alert-title {
-  color: oklch(50% 0.14 145);
+  color: var(--success-text);
 }
 .dark .markdown-alert-tip {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
 }
 .dark .markdown-alert-tip .markdown-alert-title {
   color: oklch(70% 0.14 145);
@@ -222,19 +222,19 @@
   background: color-mix(in oklch, oklch(70% 0.16 85) 12%, transparent);
 }
 .dark .markdown-alert-warning .markdown-alert-title {
-  color: oklch(75% 0.14 85);
+  color: var(--warning);
 }
 
 /* ── CAUTION ─────────────────────────────────────────────────── */
 .markdown-alert-caution {
-  border-color: oklch(55% 0.18 25);
-  background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent);
+  border-color: var(--error);
+  background: color-mix(in oklch, var(--error) 8%, transparent);
 }
 .markdown-alert-caution .markdown-alert-title {
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 .dark .markdown-alert-caution {
-  background: color-mix(in oklch, oklch(55% 0.18 25) 12%, transparent);
+  background: color-mix(in oklch, var(--error) 12%, transparent);
 }
 .dark .markdown-alert-caution .markdown-alert-title {
   color: oklch(70% 0.14 25);
@@ -290,8 +290,8 @@
 }
 
 .dark .task-list-checkbox:checked {
-  background: oklch(60% 0.16 255);
-  border-color: oklch(60% 0.16 255);
+  background: var(--info);
+  border-color: var(--info);
 }
 
 

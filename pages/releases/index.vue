@@ -792,18 +792,18 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 
 .pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 
 .pill-amber {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
-  color: oklch(60% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 
 .pill-muted {
@@ -908,18 +908,18 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 .rl-tag-added {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 
 .rl-tag-fixed {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 
 .rl-tag-changed {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
-  color: oklch(60% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 
 .rl-tag-deprecated {
@@ -928,8 +928,8 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 .rl-tag-security {
-  background: color-mix(in oklch, oklch(55% 0.18 25) 12%, transparent);
-  color: oklch(50% 0.16 25);
+  background: color-mix(in oklch, var(--error) 12%, transparent);
+  color: var(--error-text);
 }
 
 .rl-tag-muted {

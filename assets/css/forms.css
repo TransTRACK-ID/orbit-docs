@@ -58,13 +58,13 @@
 
 .field-error {
   font-size: 12px;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
   margin-top: 4px;
 }
 
 .error-msg {
   display: none;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
   font-size: 12px;
   margin-top: 4px;
 }

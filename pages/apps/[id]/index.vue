@@ -675,7 +675,7 @@ function releaseTitle(r: ReleaseItem) {
 }
 
 .dropdown-item--danger {
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 
 .dropdown-item--danger:hover {
@@ -875,18 +875,18 @@ a.row-list__title:hover {
 }
 
 .pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 
 .pill-amber {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
-  color: oklch(60% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 
 .pill-muted {

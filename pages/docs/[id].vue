@@ -1512,8 +1512,8 @@ const lastModified = computed(() => {
   font-weight: 500;
 }
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 
 .btn {

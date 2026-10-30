@@ -862,8 +862,8 @@ defineExpose({
   font-size: 14px;
   line-height: 1.6;
   color: var(--fg);
-  background: color-mix(in oklch, oklch(75% 0.14 85) 8%, transparent);
-  border: 1px solid color-mix(in oklch, oklch(75% 0.14 85) 20%, transparent);
+  background: color-mix(in oklch, var(--warning) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--warning) 20%, transparent);
   border-radius: var(--radius);
   padding: 12px;
   margin: 8px 0;
@@ -873,7 +873,7 @@ defineExpose({
   font-weight: 600;
   font-size: 14px;
   margin-bottom: 4px;
-  color: oklch(60% 0.12 85);
+  color: var(--warning-text);
 }
 
 .editor-js-container .cdx-warning__message {
@@ -897,8 +897,8 @@ defineExpose({
   margin: 0 0 10px;
   padding: 10px 12px;
   border-radius: var(--radius);
-  background: color-mix(in oklch, oklch(75% 0.14 85) 10%, transparent);
-  border: 1px solid color-mix(in oklch, oklch(75% 0.14 85) 24%, transparent);
+  background: color-mix(in oklch, var(--warning) 10%, transparent);
+  border: 1px solid color-mix(in oklch, var(--warning) 24%, transparent);
   color: oklch(50% 0.12 85);
   font-size: 13px;
   line-height: 1.5;

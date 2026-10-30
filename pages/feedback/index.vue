@@ -839,24 +839,24 @@ const categoryClass: Record<string, string> = {
   font-weight: 500;
 }
 .pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 .pill-red {
   background: color-mix(in oklch, oklch(55% 0.16 25) 12%, transparent);
   color: oklch(50% 0.14 25);
 }
 .pill-amber {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
-  color: oklch(60% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 .pill-muted {
   background: var(--fg-soft);
   color: var(--muted);
 }
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 
 .feedback-tabs {

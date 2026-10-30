@@ -536,7 +536,7 @@ useSeoMeta({
   color: oklch(50% 0.12 145);
 }
 .rl-tag-fixed {
-  background: color-mix(in oklch, oklch(55% 0.14 255) 8%, transparent);
+  background: color-mix(in oklch, var(--info-text) 8%, transparent);
   color: oklch(45% 0.12 255);
 }
 .rl-tag-changed {

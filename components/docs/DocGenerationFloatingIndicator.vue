@@ -217,7 +217,7 @@ function phaseLabel(status: string) {
 }
 
 .gen-float-pill:hover {
-  border-color: color-mix(in oklch, oklch(60% 0.16 255) 35%, var(--border));
+  border-color: color-mix(in oklch, var(--info) 35%, var(--border));
   box-shadow: 0 6px 24px color-mix(in oklch, var(--fg) 14%, transparent);
 }
 
@@ -391,7 +391,7 @@ function phaseLabel(status: string) {
 .gen-float-item-fill {
   display: block;
   height: 100%;
-  background: oklch(60% 0.16 255);
+  background: var(--info);
   border-radius: 999px;
   transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
 }
@@ -424,8 +424,8 @@ function phaseLabel(status: string) {
 }
 
 .gen-float-item-cancel:hover {
-  color: oklch(50% 0.16 25);
-  background: color-mix(in oklch, oklch(55% 0.18 25) 10%, transparent);
+  color: var(--error-text);
+  background: color-mix(in oklch, var(--error) 10%, transparent);
 }
 
 .gen-float-dot {
@@ -438,14 +438,14 @@ function phaseLabel(status: string) {
 }
 
 .gen-float-dot.active {
-  background: oklch(60% 0.16 255);
-  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(60% 0.16 255) 22%, transparent);
+  background: var(--info);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--info) 22%, transparent);
   animation: gen-pulse 1.5s ease-in-out infinite;
 }
 
 @keyframes gen-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklch, oklch(60% 0.16 255) 22%, transparent); }
-  50% { box-shadow: 0 0 0 6px color-mix(in oklch, oklch(60% 0.16 255) 8%, transparent); }
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in oklch, var(--info) 22%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--info) 8%, transparent); }
 }
 
 .gen-float-enter-active,

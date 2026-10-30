@@ -21,29 +21,29 @@
 
 .Vue-Toastify__toast--info,
 .Vue-Toastify__toast.toastify-info {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 8%, var(--surface));
-  border-color: color-mix(in oklch, oklch(60% 0.16 255) 28%, var(--border));
+  background: color-mix(in oklch, var(--info) 8%, var(--surface));
+  border-color: color-mix(in oklch, var(--info) 28%, var(--border));
   color: var(--fg);
 }
 
 .Vue-Toastify__toast--success,
 .Vue-Toastify__toast.toastify-success {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 8%, var(--surface));
-  border-color: color-mix(in oklch, oklch(60% 0.18 145) 28%, var(--border));
+  background: color-mix(in oklch, var(--success) 8%, var(--surface));
+  border-color: color-mix(in oklch, var(--success) 28%, var(--border));
   color: var(--fg);
 }
 
 .Vue-Toastify__toast--warning,
 .Vue-Toastify__toast.toastify-warning {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 10%, var(--surface));
-  border-color: color-mix(in oklch, oklch(75% 0.14 85) 30%, var(--border));
+  background: color-mix(in oklch, var(--warning) 10%, var(--surface));
+  border-color: color-mix(in oklch, var(--warning) 30%, var(--border));
   color: var(--fg);
 }
 
 .Vue-Toastify__toast--error,
 .Vue-Toastify__toast.toastify-error {
-  background: color-mix(in oklch, oklch(55% 0.18 25) 8%, var(--surface));
-  border-color: color-mix(in oklch, oklch(55% 0.18 25) 28%, var(--border));
+  background: color-mix(in oklch, var(--error) 8%, var(--surface));
+  border-color: color-mix(in oklch, var(--error) 28%, var(--border));
   color: var(--fg);
 }
 
@@ -53,22 +53,22 @@
 
 .Vue-Toastify__toast--success .Vue-Toastify__progress-bar,
 .Vue-Toastify__toast.toastify-success .Vue-Toastify__progress-bar {
-  background: oklch(60% 0.18 145);
+  background: var(--success);
 }
 
 .Vue-Toastify__toast--error .Vue-Toastify__progress-bar,
 .Vue-Toastify__toast.toastify-error .Vue-Toastify__progress-bar {
-  background: oklch(55% 0.18 25);
+  background: var(--error);
 }
 
 .Vue-Toastify__toast--info .Vue-Toastify__progress-bar,
 .Vue-Toastify__toast.toastify-info .Vue-Toastify__progress-bar {
-  background: oklch(60% 0.16 255);
+  background: var(--info);
 }
 
 .Vue-Toastify__toast--warning .Vue-Toastify__progress-bar,
 .Vue-Toastify__toast.toastify-warning .Vue-Toastify__progress-bar {
-  background: oklch(75% 0.14 85);
+  background: var(--warning);
 }
 
 .Vue-Toastify__close-button {
@@ -121,11 +121,11 @@
 }
 
 .gen-float.is-done .gen-float-pill {
-  border-color: color-mix(in oklch, oklch(60% 0.18 145) 35%, var(--border));
+  border-color: color-mix(in oklch, var(--success) 35%, var(--border));
 }
 
 .gen-float.is-failed .gen-float-pill {
-  border-color: color-mix(in oklch, oklch(55% 0.18 25) 35%, var(--border));
+  border-color: color-mix(in oklch, var(--error) 35%, var(--border));
 }
 
 .gen-float-pill-text {
@@ -167,11 +167,11 @@
 }
 
 .gen-float.is-done .gen-float-panel {
-  border-color: color-mix(in oklch, oklch(60% 0.18 145) 30%, var(--border));
+  border-color: color-mix(in oklch, var(--success) 30%, var(--border));
 }
 
 .gen-float.is-failed .gen-float-panel {
-  border-color: color-mix(in oklch, oklch(55% 0.18 25) 30%, var(--border));
+  border-color: color-mix(in oklch, var(--error) 30%, var(--border));
 }
 
 .gen-float-panel-header {
@@ -270,11 +270,11 @@
 }
 
 .gen-float-bar-fill.done {
-  background: oklch(60% 0.18 145);
+  background: var(--success);
 }
 
 .gen-float-bar-fill.failed {
-  background: oklch(55% 0.18 25);
+  background: var(--error);
 }
 
 .gen-float-bar-fill.indeterminate {
@@ -306,7 +306,7 @@
 }
 
 .gen-float-error {
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 
 .gen-float-actions {
@@ -332,12 +332,12 @@
 }
 
 .gen-float-dot.done {
-  background: oklch(60% 0.18 145);
+  background: var(--success);
   margin-top: 5px;
 }
 
 .gen-float-dot.failed {
-  background: oklch(55% 0.18 25);
+  background: var(--error);
   margin-top: 5px;
 }
 
@@ -503,7 +503,7 @@
   display: none;
   margin-top: 4px;
   font-size: 12px;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 
 .fab-error.show {

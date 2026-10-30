@@ -2335,9 +2335,9 @@ function getCallbackUrl(provider: SsoProvider): string {
   color: var(--fg);
 }
 .btn-danger {
-  background: oklch(55% 0.18 25);
+  background: var(--error);
   color: white;
-  border-color: oklch(55% 0.18 25);
+  border-color: var(--error);
 }
 .btn-danger:hover:not(:disabled) {
   background: oklch(45% 0.18 25);
@@ -2615,7 +2615,7 @@ function getCallbackUrl(provider: SsoProvider): string {
 }
 .error-msg {
   display: none;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -2623,8 +2623,8 @@ function getCallbackUrl(provider: SsoProvider): string {
   display: block;
 }
 .input-error {
-  border-color: oklch(55% 0.18 25) !important;
-  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
+  border-color: var(--error) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--error) 20%, transparent) !important;
 }
 
 /* Skeleton */
@@ -2862,7 +2862,7 @@ function getCallbackUrl(provider: SsoProvider): string {
   background: var(--bg);
 }
 .notion-sync-result.error {
-  border-color: color-mix(in oklch, oklch(55% 0.18 25) 35%, var(--border));
+  border-color: color-mix(in oklch, var(--error) 35%, var(--border));
 }
 .notion-sync-stats {
   display: flex;

@@ -1850,12 +1850,12 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 .pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 .pill-amber {
   background: color-mix(in oklch, oklch(70% 0.14 85) 12%, transparent);
@@ -2398,13 +2398,13 @@ onBeforeUnmount(() => {
 }
 
 .error-banner {
-  background: color-mix(in oklch, oklch(55% 0.18 25) 8%, transparent);
-  color: oklch(50% 0.16 25);
+  background: color-mix(in oklch, var(--error) 8%, transparent);
+  color: var(--error-text);
   padding: 10px 12px;
   border-radius: var(--radius);
   font-size: 13px;
   margin-bottom: 16px;
-  border: 1px solid color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent);
+  border: 1px solid color-mix(in oklch, var(--error) 20%, transparent);
 }
 
 /* ═══ Responsive ═══════════════════════════════════════════════ */

@@ -437,8 +437,8 @@ h2 {
   font-weight: 500;
 }
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 
 .num {
@@ -633,7 +633,7 @@ h2 {
 }
 .error-msg {
   display: none;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
   font-size: 12px;
   margin-top: 4px;
 }
@@ -661,8 +661,8 @@ h2 {
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .input-error {
-  border-color: oklch(55% 0.18 25) !important;
-  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
+  border-color: var(--error) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--error) 20%, transparent) !important;
 }
 .form-row {
   display: grid;

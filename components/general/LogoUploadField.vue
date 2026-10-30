@@ -370,7 +370,7 @@ function clearLogo() {
 .logo-upload-field__error {
   margin: 0;
   font-size: 12px;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 
 @media (max-width: 520px) {

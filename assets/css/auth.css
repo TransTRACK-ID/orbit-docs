@@ -85,12 +85,12 @@ h1 { margin: 0; font-weight: 600; font-size: 24px; }
 }
 
 .input-error {
-  border-color: oklch(55% 0.18 25) !important;
-  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
+  border-color: var(--error) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--error) 20%, transparent) !important;
 }
 .error-msg {
   display: none;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
   font-size: 12px;
   margin-top: 4px;
 }

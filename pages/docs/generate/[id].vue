@@ -1299,11 +1299,11 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .progress-card.is-failed {
-  border-color: oklch(55% 0.18 25);
+  border-color: var(--error);
 }
 
 .progress-card.is-done {
-  border-color: oklch(60% 0.18 145);
+  border-color: var(--success);
 }
 
 .progress-header {
@@ -1342,11 +1342,11 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .progress-bar-fill.done {
-  background: oklch(60% 0.18 145);
+  background: var(--success);
 }
 
 .progress-bar-fill.failed {
-  background: oklch(55% 0.18 25);
+  background: var(--error);
 }
 
 /* Indeterminate (before first SSE) */
@@ -1371,7 +1371,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 .error-msg {
   margin: 0;
   font-size: 13px;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 
 .progress-actions {
@@ -1420,11 +1420,11 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .logs-dot.done {
-  background: oklch(60% 0.18 145);
+  background: var(--success);
 }
 
 .logs-dot.failed {
-  background: oklch(55% 0.18 25);
+  background: var(--error);
 }
 
 @keyframes pulse-dot {
@@ -1483,11 +1483,11 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .log-success .log-text {
-  color: oklch(50% 0.14 145);
+  color: var(--success-text);
 }
 
 .log-error .log-text {
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 
 /* ── Live activity row ─────────────────────────────────────────── */
@@ -1667,13 +1667,13 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 
 .pill-danger {
@@ -1895,7 +1895,7 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .debug-session-idle .debug-type {
-  color: oklch(50% 0.14 145);
+  color: var(--success-text);
 }
 
 /* ── Agent alert ──────────────────────────────────────────────── */
@@ -1980,9 +1980,9 @@ function formatDebugEvent(ev: { eventType: string; eventData: Record<string, unk
 }
 
 .agent-badge--opencode {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
-  border-color: color-mix(in oklch, oklch(60% 0.16 255) 25%, transparent);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
+  border-color: color-mix(in oklch, var(--info) 25%, transparent);
 }
 
 .agent-badge--cursor {

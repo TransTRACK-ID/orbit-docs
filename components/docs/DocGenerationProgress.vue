@@ -67,7 +67,7 @@ const isCompleted = computed(() => props.status === "completed");
 }
 
 .progress-container.failed {
-  border-color: oklch(55% 0.18 25);
+  border-color: var(--error);
 }
 
 .progress-header {
@@ -106,7 +106,7 @@ const isCompleted = computed(() => props.status === "completed");
 }
 
 .progress-bar-fill.completed {
-  background: oklch(60% 0.18 145);
+  background: var(--success);
 }
 
 .progress-bar-fill.failed {
@@ -122,7 +122,7 @@ const isCompleted = computed(() => props.status === "completed");
 .error-message {
   margin: 0;
   font-size: 13px;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 
 @media (prefers-reduced-motion: reduce) {

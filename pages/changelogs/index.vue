@@ -1219,16 +1219,16 @@ function canViewHistoryDiff(): boolean {
   font-weight: 500;
 }
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 .pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 .pill-amber {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
-  color: oklch(60% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 
 .editor-shell {
@@ -2081,13 +2081,13 @@ function canViewHistoryDiff(): boolean {
   border-color: color-mix(in oklch, oklch(65% 0.14 145) 35%, var(--border));
 }
 .format-hint-tag.tag-fixed {
-  background: color-mix(in oklch, oklch(55% 0.14 255) 8%, transparent);
-  border-color: color-mix(in oklch, oklch(55% 0.14 255) 20%, var(--border));
+  background: color-mix(in oklch, var(--info-text) 8%, transparent);
+  border-color: color-mix(in oklch, var(--info-text) 20%, var(--border));
   color: oklch(45% 0.12 255);
 }
 .format-hint-tag.tag-fixed:hover {
-  background: color-mix(in oklch, oklch(55% 0.14 255) 15%, transparent);
-  border-color: color-mix(in oklch, oklch(55% 0.14 255) 35%, var(--border));
+  background: color-mix(in oklch, var(--info-text) 15%, transparent);
+  border-color: color-mix(in oklch, var(--info-text) 35%, var(--border));
 }
 .format-hint-tag.tag-changed {
   background: color-mix(in oklch, oklch(70% 0.12 85) 8%, transparent);

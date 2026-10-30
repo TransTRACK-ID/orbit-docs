@@ -665,8 +665,8 @@ function cancelCommentForm() {
   font-weight: 500;
 }
 .pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 
 .meta-label {

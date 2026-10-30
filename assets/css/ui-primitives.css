@@ -89,7 +89,7 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .input-error {
-  border-color: oklch(55% 0.18 25) !important;
+  border-color: var(--error) !important;
 }
 textarea.input {
   resize: vertical;

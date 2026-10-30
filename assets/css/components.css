@@ -205,18 +205,18 @@
 }
 
 .pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 
 .pill-amber {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
-  color: oklch(60% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 
 .pill-accent {
@@ -314,11 +314,11 @@
 }
 
 .progress-card.is-failed {
-  border-color: oklch(55% 0.18 25);
+  border-color: var(--error);
 }
 
 .progress-card.is-done {
-  border-color: oklch(60% 0.18 145);
+  border-color: var(--success);
 }
 
 .progress-header {
@@ -343,11 +343,11 @@
 }
 
 .progress-bar-fill.done {
-  background: oklch(60% 0.18 145);
+  background: var(--success);
 }
 
 .progress-bar-fill.failed {
-  background: oklch(55% 0.18 25);
+  background: var(--error);
 }
 
 .progress-bar-fill.indeterminate {
@@ -461,9 +461,9 @@
 }
 
 .agent-badge--opencode {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
-  border-color: color-mix(in oklch, oklch(60% 0.16 255) 25%, transparent);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
+  border-color: color-mix(in oklch, var(--info) 25%, transparent);
 }
 
 .agent-badge--cursor {
@@ -475,13 +475,13 @@
 /* ── Agent alert variants (base in feedback.css) ──────────────── */
 
 .agent-alert--warning {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 8%, var(--bg));
-  border-color: color-mix(in oklch, oklch(75% 0.14 85) 28%, transparent);
+  background: color-mix(in oklch, var(--warning) 8%, var(--bg));
+  border-color: color-mix(in oklch, var(--warning) 28%, transparent);
 }
 
 .agent-alert--info {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 8%, var(--bg));
-  border-color: color-mix(in oklch, oklch(60% 0.16 255) 28%, transparent);
+  background: color-mix(in oklch, var(--info) 8%, var(--bg));
+  border-color: color-mix(in oklch, var(--info) 28%, transparent);
 }
 
 /* ── Form / result sections ───────────────────────────────────── */

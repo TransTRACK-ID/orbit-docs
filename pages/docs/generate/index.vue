@@ -295,11 +295,11 @@ const statusLabel: Record<string, string> = {
 }
 
 .app-card--generating {
-  border-color: color-mix(in oklch, oklch(60% 0.16 255) 28%, var(--border));
+  border-color: color-mix(in oklch, var(--info) 28%, var(--border));
 }
 
 .app-card--generating:hover {
-  border-color: color-mix(in oklch, oklch(60% 0.16 255) 40%, var(--border));
+  border-color: color-mix(in oklch, var(--info) 40%, var(--border));
 }
 
 .app-card-header {
@@ -364,7 +364,7 @@ const statusLabel: Record<string, string> = {
   font-variant-numeric: tabular-nums;
   font-size: 11px;
   font-weight: 600;
-  color: oklch(55% 0.14 255);
+  color: var(--info-text);
 }
 
 .app-card-progress__track {
@@ -377,7 +377,7 @@ const statusLabel: Record<string, string> = {
 
 .app-card-progress__fill {
   height: 100%;
-  background: oklch(60% 0.16 255);
+  background: var(--info);
   border-radius: 999px;
   transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1);
 }
@@ -406,18 +406,18 @@ const statusLabel: Record<string, string> = {
 }
 
 .pill-green {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 12%, transparent);
-  color: oklch(50% 0.14 145);
+  background: color-mix(in oklch, var(--success) 12%, transparent);
+  color: var(--success-text);
 }
 
 .pill-blue {
-  background: color-mix(in oklch, oklch(60% 0.16 255) 12%, transparent);
-  color: oklch(55% 0.14 255);
+  background: color-mix(in oklch, var(--info) 12%, transparent);
+  color: var(--info-text);
 }
 
 .pill-amber {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 12%, transparent);
-  color: oklch(60% 0.12 85);
+  background: color-mix(in oklch, var(--warning) 12%, transparent);
+  color: var(--warning-text);
 }
 
 .empty-state {

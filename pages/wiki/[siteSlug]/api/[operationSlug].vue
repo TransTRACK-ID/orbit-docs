@@ -264,10 +264,10 @@ useHead(() => ({
   text-align: center;
 }
 .method-get { background: color-mix(in oklch, oklch(65% 0.15 145) 18%, transparent); color: oklch(45% 0.13 145); }
-.method-post { background: color-mix(in oklch, oklch(60% 0.16 255) 18%, transparent); color: oklch(55% 0.14 255); }
+.method-post { background: color-mix(in oklch, var(--info) 18%, transparent); color: var(--info-text); }
 .method-put { background: color-mix(in oklch, oklch(70% 0.15 85) 18%, transparent); color: oklch(48% 0.13 85); }
 .method-patch { background: color-mix(in oklch, oklch(70% 0.14 60) 18%, transparent); color: oklch(50% 0.12 60); }
-.method-delete { background: color-mix(in oklch, oklch(55% 0.18 25) 18%, transparent); color: oklch(50% 0.16 25); }
+.method-delete { background: color-mix(in oklch, var(--error) 18%, transparent); color: var(--error-text); }
 .method-other { background: var(--fg-soft); color: var(--muted); }
 .op-path {
   font-family: var(--font-mono);
@@ -284,8 +284,8 @@ useHead(() => ({
   text-transform: uppercase;
   padding: 2px 8px;
   border-radius: 999px;
-  background: color-mix(in oklch, oklch(55% 0.18 25) 15%, transparent);
-  color: oklch(50% 0.16 25);
+  background: color-mix(in oklch, var(--error) 15%, transparent);
+  color: var(--error-text);
 }
 .param-table {
   width: 100%;

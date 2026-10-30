@@ -799,7 +799,7 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
 }
 
 .btn-ghost.danger:hover {
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 
 .btn-sm {
@@ -835,13 +835,13 @@ async function copyToClipboard(text: string | undefined | null, field: string) {
 }
 
 .check-checking {
-  background: color-mix(in oklch, oklch(75% 0.14 85) 10%, transparent);
-  border: 1px solid color-mix(in oklch, oklch(75% 0.14 85) 20%, transparent);
+  background: color-mix(in oklch, var(--warning) 10%, transparent);
+  border: 1px solid color-mix(in oklch, var(--warning) 20%, transparent);
 }
 
 .check-success {
-  background: color-mix(in oklch, oklch(60% 0.18 145) 8%, transparent);
-  border: 1px solid color-mix(in oklch, oklch(60% 0.18 145) 16%, transparent);
+  background: color-mix(in oklch, var(--success) 8%, transparent);
+  border: 1px solid color-mix(in oklch, var(--success) 16%, transparent);
 }
 
 .check-error {

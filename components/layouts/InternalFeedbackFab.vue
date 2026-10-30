@@ -302,15 +302,15 @@ onBeforeUnmount(() => {
 }
 
 .input-error {
-  border-color: oklch(55% 0.18 25) !important;
-  box-shadow: 0 0 0 3px color-mix(in oklch, oklch(55% 0.18 25) 20%, transparent) !important;
+  border-color: var(--error) !important;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--error) 20%, transparent) !important;
 }
 
 .fab-error {
   display: none;
   margin-top: 4px;
   font-size: 12px;
-  color: oklch(50% 0.16 25);
+  color: var(--error-text);
 }
 
 .fab-error.show {

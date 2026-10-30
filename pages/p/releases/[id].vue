@@ -484,7 +484,7 @@ async function copyEmbedCode() {
   color: oklch(50% 0.12 145);
 }
 .rd-tag-fixed {
-  background: color-mix(in oklch, oklch(55% 0.14 255) 8%, transparent);
+  background: color-mix(in oklch, var(--info-text) 8%, transparent);
   color: oklch(45% 0.12 255);
 }
 .rd-tag-changed {
