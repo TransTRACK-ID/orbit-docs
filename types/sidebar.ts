@@ -16,4 +16,7 @@ export interface ISidebar {
   isOpen?: boolean;
   menu?: IChildSidebar[];
   permission?: string;
+  group?: SidebarGroupId;
 }
+
+export type SidebarGroupId = "content" | "publishing" | "admin";

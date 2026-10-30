@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { sidebarMenu } from "@/constant/sidebar";
+import { sidebarGroups, sidebarMenu } from "@/constant/sidebar";
 
 const route = useRoute();
 const { workspace } = useSettings();
@@ -11,13 +11,13 @@ function canViewNavItem(item: (typeof sidebarMenu)[number]) {
   return can(item.permission as any);
 }
 
-const workspaceNavItems = computed(() =>
-  sidebarMenu.filter(
-    (item) =>
-      item.id !== "menu__settings" &&
-      item.id !== "menu__changelogs" &&
-      canViewNavItem(item)
-  )
+const navGroups = computed(() =>
+  sidebarGroups
+    .map((group) => ({
+      ...group,
+      items: sidebarMenu.filter((item) => item.group === group.id && canViewNavItem(item)),
+    }))
+    .filter((group) => group.items.length > 0)
 );
 
 const canViewSettings = computed(() =>
@@ -198,21 +198,30 @@ function toggleCollapse() {
     </header>
 
     <nav class="sidebar-nav" aria-label="Main navigation">
-      <NuxtLink
-        v-for="(item, idx) in workspaceNavItems"
-        :key="item.id"
-        ref="(el: any) => { if (idx === 0) firstNavLinkRef = el }"
-        :to="item.route"
-        class="nav-item"
-        :class="{ active: isActive(item.route || '') }"
-        :title="isCollapsed ? item.label : undefined"
-        :aria-label="isCollapsed ? item.label : undefined"
+      <div
+        v-for="group in navGroups"
+        :key="group.id"
+        class="nav-group"
+        role="group"
+        :aria-labelledby="`nav-group-${group.id}`"
       >
-        <span class="nav-icon" aria-hidden="true">
-          <component :is="item.icon" size="18" />
-        </span>
-        <span class="nav-label">{{ item.label }}</span>
-      </NuxtLink>
+        <p :id="`nav-group-${group.id}`" class="nav-group-label">{{ group.label }}</p>
+        <NuxtLink
+          v-for="(item, idx) in group.items"
+          :key="item.id"
+          ref="(el: any) => { if (idx === 0) firstNavLinkRef = el }"
+          :to="item.route"
+          class="nav-item"
+          :class="{ active: isActive(item.route || '') }"
+          :title="isCollapsed ? item.label : undefined"
+          :aria-label="isCollapsed ? item.label : undefined"
+        >
+          <span class="nav-icon" aria-hidden="true">
+            <component :is="item.icon" size="18" />
+          </span>
+          <span class="nav-label">{{ item.label }}</span>
+        </NuxtLink>
+      </div>
     </nav>
 
     <footer v-if="user" class="sidebar-footer">
@@ -461,6 +470,28 @@ function toggleCollapse() {
   scrollbar-gutter: stable;
 }
 
+.nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-group + .nav-group {
+  margin-top: var(--sb-space-3);
+}
+
+.nav-group-label {
+  margin: 0;
+  padding: 0 var(--sb-space-2) 6px;
+  font-family: var(--font-mono, "JetBrains Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted, oklch(55% 0.015 250));
+}
+
 .nav-item {
   display: flex;
   align-items: center;
@@ -684,8 +715,19 @@ function toggleCollapse() {
 }
 
 .sidebar--collapsed .brand-text,
-.sidebar--collapsed .nav-label {
+.sidebar--collapsed .nav-label,
+.sidebar--collapsed .nav-group-label {
   display: none;
+}
+
+.sidebar--collapsed .nav-group {
+  align-items: center;
+}
+
+.sidebar--collapsed .nav-group + .nav-group {
+  margin-top: var(--sb-space-1);
+  padding-top: var(--sb-space-1);
+  border-top: 1px solid var(--border, oklch(90% 0.006 250));
 }
 
 .sidebar--collapsed .sidebar-nav {
@@ -793,8 +835,19 @@ function toggleCollapse() {
   }
 
   .sidebar--collapsed .brand-text,
-  .sidebar--collapsed .nav-label {
+  .sidebar--collapsed .nav-label,
+  .sidebar--collapsed .nav-group-label {
     display: block;
+  }
+
+  .sidebar--collapsed .nav-group {
+    align-items: stretch;
+  }
+
+  .sidebar--collapsed .nav-group + .nav-group {
+    margin-top: var(--sb-space-3);
+    padding-top: 0;
+    border-top: 0;
   }
 
   .sidebar--collapsed .sidebar-header,

@@ -8,9 +8,16 @@ import {
   IconsFeedback,
   IconsSettings,
   IconsDocSites,
+  IconsUser,
 } from "#components";
-import type { ISidebar } from "@/types/sidebar";
+import type { ISidebar, SidebarGroupId } from "@/types/sidebar";
 import { markRaw } from "vue";
+
+export const sidebarGroups: { id: SidebarGroupId; label: string }[] = [
+  { id: "content", label: "Content" },
+  { id: "publishing", label: "Publishing" },
+  { id: "admin", label: "Admin" },
+];
 
 export const sidebarMenu: ISidebar[] = [
   {
@@ -20,6 +27,7 @@ export const sidebarMenu: ISidebar[] = [
     icon: markRaw(IconsApps),
     active: false,
     permission: "apps:read",
+    group: "content",
   },
   {
     id: "menu__versions",
@@ -28,6 +36,7 @@ export const sidebarMenu: ISidebar[] = [
     icon: markRaw(IconsVersions),
     active: false,
     permission: "versions:read",
+    group: "content",
   },
   {
     id: "menu__releases",
@@ -36,6 +45,7 @@ export const sidebarMenu: ISidebar[] = [
     icon: markRaw(IconsReleases),
     active: false,
     permission: "releases:read",
+    group: "content",
   },
   {
     id: "menu__changelogs",
@@ -52,6 +62,7 @@ export const sidebarMenu: ISidebar[] = [
     icon: markRaw(IconsDocEditor),
     active: false,
     permission: "docs:read",
+    group: "content",
   },
 
   {
@@ -61,6 +72,7 @@ export const sidebarMenu: ISidebar[] = [
     icon: markRaw(IconsDocSites),
     active: false,
     permission: "doc_sites:read",
+    group: "publishing",
   },
 
   {
@@ -70,6 +82,7 @@ export const sidebarMenu: ISidebar[] = [
     icon: markRaw(IconsApiDocs),
     active: false,
     permission: "api_docs:read",
+    group: "publishing",
   },
   {
     id: "menu__feedback",
@@ -78,6 +91,16 @@ export const sidebarMenu: ISidebar[] = [
     icon: markRaw(IconsFeedback),
     active: false,
     permission: "feedback:read",
+    group: "admin",
+  },
+  {
+    id: "menu__owners",
+    label: "Owners",
+    route: "/owners",
+    icon: markRaw(IconsUser),
+    active: false,
+    permission: "apps:write",
+    group: "admin",
   },
   {
     id: "menu__settings",
