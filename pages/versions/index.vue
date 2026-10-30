@@ -126,6 +126,12 @@ const pageStats = computed(() => {
   };
 });
 
+const headerStats = computed(() => [
+  { label: "Total versions", value: pageStats.value.total },
+  { label: pageStats.value.drafts === 1 ? "Draft" : "Drafts", value: pageStats.value.drafts },
+  { label: pageStats.value.apps === 1 ? "App" : "Apps", value: pageStats.value.apps },
+]);
+
 const pageSubtitle = computed(() => {
   const total = pageStats.value.total;
   if (showAllApps.value) {
@@ -638,79 +644,56 @@ function onKeydown(e: KeyboardEvent) {
 
 <template>
   <div class="versions-page">
-    <header class="page-masthead">
-      <div class="page-masthead__copy">
-        <h1>Versions</h1>
-        <p class="page-subtitle">{{ pageSubtitle }}</p>
-      </div>
-    </header>
-
-    <div class="filter-strip">
-      <div class="search-wrap">
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
-          <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
-        <input
-          v-model="searchQuery"
-          class="search"
-          placeholder="Search versions or apps..."
-          aria-label="Search versions or apps"
-        />
-      </div>
-      <GeneralSearchableDropdown
-        v-model="appFilter"
-        :options="appFilterOptions"
-        placeholder="All apps"
-        search-placeholder="Search apps..."
-      />
-      <div v-if="canManageVersions" class="toolbar-actions">
+    <GeneralPageHeader
+      v-model:search="searchQuery"
+      title="Versions"
+      :subtitle="pageSubtitle"
+      search-placeholder="Search versions or apps..."
+      search-label="Search versions or apps"
+      :stats="headerStats"
+      stats-label="Version summary"
+    >
+      <template v-if="canWriteVersions" #actions>
         <button
-          v-if="canWriteVersions"
           type="button"
-          class="btn btn-secondary btn-sm"
-          :disabled="selectedVersions.length !== 2 || isArchiving"
-          @click="openCompare"
-        >
-          {{ compareBtnText }}
-        </button>
-        <button
-          v-if="canPublishVersions"
-          type="button"
-          class="btn btn-ghost btn-sm"
-          :disabled="selectedVersions.length === 0 || isArchiving"
-          @click="archiveSelectedVersions"
-        >
-          <span v-if="isArchiving">Archiving…</span>
-          <span v-else>Archive</span>
-        </button>
-        <button
-          v-if="canWriteVersions"
-          type="button"
-          class="btn btn-primary btn-sm"
+          class="btn btn-primary"
           :disabled="!appFilter"
           :title="!appFilter ? 'Select an app to create a version' : undefined"
           @click="openNewVersionModal"
         >
           + New Version
         </button>
-      </div>
-    </div>
-
-    <div class="stats-bar">
-      <div class="stat">
-        <span class="stat-num num">{{ pageStats.total }}</span>
-        <span class="stat-label">Total versions</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num num">{{ pageStats.drafts }}</span>
-        <span class="stat-label">Drafts</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num num">{{ pageStats.apps }}</span>
-        <span class="stat-label">Apps</span>
-      </div>
-    </div>
+      </template>
+      <template #filters>
+        <GeneralSearchableDropdown
+          v-model="appFilter"
+          :options="appFilterOptions"
+          placeholder="All apps"
+          search-placeholder="Search apps..."
+        />
+        <div v-if="canManageVersions" class="toolbar-actions">
+          <button
+            v-if="canWriteVersions"
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="selectedVersions.length !== 2 || isArchiving"
+            @click="openCompare"
+          >
+            {{ compareBtnText }}
+          </button>
+          <button
+            v-if="canPublishVersions"
+            type="button"
+            class="btn btn-ghost btn-sm"
+            :disabled="selectedVersions.length === 0 || isArchiving"
+            @click="archiveSelectedVersions"
+          >
+            <span v-if="isArchiving">Archiving…</span>
+            <span v-else>Archive</span>
+          </button>
+        </div>
+      </template>
+    </GeneralPageHeader>
 
     <div class="selection-bar" :class="{ active: selectedVersions.length > 0 }">
       <span>
@@ -1291,90 +1274,12 @@ function onKeydown(e: KeyboardEvent) {
   /* inherits global tokens */
 }
 
-.page-masthead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.page-masthead__copy {
-  min-width: 0;
-}
-
-.page-masthead h1 {
-  margin: 0 0 4px;
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--fg);
-}
-
-.page-subtitle {
-  margin: 0;
-  max-width: 56ch;
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.filter-strip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.search-wrap {
-  position: relative;
-  flex: 1 1 240px;
-  min-width: 200px;
-  max-width: 360px;
-}
-
-.search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--muted);
-  pointer-events: none;
-}
-
 .toolbar-actions {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-left: auto;
   flex-wrap: wrap;
-}
-
-.stats-bar {
-  display: flex;
-  gap: 24px;
-  align-items: baseline;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.stat {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.stat-num {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-}
-
-.stat-label {
-  font-size: 14px;
-  color: var(--muted);
 }
 
 .versions-workspace {
@@ -1564,21 +1469,6 @@ h2 {
   display: flex;
   gap: 16px;
   align-items: center;
-}
-
-.search {
-  width: 100%;
-  padding: 8px 12px 8px 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  font: inherit;
-  font-size: 14px;
-  color: var(--fg);
-}
-.search:focus {
-  outline: 2px solid var(--accent-soft);
-  border-color: var(--accent);
 }
 
 .select {
@@ -2306,7 +2196,6 @@ h2 {
   .modal-overlay,
   .modal-panel,
   .btn,
-  .search,
   .select,
   .compare-overlay,
   .compare-panel,
@@ -2330,22 +2219,9 @@ h2 {
 }
 
 @media (max-width: 768px) {
-  .filter-strip {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-wrap {
-    max-width: none;
-  }
-
   .toolbar-actions {
     margin-left: 0;
     justify-content: flex-end;
-  }
-
-  .stats-bar {
-    gap: 16px;
   }
 
   .compare-overlay {

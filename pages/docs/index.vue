@@ -279,6 +279,14 @@ async function doDelete() {
   }
 }
 
+const headerStats = computed(() => [
+  { label: "Total docs", value: pageStats.value.total },
+  { label: pageStats.value.drafts === 1 ? "Draft" : "Drafts", value: pageStats.value.drafts },
+  { label: pageStats.value.systems === 1 ? "System" : "Systems", value: pageStats.value.systems },
+]);
+
+watch(search, onSearch);
+
 function onSearch() {
   fetchDocs({
     appId: appFilter.value,
@@ -503,14 +511,16 @@ watch(docs, () => {
 
 <template>
   <div class="docs-page">
-    <header class="page-masthead">
-      <div class="page-masthead__copy">
-        <h1>Docs</h1>
-        <p class="page-subtitle">
-          Every app's documentation, grouped by system and document type.
-        </p>
-      </div>
-      <div class="page-masthead__actions">
+    <GeneralPageHeader
+      v-model:search="search"
+      title="Docs"
+      subtitle="Every app's documentation, grouped by system and document type."
+      search-placeholder="Search docs..."
+      search-label="Search docs"
+      :stats="headerStats"
+      stats-label="Docs summary"
+    >
+      <template v-if="canRunDocGeneration || canWriteDocs" #actions>
         <NuxtLink v-if="canRunDocGeneration" to="/docs/generate" class="btn btn-secondary">
           <span class="btn-sparkle" aria-hidden="true">✦</span>
           Generate Docs
@@ -518,24 +528,35 @@ watch(docs, () => {
         <button v-if="canWriteDocs" type="button" class="btn btn-primary" @click="openCreateModal">
           + New Doc
         </button>
-      </div>
-    </header>
-
-    <div class="filter-strip">
-      <div class="search-wrap">
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
-          <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
-        <input
-          v-model="search"
-          class="search"
-          placeholder="Search docs..."
-          aria-label="Search docs"
-          @input="onSearch"
-        />
-      </div>
-      <div class="filter-group">
+      </template>
+      <template v-if="activeSite" #nav>
+        <div class="site-context-banner">
+          <div class="site-context-text">
+            <span class="site-context-label">Doc site</span>
+            <strong>{{ activeSite.name }}</strong>
+            <span class="site-context-slug num">
+              {{ preferInternalWiki ? `/wiki/${activeSite.slug}` : `/s/${activeSite.slug}` }}
+            </span>
+          </div>
+          <div class="site-context-actions">
+            <NuxtLink :to="`/wiki/${activeSite.slug}`" class="btn btn-primary btn-sm">
+              Browse wiki
+            </NuxtLink>
+            <NuxtLink v-if="canManageDocSites" :to="`/sites/${activeSite.id}`" class="btn btn-secondary btn-sm">
+              Manage site
+            </NuxtLink>
+            <NuxtLink
+              v-if="activeSite.status === 'published'"
+              :to="`/s/${activeSite.slug}`"
+              target="_blank"
+              class="btn btn-ghost btn-sm"
+            >
+              Public view ↗
+            </NuxtLink>
+          </div>
+        </div>
+      </template>
+      <template #filters>
         <GeneralSearchableDropdown
           v-model="docView"
           :options="docViewOptions"
@@ -554,49 +575,8 @@ watch(docs, () => {
           placeholder="All statuses"
           search-placeholder="Filter status..."
         />
-      </div>
-    </div>
-
-    <div v-if="activeSite" class="site-context-banner">
-      <div class="site-context-text">
-        <span class="site-context-label">Doc site</span>
-        <strong>{{ activeSite.name }}</strong>
-        <span class="site-context-slug num">
-          {{ preferInternalWiki ? `/wiki/${activeSite.slug}` : `/s/${activeSite.slug}` }}
-        </span>
-      </div>
-      <div class="site-context-actions">
-        <NuxtLink :to="`/wiki/${activeSite.slug}`" class="btn btn-primary btn-sm">
-          Browse wiki
-        </NuxtLink>
-        <NuxtLink v-if="canManageDocSites" :to="`/sites/${activeSite.id}`" class="btn btn-secondary btn-sm">
-          Manage site
-        </NuxtLink>
-        <NuxtLink
-          v-if="activeSite.status === 'published'"
-          :to="`/s/${activeSite.slug}`"
-          target="_blank"
-          class="btn btn-ghost btn-sm"
-        >
-          Public view ↗
-        </NuxtLink>
-      </div>
-    </div>
-
-    <div class="stats-bar">
-      <div class="stat">
-        <span class="stat-num num">{{ pageStats.total }}</span>
-        <span class="stat-label">Total docs</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num num">{{ pageStats.drafts }}</span>
-        <span class="stat-label">Drafts</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num num">{{ pageStats.systems }}</span>
-        <span class="stat-label">Systems</span>
-      </div>
-    </div>
+      </template>
+    </GeneralPageHeader>
 
     <div
       v-if="appFilter && canWriteDocs"
@@ -1032,117 +1012,9 @@ watch(docs, () => {
   /* Inherits global semantic tokens from :root */
 }
 
-.page-masthead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.page-masthead__copy {
-  min-width: 0;
-}
-
-.page-masthead h1 {
-  margin: 0 0 4px;
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--fg);
-}
-
-.page-subtitle {
-  margin: 0;
-  max-width: 52ch;
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.page-masthead__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.filter-strip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.search-wrap {
-  position: relative;
-  flex: 1 1 240px;
-  min-width: 200px;
-  max-width: 360px;
-}
-
-.search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--muted);
-  pointer-events: none;
-}
-
-.search {
-  width: 100%;
-  padding: 8px 12px 8px 36px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  font: inherit;
-  font-size: 14px;
-  color: var(--fg);
-}
-
-.search:focus {
-  outline: 2px solid var(--accent-soft);
-  border-color: var(--accent);
-}
-
 .btn-sparkle {
   font-size: 12px;
   opacity: 0.85;
-}
-
-.stats-bar {
-  display: flex;
-  gap: 24px;
-  align-items: baseline;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.stat {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.stat-num {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-}
-
-.stat-label {
-  font-size: 14px;
-  color: var(--muted);
 }
 
 .embedding-schedule-section {
@@ -1726,33 +1598,6 @@ watch(docs, () => {
 }
 
 @media (max-width: 768px) {
-  .page-masthead {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .page-masthead__actions {
-    justify-content: flex-end;
-  }
-
-  .filter-strip {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-wrap {
-    max-width: none;
-    flex-basis: auto;
-  }
-
-  .filter-group {
-    width: 100%;
-  }
-
-  .stats-bar {
-    gap: 16px;
-  }
-
   .knowledge-row {
     flex-wrap: wrap;
   }

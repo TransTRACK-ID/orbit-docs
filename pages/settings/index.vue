@@ -1035,6 +1035,8 @@ function getCallbackUrl(provider: SsoProvider): string {
 
 <template>
   <div class="settings-page">
+    <GeneralPageHeader title="Settings" subtitle="Your profile and workspace configuration." />
+
     <!-- Settings layout -->
     <div v-if="!isSettingsRoleLoaded" class="settings-layout">
       <div class="settings-panels">

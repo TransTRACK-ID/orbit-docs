@@ -105,6 +105,13 @@ const pageSubtitle = computed(() => {
   return `${active} active ${active === 1 ? "app" : "apps"}. Docs and versions for every Transtrack product.`;
 });
 
+const headerStats = computed(() => [
+  { label: "Active apps", value: stats.value?.activeApps ?? 0 },
+  { label: "Total versions", value: stats.value?.totalVersions ?? 0 },
+  { label: "Published docs", value: stats.value?.publishedDocs ?? 0 },
+  { label: "Draft versions", value: stats.value?.draftVersions ?? 0 },
+]);
+
 const hasActiveFilters = computed(
   () => !!searchQuery.value.trim() || !!statusFilter.value
 );
@@ -375,63 +382,35 @@ const statusLabel: Record<string, string> = {
 
 <template>
   <div class="apps-page">
-    <header class="page-masthead">
-      <div class="page-masthead__copy">
-        <h1>Apps</h1>
-        <p class="page-subtitle">{{ pageSubtitle }}</p>
-      </div>
-      <div class="page-masthead__actions">
-        <button v-if="canCreateApp" type="button" class="btn btn-primary" @click="openCreateModal">
+    <GeneralPageHeader
+      v-model:search="searchQuery"
+      title="Apps"
+      :subtitle="pageSubtitle"
+      search-placeholder="Search apps, versions, docs..."
+      search-label="Search apps, versions, and docs"
+      :stats="headerStats"
+      stats-label="App summary"
+    >
+      <template v-if="canCreateApp" #actions>
+        <button type="button" class="btn btn-primary" @click="openCreateModal">
           + New App
         </button>
-      </div>
-    </header>
-
-    <div class="filter-strip">
-      <div class="search-wrap">
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
-          <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
-        <input
-          v-model="searchQuery"
-          class="search"
-          placeholder="Search apps, versions, docs..."
-          aria-label="Search apps, versions, and docs"
+      </template>
+      <template #filters>
+        <GeneralSearchableDropdown
+          v-model="statusFilter"
+          :options="statusFilterOptions"
+          placeholder="All statuses"
+          search-placeholder="Filter status..."
         />
-      </div>
-      <GeneralSearchableDropdown
-        v-model="statusFilter"
-        :options="statusFilterOptions"
-        placeholder="All statuses"
-        search-placeholder="Filter status..."
-      />
-      <GeneralSearchableDropdown
-        v-model="sortKey"
-        :options="sortOptions"
-        placeholder="Recently updated"
-        search-placeholder="Sort..."
-      />
-    </div>
-
-    <div class="stats-bar" aria-label="App summary">
-      <div class="stat">
-        <span class="stat-num num">{{ stats?.activeApps ?? 0 }}</span>
-        <span class="stat-label">Active apps</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num num">{{ stats?.totalVersions ?? 0 }}</span>
-        <span class="stat-label">Total versions</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num num">{{ stats?.publishedDocs ?? 0 }}</span>
-        <span class="stat-label">Published docs</span>
-      </div>
-      <div class="stat">
-        <span class="stat-num num">{{ stats?.draftVersions ?? 0 }}</span>
-        <span class="stat-label">Draft versions</span>
-      </div>
-    </div>
+        <GeneralSearchableDropdown
+          v-model="sortKey"
+          :options="sortOptions"
+          placeholder="Recently updated"
+          search-placeholder="Sort..."
+        />
+      </template>
+    </GeneralPageHeader>
 
     <div class="section-head">
       <div class="section-head__copy">
@@ -801,96 +780,6 @@ const statusLabel: Record<string, string> = {
 <style scoped>
 .apps-page {
   /* Inherits global semantic tokens from :root */
-}
-
-.page-masthead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.page-masthead__copy {
-  min-width: 0;
-}
-
-.page-masthead h1 {
-  margin: 0 0 4px;
-  font-weight: 600;
-  font-size: 20px;
-  color: var(--fg);
-}
-
-.page-subtitle {
-  margin: 0;
-  max-width: 52ch;
-  font-size: 13px;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
-.page-masthead__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.filter-strip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-}
-
-.search-wrap {
-  position: relative;
-  flex: 1 1 240px;
-  min-width: 200px;
-  max-width: 360px;
-}
-
-.search-icon {
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--muted);
-  pointer-events: none;
-}
-
-.search {
-  width: 100%;
-  padding: 8px 12px 8px 36px;
-}
-
-.stats-bar {
-  display: flex;
-  gap: 24px;
-  align-items: baseline;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.stat {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.stat-num {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-}
-
-.stat-label {
-  font-size: 14px;
-  color: var(--muted);
 }
 
 .section-head {
@@ -1379,29 +1268,6 @@ const statusLabel: Record<string, string> = {
 }
 
 @media (max-width: 768px) {
-  .page-masthead {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .page-masthead__actions {
-    width: 100%;
-  }
-
-  .page-masthead__actions .btn-primary {
-    width: 100%;
-  }
-
-  .filter-strip {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-wrap {
-    max-width: none;
-    flex-basis: auto;
-  }
-
   .section-head {
     flex-direction: column;
     align-items: stretch;
@@ -1409,10 +1275,6 @@ const statusLabel: Record<string, string> = {
 
   .app-grid {
     grid-template-columns: 1fr;
-  }
-
-  .stats-bar {
-    gap: 16px;
   }
 
   .form-row {
