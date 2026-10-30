@@ -42,7 +42,7 @@ export function useDocEmbeddingSchedule(appId: MaybeRef<string>) {
         toast.error("Session expired. Please sign in again.");
         navigateTo("/login");
       } else {
-        toast.error("Gagal memuat pengaturan index semantik");
+        toast.error("Couldn't load semantic index settings");
       }
       console.error(e);
       throw e;
@@ -72,7 +72,7 @@ export function useDocEmbeddingSchedule(appId: MaybeRef<string>) {
       );
       return data;
     } catch (e: any) {
-      const msg = e?.data?.message || e?.message || "Gagal menyimpan pengaturan index semantik";
+      const msg = e?.data?.message || e?.message || "Couldn't save semantic index settings";
       if (e?.statusCode === 401) {
         toast.error("Session expired. Please sign in again.");
         navigateTo("/login");
@@ -99,9 +99,9 @@ export function useDocEmbeddingSchedule(appId: MaybeRef<string>) {
     try {
       await $fetch(`/api/apps/${id}/embedding-schedule/run`, { method: "POST" });
       await fetchSchedule();
-      toast.success("Index semantik selesai dijalankan");
+      toast.success("Semantic index run finished");
     } catch (e: any) {
-      toast.error(e?.data?.message || "Gagal menjalankan index semantik");
+      toast.error(e?.data?.message || "Couldn't run the semantic index");
       throw e;
     } finally {
       isRunning.value = false;

@@ -86,7 +86,7 @@ onMounted(load);
         :empty-message="
           search.trim()
             ? 'No products match your search.'
-            : 'No active products yet. Set an app to Aktif in Apps to list it here.'
+            : 'No active products yet. Set an app to Active in Apps to list it here.'
         "
       />
     </section>

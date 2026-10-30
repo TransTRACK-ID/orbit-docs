@@ -241,7 +241,7 @@ export function useNotionImport() {
           fail(e.message || "Upload failed");
           return false;
         }
-        retryNote.value = `Koneksi terputus. Mencoba lagi (${attempt + 1}/${MAX_CHUNK_ATTEMPTS})…`;
+        retryNote.value = `Connection lost. Retrying (${attempt + 1}/${MAX_CHUNK_ATTEMPTS})…`;
         await sleep(500 * 2 ** attempt);
       }
     }
@@ -249,7 +249,7 @@ export function useNotionImport() {
     // Exhausted retries: park the upload so the user can resume later.
     pauseRequested = true;
     phase.value = "paused";
-    error.value = "Koneksi terputus. Upload dijeda, pilih Lanjutkan untuk melanjutkan.";
+    error.value = "Connection lost. Upload paused; choose Resume to continue.";
     return false;
   }
 
@@ -321,7 +321,7 @@ export function useNotionImport() {
       if (e?.statusCode === 409 && e?.data?.existingReleaseId) {
         conflictReleaseId.value = e.data.existingReleaseId;
       }
-      fail(readErrorMessage(e, "Impor gagal"));
+      fail(readErrorMessage(e, "Import failed"));
     }
   }
 
@@ -345,17 +345,17 @@ export function useNotionImport() {
       clearSavedSession(file.value);
       if (warnings.value.length) {
         toast.warning(
-          `Rilis diimpor dengan ${warnings.value.length} peringatan`
+          `Release imported with ${warnings.value.length} ${warnings.value.length === 1 ? "warning" : "warnings"}`
         );
       } else {
-        toast.success("Rilis diimpor sebagai draft");
+        toast.success("Release imported as a draft");
       }
       phase.value = "done";
     } catch (e: any) {
       if (e?.statusCode === 409 && e?.data?.existingReleaseId) {
         conflictReleaseId.value = e.data.existingReleaseId;
       }
-      fail(readErrorMessage(e, "Impor gagal"));
+      fail(readErrorMessage(e, "Import failed"));
     }
   }
 
@@ -377,7 +377,7 @@ export function useNotionImport() {
       if (e?.statusCode === 409 && e?.data?.existingReleaseId) {
         conflictReleaseId.value = e.data.existingReleaseId;
       }
-      fail(readErrorMessage(e, "Impor gagal"));
+      fail(readErrorMessage(e, "Import failed"));
     }
   }
 

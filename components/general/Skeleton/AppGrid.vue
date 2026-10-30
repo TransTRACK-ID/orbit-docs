@@ -10,7 +10,7 @@ withDefaults(
 </script>
 
 <template>
-  <div class="app-grid" aria-busy="true" aria-label="Memuat aplikasi">
+  <div class="app-grid" aria-busy="true" aria-label="Loading apps">
     <article
       v-for="n in count"
       :key="n"

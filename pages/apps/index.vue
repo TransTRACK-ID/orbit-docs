@@ -46,17 +46,17 @@ const sortKey = ref("updatedAt-desc");
 const openAppMenu = ref<string | null>(null);
 
 const statusFilterOptions = [
-  { id: "", label: "Semua status" },
-  { id: "active", label: "Aktif" },
+  { id: "", label: "All statuses" },
+  { id: "active", label: "Active" },
   { id: "draft", label: "Draft" },
   { id: "maintenance", label: "Maintenance" },
 ];
 
 const sortOptions = [
-  { id: "updatedAt-desc", label: "Terbaru diperbarui" },
-  { id: "updatedAt-asc", label: "Terlama diperbarui" },
-  { id: "name-asc", label: "Nama A–Z" },
-  { id: "name-desc", label: "Nama Z–A" },
+  { id: "updatedAt-desc", label: "Recently updated" },
+  { id: "updatedAt-asc", label: "Least recently updated" },
+  { id: "name-asc", label: "Name A–Z" },
+  { id: "name-desc", label: "Name Z–A" },
   { id: "status-asc", label: "Status" },
 ];
 
@@ -87,7 +87,7 @@ onBeforeUnmount(() => {
 
 const pageSubtitle = computed(() => {
   const active = stats.value?.activeApps ?? apps.value.filter((a) => a.status === "active").length;
-  return `${active} aplikasi aktif: pusat dokumentasi dan versi lintas produk Transtrack.`;
+  return `${active} active ${active === 1 ? "app" : "apps"}. Docs and versions for every Transtrack product.`;
 });
 
 const hasActiveFilters = computed(
@@ -146,8 +146,8 @@ const activityContributors = computed(() => {
 
 const activitySubtitle = computed(() => {
   const count = activityContributors.value.length;
-  if (count === 0) return "Aktivitas seluruh tim";
-  return `Aktivitas seluruh tim (${count} kontributor minggu ini)`;
+  if (count === 0) return "Activity across the team";
+  return `Activity across the team (${count} ${count === 1 ? "contributor" : "contributors"} this week)`;
 });
 
 function clearFilters() {
@@ -303,37 +303,37 @@ async function doDelete() {
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
-  return d.toLocaleDateString("id-ID", { month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function versionAuthor(app: AppItem): string | null {
   return app.latestVersion?.createdBy || app.owner || null;
 }
 
-function timeAgoId(dateStr: string | null) {
+function timeAgo(dateStr: string | null) {
   if (!dateStr) return "";
   const now = new Date();
   const d = new Date(dateStr);
   const diff = Math.floor((now.getTime() - d.getTime()) / 1000);
-  if (diff < 60) return "baru saja";
+  if (diff < 60) return "just now";
   if (diff < 3600) {
     const m = Math.floor(diff / 60);
-    return `${m} menit lalu`;
+    return `${m} min ago`;
   }
   if (diff < 86400) {
     const h = Math.floor(diff / 3600);
-    return `${h} jam lalu`;
+    return `${h} ${h === 1 ? "hour" : "hours"} ago`;
   }
   if (diff < 604800) {
     const days = Math.floor(diff / 86400);
-    return `${days} hari lalu`;
+    return `${days} ${days === 1 ? "day" : "days"} ago`;
   }
   if (diff < 2419200) {
     const weeks = Math.floor(diff / 604800);
-    return `${weeks} minggu lalu`;
+    return `${weeks} ${weeks === 1 ? "week" : "weeks"} ago`;
   }
   const months = Math.floor(diff / 2419200);
-  return `${months} bulan lalu`;
+  return `${months} ${months === 1 ? "month" : "months"} ago`;
 }
 
 function appUpdatedLabel(app: AppItem) {
@@ -341,8 +341,8 @@ function appUpdatedLabel(app: AppItem) {
     app.latestVersion?.releaseDate ||
     app.latestVersion?.createdAt ||
     app.updatedAt;
-  const ago = timeAgoId(date);
-  return ago ? `Diperbarui ${ago}` : "Belum diperbarui";
+  const ago = timeAgo(date);
+  return ago ? `Updated ${ago}` : "Not updated yet";
 }
 
 const statusClass: Record<string, string> = {
@@ -352,7 +352,7 @@ const statusClass: Record<string, string> = {
 };
 
 const statusLabel: Record<string, string> = {
-  active: "AKTIF",
+  active: "ACTIVE",
   draft: "DRAFT",
   maintenance: "MAINTENANCE",
 };
@@ -367,7 +367,7 @@ const statusLabel: Record<string, string> = {
       </div>
       <div class="page-masthead__actions">
         <button v-if="canCreateApp" type="button" class="btn btn-primary" @click="openCreateModal">
-          + App Baru
+          + New App
         </button>
       </div>
     </header>
@@ -381,48 +381,48 @@ const statusLabel: Record<string, string> = {
         <input
           v-model="searchQuery"
           class="search"
-          placeholder="Cari apps, versi, docs..."
-          aria-label="Cari apps, versi, dan docs"
+          placeholder="Search apps, versions, docs..."
+          aria-label="Search apps, versions, and docs"
         />
       </div>
       <GeneralSearchableDropdown
         v-model="statusFilter"
         :options="statusFilterOptions"
-        placeholder="Semua status"
+        placeholder="All statuses"
         search-placeholder="Filter status..."
       />
       <GeneralSearchableDropdown
         v-model="sortKey"
         :options="sortOptions"
-        placeholder="Terbaru diperbarui"
-        search-placeholder="Urutkan..."
+        placeholder="Recently updated"
+        search-placeholder="Sort..."
       />
     </div>
 
-    <div class="stats-bar" aria-label="Ringkasan aplikasi">
+    <div class="stats-bar" aria-label="App summary">
       <div class="stat">
         <span class="stat-num num">{{ stats?.activeApps ?? 0 }}</span>
-        <span class="stat-label">Aplikasi aktif</span>
+        <span class="stat-label">Active apps</span>
       </div>
       <div class="stat">
         <span class="stat-num num">{{ stats?.totalVersions ?? 0 }}</span>
-        <span class="stat-label">Total versi</span>
+        <span class="stat-label">Total versions</span>
       </div>
       <div class="stat">
         <span class="stat-num num">{{ stats?.publishedDocs ?? 0 }}</span>
-        <span class="stat-label">Docs terbit</span>
+        <span class="stat-label">Published docs</span>
       </div>
       <div class="stat">
         <span class="stat-num num">{{ stats?.draftVersions ?? 0 }}</span>
-        <span class="stat-label">Versi draft</span>
+        <span class="stat-label">Draft versions</span>
       </div>
     </div>
 
     <div class="section-head">
       <div class="section-head__copy">
-        <h2>Aplikasi Anda</h2>
+        <h2>Your apps</h2>
         <span v-if="hasActiveFilters" class="result-count">
-          {{ filteredApps.length }} hasil
+          {{ filteredApps.length }} {{ filteredApps.length === 1 ? "result" : "results" }}
         </span>
       </div>
     </div>
@@ -430,9 +430,9 @@ const statusLabel: Record<string, string> = {
     <GeneralSkeletonAppGrid v-if="isLoading" />
 
     <div v-else-if="filteredApps.length === 0" class="empty-state">
-      <p>Tidak ada aplikasi yang cocok.</p>
+      <p>No apps match your filters.</p>
       <button v-if="hasActiveFilters" type="button" class="btn btn-ghost" @click="clearFilters">
-        Hapus filter
+        Clear filters
       </button>
       <button
         v-else-if="canCreateApp"
@@ -441,7 +441,7 @@ const statusLabel: Record<string, string> = {
         style="margin-top: 12px;"
         @click="openCreateModal"
       >
-        Buat aplikasi pertama
+        Create your first app
       </button>
     </div>
 
@@ -463,7 +463,7 @@ const statusLabel: Record<string, string> = {
         <div v-if="app.latestVersion" class="app-version-strip">
           <span class="num">v{{ app.latestVersion.version }}</span>
           <span v-if="versionAuthor(app)" class="app-version-strip__by">
-            oleh {{ versionAuthor(app) }}
+            by {{ versionAuthor(app) }}
           </span>
         </div>
 
@@ -474,14 +474,14 @@ const statusLabel: Record<string, string> = {
                 Docs &rarr;
               </NuxtLink>
               <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm row-action">
-                Versi &rarr;
+                Versions &rarr;
               </NuxtLink>
             </div>
             <div v-if="canOpenAppMenu" class="action-dropdown-wrap actions-menu">
               <button
                 type="button"
                 class="btn btn-ghost btn-sm row-action row-action--icon"
-                aria-label="Aksi lainnya"
+                aria-label="More actions"
                 aria-haspopup="menu"
                 :aria-expanded="openAppMenu === app.id"
                 @click.stop="toggleAppMenu(app.id)"
@@ -529,7 +529,7 @@ const statusLabel: Record<string, string> = {
                   @click="confirmDelete(app); openAppMenu = null"
                 >
                   <IconsTrash size="14" />
-                  Hapus
+                  Delete
                 </button>
               </div>
             </div>
@@ -541,7 +541,7 @@ const statusLabel: Record<string, string> = {
     <section class="activity-section" aria-labelledby="activity-heading">
       <div class="activity-head">
         <div class="activity-head__copy">
-          <h2 id="activity-heading">Aktivitas terbaru</h2>
+          <h2 id="activity-heading">Recent activity</h2>
           <p class="activity-subtitle">{{ activitySubtitle }}</p>
         </div>
         <button
@@ -563,11 +563,11 @@ const statusLabel: Record<string, string> = {
             <path d="M21 12a9 9 0 1 1-2.64-6.36" />
             <polyline points="21 3 21 9 15 9" />
           </svg>
-          Segarkan
+          Refresh
         </button>
       </div>
 
-      <div v-if="activityContributors.length" class="contributor-row" aria-label="Kontributor aktif">
+      <div v-if="activityContributors.length" class="contributor-row" aria-label="Active contributors">
         <GeneralAvatar
           v-for="actor in activityContributors"
           :key="actor"
@@ -580,10 +580,10 @@ const statusLabel: Record<string, string> = {
         <GeneralDataTable :scrollable="true">
           <thead>
             <tr>
-              <th>Tanggal</th>
-              <th>Aplikasi</th>
-              <th>Aksi</th>
-              <th>Pengguna</th>
+              <th>Date</th>
+              <th>App</th>
+              <th>Action</th>
+              <th>User</th>
             </tr>
           </thead>
           <tbody>
@@ -599,7 +599,7 @@ const statusLabel: Record<string, string> = {
               </td>
             </tr>
             <tr v-if="activities.length === 0">
-              <td colspan="4" class="empty-row">Belum ada aktivitas</td>
+              <td colspan="4" class="empty-row">No activity yet</td>
             </tr>
           </tbody>
         </GeneralDataTable>
@@ -610,34 +610,34 @@ const statusLabel: Record<string, string> = {
     <div class="modal-overlay" :class="{ open: showCreateModal }" @click.self="closeCreateModal">
       <div class="modal">
         <div class="modal-header">
-          <h2>Buat App Baru</h2>
-          <button type="button" class="modal-close" aria-label="Tutup" @click="closeCreateModal">
+          <h2>New App</h2>
+          <button type="button" class="modal-close" aria-label="Close" @click="closeCreateModal">
             ✕
           </button>
         </div>
         <form novalidate @submit.prevent="submitCreate">
           <div class="modal-body">
             <div class="form-group">
-              <label for="appName">Nama App</label>
+              <label for="appName">App name</label>
               <input
                 id="appName"
                 v-model="createForm.name"
                 type="text"
-                placeholder="mis. Payment Gateway"
+                placeholder="e.g. Payment Gateway"
                 required
                 :class="{ 'input-error': createNameError }"
                 aria-describedby="appNameError"
                 @input="createNameError = false"
               />
               <span id="appNameError" class="error-msg" :class="{ show: createNameError }">
-                Nama app wajib diisi
+                App name is required
               </span>
             </div>
             <div class="form-group">
               <label for="appDesc">
-                Deskripsi <span class="opt">(opsional)</span>
+                Description <span class="opt">(optional)</span>
               </label>
-              <textarea id="appDesc" v-model="createForm.description" placeholder="Apa fungsi app ini?" />
+              <textarea id="appDesc" v-model="createForm.description" placeholder="What does this app do?" />
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -645,9 +645,9 @@ const statusLabel: Record<string, string> = {
                 <AppOwnerSelect id="appOwner" v-model="createForm.owner" />
               </div>
               <div class="form-group">
-                <label for="appStatus">Status awal</label>
+                <label for="appStatus">Initial status</label>
                 <select id="appStatus" v-model="createForm.status">
-                  <option value="active">Aktif</option>
+                  <option value="active">Active</option>
                   <option value="draft">Draft</option>
                   <option value="maintenance">Maintenance</option>
                 </select>
@@ -658,22 +658,22 @@ const statusLabel: Record<string, string> = {
                 v-model="createForm.logoUrl"
                 input-id="appLogo"
                 label="Logo"
-                optional-label="(opsional)"
+                optional-label="(optional)"
                 url-placeholder="https://cdn.example.com/product-logo.svg"
-                drop-hint="Letakkan gambar di sini, atau"
-                browse-label="pilih file"
-                remove-label="Hapus"
-                url-label="Atau tempel URL"
+                drop-hint="Drop an image here, or"
+                browse-label="browse"
+                remove-label="Remove"
+                url-label="Or paste a URL"
               />
             </div>
           </div>
           <div class="modal-foot">
             <button type="button" class="btn btn-secondary" @click="closeCreateModal">
-              Batal
+              Cancel
             </button>
             <button type="submit" class="btn btn-primary" :disabled="isCreating">
-              <span v-if="isCreating">Membuat…</span>
-              <span v-else>Buat App</span>
+              <span v-if="isCreating">Creating…</span>
+              <span v-else>Create App</span>
             </button>
           </div>
         </form>
@@ -685,14 +685,14 @@ const statusLabel: Record<string, string> = {
       <div class="modal">
         <div class="modal-header">
           <h2>Edit App</h2>
-          <button type="button" class="modal-close" aria-label="Tutup" @click="closeEditModal">
+          <button type="button" class="modal-close" aria-label="Close" @click="closeEditModal">
             ✕
           </button>
         </div>
         <form novalidate @submit.prevent="submitEdit">
           <div class="modal-body">
             <div class="form-group">
-              <label for="editName">Nama App</label>
+              <label for="editName">App name</label>
               <input
                 id="editName"
                 v-model="editForm.name"
@@ -703,14 +703,14 @@ const statusLabel: Record<string, string> = {
                 @input="editNameError = false"
               />
               <span id="editNameError" class="error-msg" :class="{ show: editNameError }">
-                Nama app wajib diisi
+                App name is required
               </span>
             </div>
             <div class="form-group">
               <label for="editDesc">
-                Deskripsi <span class="opt">(opsional)</span>
+                Description <span class="opt">(optional)</span>
               </label>
-              <textarea id="editDesc" v-model="editForm.description" placeholder="Apa fungsi app ini?" />
+              <textarea id="editDesc" v-model="editForm.description" placeholder="What does this app do?" />
             </div>
             <div class="form-row">
               <div class="form-group">
@@ -720,7 +720,7 @@ const statusLabel: Record<string, string> = {
               <div class="form-group">
                 <label for="editStatus">Status</label>
                 <select id="editStatus" v-model="editForm.status">
-                  <option value="active">Aktif</option>
+                  <option value="active">Active</option>
                   <option value="draft">Draft</option>
                   <option value="maintenance">Maintenance</option>
                 </select>
@@ -731,22 +731,22 @@ const statusLabel: Record<string, string> = {
                 v-model="editForm.logoUrl"
                 input-id="editLogo"
                 label="Logo"
-                optional-label="(opsional)"
+                optional-label="(optional)"
                 url-placeholder="https://cdn.example.com/product-logo.svg"
-                drop-hint="Letakkan gambar di sini, atau"
-                browse-label="pilih file"
-                remove-label="Hapus"
-                url-label="Atau tempel URL"
+                drop-hint="Drop an image here, or"
+                browse-label="browse"
+                remove-label="Remove"
+                url-label="Or paste a URL"
               />
             </div>
           </div>
           <div class="modal-foot">
             <button type="button" class="btn btn-secondary" @click="closeEditModal">
-              Batal
+              Cancel
             </button>
             <button type="submit" class="btn btn-primary" :disabled="isEditing">
-              <span v-if="isEditing">Menyimpan…</span>
-              <span v-else>Simpan</span>
+              <span v-if="isEditing">Saving…</span>
+              <span v-else>Save</span>
             </button>
           </div>
         </form>
@@ -757,23 +757,23 @@ const statusLabel: Record<string, string> = {
     <div class="modal-overlay" :class="{ open: !!appToDelete }" @click.self="appToDelete = null">
       <div class="modal modal--narrow">
         <div class="modal-header">
-          <h2>Hapus App</h2>
-          <button type="button" class="modal-close" aria-label="Tutup" @click="appToDelete = null">
+          <h2>Delete App</h2>
+          <button type="button" class="modal-close" aria-label="Close" @click="appToDelete = null">
             ✕
           </button>
         </div>
         <div class="modal-body">
           <p class="modal-text">
-            Yakin ingin menghapus <strong>{{ appToDelete?.name }}</strong>? Tindakan ini tidak dapat dibatalkan.
+            Delete <strong>{{ appToDelete?.name }}</strong>? This can't be undone.
           </p>
         </div>
         <div class="modal-foot">
           <button type="button" class="btn btn-secondary" @click="appToDelete = null">
-            Batal
+            Cancel
           </button>
           <button type="button" class="btn btn-danger" :disabled="isDeleting" @click="doDelete">
-            <span v-if="isDeleting">Menghapus…</span>
-            <span v-else>Hapus</span>
+            <span v-if="isDeleting">Deleting…</span>
+            <span v-else>Delete</span>
           </button>
         </div>
       </div>

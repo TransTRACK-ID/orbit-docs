@@ -79,7 +79,7 @@ const selectedApp = computed(() =>
 );
 
 const appFilterOptions = computed(() => [
-  { id: "", label: "Semua apps" },
+  { id: "", label: "All apps" },
   ...apps.value.map((a) => ({ id: a.id, label: a.name })),
 ]);
 
@@ -98,7 +98,7 @@ const versionAppGroups = computed((): VersionAppGroup[] => {
   const groups: VersionAppGroup[] = [];
   for (const [key, items] of byApp) {
     const label =
-      items[0]?.appName || apps.value.find((a) => a.id === key)?.name || "Lainnya";
+      items[0]?.appName || apps.value.find((a) => a.id === key)?.name || "Other";
     groups.push({ key, label, versions: items });
   }
   return groups.sort((a, b) => a.label.localeCompare(b.label));
@@ -129,10 +129,10 @@ const pageStats = computed(() => {
 const pageSubtitle = computed(() => {
   const total = pageStats.value.total;
   if (showAllApps.value) {
-    return `Semua apps · ${total} versi — lacak rilis lintas aplikasi dari satu tempat.`;
+    return `All apps · ${total} ${total === 1 ? "version" : "versions"}. Track releases across every app.`;
   }
   const name = selectedApp.value?.name ?? "App";
-  return `${name} · ${total} versi — lacak rilis lintas aplikasi dari satu tempat.`;
+  return `${name} · ${total} ${total === 1 ? "version" : "versions"}.`;
 });
 
 function appNameForVersion(version: AppVersion) {
@@ -186,9 +186,9 @@ const compareBtnText = computed(() => {
   if (selectedVersions.value.length === 2) {
     const v1 = versions.value.find((v) => v.id === selectedVersions.value[0]);
     const v2 = versions.value.find((v) => v.id === selectedVersions.value[1]);
-    return `Bandingkan v${v1?.version} vs v${v2?.version}`;
+    return `Compare v${v1?.version} vs v${v2?.version}`;
   }
-  return "Bandingkan";
+  return "Compare";
 });
 
 // Bulk archive selected versions
@@ -518,7 +518,7 @@ async function submitArticle() {
 function formatDate(dateStr: string | null | undefined) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
-  return d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+  return d.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" });
 }
 
 function statusDisplay(status: string) {
@@ -654,15 +654,15 @@ function onKeydown(e: KeyboardEvent) {
         <input
           v-model="searchQuery"
           class="search"
-          placeholder="Cari versi atau aplikasi..."
-          aria-label="Cari versi atau aplikasi"
+          placeholder="Search versions or apps..."
+          aria-label="Search versions or apps"
         />
       </div>
       <GeneralSearchableDropdown
         v-model="appFilter"
         :options="appFilterOptions"
-        placeholder="Semua apps"
-        search-placeholder="Cari app..."
+        placeholder="All apps"
+        search-placeholder="Search apps..."
       />
       <div v-if="canManageVersions" class="toolbar-actions">
         <button
@@ -681,18 +681,18 @@ function onKeydown(e: KeyboardEvent) {
           :disabled="selectedVersions.length === 0 || isArchiving"
           @click="archiveSelectedVersions"
         >
-          <span v-if="isArchiving">Mengarsipkan…</span>
-          <span v-else>Arsipkan</span>
+          <span v-if="isArchiving">Archiving…</span>
+          <span v-else>Archive</span>
         </button>
         <button
           v-if="canWriteVersions"
           type="button"
           class="btn btn-primary btn-sm"
           :disabled="!appFilter"
-          :title="!appFilter ? 'Pilih app untuk membuat versi' : undefined"
+          :title="!appFilter ? 'Select an app to create a version' : undefined"
           @click="openNewVersionModal"
         >
-          + Versi Baru
+          + New Version
         </button>
       </div>
     </div>
@@ -700,26 +700,26 @@ function onKeydown(e: KeyboardEvent) {
     <div class="stats-bar">
       <div class="stat">
         <span class="stat-num num">{{ pageStats.total }}</span>
-        <span class="stat-label">Total versi</span>
+        <span class="stat-label">Total versions</span>
       </div>
       <div class="stat">
         <span class="stat-num num">{{ pageStats.drafts }}</span>
-        <span class="stat-label">Draft</span>
+        <span class="stat-label">Drafts</span>
       </div>
       <div class="stat">
         <span class="stat-num num">{{ pageStats.apps }}</span>
-        <span class="stat-label">Aplikasi</span>
+        <span class="stat-label">Apps</span>
       </div>
     </div>
 
     <div class="selection-bar" :class="{ active: selectedVersions.length > 0 }">
       <span>
         <span class="num">{{ selectedVersions.length }}</span>
-        versi dipilih
+        {{ selectedVersions.length === 1 ? "version" : "versions" }} selected
       </span>
-      <span class="text-muted-sm">Pilih 2 untuk membandingkan</span>
+      <span class="text-muted-sm">Select 2 to compare</span>
       <button type="button" class="btn btn-ghost btn-sm" style="margin-left: auto;" @click="clearSelection">
-        Batal
+        Cancel
       </button>
     </div>
 
@@ -731,7 +731,7 @@ function onKeydown(e: KeyboardEvent) {
         <GeneralSkeletonAccordionList v-if="isLoading" :rows-per-accordion="5" />
 
         <div v-else-if="filteredVersions.length === 0" class="empty-state">
-          <p>Tidak ada versi ditemukan.</p>
+          <p>No versions found.</p>
           <button
             v-if="canWriteVersions && appFilter"
             type="button"
@@ -739,7 +739,7 @@ function onKeydown(e: KeyboardEvent) {
             style="margin-top: 12px;"
             @click="openNewVersionModal"
           >
-            Buat versi pertama
+            Create the first version
           </button>
         </div>
 
@@ -762,7 +762,7 @@ function onKeydown(e: KeyboardEvent) {
               />
               <span class="accordion-title">{{ group.label }}</span>
               <span class="accordion-count">
-                {{ group.versions.length }} versi
+                {{ group.versions.length }} {{ group.versions.length === 1 ? "version" : "versions" }}
               </span>
             </button>
 
@@ -771,12 +771,12 @@ function onKeydown(e: KeyboardEvent) {
                 <thead>
                   <tr>
                     <th class="check-col" />
-                    <th>Versi</th>
+                    <th>Version</th>
                     <th>Author</th>
-                    <th>Tanggal</th>
+                    <th>Date</th>
                     <th>Status</th>
                     <th>CI</th>
-                    <th>Rilis</th>
+                    <th>Release</th>
                     <th v-if="canWriteVersions" class="col-actions" />
                   </tr>
                 </thead>
@@ -795,7 +795,7 @@ function onKeydown(e: KeyboardEvent) {
                       <input
                         type="checkbox"
                         :checked="selectedVersions.includes(v.id)"
-                        :aria-label="`Pilih versi ${v.version}`"
+                        :aria-label="`Select version ${v.version}`"
                         @change="toggleVersionCheck(v.id, ($event.target as HTMLInputElement).checked)"
                       />
                     </td>
@@ -842,10 +842,10 @@ function onKeydown(e: KeyboardEvent) {
                     </td>
                     <td v-if="canWriteVersions" class="col-actions" @click.stop>
                       <div class="cell-actions">
-                        <button class="btn btn-ghost btn-sm" title="Edit versi" @click="openEditVersionModal(v)">
+                        <button class="btn btn-ghost btn-sm" title="Edit version" @click="openEditVersionModal(v)">
                           <IconsPencil size="14" />
                         </button>
-                        <button class="btn btn-ghost btn-sm" title="Hapus versi" @click="confirmDeleteVersion(v)">
+                        <button class="btn btn-ghost btn-sm" title="Delete version" @click="confirmDeleteVersion(v)">
                           <IconsTrash size="14" />
                         </button>
                       </div>
@@ -870,7 +870,7 @@ function onKeydown(e: KeyboardEvent) {
               v-if="activeReleaseDetail?.categories"
               type="button"
               class="btn btn-ghost btn-sm"
-              title="Salin changelog"
+              title="Copy changelog"
               @click="copyChangelogToClipboard(
                 activeReleaseDetail.categories,
                 { version: activeDetailVersion.version, appName: appNameForVersion(activeDetailVersion), releaseDate: activeDetailVersion.releaseDate }
@@ -896,8 +896,8 @@ function onKeydown(e: KeyboardEvent) {
             <button
               type="button"
               class="btn btn-ghost btn-sm"
-              title="Tutup panel"
-              aria-label="Tutup panel changelog"
+              title="Close panel"
+              aria-label="Close changelog panel"
               @click="activeDetailVersion = null"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -909,7 +909,7 @@ function onKeydown(e: KeyboardEvent) {
 
         <div v-if="isLoadingReleaseDetail" class="detail-loading">
           <span class="loading-spinner" />
-          <span class="text-muted-sm">Memuat changelog…</span>
+          <span class="text-muted-sm">Loading changelog…</span>
         </div>
         <template v-else-if="activeReleaseDetail?.categories">
           <div class="detail-changelog-content">
@@ -944,7 +944,7 @@ function onKeydown(e: KeyboardEvent) {
             <line x1="16" y1="17" x2="8" y2="17" />
             <polyline points="10 9 9 9 8 9" />
           </svg>
-          <p class="text-muted-sm">Belum ada changelog untuk versi ini</p>
+          <p class="text-muted-sm">No changelog for this version yet</p>
         </div>
         <div v-if="activeDetailVersion.commitHash" class="detail-commit">
           <span class="num">Commit {{ activeDetailVersion.commitHash }}</span>
@@ -1088,7 +1088,7 @@ function onKeydown(e: KeyboardEvent) {
               <select id="versionStatus" v-model="newVersionForm.status">
                 <option value="draft">Draft</option>
                 <option value="published">Published</option>
-                <option value="rc">RC</option>
+                <option value="rc">Release candidate (RC)</option>
                 <option value="archived">Archived</option>
               </select>
             </div>
@@ -1174,7 +1174,7 @@ function onKeydown(e: KeyboardEvent) {
               <select id="editVersionStatus" v-model="editVersionForm.status">
                 <option value="draft">Draft</option>
                 <option value="published">Published</option>
-                <option value="rc">RC</option>
+                <option value="rc">Release candidate (RC)</option>
                 <option value="archived">Archived</option>
               </select>
             </div>

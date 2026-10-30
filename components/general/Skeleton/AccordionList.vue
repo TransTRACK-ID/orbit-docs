@@ -14,7 +14,7 @@ withDefaults(
 </script>
 
 <template>
-  <div class="accordion-list" aria-busy="true" aria-label="Memuat data">
+  <div class="accordion-list" aria-busy="true" aria-label="Loading">
     <section
       v-for="n in count"
       :key="n"

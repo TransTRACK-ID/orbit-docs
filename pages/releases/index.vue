@@ -71,14 +71,14 @@ watch(filteredReleases, (list) => {
 });
 
 const appFilterOptions = computed(() => [
-  { id: "", label: "Semua apps" },
+  { id: "", label: "All apps" },
   ...apps.value.map((a) => ({ id: a.name, label: a.name })),
 ]);
 
 function formatTimelineDate(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
-  return d.toLocaleDateString("id-ID", {
+  return d.toLocaleDateString("en-US", {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -130,10 +130,12 @@ function getCollapsedPreview(r: ReleaseItem): string {
     const cats = countCategories(r.categories);
     const total = Object.values(cats).reduce((sum, items) => sum + items.length, 0);
     if (total > 0) {
-      return `${total} perubahan pada rilis ${formatDisplayVersion(r.version)}.`;
+      return `${total} ${total === 1 ? "change" : "changes"} in ${formatDisplayVersion(r.version)}.`;
     }
   }
-  return `Rilis ${formatDisplayVersion(r.version)} untuk ${r.appName}.`;
+  return r.version
+    ? `Release ${formatDisplayVersion(r.version)} for ${r.appName}.`
+    : `Release for ${r.appName}.`;
 }
 
 function isExpanded(id: string) {
@@ -198,7 +200,7 @@ const shareUrl = computed(() => {
 });
 
 const shareAppOptions = computed(() => [
-  { id: "", label: "Semua apps" },
+  { id: "", label: "All apps" },
   ...apps.value.map((a) => ({ id: a.name, label: a.name })),
 ]);
 
@@ -215,7 +217,7 @@ function closeShareModal() {
 async function copyShareUrl() {
   try {
     await navigator.clipboard.writeText(shareUrl.value);
-    alert("Tautan publik disalin");
+    alert("Public link copied");
     closeShareModal();
   } catch {
     const input = document.createElement("input");
@@ -224,7 +226,7 @@ async function copyShareUrl() {
     input.select();
     document.execCommand("copy");
     document.body.removeChild(input);
-    alert("Tautan publik disalin");
+    alert("Public link copied");
     closeShareModal();
   }
 }
@@ -251,7 +253,7 @@ function onKeydown(e: KeyboardEvent) {
       <div class="page-masthead__copy">
         <h1>Releases</h1>
         <p class="page-subtitle">
-          Catatan rilis, pembaruan, dan draft lintas aplikasi.
+          Release notes, updates, and drafts across every app.
         </p>
       </div>
       <div class="masthead-actions">
@@ -266,7 +268,7 @@ function onKeydown(e: KeyboardEvent) {
             <polyline points="7 10 12 15 17 10" />
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
-          Impor dari Notion
+          Import from Notion
         </button>
         <button type="button" class="btn btn-primary" @click="openShareModal">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -274,7 +276,7 @@ function onKeydown(e: KeyboardEvent) {
             <polyline points="16 6 12 2 8 6" />
             <line x1="12" y1="2" x2="12" y2="15" />
           </svg>
-          Bagikan
+          Share
         </button>
       </div>
     </header>
@@ -288,15 +290,15 @@ function onKeydown(e: KeyboardEvent) {
         <input
           v-model="searchQuery"
           class="search"
-          placeholder="Cari rilis..."
-          aria-label="Cari rilis"
+          placeholder="Search releases..."
+          aria-label="Search releases"
         />
       </div>
       <GeneralSearchableDropdown
         v-model="appFilter"
         :options="appFilterOptions"
-        placeholder="Semua apps"
-        search-placeholder="Cari app..."
+        placeholder="All apps"
+        search-placeholder="Search apps..."
       />
     </div>
 
@@ -316,7 +318,7 @@ function onKeydown(e: KeyboardEvent) {
           <time class="release-rail__date" :datetime="r.releaseDate || r.createdAt || undefined">
             {{ formatTimelineDate(r.releaseDate || r.createdAt) }}
           </time>
-          <span class="release-rail__label">Rilis</span>
+          <span class="release-rail__label">Released</span>
         </div>
 
         <div class="release-main">
@@ -335,8 +337,8 @@ function onKeydown(e: KeyboardEvent) {
               </div>
             </div>
             <div class="release-chips">
-              <span v-if="r.version" class="meta-chip">Versi {{ formatDisplayVersion(r.version) }}</span>
-              <span class="meta-chip">Produk {{ r.appName }}</span>
+              <span v-if="r.version" class="meta-chip">Version {{ formatDisplayVersion(r.version) }}</span>
+              <span class="meta-chip">Product {{ r.appName }}</span>
             </div>
           </header>
 
@@ -344,13 +346,13 @@ function onKeydown(e: KeyboardEvent) {
             <section
               v-if="getSummaryBlurb(r.summary)"
               class="release-panel release-panel--summary"
-              aria-label="Ringkasan rilis"
+              aria-label="Release summary"
             >
               <div class="release-panel__head">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3Z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" />
                 </svg>
-                <span>Ringkasan rilis</span>
+                <span>Release summary</span>
               </div>
               <p class="release-panel__text">{{ getSummaryBlurb(r.summary) }}</p>
             </section>
@@ -358,10 +360,10 @@ function onKeydown(e: KeyboardEvent) {
             <section
               v-if="r.type === 'article' && getOutlineItems(r.summary).length"
               class="release-panel release-panel--outline"
-              aria-label="Daftar isi"
+              aria-label="Contents"
             >
               <div class="release-panel__head">
-                <span class="release-panel__eyebrow">Daftar isi</span>
+                <span class="release-panel__eyebrow">Contents</span>
               </div>
               <ul class="release-outline" role="list">
                 <li
@@ -414,7 +416,7 @@ function onKeydown(e: KeyboardEvent) {
               class="release-toggle"
               @click="collapseRelease(r.id)"
             >
-              Sembunyikan konten
+              Hide content
             </button>
           </template>
 
@@ -425,15 +427,15 @@ function onKeydown(e: KeyboardEvent) {
               class="release-toggle"
               @click="expandRelease(r.id)"
             >
-              Tampilkan konten
+              Show content
             </button>
           </template>
         </div>
       </article>
 
       <div v-if="filteredReleases.length === 0 && !isLoading" class="empty-state">
-        <p>Tidak ada rilis ditemukan</p>
-        <span class="empty-hint">Coba ubah pencarian atau filter app</span>
+        <p>No releases found</p>
+        <span class="empty-hint">Try a different search or app filter</span>
       </div>
     </main>
 
@@ -448,8 +450,8 @@ function onKeydown(e: KeyboardEvent) {
     >
       <div class="share-drawer">
         <div class="share-header">
-          <h3 id="shareTitle">Bagikan tautan publik</h3>
-          <button type="button" class="btn btn-ghost share-close" aria-label="Tutup" @click="closeShareModal">
+          <h3 id="shareTitle">Share public link</h3>
+          <button type="button" class="btn btn-ghost share-close" aria-label="Close" @click="closeShareModal">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -458,21 +460,21 @@ function onKeydown(e: KeyboardEvent) {
         </div>
         <div class="share-body">
           <div class="share-field">
-            <label for="shareApp">Cakupan</label>
+            <label for="shareApp">Scope</label>
             <GeneralSearchableDropdown
               id="shareApp"
               v-model="shareApp"
               :options="shareAppOptions"
-              placeholder="Semua apps"
-              search-placeholder="Cari app..."
+              placeholder="All apps"
+              search-placeholder="Search apps..."
             />
           </div>
 
           <div class="share-field">
             <div class="share-toggle-row" @click="shareEmbed = !shareEmbed">
               <div class="share-toggle-info">
-                <span class="share-toggle-label">Mode embed</span>
-                <span class="share-toggle-desc">Menghilangkan header dan footer untuk iframe</span>
+                <span class="share-toggle-label">Embed mode</span>
+                <span class="share-toggle-desc">Hides the header and footer for use in an iframe</span>
               </div>
               <button
                 type="button"
@@ -488,18 +490,18 @@ function onKeydown(e: KeyboardEvent) {
           </div>
 
           <div class="share-preview">
-            <label>Pratinjau URL</label>
+            <label>URL preview</label>
             <code class="share-url">{{ shareUrl }}</code>
           </div>
         </div>
         <div class="share-footer">
-          <button type="button" class="btn btn-secondary" @click="closeShareModal">Batal</button>
+          <button type="button" class="btn btn-secondary" @click="closeShareModal">Cancel</button>
           <button type="button" class="btn btn-primary" @click="copyShareUrl">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
-            Salin tautan
+            Copy link
           </button>
         </div>
       </div>

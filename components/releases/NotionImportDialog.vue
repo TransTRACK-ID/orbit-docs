@@ -193,7 +193,7 @@ function onFilePicked(list: FileList | null) {
   if (!f) return;
   imp.error.value = "";
   if (!f.name.toLowerCase().endsWith(".zip")) {
-    imp.error.value = "File harus berupa arsip .zip ekspor Notion";
+    imp.error.value = "The file must be a Notion export .zip archive";
     return;
   }
   imp.file.value = f;
@@ -293,11 +293,11 @@ async function cancelImport() {
   >
     <div class="ni-drawer">
       <div class="ni-header">
-        <h3 id="niTitle">Impor dari Notion</h3>
+        <h3 id="niTitle">Import from Notion</h3>
         <button
           type="button"
           class="btn btn-ghost ni-close"
-          aria-label="Tutup"
+          aria-label="Close"
           @click="requestClose"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16" aria-hidden="true">
@@ -315,7 +315,7 @@ async function cancelImport() {
             :to="`/releases/${imp.conflictReleaseId.value}`"
             class="ni-conflict-link"
           >
-            Buka rilis yang ada
+            Open existing release
           </NuxtLink>
         </div>
 
@@ -325,14 +325,14 @@ async function cancelImport() {
             <GeneralSearchableDropdown
               v-model="selectedAppId"
               :options="appOptions"
-              label="Aplikasi"
-              placeholder="Pilih aplikasi"
-              search-placeholder="Cari aplikasi..."
+              label="App"
+              placeholder="Select an app"
+              search-placeholder="Search apps..."
             />
           </div>
 
           <div class="ni-field">
-            <label for="niVersion">Versi</label>
+            <label for="niVersion">Version</label>
             <div
               ref="versionComboRef"
               class="ni-combo"
@@ -345,8 +345,8 @@ async function cancelImport() {
                 class="ni-combo-input"
                 :placeholder="
                   selectedAppId
-                    ? 'Cari atau ketik versi baru, mis. 1.2.0'
-                    : 'Pilih aplikasi dulu'
+                    ? 'Search or type a new version, e.g. 1.2.0'
+                    : 'Select an app first'
                 "
                 :disabled="!selectedAppId"
                 role="combobox"
@@ -364,7 +364,7 @@ async function cancelImport() {
                 id="niVersionList"
                 class="ni-combo-menu"
                 role="listbox"
-                aria-label="Versi"
+                aria-label="Versions"
               >
                 <button
                   v-for="(v, i) in filteredVersions"
@@ -384,7 +384,7 @@ async function cancelImport() {
                 >
                   <span class="ni-combo-label">v{{ v.version }}</span>
                   <span v-if="versionHasArticle(v)" class="ni-combo-tag">
-                    artikel ada
+                    has article
                   </span>
                   <svg
                     v-else-if="v.id === selectedVersionId"
@@ -420,7 +420,7 @@ async function cancelImport() {
                     <line x1="5" y1="12" x2="19" y2="12" />
                   </svg>
                   <span class="ni-combo-label">
-                    {{ isCreatingVersion ? "Membuat…" : `Buat versi “v${cleanVersionQuery}”` }}
+                    {{ isCreatingVersion ? "Creating…" : `Create version “v${cleanVersionQuery}”` }}
                   </span>
                 </button>
 
@@ -429,29 +429,29 @@ async function cancelImport() {
                   class="ni-combo-empty"
                   role="alert"
                 >
-                  Tidak ada versi cocok
+                  No matching versions
                 </div>
               </div>
             </div>
             <span class="ni-hint">
-              Belum ada versi? Ketik nomor versi lalu Enter untuk membuatnya.
-              Versi yang sudah punya artikel rilis dinonaktifkan.
+              No version yet? Type a version number and press Enter to create it.
+              Versions that already have a release article are disabled.
             </span>
           </div>
 
           <div class="ni-field">
-            <label for="niHeroTitle">Judul hero <span class="ni-optional">opsional</span></label>
+            <label for="niHeroTitle">Hero title <span class="ni-optional">optional</span></label>
             <input
               id="niHeroTitle"
               v-model="heroTitle"
               type="text"
-              placeholder="Otomatis dari judul dokumen"
+              placeholder="Defaults to the document title"
               @input="onHeroTitleInput"
             />
           </div>
 
           <div class="ni-field">
-            <span class="ni-field-label">Arsip ekspor Notion</span>
+            <span class="ni-field-label">Notion export archive</span>
             <label
               class="ni-dropzone"
               :class="{ 'is-dragover': isDragOver, 'has-file': imp.file.value }"
@@ -474,7 +474,7 @@ async function cancelImport() {
                 </svg>
                 <span class="ni-file-name" :title="imp.file.value.name">{{ imp.file.value.name }}</span>
                 <span class="ni-file-size">{{ formatSize(imp.file.value.size) }}</span>
-                <span class="ni-file-replace">Klik atau tarik file lain untuk mengganti</span>
+                <span class="ni-file-replace">Click or drop another file to replace</span>
               </template>
               <template v-else>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -482,8 +482,8 @@ async function cancelImport() {
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
-                <span class="ni-drop-title">Tarik file .zip ke sini, atau klik untuk memilih</span>
-                <span class="ni-drop-hint">Ekspor Notion (Markdown &amp; CSV), maks 200 MB</span>
+                <span class="ni-drop-title">Drop a .zip file here, or click to browse</span>
+                <span class="ni-drop-hint">Notion export (Markdown &amp; CSV), max 200 MB</span>
               </template>
             </label>
           </div>
@@ -506,7 +506,7 @@ async function cancelImport() {
             :aria-valuenow="percent"
             aria-valuemin="0"
             aria-valuemax="100"
-            aria-label="Progres unggahan"
+            aria-label="Upload progress"
           >
             <div
               class="ni-progress-fill"
@@ -516,14 +516,14 @@ async function cancelImport() {
 
           <div class="ni-progress-meta">
             <span class="ni-progress-count">
-              {{ formatSize(imp.uploadedBytes.value) }} dari {{ formatSize(imp.totalBytes.value) }}
+              {{ formatSize(imp.uploadedBytes.value) }} of {{ formatSize(imp.totalBytes.value) }}
             </span>
             <span class="ni-progress-pct">{{ percent }}%</span>
           </div>
 
           <p v-if="imp.retryNote.value" class="ni-note">{{ imp.retryNote.value }}</p>
           <p v-else-if="imp.phase.value === 'paused'" class="ni-note">
-            Upload dijeda. Pilih Lanjutkan untuk melanjutkan dari titik terakhir.
+            Upload paused. Choose Resume to continue where it left off.
           </p>
 
           <div class="ni-upload-actions">
@@ -533,7 +533,7 @@ async function cancelImport() {
               class="btn btn-secondary btn-sm"
               @click="imp.pause()"
             >
-              Jeda
+              Pause
             </button>
             <button
               v-else
@@ -541,14 +541,14 @@ async function cancelImport() {
               class="btn btn-primary btn-sm"
               @click="imp.resume()"
             >
-              Lanjutkan
+              Resume
             </button>
             <button
               type="button"
               class="btn btn-ghost btn-sm"
               @click="cancelImport"
             >
-              Batalkan impor
+              Cancel import
             </button>
           </div>
         </template>
@@ -556,9 +556,9 @@ async function cancelImport() {
         <!-- Step: choose document -->
         <template v-else-if="step === 'choose'">
           <p class="ni-choose-intro">
-            Arsip berisi {{ imp.markdownFiles.value.length }} dokumen. Pilih satu untuk dijadikan artikel rilis.
+            The archive has {{ imp.markdownFiles.value.length }} {{ imp.markdownFiles.value.length === 1 ? "document" : "documents" }}. Pick one to use as the release article.
           </p>
-          <div class="ni-md-list" role="radiogroup" aria-label="Dokumen dalam arsip">
+          <div class="ni-md-list" role="radiogroup" aria-label="Documents in the archive">
             <label
               v-for="opt in imp.markdownFiles.value"
               :key="opt.path"
@@ -581,12 +581,12 @@ async function cancelImport() {
           </div>
 
           <div class="ni-field">
-            <label for="niHeroTitlePick">Judul hero <span class="ni-optional">opsional</span></label>
+            <label for="niHeroTitlePick">Hero title <span class="ni-optional">optional</span></label>
             <input
               id="niHeroTitlePick"
               v-model="heroTitle"
               type="text"
-              placeholder="Otomatis dari judul dokumen"
+              placeholder="Defaults to the document title"
               @input="onHeroTitleInput"
             />
           </div>
@@ -600,8 +600,8 @@ async function cancelImport() {
             </div>
             <p class="ni-note">
               {{ imp.phase.value === 'inspecting'
-                ? 'Membaca isi arsip…'
-                : 'Mengunggah aset dan membuat rilis…' }}
+                ? 'Reading the archive…'
+                : 'Uploading assets and creating the release…' }}
             </p>
           </div>
         </template>
@@ -610,7 +610,7 @@ async function cancelImport() {
       <div v-if="step === 'form' || step === 'choose'" class="ni-footer">
         <template v-if="step === 'form'">
           <button type="button" class="btn btn-secondary" @click="requestClose">
-            Batal
+            Cancel
           </button>
           <button
             type="button"
@@ -618,12 +618,12 @@ async function cancelImport() {
             :disabled="!canSubmit"
             @click="submitImport"
           >
-            Impor
+            Import
           </button>
         </template>
         <template v-else-if="step === 'choose'">
           <button type="button" class="btn btn-ghost" @click="cancelImport">
-            Batalkan
+            Cancel
           </button>
           <button
             type="button"
@@ -631,7 +631,7 @@ async function cancelImport() {
             :disabled="!selectedMdPath"
             @click="submitFinalize"
           >
-            Impor dokumen
+            Import document
           </button>
         </template>
       </div>

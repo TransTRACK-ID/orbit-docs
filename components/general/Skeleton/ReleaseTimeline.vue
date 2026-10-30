@@ -10,7 +10,7 @@ withDefaults(
 </script>
 
 <template>
-  <div class="release-timeline" aria-busy="true" aria-label="Memuat rilis">
+  <div class="release-timeline" aria-busy="true" aria-label="Loading releases">
     <article
       v-for="n in count"
       :key="n"

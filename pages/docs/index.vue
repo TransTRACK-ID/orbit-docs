@@ -60,12 +60,12 @@ const {
 const embeddingScheduleIntervalLabel = computed(() => {
   const interval = embeddingScheduleSettings.value?.workspaceSchedule.interval;
   const labels: Record<string, string> = {
-    hourly: "setiap jam",
-    daily: "sekali sehari",
-    weekly: "sekali seminggu",
-    monthly: "sekali sebulan",
+    hourly: "hourly",
+    daily: "daily",
+    weekly: "weekly",
+    monthly: "monthly",
   };
-  return labels[interval ?? "daily"] ?? "sekali sehari";
+  return labels[interval ?? "daily"] ?? "daily";
 });
 
 const embeddingScheduleActive = computed(() => {
@@ -79,38 +79,38 @@ const embeddingScheduleHint = computed(() => {
   if (!appFilter.value) return "";
   if (!embeddingScheduleSettings.value) return "";
   if (!embeddingScheduleSettings.value.semanticSearchEnabled) {
-    return "Semantic search dinonaktifkan (SEMANTIC_SEARCH=false).";
+    return "Semantic search is disabled (SEMANTIC_SEARCH=false).";
   }
   if (!embeddingScheduleSettings.value.hasApiKey) {
-    return "Set OPENAI_API_KEY di server untuk indexing embedding.";
+    return "Set OPENAI_API_KEY on the server to enable embedding indexing.";
   }
   if (!embeddingScheduleSettings.value.workspaceSchedule.enabled) {
-    return "Scheduled sync workspace mati. Aktifkan di Settings → Integrations → Sync.";
+    return "Workspace scheduled sync is off. Turn it on in Settings → Integrations → Sync.";
   }
   if (!embeddingScheduleSettings.value.scheduleEnabled) {
-    return "Index terjadwal mati untuk app ini.";
+    return "Scheduled indexing is off for this app.";
   }
-  return `Mengindex dokumen pending/stale ${embeddingScheduleIntervalLabel.value} (feature, SDD, wiki). Save tetap auto-index via EMBED_ON_SAVE.`;
+  return `Indexes pending or stale docs ${embeddingScheduleIntervalLabel.value} (feature, SDD, wiki). Saving still auto-indexes via EMBED_ON_SAVE.`;
 });
 
 function formatEmbeddingScheduleTime(iso: string | null | undefined) {
-  if (!iso) return "Belum pernah";
+  if (!iso) return "Never";
   return new Date(iso).toLocaleString();
 }
 
 const docViewOptions: { id: DocListView; label: string }[] = [
-  { id: "all", label: "Semua jenis" },
-  { id: "product", label: "Dokumentasi produk" },
+  { id: "all", label: "All types" },
+  { id: "product", label: "Product documentation" },
   { id: "knowledge", label: "Knowledge base" },
-  { id: "adrs", label: "Keputusan arsitektur" },
+  { id: "adrs", label: "Architectural decisions" },
 ];
 
 const statusFilterOptions = [
-  { id: "", label: "Semua status" },
+  { id: "", label: "All statuses" },
   { id: "draft", label: "Draft" },
-  { id: "in_review", label: "Dalam review" },
-  { id: "published", label: "Dipublikasi" },
-  { id: "archived", label: "Diarsipkan" },
+  { id: "in_review", label: "In review" },
+  { id: "published", label: "Published" },
+  { id: "archived", label: "Archived" },
 ];
 
 watch(
@@ -128,7 +128,7 @@ watch(
 );
 
 const appFilterOptions = computed(() => [
-  { id: "", label: "Semua apps" },
+  { id: "", label: "All apps" },
   ...apps.value.map((a) => ({ id: a.id, label: a.name })),
 ]);
 
@@ -307,7 +307,7 @@ function canManageDoc(doc: DocItem): boolean {
 function formatDate(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
-  return d.toLocaleDateString("id-ID", { month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 const statusClass: Record<string, string> = {
@@ -507,7 +507,7 @@ watch(docs, () => {
       <div class="page-masthead__copy">
         <h1>Docs</h1>
         <p class="page-subtitle">
-          Semua dokumentasi lintas aplikasi, dikelompokkan per sistem dan jenis dokumen.
+          Every app's documentation, grouped by system and document type.
         </p>
       </div>
       <div class="page-masthead__actions">
@@ -516,7 +516,7 @@ watch(docs, () => {
           Generate Docs
         </NuxtLink>
         <button v-if="canWriteDocs" type="button" class="btn btn-primary" @click="openCreateModal">
-          + Dokumen Baru
+          + New Doc
         </button>
       </div>
     </header>
@@ -530,8 +530,8 @@ watch(docs, () => {
         <input
           v-model="search"
           class="search"
-          placeholder="Cari dokumen..."
-          aria-label="Cari dokumen"
+          placeholder="Search docs..."
+          aria-label="Search docs"
           @input="onSearch"
         />
       </div>
@@ -539,19 +539,19 @@ watch(docs, () => {
         <GeneralSearchableDropdown
           v-model="docView"
           :options="docViewOptions"
-          placeholder="Semua jenis"
-          search-placeholder="Filter jenis..."
+          placeholder="All types"
+          search-placeholder="Filter types..."
         />
         <GeneralSearchableDropdown
           v-model="appFilter"
           :options="appFilterOptions"
-          placeholder="Semua apps"
-          search-placeholder="Cari app..."
+          placeholder="All apps"
+          search-placeholder="Search apps..."
         />
         <GeneralSearchableDropdown
           v-model="statusFilter"
           :options="statusFilterOptions"
-          placeholder="Semua status"
+          placeholder="All statuses"
           search-placeholder="Filter status..."
         />
       </div>
@@ -586,15 +586,15 @@ watch(docs, () => {
     <div class="stats-bar">
       <div class="stat">
         <span class="stat-num num">{{ pageStats.total }}</span>
-        <span class="stat-label">Total dokumen</span>
+        <span class="stat-label">Total docs</span>
       </div>
       <div class="stat">
         <span class="stat-num num">{{ pageStats.drafts }}</span>
-        <span class="stat-label">Draft aktif</span>
+        <span class="stat-label">Drafts</span>
       </div>
       <div class="stat">
         <span class="stat-num num">{{ pageStats.systems }}</span>
-        <span class="stat-label">Sistem</span>
+        <span class="stat-label">Systems</span>
       </div>
     </div>
 
@@ -604,16 +604,16 @@ watch(docs, () => {
     >
       <div class="embedding-schedule-header">
         <div>
-          <h2>Index semantik terjadwal</h2>
+          <h2>Scheduled semantic index</h2>
           <p class="embedding-schedule-desc">
-            Catch-up otomatis untuk dokumen feature, SDD, dan wiki yang belum atau perlu re-index.
-            Menggunakan jadwal workspace yang sama dengan Notion sync dan Generate Docs.
+            Automatically catches up feature, SDD, and wiki docs that are unindexed or need re-indexing.
+            Uses the same workspace schedule as Notion sync and Generate Docs.
           </p>
         </div>
       </div>
 
       <div v-if="isLoadingEmbeddingSchedule" class="embedding-schedule-skeleton">
-        Memuat pengaturan index…
+        Loading index settings…
       </div>
 
       <template v-else-if="embeddingScheduleSettings">
@@ -631,22 +631,22 @@ watch(docs, () => {
               {{
                 embeddingScheduleSettings.scheduleEnabled
                   ? embeddingScheduleActive
-                    ? `Aktif · ${embeddingScheduleIntervalLabel}`
-                    : "Diaktifkan untuk app ini, menunggu workspace scheduled sync"
-                  : "Nonaktif untuk app ini"
+                    ? `Active · ${embeddingScheduleIntervalLabel}`
+                    : "On for this app, waiting for workspace scheduled sync"
+                  : "Off for this app"
               }}
             </div>
           </div>
         </div>
 
         <div class="embedding-schedule-meta">
-          <span>Run terakhir: {{ formatEmbeddingScheduleTime(embeddingScheduleSettings.lastRunAt) }}</span>
+          <span>Last run: {{ formatEmbeddingScheduleTime(embeddingScheduleSettings.lastRunAt) }}</span>
           <template v-if="embeddingScheduleSettings.lastRunStatus && embeddingScheduleSettings.lastRunStatus !== 'idle'">
             · {{ embeddingScheduleSettings.lastRunStatus }}
           </template>
           <template v-if="embeddingScheduleSettings.lastRunResult">
             · {{ embeddingScheduleSettings.lastRunResult.indexed }} indexed,
-            {{ embeddingScheduleSettings.lastRunResult.candidates }} kandidat
+            {{ embeddingScheduleSettings.lastRunResult.candidates }} candidates
           </template>
         </div>
 
@@ -657,8 +657,8 @@ watch(docs, () => {
             :disabled="isRunningEmbeddingSchedule || !embeddingScheduleSettings.hasApiKey"
             @click="runEmbeddingIndexNow"
           >
-            <span v-if="isRunningEmbeddingSchedule">Mengindex…</span>
-            <span v-else>Index sekarang</span>
+            <span v-if="isRunningEmbeddingSchedule">Indexing…</span>
+            <span v-else>Index now</span>
           </button>
         </div>
 
@@ -674,7 +674,7 @@ watch(docs, () => {
     >
       <span>
         <span class="num">{{ selectedCount }}</span>
-        fitur dipilih
+        {{ selectedCount === 1 ? "feature" : "features" }} selected
       </span>
       <label class="selection-status">
         <span class="selection-status-label">Set status</span>
@@ -693,8 +693,8 @@ watch(docs, () => {
         :disabled="isBulkUpdating"
         @click="applyBulkStatus"
       >
-        <span v-if="isBulkUpdating">Memperbarui…</span>
-        <span v-else>Perbarui status</span>
+        <span v-if="isBulkUpdating">Updating…</span>
+        <span v-else>Update status</span>
       </button>
       <button
         type="button"
@@ -703,16 +703,16 @@ watch(docs, () => {
         :disabled="isBulkUpdating"
         @click="clearSelection"
       >
-        Batal
+        Cancel
       </button>
     </div>
 
     <GeneralSkeletonAccordionList v-if="isLoading" />
 
     <div v-else-if="visibleDocCount === 0 && !showKnowledgeCard" class="empty-state">
-      <p>Tidak ada dokumen ditemukan.</p>
+      <p>No docs found.</p>
       <button v-if="canWriteDocs" type="button" class="btn btn-primary" style="margin-top:12px;" @click="openCreateModal">
-        Buat dokumen pertama
+        Create your first doc
       </button>
     </div>
 
@@ -735,17 +735,17 @@ watch(docs, () => {
               :class="{ 'is-expanded': isGroupExpanded(group.key) }"
             />
             <span class="accordion-title">{{ group.label }}</span>
-            <span class="accordion-count">{{ groupDocCount(group) }} dokumen</span>
+            <span class="accordion-count">{{ groupDocCount(group) }} {{ groupDocCount(group) === 1 ? "doc" : "docs" }}</span>
           </button>
 
           <div v-show="isGroupExpanded(group.key)" class="accordion-body">
             <GeneralDataTable :scrollable="true">
               <thead>
                 <tr>
-                  <th>Dokumen</th>
+                  <th>Doc</th>
                   <th>Status</th>
-                  <th>Diperbarui</th>
-                  <th>Oleh</th>
+                  <th>Updated</th>
+                  <th>By</th>
                   <th class="col-actions" />
                 </tr>
               </thead>
@@ -759,7 +759,7 @@ watch(docs, () => {
                       <div class="subsection-label">
                         <span>{{ sectionLabel(section) }}</span>
                         <span v-if="section.kind === 'architectural_decisions'" class="subsection-count">
-                          {{ section.docs.length }} keputusan
+                          {{ section.docs.length }} {{ section.docs.length === 1 ? "decision" : "decisions" }}
                         </span>
                       </div>
                     </td>
@@ -799,13 +799,13 @@ watch(docs, () => {
                           :to="`/docs/${doc.id}`"
                           class="btn btn-ghost btn-sm row-action"
                         >
-                          Buka
+                          Open
                         </NuxtLink>
                         <button
                           v-if="canManageDoc(doc)"
                           type="button"
                           class="btn btn-ghost btn-sm"
-                          title="Hapus"
+                          title="Delete"
                           @click="confirmDelete(doc)"
                         >
                           <IconsTrash size="14" />
@@ -826,8 +826,8 @@ watch(docs, () => {
           @click="showKnowledgeBase"
         >
           <span class="knowledge-row__title">Knowledge base</span>
-          <span class="knowledge-row__meta">{{ knowledgeCount }} fitur tersinkron</span>
-          <span class="knowledge-row__cta">Lihat semua</span>
+          <span class="knowledge-row__meta">{{ knowledgeCount }} synced {{ knowledgeCount === 1 ? "feature" : "features" }}</span>
+          <span class="knowledge-row__cta">View all</span>
         </button>
       </div>
 
@@ -835,10 +835,10 @@ watch(docs, () => {
         <div class="knowledge-panel__header">
           <div>
             <h2>Knowledge base</h2>
-            <p>{{ knowledgeCount }} fitur tersinkron</p>
+            <p>{{ knowledgeCount }} synced {{ knowledgeCount === 1 ? "feature" : "features" }}</p>
           </div>
           <button type="button" class="btn btn-ghost btn-sm" @click="docView = 'all'">
-            Kembali
+            Back
           </button>
         </div>
         <GeneralDataTable>
@@ -855,10 +855,10 @@ watch(docs, () => {
                   @change="toggleSelectAllVisible"
                 />
               </th>
-              <th>Dokumen</th>
+              <th>Doc</th>
               <th>Status</th>
-              <th>Diperbarui</th>
-              <th>Oleh</th>
+              <th>Updated</th>
+              <th>By</th>
               <th class="col-actions" />
             </tr>
           </thead>
@@ -900,13 +900,13 @@ watch(docs, () => {
                     :to="`/docs/${doc.id}`"
                     class="btn btn-ghost btn-sm row-action"
                   >
-                    Buka
+                    Open
                   </NuxtLink>
                   <button
                     v-if="canManageDoc(doc)"
                     type="button"
                     class="btn btn-ghost btn-sm"
-                    title="Hapus"
+                    title="Delete"
                     @click="confirmDelete(doc)"
                   >
                     <IconsTrash size="14" />
