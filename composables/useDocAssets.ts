@@ -18,6 +18,26 @@ export interface DocAsset {
   url: string;
 }
 
+export type PdfImportStatus = "extracting" | "converting" | "completed" | "failed" | "cancelled";
+
+export interface PdfImportJob {
+  id: string;
+  docId: string;
+  assetId: string;
+  status: PdfImportStatus;
+  progressPct: number;
+  progressMessage: string | null;
+  pageCount: number | null;
+  usedAi: boolean;
+  errorMessage: string | null;
+  createdAt: string | null;
+  completedAt: string | null;
+}
+
+export function isActivePdfImport(job: Pick<PdfImportJob, "status">): boolean {
+  return job.status === "extracting" || job.status === "converting";
+}
+
 export const DOC_ASSET_ACCEPT = {
   pdf: "application/pdf",
   video: "video/mp4,video/webm,video/quicktime",
@@ -120,16 +140,43 @@ export function useDocAssets(docId: Ref<string>) {
     return res.data;
   }
 
-  async function importPdf(assetId: string): Promise<{ markdown: string; pages: number }> {
+  /** Imports the user hasn't inserted or dismissed yet, newest first. */
+  const importJobs = ref<PdfImportJob[]>([]);
+
+  async function fetchImportJobs(): Promise<void> {
+    if (!docId.value) return;
     try {
-      const res = await $fetch<{ data: { markdown: string; pages: number } }>(
-        `/api/docs/${docId.value}/assets/${assetId}/import`,
-        { method: "POST", timeout: 300_000 },
-      );
+      const res = await $fetch<{ data: PdfImportJob[] }>(`/api/docs/${docId.value}/import-jobs`);
+      importJobs.value = res.data;
+    } catch {
+      /* keep the last known state; the next poll retries */
+    }
+  }
+
+  async function startPdfImport(assetId: string): Promise<PdfImportJob> {
+    try {
+      const res = await $fetch<{ data: PdfImportJob }>(`/api/docs/${docId.value}/assets/${assetId}/import`, {
+        method: "POST",
+      });
+      importJobs.value = [res.data, ...importJobs.value.filter((j) => j.id !== res.data.id)];
       return res.data;
     } catch (error) {
-      throw new Error(errorMessage(error, "PDF import failed"));
+      throw new Error(errorMessage(error, "Couldn't start the PDF import"));
     }
+  }
+
+  async function getPdfImportMarkdown(jobId: string): Promise<string> {
+    try {
+      const res = await $fetch<{ data: { markdown: string } }>(`/api/docs/${docId.value}/import-jobs/${jobId}`);
+      return res.data.markdown;
+    } catch (error) {
+      throw new Error(errorMessage(error, "Couldn't load the imported text"));
+    }
+  }
+
+  async function updatePdfImport(jobId: string, action: "cancel" | "resolve"): Promise<void> {
+    await $fetch(`/api/docs/${docId.value}/import-jobs/${jobId}`, { method: "PATCH", body: { action } });
+    importJobs.value = importJobs.value.filter((j) => j.id !== jobId);
   }
 
   /** Uploads an inline editor image to object storage and returns its stable path. */
@@ -149,5 +196,18 @@ export function useDocAssets(docId: Ref<string>) {
     }
   }
 
-  return { assets, isLoading, fetchAssets, uploadAsset, deleteAsset, setShareEnabled, importPdf, uploadImage };
+  return {
+    assets,
+    isLoading,
+    fetchAssets,
+    uploadAsset,
+    deleteAsset,
+    setShareEnabled,
+    uploadImage,
+    importJobs,
+    fetchImportJobs,
+    startPdfImport,
+    getPdfImportMarkdown,
+    updatePdfImport,
+  };
 }

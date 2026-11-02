@@ -9,7 +9,7 @@ import { isAdrDoc as checkIsAdrDoc, isWikiDoc as checkIsWikiDoc } from "~/utils/
 import { isForbiddenWikiDocStatus } from "~/utils/wiki-content";
 import { setVideoToolBridge } from "~/components/editorjs/videoBridge";
 import type { TranscriptSegment, VideoBlockData } from "~/utils/video-block";
-import type { DocAsset } from "~/composables/useDocAssets";
+import { isActivePdfImport, type DocAsset, type PdfImportJob, type PdfImportStatus } from "~/composables/useDocAssets";
 import type { PdfImportMode } from "~/components/docs/DocAttachments.vue";
 
 definePageMeta({
@@ -557,7 +557,10 @@ function syncSplitPreview() {
 const docAssets = useDocAssets(docId);
 const previewAsset = ref<DocAsset | null>(null);
 const isSharingAsset = ref(false);
-const importingAssetId = ref<string | null>(null);
+const applyingImportId = ref<string | null>(null);
+const IMPORT_POLL_MS = 3000;
+let importPollTimer: ReturnType<typeof setInterval> | null = null;
+const knownImportStatus = new Map<string, PdfImportStatus>();
 const transcriptVideo = ref<VideoBlockData | null>(null);
 let onTranscriptSave: ((segments: TranscriptSegment[]) => void) | null = null;
 
@@ -575,11 +578,71 @@ async function togglePdfShare(enabled: boolean) {
   }
 }
 
-async function importPdfIntoEditor(asset: DocAsset, mode: PdfImportMode) {
-  if (!docId.value || importingAssetId.value) return;
-  importingAssetId.value = asset.id;
+function importAssetTitle(assetId: string): string {
+  return docAssets.assets.value.find((a) => a.id === assetId)?.title ?? "PDF";
+}
+
+const indicatorImportJobs = computed(() =>
+  docAssets.importJobs.value.map((job) => ({ ...job, title: importAssetTitle(job.assetId) })),
+);
+
+watch(
+  () => docAssets.importJobs.value,
+  (jobs) => {
+    for (const job of jobs) {
+      const previous = knownImportStatus.get(job.id);
+      if (previous && isActivePdfImport({ status: previous }) && !isActivePdfImport(job)) {
+        const title = importAssetTitle(job.assetId);
+        showToast(job.status === "completed" ? `“${title}” is ready to insert` : `Couldn't import “${title}”`);
+      }
+      knownImportStatus.set(job.id, job.status);
+    }
+    const hasActive = jobs.some(isActivePdfImport);
+    if (hasActive && !importPollTimer) {
+      importPollTimer = setInterval(() => void docAssets.fetchImportJobs(), IMPORT_POLL_MS);
+    } else if (!hasActive && importPollTimer) {
+      clearInterval(importPollTimer);
+      importPollTimer = null;
+    }
+  },
+);
+
+function onImportVisibilityChange() {
+  if (document.visibilityState === "visible" && canEditDoc.value) void docAssets.fetchImportJobs();
+}
+
+async function startPdfImport(asset: DocAsset) {
   try {
-    const { markdown } = await docAssets.importPdf(asset.id);
+    await docAssets.startPdfImport(asset.id);
+    showToast("Importing in the background. You can close this page.");
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : "Couldn't start the PDF import");
+  }
+}
+
+async function cancelPdfImport(job: PdfImportJob) {
+  try {
+    await docAssets.updatePdfImport(job.id, "cancel");
+    showToast("PDF import cancelled");
+  } catch {
+    showToast("Couldn't cancel the import. Try again.");
+    void docAssets.fetchImportJobs();
+  }
+}
+
+async function dismissPdfImport(job: PdfImportJob) {
+  try {
+    await docAssets.updatePdfImport(job.id, "resolve");
+  } catch {
+    showToast("Couldn't dismiss the import. Try again.");
+  }
+}
+
+async function applyPdfImport(job: PdfImportJob, mode: PdfImportMode) {
+  if (!docId.value || applyingImportId.value) return;
+  applyingImportId.value = job.id;
+  try {
+    const markdown = await docAssets.getPdfImportMarkdown(job.id);
     const current = editorContent.value.trim();
     if (mode === "replace" && current) {
       if (autosaveEnabled.value && hasPendingChanges()) await flushSave({ silent: true });
@@ -589,10 +652,11 @@ async function importPdfIntoEditor(asset: DocAsset, mode: PdfImportMode) {
     showEditor();
     editorContent.value = mode === "append" && current ? `${editorContent.value.trimEnd()}\n\n${markdown}` : markdown;
     showToast(mode === "append" && current ? "PDF text added to the end" : "PDF text imported");
+    await docAssets.updatePdfImport(job.id, "resolve").catch(() => {});
   } catch (error) {
     showToast(error instanceof Error ? error.message : "PDF import failed");
   } finally {
-    importingAssetId.value = null;
+    applyingImportId.value = null;
   }
 }
 
@@ -874,6 +938,7 @@ async function loadDoc() {
     await fetchDocVersions(docId.value);
     await fetchEmbeddingStatus();
     void docAssets.fetchAssets();
+    if (canEditDoc.value) void docAssets.fetchImportJobs();
   } catch {
     docNotFound.value = true;
   } finally {
@@ -891,6 +956,7 @@ onMounted(() => {
   document.addEventListener("keydown", onKeydown);
   document.addEventListener("keydown", onTagRemoveKeydown);
   window.addEventListener("beforeunload", onBeforeUnload);
+  document.addEventListener("visibilitychange", onImportVisibilityChange);
   setVideoToolBridge({
     upload: async (file, onProgress) => {
       const asset = await docAssets.uploadAsset(file, onProgress);
@@ -909,6 +975,8 @@ onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKeydown);
   document.removeEventListener("keydown", onTagRemoveKeydown);
   window.removeEventListener("beforeunload", onBeforeUnload);
+  document.removeEventListener("visibilitychange", onImportVisibilityChange);
+  if (importPollTimer) clearInterval(importPollTimer);
   if (toastTimer) clearTimeout(toastTimer);
 });
 
@@ -1623,9 +1691,10 @@ const lastModified = computed(() => {
                 :store="docAssets"
                 :can-edit="canEditDoc"
                 :doc-has-content="!!editorContent.trim()"
-                :importing-id="importingAssetId"
+                :applying-import-id="applyingImportId"
                 @preview="previewAsset = $event"
-                @import="importPdfIntoEditor"
+                @import="startPdfImport"
+                @apply-import="applyPdfImport"
                 @insert-video="insertVideoBlock"
                 @notify="showToast"
               />
@@ -1693,6 +1762,16 @@ const lastModified = computed(() => {
       :is-sharing="isSharingAsset"
       @close="previewAsset = null"
       @toggle-share="togglePdfShare"
+    />
+
+    <DocsPdfImportIndicator
+      v-if="canEditDoc"
+      :jobs="indicatorImportJobs"
+      :doc-has-content="!!editorContent.trim()"
+      :applying-id="applyingImportId"
+      @apply="applyPdfImport"
+      @dismiss="dismissPdfImport"
+      @cancel="cancelPdfImport"
     />
 
     <DocsVideoTranscriptEditor

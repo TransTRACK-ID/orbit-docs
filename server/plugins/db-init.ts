@@ -156,6 +156,26 @@ export default defineNitroPlugin(async () => {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS doc_assets_doc_id_idx ON doc_assets (doc_id)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS doc_assets_share_token_unique ON doc_assets (share_token)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS pdf_import_jobs (
+      id TEXT PRIMARY KEY,
+      doc_id TEXT NOT NULL REFERENCES docs(id) ON DELETE CASCADE,
+      asset_id TEXT NOT NULL REFERENCES doc_assets(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'extracting',
+      progress_pct INTEGER NOT NULL DEFAULT 0,
+      progress_message TEXT,
+      markdown TEXT,
+      page_count INTEGER,
+      used_ai BOOLEAN NOT NULL DEFAULT false,
+      error_message TEXT,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      completed_at TIMESTAMP WITH TIME ZONE,
+      resolved_at TIMESTAMP WITH TIME ZONE
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS pdf_import_jobs_doc_user_idx ON pdf_import_jobs (doc_id, user_id)`);
 
   // pgvector for semantic doc chunk search
   const embeddingDimensions = getEmbeddingDimensions();

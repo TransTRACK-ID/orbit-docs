@@ -335,9 +335,16 @@ export function lastMarkdownBlock(raw: string): string {
   return raw.slice(start + MARKDOWN_OPEN.length, end === -1 ? undefined : end).trim();
 }
 
-async function convertBatch(backend: "openai" | "cursor", batch: string, index: number, total: number): Promise<string> {
+async function convertBatch(
+  backend: "openai" | "cursor",
+  batch: string,
+  index: number,
+  total: number,
+  cancel?: AbortSignal,
+): Promise<string> {
   const prompt = `Part ${index + 1} of ${total} of the extracted PDF text:\n\n${batch}`;
-  const signal = AbortSignal.timeout(240_000);
+  const timeout = AbortSignal.timeout(240_000);
+  const signal = cancel ? AbortSignal.any([timeout, cancel]) : timeout;
   const raw =
     backend === "openai"
       ? (
@@ -358,7 +365,18 @@ async function convertBatch(backend: "openai" | "cursor", batch: string, index: 
   return cleanModelMarkdown(raw) ?? batch;
 }
 
-export async function pdfPagesToMarkdown(pages: string[]): Promise<{ markdown: string; usedAi: boolean }> {
+export interface PdfToMarkdownOptions {
+  /** Called after each AI batch settles. */
+  onBatchDone?: (done: number, total: number) => void | Promise<void>;
+  /** Stops pending batches; the call then throws "PDF import cancelled". */
+  signal?: AbortSignal;
+}
+
+export async function pdfPagesToMarkdown(
+  pages: string[],
+  options: PdfToMarkdownOptions = {},
+): Promise<{ markdown: string; usedAi: boolean }> {
+  const { onBatchDone, signal } = options;
   const backend = await resolvePdfImportBackend();
   if (backend === "none") {
     return { markdown: pages.filter(Boolean).join("\n\n").trim(), usedAi: false };
@@ -368,19 +386,24 @@ export async function pdfPagesToMarkdown(pages: string[]): Promise<{ markdown: s
   const parts: string[] = new Array(batches.length);
   let next = 0;
   let converted = 0;
+  let done = 0;
   const worker = async () => {
-    while (next < batches.length) {
+    while (next < batches.length && !signal?.aborted) {
       const index = next++;
       const batch = batches[index]!;
       try {
-        parts[index] = await convertBatch(backend, batch, index, batches.length);
+        parts[index] = await convertBatch(backend, batch, index, batches.length, signal);
         converted++;
       } catch (err) {
+        if (signal?.aborted) return;
         console.error(`[pdf-import] AI conversion failed for part ${index + 1}/${batches.length}:`, err);
         parts[index] = batch;
       }
+      done++;
+      await onBatchDone?.(done, batches.length);
     }
   };
   await Promise.all(Array.from({ length: Math.min(AI_CONCURRENCY, batches.length) }, worker));
+  if (signal?.aborted) throw new Error("PDF import cancelled");
   return { markdown: parts.join("\n\n").trim(), usedAi: converted > 0 };
 }

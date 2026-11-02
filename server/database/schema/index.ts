@@ -14,3 +14,4 @@ export * from "./notion-sync";
 export * from "./permissions";
 export * from "./doc-chunks";
 export * from "./doc-assets";
+export * from "./pdf-import-jobs";

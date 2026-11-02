@@ -2,7 +2,9 @@
 import {
   DOC_ASSET_ACCEPT,
   formatBytes,
+  isActivePdfImport,
   type DocAsset,
+  type PdfImportJob,
   type useDocAssets,
 } from "~/composables/useDocAssets";
 
@@ -12,12 +14,13 @@ const props = defineProps<{
   store: ReturnType<typeof useDocAssets>;
   canEdit: boolean;
   docHasContent: boolean;
-  importingId: string | null;
+  applyingImportId: string | null;
 }>();
 
 const emit = defineEmits<{
   (e: "preview", asset: DocAsset): void;
-  (e: "import", asset: DocAsset, mode: PdfImportMode): void;
+  (e: "import", asset: DocAsset): void;
+  (e: "apply-import", job: PdfImportJob, mode: PdfImportMode): void;
   (e: "insert-video", asset: DocAsset): void;
   (e: "notify", message: string): void;
 }>();
@@ -65,17 +68,26 @@ async function onFileChosen(event: Event) {
   }
 }
 
-function startImport(asset: DocAsset) {
+/** Newest open import per PDF (jobs arrive newest first). */
+const jobByAsset = computed(() => {
+  const map = new Map<string, PdfImportJob>();
+  for (const job of props.store.importJobs.value) {
+    if (!map.has(job.assetId)) map.set(job.assetId, job);
+  }
+  return map;
+});
+
+function startInsert(job: PdfImportJob) {
   if (!props.docHasContent) {
-    emit("import", asset, "replace");
+    emit("apply-import", job, "replace");
     return;
   }
-  choosingImportFor.value = choosingImportFor.value === asset.id ? null : asset.id;
+  choosingImportFor.value = choosingImportFor.value === job.assetId ? null : job.assetId;
 }
 
-function chooseImport(asset: DocAsset, mode: PdfImportMode) {
+function chooseImport(job: PdfImportJob, mode: PdfImportMode) {
   choosingImportFor.value = null;
-  emit("import", asset, mode);
+  emit("apply-import", job, mode);
 }
 
 function askDelete(asset: DocAsset) {
@@ -186,27 +198,42 @@ function onDialogKeydown(e: KeyboardEvent) {
           </button>
 
           <div v-if="canEdit" class="attach-actions">
+            <template v-if="jobByAsset.get(asset.id) && isActivePdfImport(jobByAsset.get(asset.id)!)">
+              <span class="attach-import-status" role="status">
+                <span class="attach-import-dot" aria-hidden="true" />
+                Importing… <span class="mono">{{ jobByAsset.get(asset.id)!.progressPct }}%</span>
+              </span>
+            </template>
             <button
+              v-else-if="jobByAsset.get(asset.id)?.status === 'completed'"
               type="button"
-              class="attach-action"
-              :disabled="importingId !== null"
+              class="attach-action attach-action--ready"
+              :disabled="applyingImportId !== null"
               :aria-expanded="docHasContent ? choosingImportFor === asset.id : undefined"
-              @click="startImport(asset)"
+              @click="startInsert(jobByAsset.get(asset.id)!)"
             >
-              {{ importingId === asset.id ? "Importing…" : "Import to editor" }}
+              {{ applyingImportId === jobByAsset.get(asset.id)!.id ? "Inserting…" : "Insert imported text" }}
+            </button>
+            <button v-else type="button" class="attach-action" @click="emit('import', asset)">
+              {{ jobByAsset.get(asset.id)?.status === "failed" ? "Import failed · Try again" : "Import to editor" }}
             </button>
             <button type="button" class="attach-action attach-action--danger" @click="askDelete(asset)">
               Delete
             </button>
           </div>
 
-          <div v-if="choosingImportFor === asset.id" class="attach-import-choice" role="group" aria-label="How to import">
+          <div
+            v-if="choosingImportFor === asset.id && jobByAsset.get(asset.id)?.status === 'completed'"
+            class="attach-import-choice"
+            role="group"
+            aria-label="How to insert"
+          >
             <p>This document already has content.</p>
             <div class="attach-import-buttons">
-              <button type="button" class="btn btn-secondary btn-sm" @click="chooseImport(asset, 'append')">
+              <button type="button" class="btn btn-secondary btn-sm" @click="chooseImport(jobByAsset.get(asset.id)!, 'append')">
                 Add to end
               </button>
-              <button type="button" class="btn btn-secondary btn-sm" @click="chooseImport(asset, 'replace')">
+              <button type="button" class="btn btn-secondary btn-sm" @click="chooseImport(jobByAsset.get(asset.id)!, 'replace')">
                 Replace content
               </button>
               <button type="button" class="btn btn-ghost btn-sm" @click="choosingImportFor = null">Cancel</button>
@@ -556,6 +583,33 @@ function onDialogKeydown(e: KeyboardEvent) {
   outline-offset: 2px;
 }
 
+.attach-action--ready {
+  color: var(--success-text);
+}
+
+.attach-import-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--info-text);
+}
+
+.attach-import-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--info);
+  animation: attach-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes attach-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 .attach-import-choice {
   margin: 4px 0 0 40px;
   display: flex;
@@ -585,6 +639,10 @@ function onDialogKeydown(e: KeyboardEvent) {
   .attach-item,
   .attach-name {
     transition: none;
+  }
+
+  .attach-import-dot {
+    animation: none;
   }
 }
 </style>
