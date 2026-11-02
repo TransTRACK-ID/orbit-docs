@@ -10,6 +10,9 @@ import {
   isAdrDoc,
   isFeatureCatalogDoc,
   isWikiDoc,
+  DOC_LIST_VIEW_OPTIONS,
+  sectionCollapseKey,
+  shouldCollapseKnowledgeSection,
   type DocListGroup,
   type DocListSection,
   type DocListView,
@@ -98,13 +101,6 @@ function formatEmbeddingScheduleTime(iso: string | null | undefined) {
   return new Date(iso).toLocaleString();
 }
 
-const docViewOptions: { id: DocListView; label: string }[] = [
-  { id: "all", label: "All types" },
-  { id: "product", label: "Product documentation" },
-  { id: "knowledge", label: "Knowledge base" },
-  { id: "adrs", label: "Architectural decisions" },
-];
-
 const statusFilterOptions = [
   { id: "", label: "All statuses" },
   { id: "draft", label: "Draft" },
@@ -183,6 +179,10 @@ watch(appFilter, (appId) => {
   createForm.appId = appId;
   if (appId) void fetchEmbeddingSchedule();
   else embeddingScheduleSettings.value = null;
+  const query = { ...route.query };
+  if (appId) query.app = appId;
+  else delete query.app;
+  router.replace({ query });
 });
 
 const showCreateModal = ref(false);
@@ -279,6 +279,20 @@ async function doDelete() {
   }
 }
 
+const pageSubtitle = computed(() => {
+  const total = visibleDocCount.value;
+  const viewLabel =
+    DOC_LIST_VIEW_OPTIONS.find((o) => o.id === docView.value)?.label ?? "All docs";
+  if (appFilter.value) {
+    const name = apps.value.find((a) => a.id === appFilter.value)?.name ?? "App";
+    return `${name} · ${viewLabel.toLowerCase()} · ${total} ${total === 1 ? "doc" : "docs"}.`;
+  }
+  if (docView.value === "knowledge") {
+    return `${total} synced ${total === 1 ? "feature" : "features"}. Bulk status updates apply here.`;
+  }
+  return `${viewLabel} · ${total} visible ${total === 1 ? "doc" : "docs"} across ${pageStats.value.systems} ${pageStats.value.systems === 1 ? "system" : "systems"}.`;
+});
+
 const headerStats = computed(() => [
   { label: "Total docs", value: pageStats.value.total },
   { label: pageStats.value.drafts === 1 ? "Draft" : "Drafts", value: pageStats.value.drafts },
@@ -347,16 +361,16 @@ const visibleDocCount = computed(() => {
 });
 
 const showKnowledgeCard = computed(
-  () => docView.value !== "knowledge" && knowledgeCount.value > 0,
+  () =>
+    docView.value === "all"
+    && knowledgeCount.value > 0
+    && bulkSelectionEnabled.value,
 );
 
 const accordionGroups = computed(() =>
-  docGroups.value
-    .map((group) => ({
-      ...group,
-      sections: group.sections.filter((section) => section.kind !== "knowledge"),
-    }))
-    .filter((group) => group.sections.some((section) => section.docs.length > 0)),
+  docGroups.value.filter((group) =>
+    group.sections.some((section) => section.docs.length > 0),
+  ),
 );
 
 const knowledgeDocs = computed(() => {
@@ -383,14 +397,47 @@ const pageStats = computed(() => {
 });
 
 const expandedGroups = ref<Set<string>>(new Set());
+const expandedKnowledgeSections = ref<Set<string>>(new Set());
 
 watch(
-  accordionGroups,
-  (groups) => {
-    expandedGroups.value = new Set(groups.map((group) => group.key));
+  [accordionGroups, search, appFilter],
+  ([groups, q, appId]) => {
+    const scoped = !!(q.trim() || appId);
+    if (scoped) {
+      expandedGroups.value = new Set(groups.map((group) => group.key));
+      return;
+    }
+    if (groups.length === 1) {
+      expandedGroups.value = new Set([groups[0].key]);
+      return;
+    }
+    const validKeys = new Set(groups.map((g) => g.key));
+    const next = new Set([...expandedGroups.value].filter((key) => validKeys.has(key)));
+    expandedGroups.value = next;
   },
   { immediate: true },
 );
+
+function isKnowledgeSectionCollapsed(groupKey: string, section: DocListSection) {
+  if (!shouldCollapseKnowledgeSection(section)) return false;
+  return !expandedKnowledgeSections.value.has(sectionCollapseKey(groupKey, section.kind));
+}
+
+function toggleKnowledgeSection(groupKey: string, section: DocListSection) {
+  const key = sectionCollapseKey(groupKey, section.kind);
+  const next = new Set(expandedKnowledgeSections.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedKnowledgeSections.value = next;
+}
+
+function openKnowledgeSection(groupKey: string, section: DocListSection) {
+  expandedKnowledgeSections.value = new Set([
+    ...expandedKnowledgeSections.value,
+    sectionCollapseKey(groupKey, section.kind),
+  ]);
+  if (!isGroupExpanded(groupKey)) toggleGroup(groupKey);
+}
 
 function isGroupExpanded(groupKey: string) {
   return expandedGroups.value.has(groupKey);
@@ -403,6 +450,35 @@ function toggleGroup(groupKey: string) {
   expandedGroups.value = next;
 }
 
+const allGroupsExpanded = computed(
+  () =>
+    accordionGroups.value.length > 0
+    && accordionGroups.value.every((group) => expandedGroups.value.has(group.key)),
+);
+
+function toggleAllGroups() {
+  if (allGroupsExpanded.value) {
+    expandedGroups.value = new Set();
+    return;
+  }
+  expandedGroups.value = new Set(accordionGroups.value.map((group) => group.key));
+}
+
+const docViewCounts = computed(() => {
+  const opts = { includeDraftAdrs: canReadDraftAdrs.value };
+  return Object.fromEntries(
+    DOC_LIST_VIEW_OPTIONS.map((option) => [
+      option.id,
+      filterDocsByView(docs.value, option.id, opts).length,
+    ]),
+  ) as Record<DocListView, number>;
+});
+
+function docViewTabLabel(option: (typeof DOC_LIST_VIEW_OPTIONS)[number]) {
+  const count = docViewCounts.value[option.id];
+  return count > 0 ? `${option.label} (${count})` : option.label;
+}
+
 function groupDocCount(group: DocListGroup) {
   return group.sections.reduce((sum, section) => sum + section.docs.length, 0);
 }
@@ -412,6 +488,15 @@ function showKnowledgeBase() {
   nextTick(() => {
     document.getElementById("knowledge-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+}
+
+function selectDocView(view: DocListView) {
+  docView.value = view;
+  if (view === "knowledge") {
+    nextTick(() => {
+      document.getElementById("knowledge-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 }
 
 function sectionLabel(section: DocListSection) {
@@ -514,7 +599,7 @@ watch(docs, () => {
     <GeneralPageHeader
       v-model:search="search"
       title="Docs"
-      subtitle="Every app's documentation, grouped by system and document type."
+      :subtitle="pageSubtitle"
       search-placeholder="Search docs..."
       search-label="Search docs"
       :stats="headerStats"
@@ -529,8 +614,22 @@ watch(docs, () => {
           + New Doc
         </button>
       </template>
-      <template v-if="activeSite" #nav>
-        <div class="site-context-banner">
+      <template #nav>
+        <div class="docs-view-tabs" role="tablist" aria-label="Document types">
+          <button
+            v-for="option in DOC_LIST_VIEW_OPTIONS"
+            :key="option.id"
+            type="button"
+            role="tab"
+            class="docs-view-tab"
+            :class="{ active: docView === option.id }"
+            :aria-selected="docView === option.id"
+            @click="selectDocView(option.id)"
+          >
+            {{ docViewTabLabel(option) }}
+          </button>
+        </div>
+        <div v-if="activeSite" class="site-context-banner">
           <div class="site-context-text">
             <span class="site-context-label">Doc site</span>
             <strong>{{ activeSite.name }}</strong>
@@ -558,16 +657,17 @@ watch(docs, () => {
       </template>
       <template #filters>
         <GeneralSearchableDropdown
-          v-model="docView"
-          :options="docViewOptions"
-          placeholder="All types"
-          search-placeholder="Filter types..."
-        />
-        <GeneralSearchableDropdown
           v-model="appFilter"
           :options="appFilterOptions"
           placeholder="All apps"
           search-placeholder="Search apps..."
+        />
+        <GeneralSearchableDropdown
+          v-if="docSites.length > 0"
+          v-model="siteFilter"
+          :options="siteFilterOptions"
+          placeholder="All sites"
+          search-placeholder="Search sites..."
         />
         <GeneralSearchableDropdown
           v-model="statusFilter"
@@ -697,7 +797,13 @@ watch(docs, () => {
     </div>
 
     <template v-else>
-      <div v-if="docView !== 'knowledge'" class="accordion-list">
+      <div v-if="docView !== 'knowledge'" class="docs-list-shell">
+        <div v-if="accordionGroups.length > 1" class="docs-list-toolbar">
+          <button type="button" class="btn btn-ghost btn-sm" @click="toggleAllGroups">
+            {{ allGroupsExpanded ? "Collapse all systems" : "Expand all systems" }}
+          </button>
+        </div>
+        <div class="accordion-list">
         <section
           v-for="group in accordionGroups"
           :key="group.key"
@@ -732,7 +838,7 @@ watch(docs, () => {
               <tbody>
                 <template v-for="section in group.sections" :key="`${group.key}-${section.kind}`">
                   <tr
-                    v-if="section.label || section.kind !== 'product'"
+                    v-if="section.docs.length > 0 && (section.label || section.kind !== 'product')"
                     class="subsection-row"
                   >
                     <td colspan="5">
@@ -741,10 +847,50 @@ watch(docs, () => {
                         <span v-if="section.kind === 'architectural_decisions'" class="subsection-count">
                           {{ section.docs.length }} {{ section.docs.length === 1 ? "decision" : "decisions" }}
                         </span>
+                        <span v-else-if="section.kind === 'knowledge'" class="subsection-count">
+                          {{ section.docs.length }} {{ section.docs.length === 1 ? "feature" : "features" }}
+                        </span>
                       </div>
                     </td>
                   </tr>
-                  <tr v-for="doc in section.docs" :key="doc.id">
+                  <tr
+                    v-if="section.docs.length > 0 && isKnowledgeSectionCollapsed(group.key, section)"
+                    class="section-summary-row"
+                    tabindex="0"
+                    @click="openKnowledgeSection(group.key, section)"
+                    @keydown.enter.prevent="openKnowledgeSection(group.key, section)"
+                  >
+                    <td colspan="5">
+                      <div class="section-summary">
+                        <div class="section-summary-copy">
+                          <strong>
+                            {{ section.docs.length }} synced
+                            {{ section.docs.length === 1 ? "feature" : "features" }}
+                          </strong>
+                          <span class="section-summary-hint">
+                            Large lists stay collapsed so product docs stay easy to scan.
+                          </span>
+                        </div>
+                        <span class="section-summary-action">Expand</span>
+                      </div>
+                    </td>
+                  </tr>
+                  <template v-else-if="section.docs.length > 0">
+                    <tr
+                      v-if="shouldCollapseKnowledgeSection(section)"
+                      class="section-expand-hint-row"
+                    >
+                      <td colspan="5">
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-sm section-collapse-btn"
+                          @click="toggleKnowledgeSection(group.key, section)"
+                        >
+                          Collapse feature list
+                        </button>
+                      </td>
+                    </tr>
+                    <tr v-for="doc in section.docs" :key="doc.id">
                     <td>
                       <div class="cell-stack">
                         <span class="col-strong">{{ docListPrimaryLabel(doc) }}</span>
@@ -793,6 +939,7 @@ watch(docs, () => {
                       </div>
                     </td>
                   </tr>
+                  </template>
                 </template>
               </tbody>
             </GeneralDataTable>
@@ -806,9 +953,10 @@ watch(docs, () => {
           @click="showKnowledgeBase"
         >
           <span class="knowledge-row__title">Knowledge base</span>
-          <span class="knowledge-row__meta">{{ knowledgeCount }} synced {{ knowledgeCount === 1 ? "feature" : "features" }}</span>
-          <span class="knowledge-row__cta">View all</span>
+          <span class="knowledge-row__meta">Bulk status updates and multi-select</span>
+          <span class="knowledge-row__cta">Open workspace view</span>
         </button>
+        </div>
       </div>
 
       <div v-else id="knowledge-panel" class="knowledge-panel">
@@ -817,8 +965,8 @@ watch(docs, () => {
             <h2>Knowledge base</h2>
             <p>{{ knowledgeCount }} synced {{ knowledgeCount === 1 ? "feature" : "features" }}</p>
           </div>
-          <button type="button" class="btn btn-ghost btn-sm" @click="docView = 'all'">
-            Back
+          <button type="button" class="btn btn-ghost btn-sm" @click="selectDocView('all')">
+            Back to all docs
           </button>
         </div>
         <GeneralDataTable>
@@ -1012,6 +1160,80 @@ watch(docs, () => {
   /* Inherits global semantic tokens from :root */
 }
 
+.docs-view-tabs {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 16px;
+  background: var(--fg-soft);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+
+.docs-view-tab {
+  padding: 6px 14px;
+  border: none;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 0.15s cubic-bezier(0.25, 1, 0.5, 1),
+    color 0.15s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.docs-view-tab:hover {
+  color: var(--fg);
+}
+
+.docs-view-tab.active {
+  background: var(--surface);
+  color: var(--fg);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--fg) 8%, transparent);
+}
+
+.docs-view-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.section-summary-action {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.section-summary-row:hover .section-summary-action,
+.section-summary-row:focus-visible .section-summary-action {
+  color: var(--fg);
+}
+
+.site-context-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  margin-top: 4px;
+  margin-bottom: 20px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in oklch, var(--accent) 25%, transparent);
+  border-radius: var(--radius-lg);
+}
+
+.site-context-text {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 14px;
+}
+
 .btn-sparkle {
   font-size: 12px;
   opacity: 0.85;
@@ -1120,6 +1342,17 @@ watch(docs, () => {
   color: var(--muted);
   font-size: 12px;
   margin-top: 2px;
+}
+
+.docs-list-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.docs-list-toolbar {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .accordion-list {
@@ -1299,25 +1532,6 @@ watch(docs, () => {
   opacity: 0.8;
 }
 
-.site-context-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 12px 16px;
-  margin-bottom: 20px;
-  background: var(--accent-soft);
-  border: 1px solid color-mix(in oklch, var(--accent) 25%, transparent);
-  border-radius: var(--radius-lg);
-}
-.site-context-text {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 14px;
-}
 .site-context-label {
   font-size: 11px;
   text-transform: uppercase;
