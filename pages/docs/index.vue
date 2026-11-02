@@ -387,11 +387,49 @@ const pageStats = computed(() => {
   return { total: 0, drafts: 0, systems: 0 };
 });
 
+const DOCS_EXPANDED_STORAGE_KEY = "orbit:docs:expandedGroups";
+
+type DocsExpandedStore = Partial<Record<DocListView, string[]>>;
+
+function readDocsExpandedStore(): DocsExpandedStore {
+  if (import.meta.server) return {};
+  try {
+    const raw = sessionStorage.getItem(DOCS_EXPANDED_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as DocsExpandedStore;
+  } catch {
+    return {};
+  }
+}
+
+function persistDocsExpandedGroups(view: DocListView, keys: Iterable<string>) {
+  if (import.meta.server) return;
+  const store = readDocsExpandedStore();
+  store[view] = [...keys];
+  sessionStorage.setItem(DOCS_EXPANDED_STORAGE_KEY, JSON.stringify(store));
+}
+
+function storedDocsExpandedGroups(view: DocListView): Set<string> | null {
+  const keys = readDocsExpandedStore()[view];
+  if (!Array.isArray(keys)) return null;
+  return new Set(keys);
+}
+
+const isDocsListScoped = computed(
+  () => !!(search.value.trim() || appFilter.value),
+);
+
 const expandedGroups = ref<Set<string>>(new Set());
 const expandedKnowledgeSections = ref<Set<string>>(new Set());
 
+function applyExpandedGroups(next: Set<string>, persist: boolean) {
+  expandedGroups.value = next;
+  if (persist && !isDocsListScoped.value) {
+    persistDocsExpandedGroups(docView.value, next);
+  }
+}
+
 async function refreshDocsList() {
-  const previouslyExpanded = [...expandedGroups.value];
   resetAppLoads();
   resetKnowledge();
   await fetchSummary(docView.value, listFilters.value);
@@ -410,9 +448,10 @@ async function refreshDocsList() {
     }
     if (summary.value.unboundCount > 0) keysToLoad.push("__unbound__");
   } else if (accordionGroups.value.length === 1) {
-    keysToLoad = [accordionGroups.value[0]!.key];
+    const key = accordionGroups.value[0]!.key;
+    keysToLoad = expandedGroups.value.has(key) ? [key] : [];
   } else {
-    keysToLoad = previouslyExpanded;
+    keysToLoad = [...expandedGroups.value];
   }
 
   await Promise.all(
@@ -427,20 +466,33 @@ watch(docView, async () => {
 });
 
 watch(
-  [accordionGroups, search, appFilter],
-  ([groups, q, appId]) => {
-    const scoped = !!(q.trim() || appId);
+  [accordionGroups, isDocsListScoped, docView],
+  ([groups, scoped]) => {
     if (scoped) {
       expandedGroups.value = new Set(groups.map((group) => group.key));
       return;
     }
-    if (groups.length === 1) {
-      expandedGroups.value = new Set([groups[0].key]);
+    const validKeys = new Set(groups.map((g) => g.key));
+    const stored = storedDocsExpandedGroups(docView.value);
+    const hasStored = stored !== null;
+
+    if (groups.length === 1 && !hasStored) {
+      applyExpandedGroups(new Set([groups[0].key]), false);
       return;
     }
-    const validKeys = new Set(groups.map((g) => g.key));
-    const next = new Set([...expandedGroups.value].filter((key) => validKeys.has(key)));
-    expandedGroups.value = next;
+
+    if (hasStored) {
+      applyExpandedGroups(
+        new Set([...stored].filter((key) => validKeys.has(key))),
+        false,
+      );
+      return;
+    }
+
+    applyExpandedGroups(
+      new Set([...expandedGroups.value].filter((key) => validKeys.has(key))),
+      false,
+    );
   },
   { immediate: true },
 );
@@ -484,7 +536,7 @@ function toggleGroup(groupKey: string) {
   const expanding = !next.has(groupKey);
   if (next.has(groupKey)) next.delete(groupKey);
   else next.add(groupKey);
-  expandedGroups.value = next;
+  applyExpandedGroups(next, true);
   if (expanding) {
     void ensureAppLoaded(groupKey, docView.value, listFilters.value, canReadDraftAdrs.value);
   }
@@ -498,11 +550,11 @@ const allGroupsExpanded = computed(
 
 function toggleAllGroups() {
   if (allGroupsExpanded.value) {
-    expandedGroups.value = new Set();
+    applyExpandedGroups(new Set(), true);
     return;
   }
   const keys = accordionGroups.value.map((group) => group.key);
-  expandedGroups.value = new Set(keys);
+  applyExpandedGroups(new Set(keys), true);
   for (const key of keys) {
     void ensureAppLoaded(key, docView.value, listFilters.value, canReadDraftAdrs.value);
   }
