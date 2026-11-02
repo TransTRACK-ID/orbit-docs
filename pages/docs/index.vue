@@ -47,7 +47,7 @@ const { preferInternalWiki, fetchMcpConfig } = useMcpConfig();
 const appFilter = ref((route.query.app as string) || "");
 const siteFilter = ref((route.query.siteId as string) || "");
 const statusFilter = ref("");
-const docView = ref<DocListView>("all");
+const docView = ref<DocListView>("product");
 
 const embeddingScheduleAppId = computed(() => appFilter.value || "");
 const {
@@ -965,8 +965,8 @@ watch(docs, () => {
             <h2>Knowledge base</h2>
             <p>{{ knowledgeCount }} synced {{ knowledgeCount === 1 ? "feature" : "features" }}</p>
           </div>
-          <button type="button" class="btn btn-ghost btn-sm" @click="selectDocView('all')">
-            Back to all docs
+          <button type="button" class="btn btn-ghost btn-sm" @click="selectDocView('product')">
+            Back to product docs
           </button>
         </div>
         <GeneralDataTable>
