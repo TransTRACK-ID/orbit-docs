@@ -9,6 +9,9 @@ defineProps<{
 }>();
 
 const search = defineModel<string>("search");
+
+const SEARCH_DEBOUNCE_MS = 300;
+const searchInput = useDebouncedModel(search, SEARCH_DEBOUNCE_MS);
 </script>
 
 <template>
@@ -34,7 +37,7 @@ const search = defineModel<string>("search");
           <path d="M20 20L16.5 16.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
         </svg>
         <input
-          v-model="search"
+          v-model="searchInput"
           class="search"
           :placeholder="searchPlaceholder"
           :aria-label="searchLabel || searchPlaceholder"

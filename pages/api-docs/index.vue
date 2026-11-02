@@ -60,14 +60,8 @@ onMounted(() => {
   fetchCollections();
 });
 
-/* ── Search debounce ───────────────────────────────────────── */
-let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-
 watch(searchQuery, () => {
-  if (searchTimeout) clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    fetchCollections();
-  }, 300);
+  fetchCollections();
 });
 
 const collectionStats = computed(() => {

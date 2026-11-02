@@ -10,6 +10,7 @@ definePageMeta({
 
 const route = useRoute();
 const search = ref("");
+const debouncedSearch = useDebouncedRef(search);
 const releases = ref<ReleaseItem[]>([]);
 const isLoading = ref(true);
 
@@ -33,8 +34,8 @@ async function load() {
 onMounted(load);
 
 const filteredReleases = computed(() => {
-  if (!search.value.trim()) return releases.value;
-  const q = search.value.toLowerCase();
+  if (!debouncedSearch.value.trim()) return releases.value;
+  const q = debouncedSearch.value.toLowerCase();
   return releases.value.filter((r) => {
     const text = [r.appName, r.version, r.heroTitle, r.summary].filter(Boolean).join(" ").toLowerCase();
     return text.includes(q);

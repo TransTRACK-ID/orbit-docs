@@ -59,6 +59,7 @@ const newPageTitle = ref("");
 const isCreatingPage = ref(false);
 const showAddExisting = ref(false);
 const addExistingSearch = ref("");
+const debouncedAddExistingSearch = useDebouncedRef(addExistingSearch);
 const addExistingAppFilter = ref("");
 const selectedDocIds = ref<Set<string>>(new Set());
 const isBindingPage = ref(false);
@@ -71,7 +72,7 @@ const addExistingAppOptions = computed(() => [
 ]);
 
 const filteredUnboundDocs = computed(() => {
-  const q = addExistingSearch.value.trim().toLowerCase();
+  const q = debouncedAddExistingSearch.value.trim().toLowerCase();
   return allDocs.value.filter((d) => {
     if (d.siteId) return false;
     if (addExistingAppFilter.value === "__unbound__" && d.appId) return false;

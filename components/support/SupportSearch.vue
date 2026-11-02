@@ -2,6 +2,7 @@
 const props = defineProps<{
   modelValue: string;
   placeholder?: string;
+  debounceMs?: number;
 }>();
 
 const emit = defineEmits<{
@@ -9,10 +10,45 @@ const emit = defineEmits<{
 }>();
 
 const inputId = useId();
+const delayMs = computed(() => props.debounceMs ?? 300);
+
+const localValue = ref(props.modelValue);
+let timer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => props.modelValue,
+  (value) => {
+    if (value === localValue.value) return;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    localValue.value = value;
+  },
+);
+
+function scheduleEmit(value: string) {
+  if (timer) clearTimeout(timer);
+  timer = setTimeout(() => {
+    timer = null;
+    if (props.modelValue !== value) emit("update:modelValue", value);
+  }, delayMs.value);
+}
 
 function onInput(event: Event) {
-  emit("update:modelValue", (event.target as HTMLInputElement).value);
+  const value = (event.target as HTMLInputElement).value;
+  localValue.value = value;
+  scheduleEmit(value);
 }
+
+onBeforeUnmount(() => {
+  if (timer) {
+    clearTimeout(timer);
+    if (props.modelValue !== localValue.value) {
+      emit("update:modelValue", localValue.value);
+    }
+  }
+});
 </script>
 
 <template>
@@ -32,7 +68,7 @@ function onInput(event: Event) {
       :id="inputId"
       class="support-search"
       type="search"
-      :value="modelValue"
+      :value="localValue"
       :placeholder="placeholder || 'Search all products'"
       autocomplete="off"
       @input="onInput"

@@ -63,6 +63,7 @@ const editorSearch = ref("");
 // ── History panel ────────────────────────────────────────────────
 const showHistoryPanel = ref(false);
 const historySearch = ref("");
+const debouncedHistorySearch = useDebouncedRef(historySearch);
 const historyFocusIndex = ref(0);
 let lastFocusedElement: HTMLElement | null = null;
 
@@ -631,7 +632,7 @@ async function fetchHistory() {
 }
 
 const filteredHistory = computed(() => {
-  const q = historySearch.value.toLowerCase().trim();
+  const q = debouncedHistorySearch.value.toLowerCase().trim();
   if (!q) return historyItems.value;
   return historyItems.value.filter(
     (h) =>
