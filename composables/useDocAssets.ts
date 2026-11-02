@@ -96,6 +96,7 @@ export function publicPdfShareUrl(token: string): string {
 }
 
 export function useDocAssets(docId: Ref<string>) {
+  const { validateAttachment, validateImage } = useDocUploadLimits();
   const assets = ref<DocAsset[]>([]);
   const isLoading = ref(false);
 
@@ -114,6 +115,8 @@ export function useDocAssets(docId: Ref<string>) {
 
   async function uploadAsset(file: File, onProgress?: (fraction: number) => void): Promise<DocAsset> {
     if (!docId.value) throw new Error("Upload failed");
+    const sizeError = validateAttachment(file);
+    if (sizeError) throw new Error(sizeError);
     try {
       const asset = await uploadViaServer(
         `/api/docs/${docId.value}/assets/upload`,
@@ -181,6 +184,8 @@ export function useDocAssets(docId: Ref<string>) {
 
   /** Uploads an inline editor image to object storage and returns its stable path. */
   async function uploadImage(file: File): Promise<string> {
+    const sizeError = validateImage(file);
+    if (sizeError) throw new Error(sizeError);
     const formData = new FormData();
     formData.append("file", file);
     try {

@@ -28,6 +28,7 @@ const emit = defineEmits<{
 const fileInput = ref<HTMLInputElement | null>(null);
 const uploadProgress = ref<number | null>(null);
 const uploadName = ref("");
+const { attachmentSizeHint } = useDocUploadLimits();
 const choosingImportFor = ref<string | null>(null);
 const assetToDelete = ref<DocAsset | null>(null);
 const isDeleting = ref(false);
@@ -138,6 +139,7 @@ function onDialogKeydown(e: KeyboardEvent) {
         </svg>
         {{ uploadProgress !== null ? "Uploading…" : "Upload PDF or video" }}
       </button>
+      <p class="attach-upload-hint">{{ attachmentSizeHint }}</p>
       <div v-if="uploadProgress !== null" class="attach-progress" role="status" aria-live="polite">
         <div class="attach-progress-meta">
           <span class="attach-progress-name">{{ uploadName }}</span>
@@ -334,6 +336,13 @@ function onDialogKeydown(e: KeyboardEvent) {
 
 .attach-upload-btn {
   width: 100%;
+}
+
+.attach-upload-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
 }
 
 .attach-progress {

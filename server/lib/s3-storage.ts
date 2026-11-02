@@ -10,6 +10,10 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createError } from "h3";
 import type { Readable } from "node:stream";
 import { getS3Config, type S3Config } from "~/server/utils/runtime-env";
+import {
+  getDocPdfMaxBytes,
+  getDocVideoMaxBytes,
+} from "~/utils/doc-upload-limits";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -373,15 +377,10 @@ const DOC_ASSET_TYPES: Record<DocAssetKind, Set<string>> = {
 const PRESIGNED_PUT_TTL_SECONDS = 15 * 60;
 const PRESIGNED_GET_TTL_SECONDS = 10 * 60;
 
-function readPositiveIntEnv(name: string, fallback: number): number {
-  const parsed = Number.parseInt(process.env[name]?.trim() || "", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 export function getDocAssetMaxBytes(kind: DocAssetKind): number {
   return kind === "video"
-    ? readPositiveIntEnv("DOC_VIDEO_MAX_BYTES", 500 * 1024 * 1024)
-    : readPositiveIntEnv("DOC_PDF_MAX_BYTES", 50 * 1024 * 1024);
+    ? getDocVideoMaxBytes(process.env.DOC_VIDEO_MAX_BYTES)
+    : getDocPdfMaxBytes(process.env.DOC_PDF_MAX_BYTES);
 }
 
 export function normalizeMime(mime: string): string {

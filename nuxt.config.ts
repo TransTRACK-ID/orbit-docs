@@ -123,6 +123,10 @@ export default defineNuxtConfig({
       // Active document generation agent (shown in UI)
       docAgent: process.env.DOC_AGENT || 'cursor',
       cursorModel: process.env.CURSOR_MODEL || 'auto',
+      // Doc editor upload limits (client pre-check; server enforces via DOC_* / S3_UPLOAD_MAX_BYTES)
+      docPdfMaxBytes: process.env.NUXT_PUBLIC_DOC_PDF_MAX_BYTES || process.env.DOC_PDF_MAX_BYTES || '',
+      docVideoMaxBytes: process.env.NUXT_PUBLIC_DOC_VIDEO_MAX_BYTES || process.env.DOC_VIDEO_MAX_BYTES || '',
+      docImageMaxBytes: process.env.NUXT_PUBLIC_S3_UPLOAD_MAX_BYTES || process.env.S3_UPLOAD_MAX_BYTES || '',
     },
     // Server-only base URL — can be absolute (e.g. http://127.0.0.1:port/api/preview/taskId)
     // so server-side $fetch gets a valid URL instead of crashing on relative paths
