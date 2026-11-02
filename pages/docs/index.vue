@@ -5,8 +5,6 @@ import ChevronDown from "~/components/icons/ChevronDown/index.vue";
 import {
   docListPrimaryLabel,
   docListSecondaryLabel,
-  filterDocsByView,
-  groupDocsForList,
   isAdrDoc,
   isFeatureCatalogDoc,
   isWikiDoc,
@@ -31,7 +29,7 @@ onBeforeMount(() => {
 const route = useRoute();
 const router = useRouter();
 const { can, canAny } = usePermissions();
-const { docs, isLoading, search, fetchDocs, createDoc, deleteDoc, bulkUpdateStatus } = useDocs();
+const { search, createDoc, deleteDoc, bulkUpdateStatus } = useDocs();
 
 const canWriteDocs = computed(() => can("docs:write"));
 const canWriteAdrs = computed(() => can("adrs:write"));
@@ -48,6 +46,33 @@ const appFilter = ref((route.query.app as string) || "");
 const siteFilter = ref((route.query.siteId as string) || "");
 const statusFilter = ref("");
 const docView = ref<DocListView>("product");
+
+const {
+  summary,
+  isSummaryLoading,
+  appLoads,
+  isKnowledgeLoading,
+  isKnowledgeLoadingMore,
+  knowledgeTotal,
+  fetchSummary,
+  resetAppLoads,
+  resetKnowledge,
+  ensureAppLoaded,
+  loadMoreAppDocs,
+  fetchKnowledgePage,
+  buildAccordionGroups,
+  appDocCount,
+  unboundDocCount,
+  removeDocFromCaches,
+  knowledgeCatalogDocs,
+} = useDocsPageList();
+
+const listFilters = computed(() => ({
+  search: search.value,
+  appId: appFilter.value,
+  siteId: siteFilter.value,
+  status: statusFilter.value,
+}));
 
 const embeddingScheduleAppId = computed(() => appFilter.value || "");
 const {
@@ -144,11 +169,7 @@ const appOptions = computed(() => [
 
 onMounted(async () => {
   await Promise.all([fetchApps(), fetchDocSites(), fetchMcpConfig()]);
-  await fetchDocs({
-    appId: appFilter.value,
-    siteId: siteFilter.value || undefined,
-    status: statusFilter.value || undefined,
-  });
+  await refreshDocsList();
   if (appFilter.value) {
     void fetchEmbeddingSchedule();
   }
@@ -160,11 +181,7 @@ onBeforeUnmount(() => {
 });
 
 watch([search, appFilter, siteFilter, statusFilter], async () => {
-  await fetchDocs({
-    appId: appFilter.value,
-    siteId: siteFilter.value || undefined,
-    status: statusFilter.value || undefined,
-  });
+  await refreshDocsList();
 });
 
 watch(siteFilter, (siteId) => {
@@ -273,6 +290,8 @@ async function doDelete() {
   if (!docToDelete.value) return;
   try {
     await deleteDoc(docToDelete.value.id);
+    removeDocFromCaches(docToDelete.value.id);
+    await fetchSummary(docView.value, listFilters.value);
     docToDelete.value = null;
   } catch {
     // Error toast shown by deleteDoc composable
@@ -298,16 +317,6 @@ const headerStats = computed(() => [
   { label: pageStats.value.drafts === 1 ? "Draft" : "Drafts", value: pageStats.value.drafts },
   { label: pageStats.value.systems === 1 ? "System" : "Systems", value: pageStats.value.systems },
 ]);
-
-watch(search, onSearch);
-
-function onSearch() {
-  fetchDocs({
-    appId: appFilter.value,
-    siteId: siteFilter.value || undefined,
-    status: statusFilter.value || undefined,
-  });
-}
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === "Escape") {
@@ -347,17 +356,14 @@ const statusLabel: Record<string, string> = {
 };
 
 const docGroups = computed(() =>
-  groupDocsForList(docs.value, docView.value, {
-    includeDraftAdrs: canReadDraftAdrs.value,
-  })
+  buildAccordionGroups(apps.value, docView.value, canReadDraftAdrs.value, appFilter.value),
 );
 
+const isLoading = computed(() => isSummaryLoading.value);
+
 const visibleDocCount = computed(() => {
-  if (docView.value === "knowledge") return knowledgeDocs.value.length;
-  return accordionGroups.value.reduce(
-    (total, group) => total + groupDocCount(group),
-    0,
-  );
+  if (docView.value === "knowledge") return knowledgeCount.value;
+  return summary.value?.stats.total ?? 0;
 });
 
 const showKnowledgeCard = computed(
@@ -367,37 +373,41 @@ const showKnowledgeCard = computed(
     && bulkSelectionEnabled.value,
 );
 
-const accordionGroups = computed(() =>
-  docGroups.value.filter((group) =>
-    group.sections.some((section) => section.docs.length > 0),
-  ),
+const accordionGroups = computed(() => docGroups.value);
+
+const knowledgeDocs = computed(() => knowledgeCatalogDocs());
+
+const knowledgeCount = computed(
+  () => summary.value?.viewCounts.knowledge ?? knowledgeDocs.value.length,
 );
 
-const knowledgeDocs = computed(() => {
-  const filtered = filterDocsByView(docs.value, "knowledge");
-  return filtered.filter(isFeatureCatalogDoc);
-});
-
-const knowledgeCount = computed(() => knowledgeDocs.value.length);
-
 const pageStats = computed(() => {
-  const base = filterDocsByView(docs.value, docView.value === "knowledge" ? "all" : docView.value, {
-    includeDraftAdrs: canReadDraftAdrs.value,
-  });
-  const catalog = base.filter((doc) => !isFeatureCatalogDoc(doc));
-  const draftCount = catalog.filter((doc) => doc.status === "draft").length;
-  const systemIds = new Set(
-    catalog.filter((doc) => doc.app?.id).map((doc) => doc.app!.id),
-  );
-  return {
-    total: catalog.length,
-    drafts: draftCount,
-    systems: systemIds.size,
-  };
+  if (summary.value) return summary.value.stats;
+  return { total: 0, drafts: 0, systems: 0 };
 });
 
 const expandedGroups = ref<Set<string>>(new Set());
 const expandedKnowledgeSections = ref<Set<string>>(new Set());
+
+async function refreshDocsList() {
+  const previouslyExpanded = [...expandedGroups.value];
+  resetAppLoads();
+  resetKnowledge();
+  await fetchSummary(docView.value, listFilters.value);
+  if (docView.value === "knowledge") {
+    await fetchKnowledgePage(listFilters.value, true);
+    return;
+  }
+  await Promise.all(
+    previouslyExpanded.map((key) =>
+      ensureAppLoaded(key, docView.value, listFilters.value, canReadDraftAdrs.value),
+    ),
+  );
+}
+
+watch(docView, async () => {
+  await refreshDocsList();
+});
 
 watch(
   [accordionGroups, search, appFilter],
@@ -405,10 +415,24 @@ watch(
     const scoped = !!(q.trim() || appId);
     if (scoped) {
       expandedGroups.value = new Set(groups.map((group) => group.key));
+      for (const group of groups) {
+        void ensureAppLoaded(
+          group.key,
+          docView.value,
+          listFilters.value,
+          canReadDraftAdrs.value,
+        );
+      }
       return;
     }
     if (groups.length === 1) {
       expandedGroups.value = new Set([groups[0].key]);
+      void ensureAppLoaded(
+        groups[0].key,
+        docView.value,
+        listFilters.value,
+        canReadDraftAdrs.value,
+      );
       return;
     }
     const validKeys = new Set(groups.map((g) => g.key));
@@ -417,6 +441,15 @@ watch(
   },
   { immediate: true },
 );
+
+const showDocsEmptyState = computed(() => {
+  if (isLoading.value) return false;
+  if (showKnowledgeCard.value) return false;
+  if (docView.value === "knowledge") return visibleDocCount.value === 0;
+  return accordionGroups.value.length === 0;
+});
+
+const knowledgeHasMore = computed(() => knowledgeDocs.value.length < knowledgeTotal.value);
 
 function isKnowledgeSectionCollapsed(groupKey: string, section: DocListSection) {
   if (!shouldCollapseKnowledgeSection(section)) return false;
@@ -445,9 +478,13 @@ function isGroupExpanded(groupKey: string) {
 
 function toggleGroup(groupKey: string) {
   const next = new Set(expandedGroups.value);
+  const expanding = !next.has(groupKey);
   if (next.has(groupKey)) next.delete(groupKey);
   else next.add(groupKey);
   expandedGroups.value = next;
+  if (expanding) {
+    void ensureAppLoaded(groupKey, docView.value, listFilters.value, canReadDraftAdrs.value);
+  }
 }
 
 const allGroupsExpanded = computed(
@@ -461,17 +498,21 @@ function toggleAllGroups() {
     expandedGroups.value = new Set();
     return;
   }
-  expandedGroups.value = new Set(accordionGroups.value.map((group) => group.key));
+  const keys = accordionGroups.value.map((group) => group.key);
+  expandedGroups.value = new Set(keys);
+  for (const key of keys) {
+    void ensureAppLoaded(key, docView.value, listFilters.value, canReadDraftAdrs.value);
+  }
 }
 
 const docViewCounts = computed(() => {
-  const opts = { includeDraftAdrs: canReadDraftAdrs.value };
-  return Object.fromEntries(
-    DOC_LIST_VIEW_OPTIONS.map((option) => [
-      option.id,
-      filterDocsByView(docs.value, option.id, opts).length,
-    ]),
-  ) as Record<DocListView, number>;
+  if (summary.value?.viewCounts) return summary.value.viewCounts;
+  return {
+    all: 0,
+    product: 0,
+    knowledge: 0,
+    adrs: 0,
+  } satisfies Record<DocListView, number>;
 });
 
 function docViewTabLabel(option: (typeof DOC_LIST_VIEW_OPTIONS)[number]) {
@@ -480,7 +521,17 @@ function docViewTabLabel(option: (typeof DOC_LIST_VIEW_OPTIONS)[number]) {
 }
 
 function groupDocCount(group: DocListGroup) {
-  return group.sections.reduce((sum, section) => sum + section.docs.length, 0);
+  if (group.key === "__unbound__") return unboundDocCount(group);
+  return appDocCount(group.key, group);
+}
+
+function appLoadState(groupKey: string) {
+  return appLoads.value.get(groupKey);
+}
+
+function canLoadMoreAppDocs(groupKey: string) {
+  const state = appLoadState(groupKey);
+  return !!state?.loaded && state.docs.length < state.total;
 }
 
 function showKnowledgeBase() {
@@ -576,6 +627,7 @@ async function applyBulkStatus() {
   try {
     await bulkUpdateStatus(ids, bulkStatus.value);
     clearSelection();
+    await refreshDocsList();
   } catch {
     // toast in composable
   } finally {
@@ -587,8 +639,8 @@ watch([docView, search, appFilter, siteFilter, statusFilter], () => {
   clearSelection();
 });
 
-watch(docs, () => {
-  const valid = new Set(docs.value.filter(isFeatureCatalogDoc).map((d) => d.id));
+watch(knowledgeDocs, () => {
+  const valid = new Set(knowledgeDocs.value.map((d) => d.id));
   const next = new Set([...selectedDocIds.value].filter((id) => valid.has(id)));
   if (next.size !== selectedDocIds.value.size) selectedDocIds.value = next;
 });
@@ -789,7 +841,7 @@ watch(docs, () => {
 
     <GeneralSkeletonAccordionList v-if="isLoading" />
 
-    <div v-else-if="visibleDocCount === 0 && !showKnowledgeCard" class="empty-state">
+    <div v-else-if="showDocsEmptyState" class="empty-state">
       <p>No docs found.</p>
       <button v-if="canWriteDocs" type="button" class="btn btn-primary" style="margin-top:12px;" @click="openCreateModal">
         Create your first doc
@@ -825,6 +877,20 @@ watch(docs, () => {
           </button>
 
           <div v-show="isGroupExpanded(group.key)" class="accordion-body">
+            <div v-if="appLoadState(group.key)?.loading" class="accordion-loading">
+              <GeneralSkeletonAccordionList />
+            </div>
+            <div v-else-if="appLoadState(group.key)?.error" class="accordion-error">
+              <p>Could not load docs for this system.</p>
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                @click="ensureAppLoaded(group.key, docView, listFilters, canReadDraftAdrs)"
+              >
+                Retry
+              </button>
+            </div>
+            <template v-else>
             <GeneralDataTable :scrollable="true">
               <thead>
                 <tr>
@@ -943,6 +1009,21 @@ watch(docs, () => {
                 </template>
               </tbody>
             </GeneralDataTable>
+            <div v-if="canLoadMoreAppDocs(group.key)" class="accordion-pagination">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                :disabled="appLoadState(group.key)?.loadingMore"
+                @click="loadMoreAppDocs(group.key, docView, listFilters)"
+              >
+                {{
+                  appLoadState(group.key)?.loadingMore
+                    ? "Loading…"
+                    : `Load more (${groupDocCount(group)} of ${appLoadState(group.key)?.total ?? groupDocCount(group)})`
+                }}
+              </button>
+            </div>
+            </template>
           </div>
         </section>
 
@@ -969,7 +1050,8 @@ watch(docs, () => {
             Back to product docs
           </button>
         </div>
-        <GeneralDataTable>
+        <GeneralSkeletonAccordionList v-if="isKnowledgeLoading" />
+        <GeneralDataTable v-else>
           <thead>
             <tr>
               <th v-if="bulkSelectionEnabled" class="check-col">
@@ -1044,6 +1126,16 @@ watch(docs, () => {
             </tr>
           </tbody>
         </GeneralDataTable>
+        <div v-if="knowledgeHasMore" class="accordion-pagination">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm"
+            :disabled="isKnowledgeLoadingMore"
+            @click="fetchKnowledgePage(listFilters, false)"
+          >
+            {{ isKnowledgeLoadingMore ? "Loading…" : `Load more (${knowledgeDocs.length} of ${knowledgeTotal})` }}
+          </button>
+        </div>
       </div>
     </template>
 
@@ -1348,6 +1440,24 @@ watch(docs, () => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.accordion-pagination {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0 4px;
+}
+
+.accordion-loading,
+.accordion-error {
+  padding: 16px;
+}
+
+.accordion-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-muted);
 }
 
 .docs-list-toolbar {

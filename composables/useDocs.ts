@@ -77,12 +77,13 @@ export const useDocs = () => {
   async function fetchDocs(filters?: { appId?: string; status?: string; siteId?: string }) {
     isLoading.value = true;
     try {
-      const data = await $fetch<{ data: DocItem[] }>("/api/docs", {
+      const data = await $fetch<{ data: DocItem[]; total?: number }>("/api/docs", {
         query: {
           ...(search.value ? { search: search.value } : {}),
           ...(filters?.appId ? { appId: filters.appId } : {}),
           ...(filters?.status ? { status: filters.status } : {}),
           ...(filters?.siteId ? { siteId: filters.siteId } : {}),
+          includeContent: "false",
         },
       });
       docs.value = data.data;
