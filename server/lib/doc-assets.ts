@@ -5,6 +5,7 @@ import { docs, docAssets, workspaceSettings } from "~/server/database/schema";
 import { requireAnyPermission } from "~/server/utils/rbac";
 import { requireAuth } from "~/server/utils/auth";
 import { isValidUuid } from "~/server/lib/s3-storage";
+import { withBaseURL } from "~/server/utils/base-url";
 import type { PermissionKey } from "~/types/permissions";
 
 export type DocAssetRow = typeof docAssets.$inferSelect;
@@ -26,11 +27,11 @@ export interface DocAssetDto {
 }
 
 export function docAssetFilePath(assetId: string): string {
-  return `/api/doc-assets/${assetId}/file`;
+  return withBaseURL(`/api/doc-assets/${assetId}/file`);
 }
 
 export function docImagePath(docId: string, imageId: string): string {
-  return `/api/doc-images/${docId}/${imageId}`;
+  return withBaseURL(`/api/doc-images/${docId}/${imageId}`);
 }
 
 export function toDocAssetDto(row: DocAssetRow): DocAssetDto {

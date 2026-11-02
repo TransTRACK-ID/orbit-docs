@@ -1,3 +1,5 @@
+import { isEmbeddableDocAssetFilePath } from "~/server/utils/embeddable-doc-asset-path";
+
 /**
  * Security Headers Plugin
  * Adds critical security headers to all HTTP responses.
@@ -23,11 +25,17 @@ export default defineNitroPlugin((nitroApp) => {
     // Referrer policy to prevent URL data leakage (H5)
     event.node.res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
 
-    // COOP to prevent tabnabbing / cross-window attacks (H3)
-    event.node.res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+    const path = event.path || '';
+    const isEmbeddableMedia = isEmbeddableDocAssetFilePath(path);
 
-    // CORP to prevent cross-origin resource leaks
-    event.node.res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    // HTML-oriented isolation headers break Chrome's built-in PDF viewer in iframes.
+    if (!isEmbeddableMedia) {
+      // COOP to prevent tabnabbing / cross-window attacks (H3)
+      event.node.res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+
+      // CORP to prevent cross-origin resource leaks
+      event.node.res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    }
 
     // Only set Strict-Transport-Security in production (H1)
     // max-age: 1 year, include subdomains, preload-ready
@@ -43,8 +51,10 @@ export default defineNitroPlugin((nitroApp) => {
     // Default CSP that works with the Nuxt SPA + external fonts + Leaflet
     // OAuth consent page needs form-action * because the form redirects
     // to a cross-origin callback URL (e.g. Gemini's redirect_uri).
-    const path = event.path || '';
     const isOAuthRoute = path.startsWith('/oauth/') || path.startsWith('/.well-known/');
+    if (isEmbeddableMedia) {
+      return;
+    }
     const csp = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'",

@@ -10,6 +10,8 @@
  * embeddings all see them with their timestamps.
  */
 
+import { withBaseURL } from "~/server/utils/base-url";
+
 export interface TranscriptSegment {
   /** Seconds from video start. */
   start: number;
@@ -101,5 +103,5 @@ export function parseVideoBlock(
 }
 
 export function videoFileUrl(assetId: string): string {
-  return `/api/doc-assets/${assetId}/file`;
+  return withBaseURL(`/api/doc-assets/${assetId}/file`);
 }

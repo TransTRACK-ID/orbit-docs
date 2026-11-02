@@ -69,8 +69,10 @@ export function formatBytes(bytes: number): string {
 }
 
 export function publicPdfShareUrl(token: string): string {
+  const config = useRuntimeConfig();
+  const base = String(config.app.baseURL || "/").replace(/\/$/, "");
   const origin = import.meta.client ? window.location.origin : "";
-  return `${origin}/share/pdf/${token}`;
+  return `${origin}${base}/share/pdf/${token}`;
 }
 
 export function useDocAssets(docId: Ref<string>) {
