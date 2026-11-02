@@ -539,6 +539,43 @@ function isNotFoundError(error: unknown): boolean {
   return err.name === "NoSuchKey" || err.name === "NotFound" || err.$metadata?.httpStatusCode === 404;
 }
 
+export interface DocAssetStream {
+  body: Readable;
+  contentType: string;
+  contentLength?: number;
+  contentRange?: string;
+  isPartial: boolean;
+}
+
+/** Streams a doc attachment from S3, honoring Range for video seeking. */
+export async function getDocAssetStream(key: string, rangeHeader?: string): Promise<DocAssetStream> {
+  const { client, config } = getS3Client();
+  try {
+    const response = await client.send(
+      new GetObjectCommand({
+        Bucket: config.bucket,
+        Key: key,
+        ...(rangeHeader ? { Range: rangeHeader } : {}),
+      }),
+    );
+    if (!response.Body) {
+      throw createError({ statusCode: 404, statusMessage: "Not Found", message: "Attachment not found" });
+    }
+    return {
+      body: response.Body as Readable,
+      contentType: response.ContentType || "application/octet-stream",
+      contentLength: response.ContentLength,
+      contentRange: response.ContentRange,
+      isPartial: Boolean(rangeHeader && response.ContentRange),
+    };
+  } catch (error: unknown) {
+    if (isNotFoundError(error)) {
+      throw createError({ statusCode: 404, statusMessage: "Not Found", message: "Attachment not found" });
+    }
+    throw error;
+  }
+}
+
 /** Size, type, and first bytes of an uploaded object; null when the object does not exist. */
 export async function inspectDocAsset(
   key: string,
