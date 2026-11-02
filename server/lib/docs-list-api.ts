@@ -268,11 +268,53 @@ export interface DocsListSummary {
   stats: { total: number; drafts: number; systems: number };
 }
 
-async function countForView(db: Db, baseConditions: ReturnType<typeof buildDocsListConditions>, view: DocListView, includeDraftAdrs: boolean) {
-  const conditions = [...baseConditions, buildDocsViewCondition(view, includeDraftAdrs)];
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-  const result = await db.select({ count: count() }).from(docs).where(whereClause);
-  return result[0]?.count ?? 0;
+function workspaceAdrCondition(includeDraftAdrs: boolean) {
+  return and(
+    eq(docs.docType, "adr"),
+    sql`${docs.appId} IS NULL`,
+    visibleAdrCondition(includeDraftAdrs),
+  );
+}
+
+function draftStatCondition(activeView: DocListView, includeDraftAdrs: boolean) {
+  return and(
+    buildDocsViewCondition(activeView, includeDraftAdrs),
+    eq(docs.status, "draft"),
+    sql`NOT (${docs.source} = 'op_sync' AND ${docs.docType} = 'feature')`,
+    sql`(${docs.docType} IS NULL OR ${docs.docType} <> 'adr')`,
+  );
+}
+
+async function queryDocsAggregateCounts(
+  db: Db,
+  baseConditions: ReturnType<typeof buildDocsListConditions>,
+  activeView: DocListView,
+  includeDraftAdrs: boolean,
+) {
+  const baseWhere = baseConditions.length > 0 ? and(...baseConditions) : undefined;
+
+  const [row] = await db
+    .select({
+      all: sql<number>`count(*) filter (where ${buildDocsViewCondition("all", includeDraftAdrs)})`.mapWith(Number),
+      product: sql<number>`count(*) filter (where ${buildDocsViewCondition("product", includeDraftAdrs)})`.mapWith(Number),
+      knowledge: sql<number>`count(*) filter (where ${buildDocsViewCondition("knowledge", includeDraftAdrs)})`.mapWith(Number),
+      adrs: sql<number>`count(*) filter (where ${buildDocsViewCondition("adrs", includeDraftAdrs)})`.mapWith(Number),
+      workspaceAdrCount: sql<number>`count(*) filter (where ${workspaceAdrCondition(includeDraftAdrs)})`.mapWith(Number),
+      drafts: sql<number>`count(*) filter (where ${draftStatCondition(activeView, includeDraftAdrs)})`.mapWith(Number),
+    })
+    .from(docs)
+    .where(baseWhere);
+
+  return {
+    viewCounts: {
+      all: row?.all ?? 0,
+      product: row?.product ?? 0,
+      knowledge: row?.knowledge ?? 0,
+      adrs: row?.adrs ?? 0,
+    },
+    workspaceAdrCount: row?.workspaceAdrCount ?? 0,
+    drafts: row?.drafts ?? 0,
+  };
 }
 
 export async function queryDocsListSummary(
@@ -283,22 +325,18 @@ export async function queryDocsListSummary(
   allApps: { id: string; name: string }[],
 ): Promise<DocsListSummary> {
   const baseConditions = buildDocsListConditions({ ...filters }, includeDraftAdrs);
+  const viewWhere = and(...baseConditions, buildDocsViewCondition(activeView, includeDraftAdrs));
 
-  const viewCounts: Record<DocListView, number> = {
-    all: await countForView(db, baseConditions, "all", includeDraftAdrs),
-    product: await countForView(db, baseConditions, "product", includeDraftAdrs),
-    knowledge: await countForView(db, baseConditions, "knowledge", includeDraftAdrs),
-    adrs: await countForView(db, baseConditions, "adrs", includeDraftAdrs),
-  };
+  const [aggregates, grouped] = await Promise.all([
+    queryDocsAggregateCounts(db, baseConditions, activeView, includeDraftAdrs),
+    db
+      .select({ appId: docs.appId, docCount: count() })
+      .from(docs)
+      .where(viewWhere)
+      .groupBy(docs.appId),
+  ]);
 
-  const viewConditions = [...baseConditions, buildDocsViewCondition(activeView, includeDraftAdrs)];
-  const viewWhere = viewConditions.length > 0 ? and(...viewConditions) : undefined;
-
-  const grouped = await db
-    .select({ appId: docs.appId, docCount: count() })
-    .from(docs)
-    .where(viewWhere)
-    .groupBy(docs.appId);
+  const { viewCounts, workspaceAdrCount, drafts } = aggregates;
 
   const countByAppId = new Map<string, number>();
   let unboundCount = 0;
@@ -310,39 +348,12 @@ export async function queryDocsListSummary(
     countByAppId.set(row.appId, row.docCount);
   }
 
-  const workspaceAdrConditions = [
-    ...baseConditions,
-    eq(docs.docType, "adr"),
-    sql`${docs.appId} IS NULL`,
-    visibleAdrCondition(includeDraftAdrs),
-  ];
-  if (activeView === "product" || activeView === "knowledge") {
-    // Workspace ADRs only appear in all/adrs accordion groups.
-  }
-  const workspaceAdrResult = await db
-    .select({ count: count() })
-    .from(docs)
-    .where(and(...workspaceAdrConditions));
-  const workspaceAdrCount = workspaceAdrResult[0]?.count ?? 0;
-
   const appsSummary = allApps.map((app) => {
     const bound = countByAppId.get(app.id) ?? 0;
     const extra =
       activeView === "all" || activeView === "adrs" ? workspaceAdrCount : 0;
     return { id: app.id, name: app.name, count: bound + extra };
   });
-
-  const draftConditions = [
-    ...viewConditions,
-    eq(docs.status, "draft"),
-    sql`NOT (${docs.source} = 'op_sync' AND ${docs.docType} = 'feature')`,
-    sql`(${docs.docType} IS NULL OR ${docs.docType} <> 'adr')`,
-  ];
-  const draftResult = await db
-    .select({ count: count() })
-    .from(docs)
-    .where(and(...draftConditions));
-  const drafts = draftResult[0]?.count ?? 0;
 
   const systemsWithDocs = appsSummary.filter((row) => row.count > 0).length + (unboundCount > 0 ? 1 : 0);
 

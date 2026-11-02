@@ -1,13 +1,9 @@
 import { defineEventHandler, getQuery } from "h3";
-import { eq } from "drizzle-orm";
 import { getDb } from "~/server/database";
-import { apps } from "~/server/database/schema";
-import type { DocListView } from "~/utils/doc-display";
 import {
   parseDocsListFilters,
   parseDocsListPagination,
   queryDocsList,
-  queryDocsListSummary,
 } from "~/server/lib/docs-list-api";
 import { requireAuth } from "~/server/utils/auth";
 import { getAuthContext } from "~/server/utils/rbac";

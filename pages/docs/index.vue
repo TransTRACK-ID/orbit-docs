@@ -168,12 +168,13 @@ const appOptions = computed(() => [
 ]);
 
 onMounted(async () => {
-  await Promise.all([fetchApps(), fetchDocSites(), fetchMcpConfig()]);
-  await refreshDocsList();
+  document.addEventListener("keydown", onKeydown);
+  void fetchMcpConfig();
+  void fetchDocSites();
+  await Promise.all([fetchApps(), refreshDocsList()]);
   if (appFilter.value) {
     void fetchEmbeddingSchedule();
   }
-  document.addEventListener("keydown", onKeydown);
 });
 
 onBeforeUnmount(() => {
@@ -398,8 +399,24 @@ async function refreshDocsList() {
     await fetchKnowledgePage(listFilters.value, true);
     return;
   }
+
+  const scoped = !!(listFilters.value.search.trim() || listFilters.value.appId);
+  let keysToLoad: string[] = [];
+  if (scoped && summary.value) {
+    if (listFilters.value.appId) {
+      keysToLoad = [listFilters.value.appId];
+    } else {
+      keysToLoad = summary.value.apps.filter((row) => row.count > 0).map((row) => row.id);
+    }
+    if (summary.value.unboundCount > 0) keysToLoad.push("__unbound__");
+  } else if (accordionGroups.value.length === 1) {
+    keysToLoad = [accordionGroups.value[0]!.key];
+  } else {
+    keysToLoad = previouslyExpanded;
+  }
+
   await Promise.all(
-    previouslyExpanded.map((key) =>
+    keysToLoad.map((key) =>
       ensureAppLoaded(key, docView.value, listFilters.value, canReadDraftAdrs.value),
     ),
   );
@@ -415,24 +432,10 @@ watch(
     const scoped = !!(q.trim() || appId);
     if (scoped) {
       expandedGroups.value = new Set(groups.map((group) => group.key));
-      for (const group of groups) {
-        void ensureAppLoaded(
-          group.key,
-          docView.value,
-          listFilters.value,
-          canReadDraftAdrs.value,
-        );
-      }
       return;
     }
     if (groups.length === 1) {
       expandedGroups.value = new Set([groups[0].key]);
-      void ensureAppLoaded(
-        groups[0].key,
-        docView.value,
-        listFilters.value,
-        canReadDraftAdrs.value,
-      );
       return;
     }
     const validKeys = new Set(groups.map((g) => g.key));

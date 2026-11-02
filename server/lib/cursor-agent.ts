@@ -1,6 +1,7 @@
 import { spawn } from "child_process";
 import { getCursorModel as getCursorModelFromEnv } from "~/server/utils/agent-config";
 import { getCursorApiKey } from "~/server/utils/cursor-api-key";
+import { getChatWorkspace } from "~/server/lib/chat-workspace";
 
 export interface AnalyzeOptions {
   workdir?: string;
