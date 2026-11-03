@@ -460,29 +460,39 @@ export function markdownToEditorJs(md: string): EditorJsData {
       continue;
     }
 
-    // Table
+    // Table (preserve empty cells: "| a | | c |" must keep the middle cell,
+    // otherwise Editor.js gets ragged rows and shows "block can not be displayed correctly")
     if (line.includes("|") && i + 1 < lines.length && lines[i + 1].includes("|")) {
-      const headerCells = line
-        .split("|")
-        .map((c) => c.trim())
-        .filter((c) => c !== "");
+      const splitTableRow = (rowLine: string): string[] => {
+        const parts = rowLine.split("|").map((c) => c.trim());
+        if (parts.length > 0 && parts[0] === "") parts.shift();
+        if (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
+        return parts;
+      };
+      const headerCells = splitTableRow(line);
       i++;
       // skip separator line
       if (i < lines.length && /^[-\s:|]+$/.test(lines[i])) i++;
       const rows: string[][] = [];
       while (i < lines.length && lines[i].includes("|")) {
-        const cells = lines[i]
-          .split("|")
-          .map((c) => c.trim())
-          .filter((c) => c !== "");
-        rows.push(cells);
+        rows.push(splitTableRow(lines[i]));
         i++;
       }
+      if (headerCells.length === 0) {
+        continue;
+      }
+      // Editor.js table requires a rectangular grid: pad short rows, trim long rows.
+      const width = headerCells.length;
+      const content = [headerCells, ...rows].map((row) => {
+        if (row.length === width) return row;
+        if (row.length < width) return [...row, ...Array(width - row.length).fill("")];
+        return row.slice(0, width);
+      });
       blocks.push({
         type: "table",
         data: {
           withHeadings: true,
-          content: [headerCells, ...rows],
+          content,
         },
       });
       continue;
