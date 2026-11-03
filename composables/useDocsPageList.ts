@@ -288,6 +288,17 @@ export function useDocsPageList() {
       if (unbound) result.push(unbound);
     }
 
+    // When scoped to a single app, only that app is shown (like /versions).
+    // Its placeholder is kept until the first page finishes loading so the
+    // page does not flash the empty state; once loaded with no visible docs
+    // it is dropped so the empty state shows instead of an empty accordion.
+    if (appFilter) {
+      return result.filter((group) => {
+        if (group.sections.some((section) => section.docs.length > 0)) return true;
+        return !appLoads.value.get(group.key)?.loaded;
+      });
+    }
+
     return result;
   }
 
