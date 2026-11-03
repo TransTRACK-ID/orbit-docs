@@ -4,26 +4,58 @@ import { randomUUID } from "node:crypto";
 import type { ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { createMcpServer, checkMcpApiKey, transports } from "~/server/utils/mcp-server";
+import {
+  createMcpServer,
+  mcpSessionPrincipals,
+  transports,
+} from "~/server/utils/mcp-server";
+import {
+  principalFingerprint,
+  resolveMcpPrincipal,
+  type McpPrincipal,
+} from "~/server/utils/mcp-principal";
 import { InMemoryEventStore } from "~/server/utils/mcp-event-store";
 import { isMcpOAuthEnabled, getProtectedResourceMetadataUrl } from "~/server/utils/mcp-oauth/config";
 
-export function assertMcpAuth(event: H3Event) {
+export async function assertMcpAuth(event: H3Event): Promise<McpPrincipal> {
   const authHeader = getHeader(event, "authorization");
   const apiKeyHeader = getHeader(event, "x-api-key");
 
-  if (!checkMcpApiKey(authHeader, apiKeyHeader)) {
+  const principal = await resolveMcpPrincipal(authHeader, apiKeyHeader);
+  if (!principal) {
     // When OAuth is enabled, advertise the protected resource metadata URL
     // so MCP clients (Gemini Spark, etc.) can discover the OAuth flow.
     if (isMcpOAuthEnabled()) {
       setResponseHeaders(event, {
-        "WWW-Authenticate": `Bearer realm="mcp", resource_metadata="${getProtectedResourceMetadataUrl()}", scope="mcp:read"`,
+        "WWW-Authenticate": `Bearer [REDACTED]"mcp", resource_metadata="${getProtectedResourceMetadataUrl()}", scope="mcp:read"`,
       });
     }
     throw createError({
       statusCode: 401,
       statusMessage: "Unauthorized",
-      message: "Invalid or missing API key. Provide it via Authorization: Bearer <key> or X-API-Key header.",
+      message: "Invalid or missing credentials. Connect with OAuth, or provide the API key via Authorization: Bearer <key> or X-API-Key header.",
+    });
+  }
+  return principal;
+}
+
+/**
+ * Sessions are bound to the principal that created them: a token swap
+ * mid-session (different user, or API key vs OAuth) is rejected instead of
+ * silently changing whose data the tools read.
+ */
+export function assertSessionPrincipal(sessionId: string, principal: McpPrincipal): void {
+  const fingerprint = principalFingerprint(principal);
+  const bound = mcpSessionPrincipals[sessionId];
+  if (!bound) {
+    mcpSessionPrincipals[sessionId] = fingerprint;
+    return;
+  }
+  if (bound !== fingerprint) {
+    throw createError({
+      statusCode: 401,
+      statusMessage: "Unauthorized",
+      message: "This MCP session belongs to a different user. Start a new session with your own credentials.",
     });
   }
 }
@@ -48,7 +80,7 @@ function sendJsonRpcError(res: ServerResponse, status: number, message: string) 
  * Handle MCP Streamable HTTP requests (GET / POST / DELETE) on /api/mcp/connect.
  */
 export async function handleStreamableHttpRequest(event: H3Event, parsedBody?: unknown) {
-  assertMcpAuth(event);
+  const principal = await assertMcpAuth(event);
 
   const req = event.node.req;
   const res = event.node.res;
@@ -69,6 +101,7 @@ export async function handleStreamableHttpRequest(event: H3Event, parsedBody?: u
       sendJsonRpcError(res, 400, "Bad Request: Session exists but uses a different transport protocol");
       return;
     }
+    assertSessionPrincipal(sessionId, principal);
     transport = existing;
   } else if (!sessionId && method === "POST" && isInitializeRequest(body)) {
     transport = new StreamableHTTPServerTransport({
@@ -76,6 +109,7 @@ export async function handleStreamableHttpRequest(event: H3Event, parsedBody?: u
       eventStore: new InMemoryEventStore(),
       onsessioninitialized: (sid) => {
         transports[sid] = transport;
+        mcpSessionPrincipals[sid] = principalFingerprint(principal);
       },
     });
 
@@ -84,9 +118,12 @@ export async function handleStreamableHttpRequest(event: H3Event, parsedBody?: u
       if (sid && transports[sid]) {
         delete transports[sid];
       }
+      if (sid) {
+        delete mcpSessionPrincipals[sid];
+      }
     };
 
-    const mcpServer = await createMcpServer();
+    const mcpServer = await createMcpServer(principal);
     await mcpServer.connect(transport);
   } else {
     sendJsonRpcError(res, 400, "Bad Request: No valid session ID provided");

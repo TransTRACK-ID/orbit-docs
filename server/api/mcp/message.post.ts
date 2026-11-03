@@ -1,10 +1,10 @@
 import { defineEventHandler, getQuery, createError, readBody } from "h3";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { transports } from "~/server/utils/mcp-server";
-import { assertMcpAuth } from "~/server/utils/mcp-streamable-http";
+import { assertMcpAuth, assertSessionPrincipal } from "~/server/utils/mcp-streamable-http";
 
 export default defineEventHandler(async (event) => {
-  assertMcpAuth(event);
+  const principal = await assertMcpAuth(event);
 
   const query = getQuery(event);
   const sessionId = query.sessionId as string;
@@ -17,6 +17,8 @@ export default defineEventHandler(async (event) => {
       message: "No transport found for sessionId",
     });
   }
+
+  assertSessionPrincipal(sessionId, principal);
 
   if (!(transport instanceof SSEServerTransport)) {
     throw createError({

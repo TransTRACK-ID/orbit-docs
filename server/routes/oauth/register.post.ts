@@ -1,6 +1,6 @@
 import { defineEventHandler, readBody, createError, setResponseStatus } from "h3";
 import { isMcpOAuthEnabled } from "~/server/utils/mcp-oauth/config";
-import { registerClient } from "~/server/utils/mcp-oauth/clients";
+import { registerClientPersistent } from "~/server/utils/mcp-oauth/clients";
 
 /**
  * RFC 7591 dynamic client registration — lets MCP clients (Claude, Cursor,
@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
       ? body.redirect_uris.filter((uri): uri is string => typeof uri === "string")
       : [];
 
-  const result = registerClient({
+  const result = await registerClientPersistent({
     redirectUris,
     clientName:
       typeof body?.client_name === "string" ? body.client_name : undefined,
@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
   setResponseStatus(event, 201);
   return {
     client_id: result.clientId,
-    ...(result.clientSecret ? { client_secret: result.clientSecret } : {}),
+    ...(result.secret ? { client_secret: result.secret } : {}),
     client_name: result.clientName,
     redirect_uris: result.redirectUris,
     grant_types: ["authorization_code", "refresh_token"],

@@ -40,6 +40,15 @@ export function formatLastActive(date: Date | string | null | undefined): string
  */
 export async function getCurrentMember(event: H3Event) {
   const user = await getAuthUser(event);
+  return getMemberForUser(user);
+}
+
+/**
+ * Get the active team member record for a known user (no request needed).
+ * Shared by request-scoped auth and token-scoped (MCP) auth so both resolve
+ * the same role for the same user.
+ */
+export async function getMemberForUser(user: Pick<SessionUser, "id" | "email">) {
   const db = getDb();
 
   let member = null;

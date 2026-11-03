@@ -12,7 +12,7 @@ import {
   roleHasPermission,
 } from "~/server/lib/permissions";
 import { requireAuth, type SessionUser } from "./auth";
-import { getCurrentMember, type TeamRole as ServerTeamRole } from "./team-access";
+import { getMemberForUser, type TeamRole as ServerTeamRole } from "./team-access";
 
 export interface AuthContext {
   user: SessionUser;
@@ -108,6 +108,15 @@ export async function saveRolePermissionMatrix(matrix: RolePermissionMatrix) {
 
 export async function getAuthContext(event: H3Event): Promise<AuthContext> {
   const user = await requireAuth(event);
+  return getAuthContextForUser(user);
+}
+
+/**
+ * Build the auth context for a known user (no request needed). MCP OAuth
+ * tokens resolve through this so token-scoped access enforces the same
+ * membership, role, and permissions as the web app.
+ */
+export async function getAuthContextForUser(user: SessionUser): Promise<AuthContext> {
   const matrix = await loadRolePermissionMatrix();
 
   if (user.id === "preview-user") {
@@ -121,7 +130,7 @@ export async function getAuthContext(event: H3Event): Promise<AuthContext> {
   }
 
   const isSuperAdmin = user.id ? await isUserSuperAdmin(user.id) : false;
-  const member = await getCurrentMember(event);
+  const member = await getMemberForUser(user);
   const role = (member?.role as TeamRole | undefined) ?? null;
 
   if (isSuperAdmin) {

@@ -66,57 +66,209 @@ function sendUnauthorized(req: express.Request, res: express.Response, message: 
   res.status(401).json({ error: "Unauthorized", message });
 }
 
-function requireApiKey(req: express.Request, res: express.Response, next: express.NextFunction) {
+async function requirePrincipal(req: express.Request, res: express.Response, next: express.NextFunction) {
   // Skip auth for health check and OAuth endpoints
   if (req.path === "/health" || req.path.startsWith("/oauth/") || req.path.startsWith("/.well-known/")) {
     return next();
   }
 
-  // If neither static key nor OAuth is configured, allow open access
-  if (!MCP_API_KEY && !isMcpOAuthEnabled()) {
-    return next();
-  }
-
   const authHeader = req.headers.authorization || "";
-  const apiKey = req.headers["x-api-key"] as string || "";
+  const apiKey = (req.headers["x-api-key"] as string) || "";
 
-  const providedKey = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : apiKey;
-
-  // Check static API key
-  if (MCP_API_KEY && providedKey === MCP_API_KEY) {
-    return next();
-  }
-
-  // Check OAuth access token (JWT)
-  if (isMcpOAuthEnabled() && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    if (verifyMcpAccessToken(token)) {
-      return next();
+  try {
+    const principal = await resolveStandalonePrincipal(authHeader, apiKey);
+    if (!principal) {
+      return sendUnauthorized(
+        req,
+        res,
+        "Invalid or missing credentials. Connect with OAuth, or provide the API key via Authorization: Bearer <key> or X-API-Key header.",
+      );
     }
+    (req as express.Request & { mcpPrincipal?: StandalonePrincipal }).mcpPrincipal = principal;
+    return next();
+  } catch (err) {
+    console.error("[orbit-docs-mcp] principal resolution failed:", err);
+    return sendUnauthorized(req, res, "Authentication service unavailable.");
   }
-
-  return sendUnauthorized(
-    req,
-    res,
-    "Invalid or missing API key. Provide it via Authorization: Bearer <key> or X-API-Key header.",
-  );
 }
 
 /* ------------------------------------------------------------------ */
 /* 2. MCP Server                                                       */
 /* ------------------------------------------------------------------ */
 
-const server = new Server(
-  {
-    name: "orbit-docs",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
-    },
+/* ------------------------------------------------------------------ */
+/* 1c. Principal resolution (user-bound OAuth / service API key)         */
+/* ------------------------------------------------------------------ */
+
+type StandalonePrincipal =
+  | {
+      kind: "user";
+      userId: string;
+      role: string | null;
+      permissions: string[];
+      isSuperAdmin: boolean;
+    }
+  | { kind: "service" };
+
+function standaloneFingerprint(principal: StandalonePrincipal): string {
+  return principal.kind === "service" ? "service" : `user:${principal.userId}`;
+}
+
+function standalonePublishedOnly(principal: StandalonePrincipal): boolean {
+  return principal.kind === "service";
+}
+
+async function loadStandalonePermissions(
+  role: string,
+): Promise<string[]> {
+  const { mergeMatrixWithDefaults, listPermissionsForRole } =
+    await import("./server/lib/permissions");
+  const stored: Record<string, Record<string, boolean>> = {};
+  try {
+    const rows = await db.select().from(schema.rolePermissions);
+    for (const row of rows) {
+      if (!stored[row.role]) stored[row.role] = {};
+      stored[row.role]![row.permission] = row.allowed;
+    }
+  } catch {
+    // Fall through to defaults when the table is unavailable.
   }
-);
+  const matrix = mergeMatrixWithDefaults(
+    stored as Parameters<typeof mergeMatrixWithDefaults>[0],
+  );
+  return listPermissionsForRole(
+    role as Parameters<typeof listPermissionsForRole>[0],
+    matrix,
+  );
+}
+
+async function resolveStandalonePrincipal(
+  authHeader: string,
+  apiKey: string,
+): Promise<StandalonePrincipal | null> {
+  const provided = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : apiKey;
+
+  if (MCP_API_KEY && provided === MCP_API_KEY) {
+    return { kind: "service" };
+  }
+
+  if (isMcpOAuthEnabled() && authHeader.startsWith("Bearer ")) {
+    const payload = verifyMcpAccessToken(authHeader.slice(7));
+    if (!payload) return null;
+
+    const userRow = await db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, payload.sub))
+      .limit(1)
+      .then((rows) => rows[0]);
+
+    const memberRows = await db
+      .select()
+      .from(schema.teamMembers)
+      .where(eq(schema.teamMembers.status, "active"));
+    const member =
+      memberRows.find((m) => m.userId && m.userId === payload.sub) ??
+      memberRows.find(
+        (m) =>
+          m.email &&
+          userRow?.email &&
+          m.email.toLowerCase() === userRow.email.toLowerCase(),
+      );
+    // The users row is optional: local/SSO bootstrap accounts may only have a
+    // team membership row.
+    if (!userRow && !member) return null;
+
+    const isSuperAdmin = Boolean(userRow?.isSuperAdmin);
+    const role = (member?.role as string | undefined) ?? null;
+    if (!isSuperAdmin && !role) return null;
+
+    const permissions = isSuperAdmin
+      ? null
+      : role
+        ? await loadStandalonePermissions(role)
+        : [];
+    return { kind: "user", userId: payload.sub, role, permissions: permissions ?? [], isSuperAdmin };
+  }
+
+  if (!MCP_API_KEY && !isMcpOAuthEnabled()) {
+    return { kind: "service" };
+  }
+
+  return null;
+}
+
+/** Read permission required per tool (same keys as the web app). */
+const STANDALONE_TOOL_PERMISSIONS: Record<string, string> = {
+  list_apps: "apps:read",
+  get_app: "apps:read",
+  list_versions: "versions:read",
+  get_version: "versions:read",
+  list_docs: "docs:read",
+  get_doc: "docs:read",
+  search_docs_content: "docs:read",
+  list_releases: "releases:read",
+  get_release: "releases:read",
+  list_changelogs: "changelogs:read",
+  list_activity: "apps:read",
+  list_owners: "owners:read",
+  get_owner: "owners:read",
+  get_stats: "apps:read",
+};
+
+const STANDALONE_SERVICE_PERMISSIONS = new Set([
+  "apps:read",
+  "owners:read",
+  "versions:read",
+  "releases:read",
+  "changelogs:read",
+  "docs:read",
+]);
+
+function checkStandaloneToolAccess(principal: StandalonePrincipal, name: string) {
+  const permission = STANDALONE_TOOL_PERMISSIONS[name];
+  if (!permission) return null;
+  if (principal.kind === "service") {
+    if (STANDALONE_SERVICE_PERMISSIONS.has(permission)) return null;
+    return {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify(
+            {
+              error: "forbidden",
+              tool: name,
+              hint: `This tool needs a signed-in user with '${permission}'. Connect with OAuth instead of the shared API key.`,
+            },
+            null,
+            2,
+          ),
+        },
+      ],
+      isError: true as const,
+    };
+  }
+  if (principal.isSuperAdmin || principal.permissions.includes(permission)) return null;
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          {
+            error: "forbidden",
+            tool: name,
+            missing_permission: permission,
+            your_role: principal.role,
+            hint: "Ask a workspace admin for the required permission.",
+          },
+          null,
+          2,
+        ),
+      },
+    ],
+    isError: true as const,
+  };
+}
 
 /* ------------------------------------------------------------------ */
 /* 3. Zod Schemas for Validation                                       */
@@ -383,8 +535,21 @@ const TOOLS: Tool[] = [
 ];
 
 /* ------------------------------------------------------------------ */
-/* 5. Request Handlers                                                 */
+/* 5. Request Handlers (per-connection server, principal-scoped)         */
 /* ------------------------------------------------------------------ */
+
+function createStandaloneServer(principal: StandalonePrincipal) {
+  const server = new Server(
+    {
+      name: "orbit-docs",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools: TOOLS };
@@ -394,6 +559,9 @@ server.setRequestHandler(
   CallToolRequestSchema,
   async (request) => {
     const { name, arguments: args } = request.params;
+
+    const denied = checkStandaloneToolAccess(principal, name);
+    if (denied) return denied;
 
     try {
       switch (name) {
@@ -603,7 +771,11 @@ server.setRequestHandler(
           const versions = await db
             .select()
             .from(schema.appVersions)
-            .where(eq(schema.appVersions.appId, id))
+            .where(
+              standalonePublishedOnly(principal)
+                ? and(eq(schema.appVersions.appId, id), eq(schema.appVersions.status, "published"))
+                : eq(schema.appVersions.appId, id),
+            )
             .orderBy(desc(schema.appVersions.createdAt))
             .limit(limit)
             .offset(offset);
@@ -625,11 +797,16 @@ server.setRequestHandler(
             releasesByVersion.set(r.versionId, list);
           }
 
-          const data = versions.map((v) => ({
-            ...v,
-            releases: releasesByVersion.get(v.id) || [],
-            releasePublished: releasesByVersion.get(v.id)?.some((r) => r.published) || false,
-          }));
+          const data = versions.map((v) => {
+            const releases = (releasesByVersion.get(v.id) || []).filter(
+              (r) => !standalonePublishedOnly(principal) || r.published,
+            );
+            return {
+              ...v,
+              releases,
+              releasePublished: releases.some((r) => r.published),
+            };
+          });
 
           return {
             content: [
@@ -671,7 +848,7 @@ server.setRequestHandler(
             .limit(1)
             .then((rows) => rows[0]);
 
-          if (!row) {
+          if (!row || (standalonePublishedOnly(principal) && row.status !== "published")) {
             return {
               content: [{ type: "text", text: JSON.stringify({ error: "Version not found" }, null, 2) }],
               isError: true,
@@ -730,9 +907,15 @@ server.setRequestHandler(
                   {
                     data: {
                       ...row,
-                      releases: releasesForVersion,
-                      changelogs: changelogsForVersion,
-                      docs: docsForVersion,
+                      releases: standalonePublishedOnly(principal)
+                        ? releasesForVersion.filter((r) => r.published)
+                        : releasesForVersion,
+                      changelogs: standalonePublishedOnly(principal)
+                        ? changelogsForVersion.filter((c) => c.status === "published")
+                        : changelogsForVersion,
+                      docs: standalonePublishedOnly(principal)
+                        ? docsForVersion.filter((d) => d.status === "published")
+                        : docsForVersion,
                       versionHistory,
                     },
                   },
@@ -749,6 +932,9 @@ server.setRequestHandler(
           const params = ListDocsSchema.parse(args);
           const conditions: any[] = [];
 
+          if (standalonePublishedOnly(principal)) {
+            conditions.push(eq(schema.docs.status, "published"));
+          }
           if (params.appId) {
             conditions.push(eq(schema.docs.appId, params.appId));
           }
@@ -837,7 +1023,7 @@ server.setRequestHandler(
 
           const doc = rows[0] || null;
 
-          if (!doc) {
+          if (!doc || (standalonePublishedOnly(principal) && doc.status !== "published")) {
             return {
               content: [{ type: "text", text: JSON.stringify({ error: "Doc not found" }, null, 2) }],
               isError: true,
@@ -894,6 +1080,9 @@ server.setRequestHandler(
           const searchPattern = "%" + query + "%";
           const conditions = [sql`${schema.docs.content} ILIKE ${searchPattern}`];
 
+          if (standalonePublishedOnly(principal)) {
+            conditions.push(eq(schema.docs.status, "published"));
+          }
           if (appId) {
             conditions.push(eq(schema.docs.appId, appId));
           }
@@ -987,7 +1176,11 @@ server.setRequestHandler(
             .from(schema.releases)
             .innerJoin(schema.apps, eq(schema.releases.appId, schema.apps.id))
             .innerJoin(schema.appVersions, eq(schema.releases.versionId, schema.appVersions.id))
-            .where(eq(schema.releases.appId, id))
+            .where(
+              standalonePublishedOnly(principal)
+                ? and(eq(schema.releases.appId, id), eq(schema.releases.published, true))
+                : eq(schema.releases.appId, id),
+            )
             .orderBy(desc(schema.appVersions.releaseDate))
             .limit(limit)
             .offset(offset);
@@ -1037,7 +1230,7 @@ server.setRequestHandler(
 
           const release = rows[0];
 
-          if (!release) {
+          if (!release || (standalonePublishedOnly(principal) && !release.published)) {
             return {
               content: [{ type: "text", text: JSON.stringify({ error: "Release not found" }, null, 2) }],
               isError: true,
@@ -1054,7 +1247,14 @@ server.setRequestHandler(
               createdAt: schema.changelogs.createdAt,
             })
             .from(schema.changelogs)
-            .where(eq(schema.changelogs.versionId, release.versionId))
+            .where(
+              standalonePublishedOnly(principal)
+                ? and(
+                    eq(schema.changelogs.versionId, release.versionId),
+                    eq(schema.changelogs.status, "published"),
+                  )
+                : eq(schema.changelogs.versionId, release.versionId),
+            )
             .orderBy(desc(schema.changelogs.createdAt));
 
           return {
@@ -1098,7 +1298,11 @@ server.setRequestHandler(
             })
             .from(schema.changelogs)
             .leftJoin(schema.appVersions, eq(schema.changelogs.versionId, schema.appVersions.id))
-            .where(eq(schema.changelogs.appId, id))
+            .where(
+              standalonePublishedOnly(principal)
+                ? and(eq(schema.changelogs.appId, id), eq(schema.changelogs.status, "published"))
+                : eq(schema.changelogs.appId, id),
+            )
             .orderBy(desc(schema.changelogs.updatedAt))
             .limit(limit)
             .offset(offset);
@@ -1260,15 +1464,24 @@ server.setRequestHandler(
 
         /* ----------------------- get_stats ----------------------- */
         case "get_stats": {
+          const statsPublishedOnly = standalonePublishedOnly(principal);
           const [activeAppsResult, totalVersionsResult, publishedDocsResult, draftVersionsResult, totalAppsResult, totalDocsResult, totalReleasesResult, totalOwnersResult] =
             await Promise.all([
               db.select({ count: count() }).from(schema.apps).where(eq(schema.apps.status, "active")),
-              db.select({ count: count() }).from(schema.appVersions),
+              statsPublishedOnly
+                ? db.select({ count: count() }).from(schema.appVersions).where(eq(schema.appVersions.status, "published"))
+                : db.select({ count: count() }).from(schema.appVersions),
               db.select({ count: count() }).from(schema.docs).where(eq(schema.docs.status, "published")),
-              db.select({ count: count() }).from(schema.appVersions).where(eq(schema.appVersions.status, "draft")),
+              statsPublishedOnly
+                ? Promise.resolve([{ count: 0 }])
+                : db.select({ count: count() }).from(schema.appVersions).where(eq(schema.appVersions.status, "draft")),
               db.select({ count: count() }).from(schema.apps),
-              db.select({ count: count() }).from(schema.docs),
-              db.select({ count: count() }).from(schema.releases),
+              statsPublishedOnly
+                ? db.select({ count: count() }).from(schema.docs).where(eq(schema.docs.status, "published"))
+                : db.select({ count: count() }).from(schema.docs),
+              statsPublishedOnly
+                ? db.select({ count: count() }).from(schema.releases).where(eq(schema.releases.published, true))
+                : db.select({ count: count() }).from(schema.releases),
               db.select({ count: count() }).from(schema.owners),
             ]);
 
@@ -1317,6 +1530,9 @@ server.setRequestHandler(
   }
 );
 
+  return server;
+}
+
 /* ------------------------------------------------------------------ */
 /* 6. HTTP Server with SSE Transport                                   */
 /* ------------------------------------------------------------------ */
@@ -1326,23 +1542,34 @@ app.use(cors());
 app.use(express.json());
 
 // Mount OAuth 2.0 + PKCE routes (authorize, token, .well-known/*).
-// No-ops when OAuth is not configured. Must come before requireApiKey so
+// No-ops when OAuth is not configured. Must come before requirePrincipal so
 // OAuth endpoints are accessible without a bearer token.
 mountMcpOAuth(app);
 
-app.use(requireApiKey);
+app.use(requirePrincipal);
 
 const transports: Record<string, SSEServerTransport> = {};
+const sessionPrincipals: Record<string, string> = {};
+
+function requestPrincipal(req: express.Request): StandalonePrincipal {
+  return (req as express.Request & { mcpPrincipal?: StandalonePrincipal }).mcpPrincipal ?? {
+    kind: "service",
+  };
+}
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok", server: "orbit-docs-mcp", version: "1.0.0" });
 });
 
-app.get("/mcp", async (_req, res) => {
+app.get("/mcp", async (req, res) => {
+  const principal = requestPrincipal(req);
+  const server = createStandaloneServer(principal);
   const transport = new SSEServerTransport("/mcp/message", res);
   transports[transport.sessionId] = transport;
+  sessionPrincipals[transport.sessionId] = standaloneFingerprint(principal);
   res.on("close", () => {
     delete transports[transport.sessionId];
+    delete sessionPrincipals[transport.sessionId];
   });
   await server.connect(transport);
 });
@@ -1350,11 +1577,21 @@ app.get("/mcp", async (_req, res) => {
 app.post("/mcp/message", async (req, res) => {
   const sessionId = req.query.sessionId as string;
   const transport = transports[sessionId];
-  if (transport) {
-    await transport.handlePostMessage(req, res, req.body);
-  } else {
+  if (!transport) {
     res.status(400).json({ error: "No transport found for sessionId" });
+    return;
   }
+  // Sessions stay bound to the principal that created them.
+  const bound = sessionPrincipals[sessionId];
+  const current = standaloneFingerprint(requestPrincipal(req));
+  if (bound && bound !== current) {
+    res.status(401).json({
+      error: "Unauthorized",
+      message: "This MCP session belongs to a different user. Start a new session with your own credentials.",
+    });
+    return;
+  }
+  await transport.handlePostMessage(req, res, req.body);
 });
 
 const PORT = process.env.MCP_PORT ? parseInt(process.env.MCP_PORT, 10) : 41244;

@@ -7,15 +7,22 @@ import {
   getTokenEndpoint,
   isMcpOAuthEnabled,
 } from "./config";
-import { createAuthorizationCode, consumeAuthorizationCode } from "./codes";
-import { verifyPkceS256 } from "./pkce";
-import { issueMcpAccessToken, refreshMcpAccessToken } from "./tokens";
 import {
-  isRedirectUriAllowed,
-  registerClient,
-  validateClientCredentials,
+  cleanupExpiredGrants,
+  consumeAuthorizationCode,
+  createPendingRequest,
+  issueRefreshToken,
+  rotateRefreshToken,
+} from "./store";
+import { verifyPkceS256 } from "./pkce";
+import { withBaseURL } from "../base-url";
+import { issueMcpAccessToken } from "./tokens";
+import {
+  isRedirectUriAllowedAsync,
+  registerClientPersistent,
+  resolveClientAsync,
+  validateClientCredentialsAsync,
 } from "./clients";
-import { renderConsentPage } from "./consent";
 
 function oauthError(res: Response, status: number, error: string, description?: string): void {
   res.status(status).json({
@@ -51,14 +58,6 @@ function parseClientCredentials(req: Request): {
   };
 }
 
-function buildRedirectUrl(redirectUri: string, params: Record<string, string>): string {
-  const url = new URL(redirectUri);
-  for (const [key, value] of Object.entries(params)) {
-    url.searchParams.set(key, value);
-  }
-  return url.toString();
-}
-
 async function handleAuthorize(req: Request, res: Response): Promise<void> {
   const clientId = typeof req.query.client_id === "string" ? req.query.client_id : undefined;
   const redirectUri =
@@ -67,13 +66,13 @@ async function handleAuthorize(req: Request, res: Response): Promise<void> {
     typeof req.query.response_type === "string" ? req.query.response_type : undefined;
   const state = typeof req.query.state === "string" ? req.query.state : undefined;
   const scope = typeof req.query.scope === "string" ? req.query.scope : "mcp:read";
+  const resource = typeof req.query.resource === "string" ? req.query.resource : undefined;
   const codeChallenge =
     typeof req.query.code_challenge === "string" ? req.query.code_challenge : undefined;
   const codeChallengeMethod =
     typeof req.query.code_challenge_method === "string"
       ? req.query.code_challenge_method
       : undefined;
-  const approved = req.query.approved === "1";
 
   if (!clientId || !redirectUri || responseType !== "code") {
     oauthError(
@@ -95,66 +94,79 @@ async function handleAuthorize(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  if (!(await isRedirectUriAllowed(clientId, redirectUri))) {
+  if (resource && resource !== getMcpResourceUrl()) {
+    oauthError(res, 400, "invalid_target", "resource does not match this MCP server.");
+    return;
+  }
+
+  const client = await resolveClientAsync(clientId);
+  if (!client) {
+    oauthError(res, 400, "invalid_client", "Unknown client_id. Register via POST /oauth/register first.");
+    return;
+  }
+
+  if (!(await isRedirectUriAllowedAsync(clientId, redirectUri))) {
     oauthError(res, 400, "invalid_request", "redirect_uri is not allowed.");
     return;
   }
 
-  if (!approved) {
-    res
-      .status(200)
-      .type("html")
-      .send(
-        renderConsentPage({
-          clientId,
-          scope,
-          state,
-          redirectUri,
-          codeChallenge,
-          codeChallengeMethod,
-          responseType,
-        }),
-      );
-    return;
+  // The standalone server does not own the web session cookie, so consent
+  // happens on the issuer's Nuxt app. The shared database carries the pending
+  // request across processes.
+  try {
+    const requestId = await createPendingRequest({
+      clientId,
+      clientName: client.clientName,
+      redirectUri,
+      state,
+      scope,
+      codeChallenge,
+    });
+    void cleanupExpiredGrants();
+    res.redirect(
+      `${getMcpOAuthIssuer()}${withBaseURL(`/oauth/consent?request_id=${encodeURIComponent(requestId)}`)}`,
+    );
+  } catch {
+    oauthError(res, 503, "temporarily_unavailable", "Authorization store is unavailable.");
   }
-
-  const code = createAuthorizationCode({
-    clientId,
-    redirectUri,
-    codeChallenge,
-    scope,
-  });
-
-  res.redirect(
-    buildRedirectUrl(redirectUri, {
-      code,
-      ...(state ? { state } : {}),
-    }),
-  );
 }
 
 async function handleToken(req: Request, res: Response): Promise<void> {
   const grantType = typeof req.body?.grant_type === "string" ? req.body.grant_type : undefined;
+  const resource = typeof req.body?.resource === "string" ? req.body.resource : undefined;
+
+  if (resource && resource !== getMcpResourceUrl()) {
+    oauthError(res, 400, "invalid_target", "resource does not match this MCP server.");
+    return;
+  }
 
   if (grantType === "refresh_token") {
     const refreshToken =
       typeof req.body?.refresh_token === "string" ? req.body.refresh_token : undefined;
-    if (!refreshToken) {
-      oauthError(res, 400, "invalid_request", "refresh_token is required.");
+    const clientId =
+      typeof req.body?.client_id === "string" ? req.body.client_id : undefined;
+    if (!refreshToken || !clientId) {
+      oauthError(res, 400, "invalid_request", "refresh_token and client_id are required.");
       return;
     }
-    const result = refreshMcpAccessToken(refreshToken);
-    if (!result) {
-      oauthError(res, 400, "invalid_grant", "Refresh token is invalid or expired.");
+    const result = await rotateRefreshToken(refreshToken);
+    if (result.status !== "rotated" || result.record.clientId !== clientId) {
+      oauthError(res, 400, "invalid_grant", "Refresh token is invalid, expired, or already used.");
       return;
     }
+    const { accessToken, expiresIn } = issueMcpAccessToken({
+      userId: result.record.userId,
+      clientId: result.record.clientId,
+      scope: result.record.scope,
+    });
+    void cleanupExpiredGrants();
     res.json({
-      access_token: result.accessToken,
+      access_token: accessToken,
       token_type: "Bearer",
-      expires_in: result.expiresIn,
-      scope: "mcp:read",
+      expires_in: expiresIn,
+      scope: result.record.scope,
       resource: getMcpResourceUrl(),
-      refresh_token: result.refreshToken,
+      refresh_token: result.token,
     });
     return;
   }
@@ -178,14 +190,14 @@ async function handleToken(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  if (!validateClientCredentials(bodyClientId, clientSecret)) {
+  if (!(await validateClientCredentialsAsync(bodyClientId, clientSecret))) {
     oauthError(res, 401, "invalid_client", "Client authentication failed.");
     return;
   }
 
-  const record = consumeAuthorizationCode(code);
+  const record = await consumeAuthorizationCode(code);
   if (!record) {
-    oauthError(res, 400, "invalid_grant", "Authorization code is invalid or expired.");
+    oauthError(res, 400, "invalid_grant", "Authorization code is invalid, expired, or already used.");
     return;
   }
 
@@ -199,7 +211,17 @@ async function handleToken(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const { accessToken, expiresIn, refreshToken } = issueMcpAccessToken(bodyClientId, record.scope);
+  const { accessToken, expiresIn } = issueMcpAccessToken({
+    userId: record.userId,
+    clientId: record.clientId,
+    scope: record.scope,
+  });
+  const { token: refreshToken } = await issueRefreshToken({
+    userId: record.userId,
+    clientId: record.clientId,
+    scope: record.scope,
+  });
+  void cleanupExpiredGrants();
   res.json({
     access_token: accessToken,
     token_type: "Bearer",
@@ -241,30 +263,30 @@ function handleRegister(req: Request, res: Response): void {
       ? body.redirect_uris.filter((uri): uri is string => typeof uri === "string")
       : [];
 
-  const result = registerClient({
+  void registerClientPersistent({
     redirectUris,
     clientName: typeof body?.client_name === "string" ? body.client_name : undefined,
     tokenEndpointAuthMethod:
       typeof body?.token_endpoint_auth_method === "string"
         ? body.token_endpoint_auth_method
         : undefined,
-  });
+  }).then((result) => {
+    if ("error" in result) {
+      oauthError(res, 400, "invalid_client_metadata", result.error);
+      return;
+    }
 
-  if ("error" in result) {
-    oauthError(res, 400, "invalid_client_metadata", result.error);
-    return;
-  }
-
-  res.status(201).json({
-    client_id: result.clientId,
-    ...(result.clientSecret ? { client_secret: result.clientSecret } : {}),
-    client_name: result.clientName,
-    redirect_uris: result.redirectUris,
-    grant_types: ["authorization_code", "refresh_token"],
-    response_types: ["code"],
-    token_endpoint_auth_method: result.tokenEndpointAuthMethod,
-    client_id_issued_at: Math.floor(Date.now() / 1000),
-    client_secret_expires_at: 0,
+    res.status(201).json({
+      client_id: result.clientId,
+      ...(result.secret ? { client_secret: result.secret } : {}),
+      client_name: result.clientName,
+      redirect_uris: result.redirectUris,
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: result.tokenEndpointAuthMethod,
+      client_id_issued_at: Math.floor(Date.now() / 1000),
+      client_secret_expires_at: 0,
+    });
   });
 }
 

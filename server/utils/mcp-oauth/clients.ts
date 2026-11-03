@@ -1,9 +1,15 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import {
   getConfiguredRedirectUris,
   getMcpOAuthClientId,
   getMcpOAuthClientSecret,
 } from "./config";
+import {
+  findClientRecord,
+  registerClientRecord,
+  sha256Hex,
+  type StoredClientRecord,
+} from "./store";
 
 interface ClientIdMetadataDocument {
   client_id?: string;
@@ -198,9 +204,131 @@ export function validateClientCredentials(
     return false;
   }
   if (!client.clientSecret) {
-    return true;
+    // Persisted confidential client loaded from the database: the plaintext
+    // secret is not cached, so compare against its stored hash.
+    const expectedHash = persistedSecretHashes.get(clientId);
+    if (!expectedHash) return true;
+    if (!clientSecret) return false;
+    const provided = Buffer.from(sha256Hex(clientSecret), "utf8");
+    const expected = Buffer.from(expectedHash, "utf8");
+    return provided.length === expected.length && timingSafeEqual(provided, expected);
   }
   return client.clientSecret === clientSecret;
+}
+
+/**
+ * Database-backed client resolution. The in-memory map stays the hot cache;
+ * dynamically registered clients are persisted so they survive restarts and
+ * work across replicas/processes (Nitro + standalone MCP server).
+ */
+const persistedSecretHashes = new Map<string, string>();
+
+function cacheStoredRecord(record: StoredClientRecord): McpOAuthClient {
+  const cached: McpOAuthClient = {
+    clientId: record.clientId,
+    clientSecret: undefined,
+    redirectUris: record.redirectUris,
+    clientName: record.clientName ?? undefined,
+    tokenEndpointAuthMethod: record.tokenEndpointAuthMethod,
+  };
+  registeredClients.set(record.clientId, cached);
+  if (record.clientSecretHash) {
+    persistedSecretHashes.set(record.clientId, record.clientSecretHash);
+  }
+  return cached;
+}
+
+export async function resolveClientAsync(
+  clientId: string,
+): Promise<McpOAuthClient | undefined> {
+  const memory = resolveClient(clientId);
+  if (memory) return memory;
+  try {
+    const stored = await findClientRecord(clientId);
+    if (!stored) return undefined;
+    return cacheStoredRecord(stored);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * RFC 7591 registration persisted to the database. The returned secret (when
+ * present) is shown exactly once — only its SHA-256 hash is stored.
+ */
+export async function registerClientPersistent(input: {
+  redirectUris: string[];
+  clientName?: string;
+  tokenEndpointAuthMethod?: string;
+}): Promise<McpOAuthClient & { secret: string | null } | { error: string }> {
+  const validated = registerClient(input);
+  if ("error" in validated) return validated;
+
+  // Persist the same identity so every process agrees on it. The plaintext
+  // secret lives only in this process's cache and the registration response;
+  // the database keeps its SHA-256 hash.
+  try {
+    await registerClientRecord({
+      clientId: validated.clientId,
+      secret: validated.clientSecret ?? null,
+      clientName: validated.clientName,
+      redirectUris: validated.redirectUris,
+      tokenEndpointAuthMethod: validated.tokenEndpointAuthMethod,
+      publicClient: validated.tokenEndpointAuthMethod === "none",
+    });
+    if (validated.clientSecret) {
+      persistedSecretHashes.set(validated.clientId, sha256Hex(validated.clientSecret));
+    }
+  } catch {
+    // Database unavailable — the in-memory registration above still lets
+    // local development without Postgres keep working.
+  }
+  return { ...validated, secret: validated.clientSecret ?? null };
+}
+
+/**
+ * Confidential clients must prove their secret; public clients rely on PKCE.
+ * Checks the in-memory cache first, then persisted registrations (comparing
+ * hashes), then the static env client and CIMD public clients.
+ */
+export async function validateClientCredentialsAsync(
+  clientId: string,
+  clientSecret: string | undefined,
+): Promise<boolean> {
+  if (validateClientCredentials(clientId, clientSecret)) return true;
+
+  let stored: StoredClientRecord | null = null;
+  try {
+    stored = await findClientRecord(clientId);
+  } catch {
+    return false;
+  }
+  if (!stored) return false;
+  cacheStoredRecord(stored);
+  if (!stored.clientSecretHash) return true;
+  if (!clientSecret) return false;
+  const provided = Buffer.from(sha256Hex(clientSecret), "utf8");
+  const expected = Buffer.from(stored.clientSecretHash, "utf8");
+  return provided.length === expected.length && timingSafeEqual(provided, expected);
+}
+
+export async function isRedirectUriAllowedAsync(
+  clientId: string,
+  redirectUri: string,
+): Promise<boolean> {
+  if (await isRedirectUriAllowed(clientId, redirectUri)) return true;
+  try {
+    const stored = await findClientRecord(clientId);
+    if (!stored) return false;
+    cacheStoredRecord(stored);
+    if (stored.redirectUris.includes(redirectUri)) return true;
+    if (!stored.clientSecretHash && isLoopbackRedirectUri(redirectUri)) {
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 export async function isRedirectUriAllowed(

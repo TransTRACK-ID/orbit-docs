@@ -3,10 +3,15 @@ import {
   getMcpResourceUrl,
   isMcpOAuthEnabled,
 } from "~/server/utils/mcp-oauth/config";
-import { consumeAuthorizationCode } from "~/server/utils/mcp-oauth/codes";
+import {
+  cleanupExpiredGrants,
+  consumeAuthorizationCode,
+  issueRefreshToken,
+  rotateRefreshToken,
+} from "~/server/utils/mcp-oauth/store";
 import { verifyPkceS256 } from "~/server/utils/mcp-oauth/pkce";
-import { issueMcpAccessToken, refreshMcpAccessToken } from "~/server/utils/mcp-oauth/tokens";
-import { validateClientCredentials } from "~/server/utils/mcp-oauth/clients";
+import { issueMcpAccessToken } from "~/server/utils/mcp-oauth/tokens";
+import { validateClientCredentialsAsync } from "~/server/utils/mcp-oauth/clients";
 
 function parseClientCredentials(
   authHeader: string | undefined,
@@ -53,24 +58,40 @@ export default defineEventHandler(async (event) => {
 
   const body = (await readBody(event)) as Record<string, unknown>;
   const grantType = typeof body.grant_type === "string" ? body.grant_type : undefined;
+  const resource = typeof body.resource === "string" ? body.resource : undefined;
+
+  if (resource && resource !== getMcpResourceUrl()) {
+    throw oauthError(400, "invalid_target", "resource does not match this MCP server.");
+  }
 
   if (grantType === "refresh_token") {
     const refreshToken =
       typeof body.refresh_token === "string" ? body.refresh_token : undefined;
-    if (!refreshToken) {
-      throw oauthError(400, "invalid_request", "refresh_token is required.");
+    const clientId =
+      typeof body.client_id === "string" ? body.client_id : undefined;
+    if (!refreshToken || !clientId) {
+      throw oauthError(400, "invalid_request", "refresh_token and client_id are required.");
     }
-    const result = refreshMcpAccessToken(refreshToken);
-    if (!result) {
-      throw oauthError(400, "invalid_grant", "Refresh token is invalid or expired.");
+    const result = await rotateRefreshToken(refreshToken);
+    if (result.status === "invalid" || result.status === "replay") {
+      throw oauthError(400, "invalid_grant", "Refresh token is invalid, expired, or already used.");
     }
+    if (result.record.clientId !== clientId) {
+      throw oauthError(400, "invalid_grant", "Refresh token was issued to another client.");
+    }
+    const { accessToken, expiresIn } = issueMcpAccessToken({
+      userId: result.record.userId,
+      clientId: result.record.clientId,
+      scope: result.record.scope,
+    });
+    void cleanupExpiredGrants();
     return {
-      access_token: result.accessToken,
+      access_token: accessToken,
       token_type: "Bearer",
-      expires_in: result.expiresIn,
-      scope: "mcp:read",
+      expires_in: expiresIn,
+      scope: result.record.scope,
       resource: getMcpResourceUrl(),
-      refresh_token: result.refreshToken,
+      refresh_token: result.token,
     };
   }
 
@@ -94,13 +115,13 @@ export default defineEventHandler(async (event) => {
     throw oauthError(400, "invalid_request", "code, redirect_uri, and client_id are required.");
   }
 
-  if (!validateClientCredentials(bodyClientId, clientSecret)) {
+  if (!(await validateClientCredentialsAsync(bodyClientId, clientSecret))) {
     throw oauthError(401, "invalid_client", "Client authentication failed.");
   }
 
-  const record = consumeAuthorizationCode(code);
+  const record = await consumeAuthorizationCode(code);
   if (!record) {
-    throw oauthError(400, "invalid_grant", "Authorization code is invalid or expired.");
+    throw oauthError(400, "invalid_grant", "Authorization code is invalid, expired, or already used.");
   }
 
   if (record.clientId !== bodyClientId || record.redirectUri !== redirectUri) {
@@ -111,7 +132,17 @@ export default defineEventHandler(async (event) => {
     throw oauthError(400, "invalid_grant", "PKCE verification failed.");
   }
 
-  const { accessToken, expiresIn, refreshToken } = issueMcpAccessToken(bodyClientId, record.scope);
+  const { accessToken, expiresIn } = issueMcpAccessToken({
+    userId: record.userId,
+    clientId: record.clientId,
+    scope: record.scope,
+  });
+  const { token: refreshToken } = await issueRefreshToken({
+    userId: record.userId,
+    clientId: record.clientId,
+    scope: record.scope,
+  });
+  void cleanupExpiredGrants();
   return {
     access_token: accessToken,
     token_type: "Bearer",

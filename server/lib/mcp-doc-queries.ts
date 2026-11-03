@@ -194,8 +194,14 @@ export async function resolveAppRef(
   return { id: null, name: null, found: false };
 }
 
-export async function getAppDocCounts(db: Db, appId: string): Promise<AppDocCounts> {
-  const base = eq(schema.docs.appId, appId);
+export async function getAppDocCounts(
+  db: Db,
+  appId: string,
+  options?: { publishedOnly?: boolean },
+): Promise<AppDocCounts> {
+  const base = options?.publishedOnly
+    ? and(eq(schema.docs.appId, appId), eq(schema.docs.status, "published"))
+    : eq(schema.docs.appId, appId);
 
   const [
     totalResult,

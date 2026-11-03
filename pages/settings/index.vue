@@ -301,6 +301,7 @@ onMounted(async () => {
   await syncFromCurrentMember();
 
   fetchMcpConfig();
+  fetchMcpGrants();
   fetchPendingInvitations();
 
   resolveActiveTabFromRoute();
@@ -805,18 +806,67 @@ async function revokeAllKeys() {
 }
 
 // ─── MCP Connection ───────────────────────────────────────────────
-const mcpConfig = ref<{ host: string; url: string; protocol: string; configured: boolean; authRequired: boolean } | null>(null);
+const mcpConfig = ref<{ host: string; url: string; protocol: string; configured: boolean; authRequired: boolean; oauthEnabled: boolean } | null>(null);
 const mcpLoading = ref(false);
 
 async function fetchMcpConfig() {
   mcpLoading.value = true;
   try {
-    const { data } = await $fetch<{ data: { host: string; url: string; protocol: string; configured: boolean; authRequired: boolean } }>("/api/mcp-config");
+    const { data } = await $fetch<{ data: { host: string; url: string; protocol: string; configured: boolean; authRequired: boolean; oauthEnabled: boolean } }>("/api/mcp-config");
     mcpConfig.value = data;
   } catch (e) {
     console.error("Failed to fetch MCP config", e);
   } finally {
     mcpLoading.value = false;
+  }
+}
+
+// ─── Connected MCP apps (OAuth grants) ──────────────────────────────
+interface McpGrant {
+  family_id: string;
+  client_id: string;
+  client_name: string | null;
+  scope: string;
+  created_at: string | null;
+}
+const mcpGrants = ref<McpGrant[]>([]);
+const mcpGrantsLoading = ref(false);
+const mcpRevoking = ref<string | null>(null);
+
+async function fetchMcpGrants() {
+  mcpGrantsLoading.value = true;
+  try {
+    const res = await $fetch<{ data: McpGrant[] }>("/api/oauth/grants");
+    mcpGrants.value = res.data ?? [];
+  } catch (e) {
+    console.error("Failed to fetch MCP grants", e);
+  } finally {
+    mcpGrantsLoading.value = false;
+  }
+}
+
+async function revokeMcpGrant(familyId?: string) {
+  mcpRevoking.value = familyId ?? "all";
+  try {
+    await $fetch("/api/oauth/grants", {
+      method: "DELETE",
+      query: familyId ? { family_id: familyId } : {},
+    });
+    toast.success(familyId ? "Disconnected the app." : "Disconnected all apps.");
+    await fetchMcpGrants();
+  } catch (e: any) {
+    toast.error(e?.data?.message || "Failed to revoke access.");
+  } finally {
+    mcpRevoking.value = null;
+  }
+}
+
+function formatGrantDate(value: string | null) {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleDateString();
+  } catch {
+    return "—";
   }
 }
 
@@ -1913,7 +1963,56 @@ function getCallbackUrl(provider: SsoProvider): string {
                     <code>MCP_API_KEY</code> is set on the server, so remote connections must authenticate with
                     <code>Authorization: Bearer &lt;key&gt;</code> using the value of the <code>MCP_API_KEY</code> environment variable.
                   </p>
+                  <p v-if="mcpConfig?.oauthEnabled" class="desc" style="margin: 0;">
+                    OAuth is enabled: AI apps can sign in as you and only see what your account can see.
+                    The shared API key is limited to published content.
+                  </p>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="setting-section">
+            <h3>Connected apps</h3>
+            <p class="desc">AI applications you authorized through OAuth. Revoking disconnects the app immediately; short-lived sessions expire on their own within the hour.</p>
+
+            <p v-if="mcpGrantsLoading" class="desc">Loading connected apps…</p>
+            <p v-else-if="mcpGrants.length === 0" class="desc">No apps connected.</p>
+            <div v-else class="table-wrap">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Application</th>
+                    <th>Scope</th>
+                    <th>Connected</th>
+                    <th style="text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="grant in mcpGrants" :key="grant.family_id">
+                    <td>{{ grant.client_name || grant.client_id }}</td>
+                    <td>{{ grant.scope }}</td>
+                    <td class="num">{{ formatGrantDate(grant.created_at) }}</td>
+                    <td style="text-align: right;">
+                      <button
+                        class="btn btn-ghost btn-sm"
+                        :disabled="mcpRevoking !== null"
+                        @click="revokeMcpGrant(grant.family_id)"
+                      >
+                        {{ mcpRevoking === grant.family_id ? "Revoking…" : "Revoke" }}
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div style="margin-top: 12px; text-align: right;">
+                <button
+                  class="btn btn-ghost btn-sm"
+                  :disabled="mcpRevoking !== null"
+                  @click="revokeMcpGrant()"
+                >
+                  {{ mcpRevoking === "all" ? "Revoking…" : "Revoke all" }}
+                </button>
               </div>
             </div>
           </div>

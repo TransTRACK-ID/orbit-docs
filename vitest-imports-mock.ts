@@ -30,4 +30,6 @@ export const useHeadSafe = vi.fn();
 export const navigateTo = vi.fn();
 export const useNuxtApp = vi.fn(() => ({}));
 
+export const useRuntimeConfig = vi.fn(() => ({ public: {} }));
+
 export const useIsUnauthorized = vi.fn(() => ref(false));

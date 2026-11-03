@@ -3,6 +3,7 @@ import { useField, useForm } from "vee-validate";
 import { object, string } from "yup";
 import { useAuthStore } from "~/store/auth";
 import { usePageStore } from "~/store/page";
+import { takeConsentRedirect } from "~/utils/oauth-consent";
 
 interface SsoProviderUI {
   id: string;
@@ -22,7 +23,7 @@ definePageMeta({
   },
 });
 
-const { getSession } = useAuth();
+const { getSession, status } = useAuth();
 const $auth = useAuthStore();
 const $page = usePageStore();
 
@@ -54,11 +55,20 @@ const onSubmitLogin = handleSubmit(async (values) => {
   $auth.email = values.email;
   $auth.password = values.password;
 
-  await $auth.login().catch((e) => {
-    if (e?.statusCode === 400 || e?.statusCode === 401) {
-      isShowNotificationError.value = true;
-    }
-  });
+  await $auth
+    .login()
+    .then(async () => {
+      // Return to a pending MCP consent screen after sign-in.
+      const consentRedirect = takeConsentRedirect();
+      if (consentRedirect) {
+        await navigateTo(consentRedirect);
+      }
+    })
+    .catch((e) => {
+      if (e?.statusCode === 400 || e?.statusCode === 401) {
+        isShowNotificationError.value = true;
+      }
+    });
 });
 
 async function fetchSsoProviders() {
@@ -86,6 +96,15 @@ function getSsoLoginUrl(provider: SsoProviderUI) {
 
 onMounted(async () => {
   await getSession();
+  // A pending MCP authorization survives the login round trip: an already
+  // signed-in user landing here with one goes straight back to consent.
+  if (status.value === "authenticated") {
+    const consentRedirect = takeConsentRedirect();
+    if (consentRedirect) {
+      await navigateTo(consentRedirect);
+      return;
+    }
+  }
   await fetchSsoProviders();
 });
 </script>

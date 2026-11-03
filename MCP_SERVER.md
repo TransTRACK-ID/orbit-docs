@@ -329,6 +329,14 @@ OAuth 2.0 Authorization Code flow with PKCE (Proof Key for Code Exchange). This
 enables MCP clients that require OAuth — such as **Gemini Spark** — to connect
 without a static API key.
 
+OAuth tokens are **bound to the workspace user who approves them**: every MCP
+tool call runs with that user's identity, team role, and permissions — the
+same access they have in the web app.
+
+> **Breaking change:** tokens issued before this update identified the OAuth
+> *client* instead of a user and are rejected now. Reconnect affected clients
+> once so they complete the consent flow again.
+
 Both the **Nitro-hosted endpoint** (`/api/mcp/connect`) and the **standalone
 server** (`/mcp`) support OAuth. Static bearer tokens continue to work
 alongside OAuth — you can use either or both.
@@ -341,10 +349,32 @@ alongside OAuth — you can use either or both.
 3. Client fetches `/.well-known/oauth-protected-resource/mcp` to discover the
    authorization server
 4. Client fetches `/.well-known/oauth-authorization-server` for endpoint URLs
-5. Client redirects the user to `/oauth/authorize` (consent page)
-6. After consent, server issues an authorization code
-7. Client exchanges the code for a JWT access token at `/oauth/token`
+5. Client redirects the user to `/oauth/authorize`, which stores a short-lived
+   request and forwards the browser to the `/oauth/consent` page
+6. The user signs in (password or SSO) if needed, reviews the requesting app
+   and permissions, and approves. The issued authorization code is bound to
+   their user id — anonymous approval is not possible
+7. Client exchanges the code for a JWT access token (`sub` = user id) plus a
+   single-use refresh token at `/oauth/token`
 8. Client retries the MCP connection with `Authorization: Bearer <jwt>`
+
+### Who Sees What
+
+- Each tool requires the same read permission as its web counterpart
+  (`docs:read`, `apps:read`, `adrs:read`, …). A `viewer` calling a tool their
+  role forbids gets an explicit `forbidden` error naming the missing
+  permission.
+- Draft ADRs are hidden unless the user has `adrs:read` (admin by default);
+  everyone sees published ADRs — exactly like the web docs list.
+- Membership and role are re-checked from the database on every connection,
+  so removing a member, changing their role, or deactivating them takes
+  effect without waiting for token expiry.
+- The shared `MCP_API_KEY` acts as a **service principal**: read-only,
+  published content only, without draft counts that would leak unpublished
+  work.
+- Users can disconnect apps anytime in **Settings → MCP Connection →
+  Connected apps** (`GET`/`DELETE /api/oauth/grants`). Refresh tokens rotate
+  single-use; replaying a consumed token revokes the whole family.
 
 ### Configuration
 
@@ -384,9 +414,15 @@ no changes needed.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /oauth/authorize` | Authorization code issuance (consent page) |
-| `POST /oauth/token` | Token exchange (authorization code → JWT) |
+| `GET /oauth/authorize` | Validates the request, stores a pending authorization, redirects to consent |
+| `GET /oauth/consent?request_id=…` | Signed-in consent page (login/SSO if needed) |
+| `GET /api/oauth/requests/:id` | Pending request details for the consent page (auth required) |
+| `POST /api/oauth/requests/:id/approve` | Approve; issues a user-bound authorization code |
+| `POST /api/oauth/requests/:id/deny` | Deny; redirects back with `access_denied` |
+| `POST /oauth/token` | Token exchange (authorization code → JWT) and refresh rotation |
 | `POST /oauth/register` | Dynamic client registration (RFC 7591) |
+| `GET /api/oauth/grants` | List my connected MCP apps (auth required) |
+| `DELETE /api/oauth/grants[?family_id=…]` | Revoke one or all of my MCP grants |
 | `GET /.well-known/oauth-authorization-server` | OAuth server metadata (RFC 8418) |
 | `GET /.well-known/oauth-protected-resource` | Protected resource metadata |
 | `GET /.well-known/oauth-protected-resource/mcp` | RFC 9728 resource metadata |
@@ -409,8 +445,11 @@ curl -X POST https://docs.your-domain.com/oauth/register \
   }'
 ```
 
-Registered clients are stored in memory (like authorization codes) — after a
-server restart clients simply re-register. Clients registered with
+Registered clients, pending requests, authorization codes, and refresh tokens
+are persisted in Postgres (`mcp_oauth_*` tables), so they survive restarts and
+work across replicas and both servers (Nitro + standalone share the database).
+Only the client secret's SHA-256 hash is stored — the plaintext secret is
+shown once in the registration response. Clients registered with
 `token_endpoint_auth_method: "none"` are public clients authenticated by PKCE
 alone; any other auth method receives a `client_secret` it must present at
 the token endpoint.

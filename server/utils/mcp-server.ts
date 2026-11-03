@@ -5,7 +5,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { eq, desc, sql, and, count, inArray } from "drizzle-orm";
+import { eq, desc, sql, and, or, count, inArray } from "drizzle-orm";
 import { db } from "~/server/database";
 import * as schema from "~/server/database/schema";
 import {
@@ -55,8 +55,13 @@ import {
   listBindingAdrs,
 } from "~/server/lib/adr-queries";
 import type { AdrStatus } from "~/types/adr";
-import { isMcpOAuthEnabled, getProtectedResourceMetadataUrl } from "~/server/utils/mcp-oauth/config";
-import { verifyMcpAccessToken } from "~/server/utils/mcp-oauth/tokens";
+import {
+  checkMcpToolAccess,
+  mcpCanReadDraftAdrs,
+  mcpPublishedOnly,
+  type McpPrincipal,
+} from "~/server/utils/mcp-principal";
+import type { PermissionKey } from "~/types/permissions";
 
 const optionalString = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
@@ -162,7 +167,7 @@ async function buildMcpServerInstructions(): Promise<string> {
 /* 2. MCP Server Factory                                               */
 /* ------------------------------------------------------------------ */
 
-export async function createMcpServer() {
+export async function createMcpServer(principal: McpPrincipal = { kind: "service" }) {
   const instructions = await buildMcpServerInstructions();
   const mcpServer = new Server(
     {
@@ -918,6 +923,77 @@ const TOOLS: Tool[] = [
 /* 5. Request Handlers                                                 */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* 4b. Principal-scoped access                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Each tool requires the same read permission as its REST counterpart
+ * (see ROUTE_PERMISSIONS in server/lib/permissions.ts). Tools without an
+ * entry only require an authenticated principal (membership).
+ */
+const MCP_TOOL_PERMISSIONS: Record<string, PermissionKey> = {
+  list_apps: "apps:read",
+  get_app: "apps:read",
+  list_versions: "versions:read",
+  get_version: "versions:read",
+  list_docs: "docs:read",
+  list_app_documentation: "docs:read",
+  search_feature_docs: "docs:read",
+  list_feature_docs: "docs:read",
+  get_doc: "docs:read",
+  search_docs_content: "docs:read",
+  list_doc_tree: "docs:read",
+  grep_docs: "docs:read",
+  read_doc_section: "docs:read",
+  list_releases: "releases:read",
+  get_release: "releases:read",
+  list_changelogs: "changelogs:read",
+  list_activity: "apps:read",
+  list_owners: "owners:read",
+  get_owner: "owners:read",
+  get_stats: "apps:read",
+  list_doc_sites: "doc_sites:read",
+  get_doc_site: "doc_sites:read",
+  // ADR tools only surface published ADRs (binding tools exclusively so);
+  // draft ADRs are filtered per principal below. Membership is sufficient,
+  // matching the web docs list where published ADRs are visible to everyone.
+  ask_docs: "docs:read",
+};
+
+/**
+ * Extra `docs` visibility conditions for this principal.
+ *
+ * Web parity rules: anyone may see published ADRs, but draft ADRs need
+ * `adrs:read` (see queryDocsList in server/lib/docs-list-api.ts). Service
+ * principals (shared API key) only ever see published docs.
+ */
+function mcpDocVisibilityConditions() {
+  if (mcpPublishedOnly(principal)) {
+    return [eq(schema.docs.status, "published")];
+  }
+  if (mcpCanReadDraftAdrs(principal)) {
+    return [];
+  }
+  return [
+    or(
+      sql`(${schema.docs.docType} IS NULL OR ${schema.docs.docType} <> 'adr')`,
+      eq(schema.docs.status, "published"),
+    ),
+  ];
+}
+
+/** True when a single doc row may be exposed to this principal. */
+function mcpCanSeeDoc(row: { status: string; docType: string | null }): boolean {
+  if (mcpPublishedOnly(principal)) {
+    return row.status === "published";
+  }
+  if (row.docType === "adr" && row.status !== "published") {
+    return mcpCanReadDraftAdrs(principal);
+  }
+  return true;
+}
+
 mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
   return { tools: TOOLS };
 });
@@ -926,6 +1002,12 @@ mcpServer.setRequestHandler(
   CallToolRequestSchema,
   async (request) => {
     const { name, arguments: args } = request.params;
+
+    const requiredPermission = MCP_TOOL_PERMISSIONS[name];
+    if (requiredPermission) {
+      const denied = checkMcpToolAccess(principal, name, requiredPermission);
+      if (denied) return denied;
+    }
 
     try {
       switch (name) {
@@ -978,10 +1060,15 @@ mcpServer.setRequestHandler(
 
           const appsWithVersions = await Promise.all(
             allApps.map(async (app) => {
+              const listAppsPublishedOnly = mcpPublishedOnly(principal);
               const latestVersion = await db
                 .select()
                 .from(schema.appVersions)
-                .where(eq(schema.appVersions.appId, app.id))
+                .where(
+                  listAppsPublishedOnly
+                    ? and(eq(schema.appVersions.appId, app.id), eq(schema.appVersions.status, "published"))
+                    : eq(schema.appVersions.appId, app.id),
+                )
                 .orderBy(desc(schema.appVersions.releaseDate), desc(schema.appVersions.createdAt))
                 .limit(1)
                 .then((rows) => rows[0] || null);
@@ -989,16 +1076,26 @@ mcpServer.setRequestHandler(
               const versionCount = await db
                 .select({ count: count() })
                 .from(schema.appVersions)
-                .where(eq(schema.appVersions.appId, app.id))
+                .where(
+                  listAppsPublishedOnly
+                    ? and(eq(schema.appVersions.appId, app.id), eq(schema.appVersions.status, "published"))
+                    : eq(schema.appVersions.appId, app.id),
+                )
                 .then((rows) => rows[0]?.count ?? 0);
 
               const docCount = await db
                 .select({ count: count() })
                 .from(schema.docs)
-                .where(eq(schema.docs.appId, app.id))
+                .where(
+                  listAppsPublishedOnly
+                    ? and(eq(schema.docs.appId, app.id), eq(schema.docs.status, "published"))
+                    : eq(schema.docs.appId, app.id),
+                )
                 .then((rows) => rows[0]?.count ?? 0);
 
-              const documentation = await getAppDocCounts(db, app.id);
+              const documentation = await getAppDocCounts(db, app.id, {
+                publishedOnly: listAppsPublishedOnly,
+              });
 
               return {
                 ...app,
@@ -1169,7 +1266,11 @@ mcpServer.setRequestHandler(
           const versions = await db
             .select()
             .from(schema.appVersions)
-            .where(eq(schema.appVersions.appId, id))
+            .where(
+              mcpPublishedOnly(principal)
+                ? and(eq(schema.appVersions.appId, id), eq(schema.appVersions.status, "published"))
+                : eq(schema.appVersions.appId, id),
+            )
             .orderBy(desc(schema.appVersions.createdAt))
             .limit(limit)
             .offset(offset);
@@ -1191,11 +1292,16 @@ mcpServer.setRequestHandler(
             releasesByVersion.set(r.versionId, list);
           }
 
-          const data = versions.map((v) => ({
-            ...v,
-            releases: releasesByVersion.get(v.id) || [],
-            releasePublished: releasesByVersion.get(v.id)?.some((r) => r.published) || false,
-          }));
+          const data = versions.map((v) => {
+            const releases = (releasesByVersion.get(v.id) || []).filter(
+              (r) => !mcpPublishedOnly(principal) || r.published,
+            );
+            return {
+              ...v,
+              releases,
+              releasePublished: releases.some((r) => r.published),
+            };
+          });
 
           return {
             content: [
@@ -1237,6 +1343,13 @@ mcpServer.setRequestHandler(
             .then((rows) => rows[0]);
 
           if (!row) {
+            return {
+              content: [{ type: "text", text: JSON.stringify({ error: "Version not found" }, null, 2) }],
+              isError: true,
+            };
+          }
+
+          if (mcpPublishedOnly(principal) && row.status !== "published") {
             return {
               content: [{ type: "text", text: JSON.stringify({ error: "Version not found" }, null, 2) }],
               isError: true,
@@ -1295,9 +1408,15 @@ mcpServer.setRequestHandler(
                   {
                     data: {
                       ...row,
-                      releases: releasesForVersion,
-                      changelogs: changelogsForVersion,
-                      docs: docsForVersion,
+                      releases: mcpPublishedOnly(principal)
+                        ? releasesForVersion.filter((r) => r.published)
+                        : releasesForVersion,
+                      changelogs: mcpPublishedOnly(principal)
+                        ? changelogsForVersion.filter((c) => c.status === "published")
+                        : changelogsForVersion,
+                      docs: mcpPublishedOnly(principal)
+                        ? docsForVersion.filter((d) => d.status === "published")
+                        : docsForVersion,
                       versionHistory,
                     },
                   },
@@ -1337,7 +1456,7 @@ mcpServer.setRequestHandler(
             };
           }
 
-          const conditions: any[] = [];
+          const conditions: any[] = [...mcpDocVisibilityConditions()];
 
           if (app.id) {
             conditions.push(eq(schema.docs.appId, app.id));
@@ -1358,7 +1477,9 @@ mcpServer.setRequestHandler(
 
           const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
           const total = await countDocsForFilters(db, conditions);
-          const docCounts = app.id ? await getAppDocCounts(db, app.id) : undefined;
+          const docCounts = app.id
+            ? await getAppDocCounts(db, app.id, { publishedOnly: mcpPublishedOnly(principal) })
+            : undefined;
 
           const rows = await db
             .select(mcpDocSelectFields)
@@ -1447,7 +1568,7 @@ mcpServer.setRequestHandler(
             .leftJoin(schema.apps, eq(schema.docs.appId, schema.apps.id))
             .leftJoin(schema.appVersions, eq(schema.docs.versionId, schema.appVersions.id))
             .leftJoin(schema.docSites, eq(schema.docs.siteId, schema.docSites.id))
-            .where(eq(schema.docs.appId, app.id))
+            .where(and(eq(schema.docs.appId, app.id), ...mcpDocVisibilityConditions()))
             .orderBy(desc(schema.docs.updatedAt));
 
           const groups = buildGroupedAppDocumentation(
@@ -1457,7 +1578,9 @@ mcpServer.setRequestHandler(
             // actually report on every feature, instead of an empty collapsed list.
             { collapseKnowledge: false },
           );
-          const documentation = await getAppDocCounts(db, app.id);
+          const documentation = await getAppDocCounts(db, app.id, {
+            publishedOnly: mcpPublishedOnly(principal),
+          });
           const bindingAdrs = await listBindingAdrs(db, app.id, { includeContent: true });
 
           return {
@@ -1521,6 +1644,7 @@ mcpServer.setRequestHandler(
             query: params.query,
             module: params.module,
             limit: params.limit,
+            publishedOnly: mcpPublishedOnly(principal),
           });
 
           const data = results.map((row) => {
@@ -1593,6 +1717,7 @@ mcpServer.setRequestHandler(
             appId: app.id,
             module: params.module,
             limit: params.limit,
+            publishedOnly: mcpPublishedOnly(principal),
           })).map((row) => {
             const publicLinks = buildDocPublicUrls({
               id: row.id,
@@ -1608,7 +1733,9 @@ mcpServer.setRequestHandler(
               shareUrl: shareLinks.url,
             };
           });
-          const documentation = await getAppDocCounts(db, app.id);
+          const documentation = await getAppDocCounts(db, app.id, {
+            publishedOnly: mcpPublishedOnly(principal),
+          });
 
           return {
             content: [
@@ -1645,7 +1772,7 @@ mcpServer.setRequestHandler(
 
           const doc = rows[0] || null;
 
-          if (!doc) {
+          if (!doc || !mcpCanSeeDoc({ status: doc.status, docType: doc.docType })) {
             return {
               content: [{ type: "text", text: JSON.stringify({ error: "Doc not found" }, null, 2) }],
               isError: true,
@@ -1734,10 +1861,20 @@ mcpServer.setRequestHandler(
             docTypes: params.docType ? [params.docType] : undefined,
             mode: params.mode,
             limit: params.limit,
+            publishedOnly: mcpPublishedOnly(principal),
           });
 
+          // Draft ADRs need adrs:read, like the web docs list.
+          const canReadDraftAdrs = mcpCanReadDraftAdrs(principal);
+          const visibleResults = mcpPublishedOnly(principal)
+            ? results
+            : results.filter(
+                (row) =>
+                  row.docType !== "adr" || row.status === "published" || canReadDraftAdrs,
+              );
+
           const paths = app.id ? await buildDocPathIndex({ id: app.id, name: app.name }) : null;
-          const data = results.map((row) => ({
+          const data = visibleResults.map((row) => ({
             ...formatMcpDoc(
               {
                 id: row.id,
@@ -1803,7 +1940,15 @@ mcpServer.setRequestHandler(
             includeOutline: params.includeOutline,
             limit: params.limit,
           });
-          return jsonResult({ app: { id: app.id, name: app.name }, ...tree });
+          const visibleEntries = tree.entries.filter((entry) =>
+            mcpCanSeeDoc({ status: entry.status, docType: entry.docType }),
+          );
+          return jsonResult({
+            app: { id: app.id, name: app.name },
+            entries: visibleEntries,
+            total: visibleEntries.length,
+            truncated: tree.truncated,
+          });
         }
 
         case "grep_docs": {
@@ -1821,6 +1966,7 @@ mcpServer.setRequestHandler(
             contextLines: params.contextLines,
             maxResults: params.maxResults,
             maxPerDoc: params.maxPerDoc,
+            publishedOnly: mcpPublishedOnly(principal),
           });
           return jsonResult({
             app: { id: app.id, name: app.name },
@@ -1850,6 +1996,9 @@ mcpServer.setRequestHandler(
           });
           if ("error" in result) {
             return { ...jsonResult(result), isError: true };
+          }
+          if (!mcpCanSeeDoc({ status: result.status, docType: result.docType })) {
+            return { ...jsonResult({ error: "Doc not found" }), isError: true };
           }
           return jsonResult(result);
         }
@@ -1896,7 +2045,11 @@ mcpServer.setRequestHandler(
             .from(schema.releases)
             .innerJoin(schema.apps, eq(schema.releases.appId, schema.apps.id))
             .innerJoin(schema.appVersions, eq(schema.releases.versionId, schema.appVersions.id))
-            .where(eq(schema.releases.appId, id))
+            .where(
+              mcpPublishedOnly(principal)
+                ? and(eq(schema.releases.appId, id), eq(schema.releases.published, true))
+                : eq(schema.releases.appId, id),
+            )
             .orderBy(desc(schema.appVersions.releaseDate))
             .limit(limit)
             .offset(offset);
@@ -1957,7 +2110,7 @@ mcpServer.setRequestHandler(
 
           const release = rows[0];
 
-          if (!release) {
+          if (!release || (mcpPublishedOnly(principal) && !release.published)) {
             return {
               content: [{ type: "text", text: JSON.stringify({ error: "Release not found" }, null, 2) }],
               isError: true,
@@ -1974,7 +2127,14 @@ mcpServer.setRequestHandler(
               createdAt: schema.changelogs.createdAt,
             })
             .from(schema.changelogs)
-            .where(eq(schema.changelogs.versionId, release.versionId))
+            .where(
+              mcpPublishedOnly(principal)
+                ? and(
+                    eq(schema.changelogs.versionId, release.versionId),
+                    eq(schema.changelogs.status, "published"),
+                  )
+                : eq(schema.changelogs.versionId, release.versionId),
+            )
             .orderBy(desc(schema.changelogs.createdAt));
 
           const publicLinks = buildReleasePublicUrls({
@@ -2024,7 +2184,11 @@ mcpServer.setRequestHandler(
             })
             .from(schema.changelogs)
             .leftJoin(schema.appVersions, eq(schema.changelogs.versionId, schema.appVersions.id))
-            .where(eq(schema.changelogs.appId, id))
+            .where(
+              mcpPublishedOnly(principal)
+                ? and(eq(schema.changelogs.appId, id), eq(schema.changelogs.status, "published"))
+                : eq(schema.changelogs.appId, id),
+            )
             .orderBy(desc(schema.changelogs.updatedAt))
             .limit(limit)
             .offset(offset);
@@ -2209,6 +2373,9 @@ mcpServer.setRequestHandler(
           }
 
           const conditions: any[] = [];
+          if (mcpPublishedOnly(principal)) {
+            conditions.push(eq(schema.docSites.status, "published"));
+          }
           if (app.id) {
             conditions.push(eq(schema.docSites.appId, app.id));
           }
@@ -2301,7 +2468,7 @@ mcpServer.setRequestHandler(
             .limit(1);
 
           const site = siteRows[0];
-          if (!site) {
+          if (!site || (mcpPublishedOnly(principal) && site.status !== "published")) {
             return {
               content: [
                 {
@@ -2330,7 +2497,10 @@ mcpServer.setRequestHandler(
             .where(eq(schema.docs.siteId, site.id))
             .orderBy(schema.docs.sortOrder, desc(schema.docs.updatedAt));
 
-          const pages = pageRows.map((page) => {
+          const visiblePageRows = mcpPublishedOnly(principal)
+            ? pageRows.filter((page) => page.status === "published")
+            : pageRows;
+          const pages = visiblePageRows.map((page) => {
             const links = formatMcpDocSitePageLinks({
               id: page.id,
               status: page.status,
@@ -2413,7 +2583,12 @@ mcpServer.setRequestHandler(
             limit: params.limit,
           });
 
-          const bindingRows = rows.filter(
+          // Draft ADRs need adrs:read; everyone sees published ones.
+          const visibleRows = mcpCanReadDraftAdrs(principal)
+            ? rows
+            : rows.filter((row) => row.status === "published");
+
+          const bindingRows = visibleRows.filter(
             (row) => row.status === "published" && row.frontmatter?.adr_status === "accepted"
           );
 
@@ -2425,7 +2600,7 @@ mcpServer.setRequestHandler(
                   {
                     app: { id: app.id, name: app.name },
                     bindingCount: bindingRows.length,
-                    adrs: rows.map((row) =>
+                    adrs: visibleRows.map((row) =>
                       formatAdrApiItem(row, { includeContent: params.includeContent })
                     ),
                     constraintSummary: formatAdrConstraintSummary(bindingRows),
@@ -2544,7 +2719,7 @@ mcpServer.setRequestHandler(
             appId: app.id,
             question: params.question,
             module: params.module ?? undefined,
-            publishedOnly: false,
+            publishedOnly: mcpPublishedOnly(principal),
             role,
           });
 
@@ -2570,15 +2745,26 @@ mcpServer.setRequestHandler(
         }
 
         case "get_stats": {
+          // Service principals only see published aggregates; draft counts
+          // would leak the existence of unpublished work.
+          const statsPublishedOnly = mcpPublishedOnly(principal);
           const [activeAppsResult, totalVersionsResult, publishedDocsResult, draftVersionsResult, totalAppsResult, totalDocsResult, totalReleasesResult, totalOwnersResult] =
             await Promise.all([
               db.select({ count: count() }).from(schema.apps).where(eq(schema.apps.status, "active")),
-              db.select({ count: count() }).from(schema.appVersions),
+              statsPublishedOnly
+                ? db.select({ count: count() }).from(schema.appVersions).where(eq(schema.appVersions.status, "published"))
+                : db.select({ count: count() }).from(schema.appVersions),
               db.select({ count: count() }).from(schema.docs).where(eq(schema.docs.status, "published")),
-              db.select({ count: count() }).from(schema.appVersions).where(eq(schema.appVersions.status, "draft")),
+              statsPublishedOnly
+                ? Promise.resolve([{ count: 0 }])
+                : db.select({ count: count() }).from(schema.appVersions).where(eq(schema.appVersions.status, "draft")),
               db.select({ count: count() }).from(schema.apps),
-              db.select({ count: count() }).from(schema.docs),
-              db.select({ count: count() }).from(schema.releases),
+              statsPublishedOnly
+                ? db.select({ count: count() }).from(schema.docs).where(eq(schema.docs.status, "published"))
+                : db.select({ count: count() }).from(schema.docs),
+              statsPublishedOnly
+                ? db.select({ count: count() }).from(schema.releases).where(eq(schema.releases.published, true))
+                : db.select({ count: count() }).from(schema.releases),
               db.select({ count: count() }).from(schema.owners),
             ]);
 
@@ -2636,39 +2822,10 @@ mcpServer.setRequestHandler(
 }
 
 /* ------------------------------------------------------------------ */
-/* 6. Auth helper for Nitro                                           */
-/* ------------------------------------------------------------------ */
-
-export const MCP_API_KEY = process.env.MCP_API_KEY;
-
-export function checkMcpApiKey(authHeader: string | undefined, apiKeyHeader: string | undefined): boolean {
-  // If no MCP_API_KEY is configured and OAuth is not enabled, allow open
-  // (unauthenticated) connections so remote clients can connect without an
-  // Authorization header.
-  if (!MCP_API_KEY && !isMcpOAuthEnabled()) {
-    return true;
-  }
-
-  const providedKey = (authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : apiKeyHeader) || "";
-
-  // Check static API key first
-  if (MCP_API_KEY && providedKey === MCP_API_KEY) {
-    return true;
-  }
-
-  // Check OAuth access token (JWT)
-  if (isMcpOAuthEnabled() && authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice(7);
-    if (verifyMcpAccessToken(token)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-/* ------------------------------------------------------------------ */
 /* 7. Transport storage (shared for serverful deployments)              */
 /* ------------------------------------------------------------------ */
 
 export const transports: Record<string, any> = {};
+
+/** Principal fingerprint per MCP session id, bound at session creation. */
+export const mcpSessionPrincipals: Record<string, string> = {};

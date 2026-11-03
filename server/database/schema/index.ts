@@ -15,3 +15,4 @@ export * from "./permissions";
 export * from "./doc-chunks";
 export * from "./doc-assets";
 export * from "./pdf-import-jobs";
+export * from "./mcp-oauth";
