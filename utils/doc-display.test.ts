@@ -4,6 +4,7 @@ import {
   isFeatureCatalogDoc,
   filterDocsByView,
   shouldCollapseKnowledgeSection,
+  isSemanticIndexableDocType,
 } from "./doc-display";
 import type { DocItem } from "~/composables/useDocs";
 
@@ -37,6 +38,26 @@ describe("isFeatureCatalogDoc", () => {
       docType: "feature",
     });
     expect(isFeatureCatalogDoc(doc)).toBe(true);
+  });
+});
+
+describe("isSemanticIndexableDocType", () => {
+  it("includes generated product doc types", () => {
+    for (const docType of ["srs", "fsd", "sdd", "git_snapshot"]) {
+      expect(isSemanticIndexableDocType(docType)).toBe(true);
+    }
+  });
+
+  it("includes feature, wiki, and adr docs", () => {
+    for (const docType of ["feature", "wiki", "adr"]) {
+      expect(isSemanticIndexableDocType(docType)).toBe(true);
+    }
+  });
+
+  it("rejects unknown and missing doc types", () => {
+    expect(isSemanticIndexableDocType("prd")).toBe(false);
+    expect(isSemanticIndexableDocType(null)).toBe(false);
+    expect(isSemanticIndexableDocType(undefined)).toBe(false);
   });
 });
 

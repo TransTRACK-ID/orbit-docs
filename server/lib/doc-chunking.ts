@@ -1,5 +1,6 @@
 import { splitMarkdownSections } from "~/server/lib/doc-section-merge";
 
+// Keep in sync with SEMANTIC_INDEXABLE_DOC_TYPES in utils/doc-display.ts (client copy).
 export const INDEXABLE_DOC_TYPES = [
   "feature",
   "sdd",

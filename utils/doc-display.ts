@@ -32,6 +32,24 @@ const DOC_TYPE_SORT: Record<string, number> = {
   sdd_index: 4,
 };
 
+/** Doc types chunked for hybrid semantic search. Mirrors INDEXABLE_DOC_TYPES in server/lib/doc-chunking.ts — keep in sync. */
+export const SEMANTIC_INDEXABLE_DOC_TYPES = [
+  "feature",
+  "sdd",
+  "wiki",
+  "srs",
+  "fsd",
+  "adr",
+  "git_snapshot",
+] as const;
+
+export function isSemanticIndexableDocType(docType: string | null | undefined): boolean {
+  return (
+    !!docType &&
+    (SEMANTIC_INDEXABLE_DOC_TYPES as readonly string[]).includes(docType)
+  );
+}
+
 export type DocListView = "all" | "product" | "knowledge" | "adrs";
 
 export const DOC_LIST_VIEW_OPTIONS: { id: DocListView; label: string }[] = [

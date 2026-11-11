@@ -118,7 +118,7 @@ const embeddingScheduleHint = computed(() => {
   if (!embeddingScheduleSettings.value.scheduleEnabled) {
     return "Scheduled indexing is off for this app.";
   }
-  return `Indexes pending or stale docs ${embeddingScheduleIntervalLabel.value} (feature, SDD, wiki). Saving still auto-indexes via EMBED_ON_SAVE.`;
+  return `Indexes pending or stale docs ${embeddingScheduleIntervalLabel.value} (generated SRS/FSD/SDD/Git Snapshot, feature, wiki). Saving still auto-indexes via EMBED_ON_SAVE.`;
 });
 
 function formatEmbeddingScheduleTime(iso: string | null | undefined) {
@@ -793,7 +793,7 @@ watch(knowledgeDocs, () => {
         <div>
           <h2>Scheduled semantic index</h2>
           <p class="embedding-schedule-desc">
-            Automatically catches up feature, SDD, and wiki docs that are unindexed or need re-indexing.
+            Automatically catches up generated (SRS, FSD, SDD, Git Snapshot), feature, and wiki docs that are unindexed or need re-indexing.
             Uses the same workspace schedule as Notion sync and Generate Docs.
           </p>
         </div>

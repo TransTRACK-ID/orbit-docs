@@ -1,8 +1,14 @@
 import { defineEventHandler, createError, getRouterParam, readBody } from "h3";
 import { getDb } from "~/server/database";
-import { docGenerationJobs, docGenerationVersions } from "~/server/database/schema";
+import { docGenerationJobs, docGenerationVersions, appRepositories } from "~/server/database/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
+import {
+  generationDocTypeToAppDocType,
+  saveAppProductDoc,
+  saveGeneratedRepoSddDoc,
+  type GenerationProductDocType,
+} from "~/server/lib/app-product-docs";
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
@@ -87,6 +93,39 @@ export default defineEventHandler(async (event) => {
       actor,
       createdAt: now,
     });
+  }
+
+  // Keep the app docs library (and its semantic index) in sync with manual
+  // edits made in the Generate Docs viewer; generation already mirrors on
+  // save, this endpoint previously only updated job tables.
+  const productEdits: Array<{
+    type: GenerationProductDocType;
+    content: string | undefined;
+    previous: string | null;
+  }> = [
+    { type: "srs", content: srs, previous: job.srsContent },
+    { type: "fsd", content: fsd, previous: job.fsdContent },
+    { type: "git_snapshot", content: gitSnapshot, previous: job.gitSnapshotContent },
+    { type: "sdd_index", content: sdd, previous: job.sddContent },
+  ];
+  for (const edit of productEdits) {
+    if (edit.content === undefined || edit.content === edit.previous) continue;
+    if (edit.type === "sdd_index" && job.scope === "repo") continue;
+    await saveAppProductDoc(
+      appId,
+      generationDocTypeToAppDocType(edit.type),
+      edit.content,
+      actor
+    );
+  }
+  if (sdd !== undefined && sdd !== job.sddContent && job.scope === "repo" && job.repoId) {
+    const repo = await db
+      .select({ id: appRepositories.id, name: appRepositories.name })
+      .from(appRepositories)
+      .where(eq(appRepositories.id, job.repoId))
+      .limit(1)
+      .then((rows) => rows[0]);
+    if (repo) await saveGeneratedRepoSddDoc(appId, repo, sdd, actor);
   }
 
   return {

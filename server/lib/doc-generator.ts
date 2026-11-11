@@ -31,6 +31,7 @@ import { readExistingDoc } from "./existing-doc";
 import {
   readProductDocForGeneration,
   saveAppProductDoc,
+  saveGeneratedRepoSddDoc,
   generationDocTypeToAppDocType,
   type GenerationProductDocType,
 } from "./app-product-docs";
@@ -1439,6 +1440,7 @@ Instructions:
             repoRef: ref || undefined,
             status: "writing_back",
           });
+          await saveGeneratedRepoSddDoc(appId, repo, sddContent, actor);
 
           await onProgress({
             status: "writing_back",
@@ -1661,6 +1663,12 @@ export async function generateRepoSdd(
       status: "writing_back",
     });
     await updateJobResult(jobId, "sdd", sddContent);
+    await saveGeneratedRepoSddDoc(
+      repoRow.appId,
+      repo,
+      sddContent,
+      await resolveJobActor(jobId)
+    );
 
     await onProgress({
       status: "writing_back",

@@ -248,12 +248,20 @@ export default defineNitroPlugin(async () => {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS pdf_import_jobs_doc_user_idx ON pdf_import_jobs (doc_id, user_id)`);
 
-  // pgvector for semantic doc chunk search
+  // pgvector for semantic doc chunk search. Fault-isolated: a database
+  // without the pgvector binaries must not abort the rest of db-init —
+  // doc_chunks is created without the embedding column and upgraded
+  // automatically on a later boot once the extension exists.
   const embeddingDimensions = getEmbeddingDimensions();
+  let vectorAvailable = false;
   try {
     await pool.query(`CREATE EXTENSION IF NOT EXISTS vector`);
-  } catch (err: any) {
-    console.warn("[db-init] pgvector extension unavailable:", err.message);
+    vectorAvailable = true;
+  } catch (err) {
+    console.error(
+      "[db-init] pgvector unavailable — semantic search disabled until the vector extension is installed on the database server:",
+      err instanceof Error ? err.message : err,
+    );
   }
 
   await pool.query(`
@@ -266,7 +274,6 @@ export default defineNitroPlugin(async () => {
       chunk_index INTEGER NOT NULL,
       content TEXT NOT NULL,
       content_hash TEXT NOT NULL,
-      embedding vector(${embeddingDimensions}),
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
       UNIQUE (doc_id, chunk_index)
@@ -281,27 +288,32 @@ export default defineNitroPlugin(async () => {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS doc_chunks_search_tsv_idx ON doc_chunks USING gin (search_tsv)`);
 
-  const embeddingColumn = await pool.query<{ type: string }>(`
-    SELECT format_type(atttypid, atttypmod) AS type
-    FROM pg_attribute
-    WHERE attrelid = 'doc_chunks'::regclass AND attname = 'embedding' AND NOT attisdropped
-  `);
-  const currentDimensions = parseVectorTypeDimensions(embeddingColumn.rows[0]?.type);
-  if (currentDimensions !== null && currentDimensions !== embeddingDimensions) {
-    console.warn(
-      `[db-init] doc_chunks.embedding is vector(${currentDimensions}), expected vector(${embeddingDimensions}); clearing chunks for re-embedding`,
+  if (vectorAvailable) {
+    await pool.query(
+      `ALTER TABLE doc_chunks ADD COLUMN IF NOT EXISTS embedding vector(${embeddingDimensions})`,
     );
-    await pool.query(`DROP INDEX IF EXISTS doc_chunks_embedding_hnsw_idx`);
-    await pool.query(`DELETE FROM doc_chunks`);
-    await pool.query(`ALTER TABLE doc_chunks ALTER COLUMN embedding TYPE vector(${embeddingDimensions})`);
-  }
-  try {
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS doc_chunks_embedding_hnsw_idx
-      ON doc_chunks USING hnsw (embedding vector_cosine_ops)
+    const embeddingColumn = await pool.query<{ type: string }>(`
+      SELECT format_type(atttypid, atttypmod) AS type
+      FROM pg_attribute
+      WHERE attrelid = 'doc_chunks'::regclass AND attname = 'embedding' AND NOT attisdropped
     `);
-  } catch (err: any) {
-    console.warn("[db-init] doc_chunks HNSW index skipped:", err.message);
+    const currentDimensions = parseVectorTypeDimensions(embeddingColumn.rows[0]?.type);
+    if (currentDimensions !== null && currentDimensions !== embeddingDimensions) {
+      console.warn(
+        `[db-init] doc_chunks.embedding is vector(${currentDimensions}), expected vector(${embeddingDimensions}); clearing chunks for re-embedding`,
+      );
+      await pool.query(`DROP INDEX IF EXISTS doc_chunks_embedding_hnsw_idx`);
+      await pool.query(`DELETE FROM doc_chunks`);
+      await pool.query(`ALTER TABLE doc_chunks ALTER COLUMN embedding TYPE vector(${embeddingDimensions})`);
+    }
+    try {
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS doc_chunks_embedding_hnsw_idx
+        ON doc_chunks USING hnsw (embedding vector_cosine_ops)
+      `);
+    } catch (err) {
+      console.warn("[db-init] doc_chunks HNSW index skipped:", err instanceof Error ? err.message : err);
+    }
   }
 
   await pool.query(`
@@ -594,6 +606,12 @@ export default defineNitroPlugin(async () => {
     )
   `);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS doc_embedding_schedule_app_id_unique ON doc_embedding_schedule (app_id)`);
+  await pool.query(`ALTER TABLE doc_embedding_schedule ADD COLUMN IF NOT EXISTS schedule_enabled BOOLEAN NOT NULL DEFAULT false`);
+  await pool.query(`ALTER TABLE doc_embedding_schedule ADD COLUMN IF NOT EXISTS last_run_at TIMESTAMP WITH TIME ZONE`);
+  await pool.query(`ALTER TABLE doc_embedding_schedule ADD COLUMN IF NOT EXISTS last_run_status TEXT NOT NULL DEFAULT 'idle'`);
+  await pool.query(`ALTER TABLE doc_embedding_schedule ADD COLUMN IF NOT EXISTS last_run_result JSONB`);
+  await pool.query(`ALTER TABLE doc_embedding_schedule ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
+  await pool.query(`ALTER TABLE doc_embedding_schedule ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()`);
 
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS share_token TEXT`);
   await pool.query(`ALTER TABLE doc_generation_jobs ADD COLUMN IF NOT EXISTS share_enabled BOOLEAN NOT NULL DEFAULT false`);

@@ -6,7 +6,7 @@ import {
   docGenerationJobs,
   docGenerationVersions,
 } from "~/server/database/schema";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { onDocContentSaved } from "~/server/lib/doc-embedding-hooks";
 import { isValidExistingDoc } from "./generated-doc-validation";
 
@@ -140,12 +140,14 @@ export async function saveAppProductDoc(
   docType: AppProductDocType,
   content: string,
   actor: string,
-  title?: string
+  title?: string,
+  options?: { externalId?: string }
 ): Promise<void> {
   const db = getDb();
   const docTitle = title || TITLES[docType];
   const trimmed = content.trim();
   if (!trimmed || !isValidExistingDoc(trimmed)) return;
+  const externalId = options?.externalId ?? null;
   const existing = await db
     .select()
     .from(docs)
@@ -153,7 +155,8 @@ export async function saveAppProductDoc(
       and(
         eq(docs.appId, appId),
         eq(docs.docType, docType),
-        eq(docs.source, "generated")
+        eq(docs.source, "generated"),
+        externalId ? eq(docs.externalId, externalId) : isNull(docs.externalId)
       )
     )
     .limit(1)
@@ -207,6 +210,7 @@ export async function saveAppProductDoc(
       status: "draft",
       source: "generated",
       docType,
+      externalId,
       author: actor,
     })
     .returning()
@@ -228,4 +232,26 @@ export async function saveAppProductDoc(
   });
 
   onDocContentSaved({ id: doc.id, docType, content: trimmed });
+}
+
+/** Stable docs-library identity for a per-repository generated SDD. */
+export function generatedRepoSddExternalId(repoId: string): string {
+  return `repo-sdd:${repoId}`;
+}
+
+/**
+ * Mirrors a per-repository SDD into the app docs library so it is chunked
+ * for hybrid semantic search. Git remains the source of truth; this copy
+ * exists for retrieval (draft, like the other generated product docs).
+ */
+export async function saveGeneratedRepoSddDoc(
+  appId: string,
+  repo: { id: string | null; name: string },
+  content: string,
+  actor: string
+): Promise<void> {
+  if (!repo.id) return;
+  await saveAppProductDoc(appId, "sdd", content, actor, `SDD — ${repo.name}`, {
+    externalId: generatedRepoSddExternalId(repo.id),
+  });
 }

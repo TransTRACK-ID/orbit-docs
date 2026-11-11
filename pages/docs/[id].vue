@@ -5,7 +5,7 @@ import type { DocVersion } from "~/composables/useDocs";
 import { slugify } from "~/utils/nav-client";
 import type { AdrStatus } from "~/types/adr";
 import { ADR_STATUSES } from "~/types/adr";
-import { isAdrDoc as checkIsAdrDoc, isWikiDoc as checkIsWikiDoc } from "~/utils/doc-display";
+import { isAdrDoc as checkIsAdrDoc, isWikiDoc as checkIsWikiDoc, isSemanticIndexableDocType } from "~/utils/doc-display";
 import { isForbiddenWikiDocStatus } from "~/utils/wiki-content";
 import { setVideoToolBridge } from "~/components/editorjs/videoBridge";
 import type { TranscriptSegment, VideoBlockData } from "~/utils/video-block";
@@ -203,10 +203,9 @@ let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 const isPublished = computed(() => editorStatus.value === "published");
 
-const showEmbeddingPanel = computed(() => {
-  const docType = currentDoc.value?.docType;
-  return docType === "feature" || docType === "sdd" || docType === "wiki";
-});
+const showEmbeddingPanel = computed(() =>
+  isSemanticIndexableDocType(currentDoc.value?.docType)
+);
 
 const embeddingStatusLabel = computed(() => {
   if (!embeddingStatus.value) return "Checking…";
