@@ -80,6 +80,24 @@ See [`.env.example`](.env.example) for the full list. Key variables:
 
 `API_BASE_URL` is optional — it enables forwarding auth to an external API. For self-hosted deployments, local database authentication is the default.
 
+## Reliability & Operations
+
+The server is hardened against the "process alive but API pending forever" failure mode, where exhausted resources wedge every request until a manual restart:
+
+- **DB pool bounds** (`server/database/index.ts`) — every pool wait and query is time-bounded, so failures surface as fast 500s instead of hanging requests: `DB_POOL_MAX` (20), `DB_CONNECTION_TIMEOUT_MS` (10s), `DB_STATEMENT_TIMEOUT_MS` (120s, `0` disables), `DB_IDLE_TIMEOUT_MS` (30s), `DB_IDLE_IN_TRANSACTION_TIMEOUT_MS` (60s). See [`.env.example`](.env.example).
+- **Health probe** — `GET /api/health` exercises the DB pool and returns pool stats (`total`/`idle`/`waiting`) plus process memory. The Docker image ships a `HEALTHCHECK` against it, and caps the Node heap (`NODE_OPTIONS=--max-old-space-size=2048`) so a leak becomes a restartable OOM exit instead of an unresponsive process.
+- **Auto-restart** — all compose files include an `autoheal` service ([willfarrell/docker-autoheal](https://github.com/willfarrell/docker-autoheal)) that restarts the app container when its healthcheck turns `unhealthy`. Run **exactly one** autoheal per host: if one host runs multiple stacks, remove it from the stacks and run a single standalone instance.
+- **Bounded in-memory state** — MCP session event stores are capped and sessions idle longer than `MCP_SESSION_IDLE_TTL_MS` (default 30 min) are closed; expired sessions return `404` so clients re-initialize.
+- **Agent subprocesses** — doc generation runs one job per app+scope at a time (duplicate requests get `409`), and Cursor/Opencode subprocesses are force-killed on abort/timeout so stuck runs cannot accumulate.
+
+Diagnosing a wedged instance:
+
+```bash
+docker ps        # app should show "(healthy)"; check `docker logs autoheal` for restarts
+curl -s localhost:3000/api/health   # sustained db.waiting > 0 = pool contention
+docker stats     # memory creeping for days = leak; check for orphan cursor-agent/opencode processes
+```
+
 ## Development
 
 ```bash

@@ -4,8 +4,15 @@ import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 /**
  * Simple in-memory EventStore for Streamable HTTP resumability.
  * Suitable for single-instance deployments; use persistent storage for multi-node.
+ *
+ * Bounded: every stored event retains its full JSON-RPC message (tool results
+ * can be entire documents), so an unbounded store grows process memory for
+ * the lifetime of every session. Keep only the most recent MAX_EVENTS —
+ * resumability only needs a short replay window; older events are evicted
+ * and a client replaying from an evicted id simply gets no replay.
  */
 export class InMemoryEventStore implements EventStore {
+  private static readonly MAX_EVENTS = 500;
   private events = new Map<EventId, { streamId: StreamId; message: JSONRPCMessage }>();
 
   private generateEventId(streamId: StreamId): EventId {
@@ -19,6 +26,12 @@ export class InMemoryEventStore implements EventStore {
   async storeEvent(streamId: StreamId, message: JSONRPCMessage): Promise<EventId> {
     const eventId = this.generateEventId(streamId);
     this.events.set(eventId, { streamId, message });
+    // Map iteration order is insertion order — evict oldest first.
+    while (this.events.size > InMemoryEventStore.MAX_EVENTS) {
+      const oldest = this.events.keys().next().value;
+      if (oldest === undefined) break;
+      this.events.delete(oldest);
+    }
     return eventId;
   }
 

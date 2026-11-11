@@ -17,6 +17,48 @@ import {
 import { InMemoryEventStore } from "~/server/utils/mcp-event-store";
 import { isMcpOAuthEnabled, getProtectedResourceMetadataUrl } from "~/server/utils/mcp-oauth/config";
 
+/**
+ * MCP session expiry. Streamable HTTP sessions are resumable by design, so a
+ * client that simply disappears (closed laptop, killed agent) never sends
+ * DELETE and its transport, McpServer instance, event store, and principal
+ * binding stay in `transports` forever — unbounded memory growth across
+ * every agent connection the server ever serves. Track last activity per
+ * session and close sessions idle beyond the TTL; clients re-initialize.
+ */
+const SESSION_IDLE_TTL_MS = (() => {
+  const parsed = Number(process.env.MCP_SESSION_IDLE_TTL_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30 * 60 * 1000;
+})();
+const sessionLastSeenAt = new Map<string, number>();
+let sessionSweeperStarted = false;
+
+export function trackMcpSessionActivity(sessionId: string): void {
+  sessionLastSeenAt.set(sessionId, Date.now());
+  if (!sessionSweeperStarted) {
+    sessionSweeperStarted = true;
+    const sweeper = setInterval(async () => {
+      const now = Date.now();
+      for (const [sid, lastSeen] of sessionLastSeenAt) {
+        if (now - lastSeen <= SESSION_IDLE_TTL_MS) continue;
+        sessionLastSeenAt.delete(sid);
+        const transport = transports[sid];
+        delete transports[sid];
+        delete mcpSessionPrincipals[sid];
+        try {
+          await transport?.close?.();
+        } catch {
+          // Already removed from every map; a failed close must not leak back.
+        }
+      }
+    }, 5 * 60 * 1000);
+    sweeper.unref?.();
+  }
+}
+
+export function stopTrackingMcpSession(sessionId: string): void {
+  sessionLastSeenAt.delete(sessionId);
+}
+
 export async function assertMcpAuth(event: H3Event): Promise<McpPrincipal> {
   const authHeader = getHeader(event, "authorization");
   const apiKeyHeader = getHeader(event, "x-api-key");
@@ -96,6 +138,7 @@ export async function handleStreamableHttpRequest(event: H3Event, parsedBody?: u
   let transport: StreamableHTTPServerTransport;
 
   if (sessionId && transports[sessionId]) {
+    trackMcpSessionActivity(sessionId);
     const existing = transports[sessionId];
     if (!(existing instanceof StreamableHTTPServerTransport)) {
       sendJsonRpcError(res, 400, "Bad Request: Session exists but uses a different transport protocol");
@@ -110,6 +153,7 @@ export async function handleStreamableHttpRequest(event: H3Event, parsedBody?: u
       onsessioninitialized: (sid) => {
         transports[sid] = transport;
         mcpSessionPrincipals[sid] = principalFingerprint(principal);
+        trackMcpSessionActivity(sid);
       },
     });
 
@@ -120,11 +164,17 @@ export async function handleStreamableHttpRequest(event: H3Event, parsedBody?: u
       }
       if (sid) {
         delete mcpSessionPrincipals[sid];
+        stopTrackingMcpSession(sid);
       }
     };
 
     const mcpServer = await createMcpServer(principal);
     await mcpServer.connect(transport);
+  } else if (sessionId) {
+    // Unknown/expired session (idle sessions are reaped after the TTL).
+    // 404 per MCP spec: the client must start a new session with Initialize.
+    sendJsonRpcError(res, 404, "Session not found or expired");
+    return;
   } else {
     sendJsonRpcError(res, 400, "Bad Request: No valid session ID provided");
     return;

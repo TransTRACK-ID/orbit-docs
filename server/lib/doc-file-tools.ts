@@ -348,6 +348,7 @@ export async function grepDocs(
   }
 
   const client = await pool.connect();
+  let txError: unknown;
   let rows: Array<{ id: string; title: string; doc_type: string | null; content: string | null }>;
   try {
     await client.query("BEGIN");
@@ -363,10 +364,15 @@ export async function grepDocs(
     await client.query("COMMIT");
     rows = result.rows;
   } catch (err) {
-    await client.query("ROLLBACK");
+    txError = err;
+    // ROLLBACK on a dead connection rejects too — never let it mask the
+    // original error or skip the release below.
+    await client.query("ROLLBACK").catch(() => {});
     throw err;
   } finally {
-    client.release();
+    // release(err) destroys the client instead of returning a possibly
+    // broken/aborted connection to the pool for the next request to hang on.
+    client.release(txError instanceof Error ? txError : undefined);
   }
 
   const paths = await buildDocPathIndex(params.app);

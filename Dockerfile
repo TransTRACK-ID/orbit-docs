@@ -88,7 +88,20 @@ ENV NUXT_PORT=3000
 ENV HOME=/home/nodejs
 ENV ORBIT_REPO_DIR=/home/nodejs/.local/share/orbit-docs-repositories
 ENV PATH="/home/nodejs/.local/bin:/usr/local/bin:${PATH}"
+# Cap the V8 heap so a memory leak becomes a fast OOM exit (which
+# `restart: unless-stopped` recovers from automatically) instead of the
+# process swapping/GC-thrashing while alive-but-unresponsive. Agent
+# subprocesses (cursor-agent, opencode, git) have their own memory outside
+# this heap. Override via compose `environment: NODE_OPTIONS=...` if needed.
+ENV NODE_OPTIONS=--max-old-space-size=2048
 # OPENCODE_CONFIG_B64 is injected at runtime via docker-compose / .env
 # CURSOR_API_KEY is injected at runtime via docker-compose / .env when DOC_AGENT=cursor
+
+# /api/health exercises the DB pool, so a wedged (pool-exhausted) process
+# fails the probe and is marked unhealthy. Plain `docker compose` does not
+# restart unhealthy containers by itself — run willfarrell/docker-autoheal
+# (containers labeled autoheal=true) or Swarm/K8s to act on it.
+HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=3 \
+  CMD curl -fsS -m 12 "http://127.0.0.1:3000${NUXT_APP_BASE_URL%/}/api/health" || exit 1
 
 CMD ["node", ".output/server/index.mjs"]

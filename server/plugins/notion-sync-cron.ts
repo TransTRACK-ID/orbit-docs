@@ -12,7 +12,15 @@ import { runScheduledDocGenerations } from "~/server/lib/doc-generation-schedule
 import { runScheduledEmbeddingIndexes } from "~/server/lib/doc-embedding-schedule";
 
 export default defineNitroPlugin(() => {
+  // Reentrancy guard: a tick awaits full Notion syncs, scheduled doc
+  // generations, and embedding reindexes — all routinely longer than the
+  // 5-minute interval. Without this, ticks stack up concurrently, each
+  // spawning its own agent subprocesses and DB work until the process is
+  // memory/CPU saturated.
+  let tickInFlight = false;
   const tick = async () => {
+    if (tickInFlight) return;
+    tickInFlight = true;
     try {
       // A "running" status can outlive its process (restart/crash mid-sync).
       // Clear stale runs before anything else so manual and scheduled syncs recover.
@@ -37,6 +45,8 @@ export default defineNitroPlugin(() => {
       await runScheduledEmbeddingIndexes();
     } catch (err: any) {
       console.warn("[sync-cron]", err?.message || err);
+    } finally {
+      tickInFlight = false;
     }
   };
 

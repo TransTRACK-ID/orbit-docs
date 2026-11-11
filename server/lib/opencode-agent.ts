@@ -271,12 +271,19 @@ export function createOpencodeAgent() {
             for (const fn of abortHandlers.splice(0)) {
               try { fn(); } catch { /* noop */ }
             }
-            if (sessionId) {
-              try {
-                await client.session.delete({ path: { id: sessionId } });
-              } catch { /* non-fatal */ }
+            try {
+              if (sessionId) {
+                // Bounded: against a hung opencode server this delete never
+                // resolves, which previously meant close() below never ran
+                // and the spawned server process leaked per stuck run.
+                await Promise.race([
+                  client.session.delete({ path: { id: sessionId } }),
+                  new Promise((resolve) => setTimeout(resolve, 5_000).unref?.()),
+                ]).catch(() => { /* non-fatal */ });
+              }
+            } finally {
+              close();
             }
-            close();
           };
 
           try {

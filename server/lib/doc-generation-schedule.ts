@@ -91,7 +91,10 @@ async function appHasRepositories(appId: string, legacyRepoUrl: string | null) {
   return repos.length > 0 || !!legacyRepoUrl;
 }
 
-async function hasPendingProductJob(appId: string) {
+export async function hasPendingDocGenerationJob(
+  appId: string,
+  scope: "product" | "wiki" | "repo"
+) {
   const db = getDb();
   const pending = await db
     .select({ id: docGenerationJobs.id })
@@ -99,13 +102,17 @@ async function hasPendingProductJob(appId: string) {
     .where(
       and(
         eq(docGenerationJobs.appId, appId),
-        eq(docGenerationJobs.scope, "product"),
+        eq(docGenerationJobs.scope, scope),
         notInArray(docGenerationJobs.status, [...TERMINAL_JOB_STATUSES])
       )
     )
     .limit(1)
     .then((rows) => rows[0]);
-  return !!pending;
+  return pending?.id ?? null;
+}
+
+async function hasPendingProductJob(appId: string) {
+  return !!(await hasPendingDocGenerationJob(appId, "product"));
 }
 
 async function resolveScheduleActorUserId() {

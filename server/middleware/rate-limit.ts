@@ -53,7 +53,8 @@ function incrementRateLimit(key: string): void {
   }
 }
 
-// Periodic cleanup of expired entries
+// Periodic cleanup of expired entries. unref so this timer alone never
+// keeps the process alive during shutdown.
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of rateLimitStore.entries()) {
@@ -61,7 +62,7 @@ setInterval(() => {
       rateLimitStore.delete(key);
     }
   }
-}, CLEANUP_INTERVAL_MS);
+}, CLEANUP_INTERVAL_MS).unref?.();
 
 export default defineEventHandler((event) => {
   const path = event.path || '';

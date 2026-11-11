@@ -1,7 +1,7 @@
 import { defineEventHandler, getQuery, createError, readBody } from "h3";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { transports } from "~/server/utils/mcp-server";
-import { assertMcpAuth, assertSessionPrincipal } from "~/server/utils/mcp-streamable-http";
+import { assertMcpAuth, assertSessionPrincipal, trackMcpSessionActivity } from "~/server/utils/mcp-streamable-http";
 
 export default defineEventHandler(async (event) => {
   const principal = await assertMcpAuth(event);
@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
   }
 
   assertSessionPrincipal(sessionId, principal);
+  trackMcpSessionActivity(sessionId);
 
   if (!(transport instanceof SSEServerTransport)) {
     throw createError({

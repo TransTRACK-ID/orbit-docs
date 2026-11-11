@@ -23,9 +23,28 @@ export default defineEventHandler(async (event) => {
   event.node.res.setHeader("Cache-Control", "no-cache");
   event.node.res.setHeader("Connection", "keep-alive");
 
+  // Only the fields serializeJob emits. A bare select() also hauls
+  // srs_content / fsd_content / sdd_content / git_snapshot_content
+  // (potentially MBs) out of Postgres on every 1s poll per viewer.
+  const jobFields = {
+    appId: docGenerationJobs.appId,
+    status: docGenerationJobs.status,
+    progressPct: docGenerationJobs.progressPct,
+    progressMessage: docGenerationJobs.progressMessage,
+    repoRef: docGenerationJobs.repoRef,
+    completedAt: docGenerationJobs.completedAt,
+    errorMessage: docGenerationJobs.errorMessage,
+    currentActivity: docGenerationJobs.currentActivity,
+    partialContent: docGenerationJobs.partialContent,
+    lastEventAt: docGenerationJobs.lastEventAt,
+    tokensInput: docGenerationJobs.tokensInput,
+    tokensOutput: docGenerationJobs.tokensOutput,
+    opencodeSessionId: docGenerationJobs.opencodeSessionId,
+  };
+
   // Send initial data
   const job = await db
-    .select()
+    .select(jobFields)
     .from(docGenerationJobs)
     .where(eq(docGenerationJobs.id, jobId))
     .limit(1)
@@ -74,7 +93,7 @@ export default defineEventHandler(async (event) => {
   const interval = setInterval(async () => {
     try {
       const updated = await db
-        .select()
+        .select(jobFields)
         .from(docGenerationJobs)
         .where(eq(docGenerationJobs.id, jobId))
         .limit(1)

@@ -6,7 +6,7 @@ import {
   transports,
 } from "~/server/utils/mcp-server";
 import { principalFingerprint } from "~/server/utils/mcp-principal";
-import { assertMcpAuth, assertSessionPrincipal, handleStreamableHttpRequest } from "~/server/utils/mcp-streamable-http";
+import { assertMcpAuth, assertSessionPrincipal, handleStreamableHttpRequest, stopTrackingMcpSession, trackMcpSessionActivity } from "~/server/utils/mcp-streamable-http";
 
 export default defineEventHandler(async (event) => {
   const principal = await assertMcpAuth(event);
@@ -32,11 +32,14 @@ export default defineEventHandler(async (event) => {
   const transport = new SSEServerTransport(messagePath, res);
   transports[transport.sessionId] = transport;
   mcpSessionPrincipals[transport.sessionId] = principalFingerprint(principal);
+  trackMcpSessionActivity(transport.sessionId);
 
-  // Clean up on close
+  // Clean up on close; the idle-session sweeper in mcp-streamable-http is the
+  // backstop for half-open connections whose 'close' never fires.
   res.on("close", () => {
     delete transports[transport.sessionId];
     delete mcpSessionPrincipals[transport.sessionId];
+    stopTrackingMcpSession(transport.sessionId);
   });
 
   // Create a new MCP server instance for this connection, scoped to the caller

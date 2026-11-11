@@ -168,6 +168,7 @@ export async function indexDocChunks(docId: string): Promise<IndexDocChunksResul
   const now = new Date();
   const embeddingModel = getEmbeddingModelName();
   const client = await pool.connect();
+  let txError: unknown;
   try {
     await client.query("BEGIN");
     await client.query("DELETE FROM doc_chunks WHERE doc_id = $1", [row.id]);
@@ -194,10 +195,15 @@ export async function indexDocChunks(docId: string): Promise<IndexDocChunksResul
     }
     await client.query("COMMIT");
   } catch (err) {
-    await client.query("ROLLBACK");
+    txError = err;
+    // ROLLBACK on a dead connection rejects too — never let it mask the
+    // original error or skip the release below.
+    await client.query("ROLLBACK").catch(() => {});
     throw err;
   } finally {
-    client.release();
+    // release(err) destroys the client instead of returning a possibly
+    // broken/aborted connection to the pool for the next request to hang on.
+    client.release(txError instanceof Error ? txError : undefined);
   }
 
   return { indexed: chunks.length, skipped: false };

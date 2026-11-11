@@ -11,6 +11,13 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       POSTGRES_URL: ${DATABASE_URL}
+      # DB pool hardening (see server/database/index.ts) — empty = built-in defaults
+      DB_POOL_MAX: ${DB_POOL_MAX:-}
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-}
+      DB_STATEMENT_TIMEOUT_MS: ${DB_STATEMENT_TIMEOUT_MS:-}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-}
+      DB_IDLE_IN_TRANSACTION_TIMEOUT_MS: ${DB_IDLE_IN_TRANSACTION_TIMEOUT_MS:-}
+      MCP_SESSION_IDLE_TTL_MS: ${MCP_SESSION_IDLE_TTL_MS:-}
       APP_KEY: ${APP_KEY}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
@@ -49,6 +56,24 @@ services:
       - orbit-docs-repositories:/home/nodejs/.local/share/orbit-docs-repositories
     networks:
       - orbit-network
+    labels:
+      # Lets willfarrell/docker-autoheal restart this container when the
+      # Dockerfile HEALTHCHECK (/api/health) reports unhealthy.
+      - "autoheal=true"
+      - "autoheal.stop.timeout=30"
+
+  # Restarts `application` when its HEALTHCHECK (/api/health) goes unhealthy.
+  # Run exactly ONE autoheal per host — if this host runs multiple stacks,
+  # delete it here and run a single standalone instance instead (see below).
+  autoheal:
+    image: willfarrell/docker-autoheal:latest
+    container_name: autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: "15"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   orbit-docs-repositories:

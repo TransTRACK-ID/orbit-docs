@@ -188,17 +188,36 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
         let exitCode: number | null = null;
         let stdoutEnded = false;
 
+        // SIGTERM, then SIGKILL if the process is still alive 5s later.
+        // NOTE: `proc.killed` only means a signal was sent, not that the
+        // process exited — the previous escalation checked `!proc.killed`
+        // right after SIGTERM, so SIGKILL never fired and a cursor-agent
+        // that ignored SIGTERM (or whose grandchildren held stdout open)
+        // hung analyze() forever, leaking the child process.
+        const killProc = () => {
+          try {
+            proc.kill("SIGTERM");
+          } catch {
+            /* noop */
+          }
+          setTimeout(() => {
+            if (exitCode === null) {
+              try {
+                proc.kill("SIGKILL");
+              } catch {
+                /* noop */
+              }
+            }
+          }, 5000).unref?.();
+        };
+
         const finishEarly = (finalText?: string) => {
           if (settled) return;
           settled = true;
           if (finalText !== undefined) {
             finalResult = finalText;
           }
-          try {
-            proc.kill("SIGTERM");
-          } catch {
-            /* noop */
-          }
+          killProc();
           resolve(finalResult || accumulated);
         };
 
@@ -368,7 +387,10 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
           onDebugEvent?.({ type: "cursor.stderr", payload: { text } });
         });
         proc.on("error", (err) => {
-          reject(new Error(`Cursor agent failed to start: ${err.message}`));
+          if (!settled) {
+            settled = true;
+            reject(new Error(`Cursor agent failed to start: ${err.message}`));
+          }
         });
 
         proc.on("exit", (code) => {
@@ -399,10 +421,20 @@ export function createCursorAgent(opts: CursorAgentOptions = {}) {
         }
         if (signal) {
           const onAbort = () => {
-            proc.kill("SIGTERM");
+            killProc();
+            // checkDone() needs BOTH exit and stdout 'end'; a grandchild
+            // inheriting stdout can delay 'end' indefinitely even after the
+            // child dies. Force-settle so an aborted run always unwinds and
+            // releases its timers, pipes, and DB flush loops.
             setTimeout(() => {
-              if (!proc.killed) proc.kill("SIGKILL");
-            }, 5000);
+              if (!settled) {
+                settled = true;
+                proc.stdin.destroy();
+                proc.stdout.destroy();
+                proc.stderr.destroy();
+                reject(new Error("Generation cancelled"));
+              }
+            }, 10_000).unref?.();
           };
           if (signal.aborted) {
             onAbort();

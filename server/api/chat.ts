@@ -221,7 +221,13 @@ export default defineEventHandler(async (event) => {
 
   const agent = createChatAgent();
   const prompt = buildChatPrompt(systemPrompt, chatMessages);
-  const abortSignal = (event.node.req as { abortSignal?: AbortSignal }).abortSignal;
+  // h3/Node IncomingMessage has no `abortSignal` property, so the previous
+  // `(req as { abortSignal }).abortSignal` was always undefined: closing the
+  // chat tab never aborted the agent, which kept running (subprocess +
+  // tokens) to completion in the background. Drive a real AbortController
+  // from the response closing.
+  const abortController = new AbortController();
+  const abortSignal = abortController.signal;
 
   startPlainTextStream(event);
 
@@ -229,6 +235,7 @@ export default defineEventHandler(async (event) => {
     const res = event.node.res;
 
     const onClose = () => {
+      abortController.abort();
       resolve();
     };
     res.on("close", onClose);

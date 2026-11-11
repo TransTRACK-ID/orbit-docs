@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
 import { generateProductDocs, generateWikiDocs, updateJobProgress } from "~/server/lib/doc-generator";
 import { assertDocAgentReady } from "~/server/lib/agent-readiness";
+import { hasPendingDocGenerationJob } from "~/server/lib/doc-generation-schedule";
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event);
@@ -55,6 +56,20 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event).catch(() => ({}));
   const cursorModel = body?.cursorModel;
   const scope = body?.scope === "wiki" ? "wiki" : "product";
+
+  // Each generation spawns a full agent (opencode server / cursor-agent
+  // process tree) in-process. The scheduled path already refuses to stack
+  // runs for the same app; manual clicks previously did not, so repeated
+  // clicks piled up concurrent agent processes until memory pressure wedged
+  // the server. One active run per app+scope.
+  const pendingJobId = await hasPendingDocGenerationJob(appId, scope);
+  if (pendingJobId) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: "Conflict",
+      message: `A ${scope} doc generation is already running for this app (job ${pendingJobId}). Wait for it to finish or cancel it first.`,
+    });
+  }
 
   const job = await db
     .insert(docGenerationJobs)
