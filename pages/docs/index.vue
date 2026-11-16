@@ -833,7 +833,8 @@ watch(knowledgeDocs, () => {
           </template>
           <template v-if="embeddingScheduleSettings.lastRunResult">
             · {{ embeddingScheduleSettings.lastRunResult.indexed }} indexed,
-            {{ embeddingScheduleSettings.lastRunResult.candidates }} candidates
+            {{ embeddingScheduleSettings.lastRunResult.candidates }} candidates<template v-if="embeddingScheduleSettings.lastRunResult.failed > 0">,
+            {{ embeddingScheduleSettings.lastRunResult.failed }} failed</template>
           </template>
         </div>
 

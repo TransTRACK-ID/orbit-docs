@@ -1,10 +1,11 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull, lt, ne, or } from "drizzle-orm";
 import { getDb } from "~/server/database";
 import { docEmbeddingSchedule } from "~/server/database/schema/doc-embedding-schedule";
 import {
   isEmbeddingConfigured,
   isSemanticSearchEnabled,
   reindexPendingAndStaleDocEmbeddings,
+  type ReindexPendingAndStaleResult,
 } from "~/server/lib/doc-embeddings";
 import {
   getWorkspaceSyncSchedule,
@@ -80,56 +81,100 @@ export async function updateDocEmbeddingSchedule(appId: string, scheduleEnabled:
   return getDocEmbeddingSchedulePublic(appId);
 }
 
-export async function runScheduledEmbeddingIndexForApp(appId: string): Promise<boolean> {
+/**
+ * A run heartbeats `updatedAt` after every doc; older than this means its
+ * process died mid-run (restart/crash) and the slot can be reclaimed.
+ */
+export const EMBEDDING_INDEX_RUN_STALE_MS = 30 * 60 * 1000;
+
+export interface EmbeddingIndexRun {
+  /** Settles when the run ends; never rejects. Resolves true on success. */
+  done: Promise<boolean>;
+}
+
+/**
+ * Atomically claims the app's run slot and starts indexing in the background.
+ * Returns null when indexing is disabled/unconfigured or a live run holds the slot.
+ */
+export async function startEmbeddingIndexRun(appId: string): Promise<EmbeddingIndexRun | null> {
   if (!isSemanticSearchEnabled() || !isEmbeddingConfigured()) {
-    return false;
+    return null;
   }
 
   const db = getDb();
   const scheduleRow = await getDocEmbeddingScheduleRow(appId);
-
-  if (scheduleRow.lastRunStatus === "running") {
-    return false;
-  }
-
-  await db
+  const now = new Date();
+  const claimed = await db
     .update(docEmbeddingSchedule)
     .set({
-      lastRunAt: new Date(),
+      lastRunAt: now,
       lastRunStatus: "running",
-      updatedAt: new Date(),
+      lastRunResult: null,
+      updatedAt: now,
     })
-    .where(eq(docEmbeddingSchedule.id, scheduleRow.id));
+    .where(
+      and(
+        eq(docEmbeddingSchedule.id, scheduleRow.id),
+        or(
+          ne(docEmbeddingSchedule.lastRunStatus, "running"),
+          isNull(docEmbeddingSchedule.updatedAt),
+          lt(
+            docEmbeddingSchedule.updatedAt,
+            new Date(now.getTime() - EMBEDDING_INDEX_RUN_STALE_MS),
+          ),
+        ),
+      ),
+    )
+    .returning({ id: docEmbeddingSchedule.id });
+
+  if (claimed.length === 0) {
+    return null;
+  }
+
+  return {
+    done: executeEmbeddingIndexRun(appId).catch((error) => {
+      console.error(`[doc-embedding-schedule] app ${appId}: could not record run outcome:`, error);
+      return false;
+    }),
+  };
+}
+
+async function executeEmbeddingIndexRun(appId: string): Promise<boolean> {
+  const db = getDb();
+  const startedAt = Date.now();
+  // Cast keeps TS from narrowing to `null`; the closure below assigns it.
+  let progress = null as ReindexPendingAndStaleResult | null;
+  console.log(`[doc-embedding-schedule] app ${appId}: run started`);
 
   try {
-    const result = await reindexPendingAndStaleDocEmbeddings(appId);
-    const lastRunResult = {
-      ...result,
-      finishedAt: new Date().toISOString(),
-    };
+    const result = await reindexPendingAndStaleDocEmbeddings(appId, async (latest) => {
+      progress = latest;
+      await db
+        .update(docEmbeddingSchedule)
+        .set({ updatedAt: new Date() })
+        .where(eq(docEmbeddingSchedule.appId, appId));
+    });
 
     await db
       .update(docEmbeddingSchedule)
       .set({
-        lastRunStatus: "success",
-        lastRunResult,
+        lastRunStatus: result.failed > 0 ? "error" : "success",
+        lastRunResult: { ...result, finishedAt: new Date().toISOString() },
         updatedAt: new Date(),
       })
       .where(eq(docEmbeddingSchedule.appId, appId));
 
-    if (result.candidates > 0) {
-      console.log(
-        `[doc-embedding-schedule] app ${appId}: indexed=${result.indexed} failed=${result.failed} candidates=${result.candidates}`,
-      );
-    }
-
-    return true;
+    console.log(
+      `[doc-embedding-schedule] app ${appId}: finished in ${Date.now() - startedAt}ms indexed=${result.indexed} failed=${result.failed} skipped=${result.skipped} candidates=${result.candidates}`,
+    );
+    return result.failed === 0;
   } catch (error) {
     console.error(`[doc-embedding-schedule] app ${appId} failed:`, error);
     await db
       .update(docEmbeddingSchedule)
       .set({
         lastRunStatus: "error",
+        lastRunResult: progress ? { ...progress, finishedAt: new Date().toISOString() } : null,
         updatedAt: new Date(),
       })
       .where(eq(docEmbeddingSchedule.appId, appId));
@@ -150,14 +195,14 @@ export async function runScheduledEmbeddingIndexes(): Promise<void> {
     .select({
       appId: docEmbeddingSchedule.appId,
       lastRunAt: docEmbeddingSchedule.lastRunAt,
-      lastRunStatus: docEmbeddingSchedule.lastRunStatus,
     })
     .from(docEmbeddingSchedule)
     .where(eq(docEmbeddingSchedule.scheduleEnabled, true));
 
+  // Sequential on purpose: one app at a time keeps load on the embedding endpoint bounded.
   for (const row of rows) {
-    if (row.lastRunStatus === "running") continue;
     if (!isSyncIntervalDue(row.lastRunAt, workspaceSchedule.interval)) continue;
-    await runScheduledEmbeddingIndexForApp(row.appId);
+    const run = await startEmbeddingIndexRun(row.appId);
+    await run?.done;
   }
 }

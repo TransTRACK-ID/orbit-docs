@@ -519,8 +519,9 @@ export async function rebuildDocEmbeddings(
       const result = await indexDocChunks(row.id);
       if (result.skipped) skipped += 1;
       else indexed += 1;
-    } catch {
+    } catch (err) {
       failed += 1;
+      console.error(`[doc-embed] rebuild failed for doc ${row.id}:`, err);
     }
   }
 
@@ -549,9 +550,18 @@ export interface ReindexPendingAndStaleResult {
   failed: number;
 }
 
-/** Index only docs that are pending or stale (efficient scheduled catch-up). */
+/** Consecutive doc failures after which a catch-up run treats the embedding endpoint as down. */
+const MAX_CONSECUTIVE_REINDEX_FAILURES = 3;
+
+/**
+ * Index only docs that are pending or stale (efficient scheduled catch-up).
+ * `onProgress` runs after every candidate doc. Throws once
+ * MAX_CONSECUTIVE_REINDEX_FAILURES docs fail in a row, so a dead endpoint
+ * costs a few timeouts instead of one per doc.
+ */
 export async function reindexPendingAndStaleDocEmbeddings(
   appId: string,
+  onProgress?: (progress: ReindexPendingAndStaleResult) => Promise<void>,
 ): Promise<ReindexPendingAndStaleResult> {
   if (!isSemanticSearchEnabled() || !isEmbeddingConfigured()) {
     return { candidates: 0, indexed: 0, skipped: 0, failed: 0 };
@@ -573,6 +583,7 @@ export async function reindexPendingAndStaleDocEmbeddings(
   let indexed = 0;
   let skipped = 0;
   let failed = 0;
+  let consecutiveFailures = 0;
 
   for (const row of rows) {
     const status = await getDocEmbeddingStatus(row.id);
@@ -586,9 +597,20 @@ export async function reindexPendingAndStaleDocEmbeddings(
       const result = await indexDocChunks(row.id);
       if (result.skipped) skipped += 1;
       else indexed += 1;
-    } catch {
+      consecutiveFailures = 0;
+    } catch (err) {
       failed += 1;
+      consecutiveFailures += 1;
+      console.error(`[doc-embed] reindex failed for doc ${row.id} (app ${appId}):`, err);
+      if (consecutiveFailures >= MAX_CONSECUTIVE_REINDEX_FAILURES) {
+        await onProgress?.({ candidates, indexed, skipped, failed });
+        const reason = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `Aborted after ${consecutiveFailures} consecutive embedding failures (last: ${reason})`,
+        );
+      }
     }
+    await onProgress?.({ candidates, indexed, skipped, failed });
   }
 
   return { candidates, indexed, skipped, failed };

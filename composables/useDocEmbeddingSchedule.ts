@@ -20,11 +20,17 @@ export interface DocEmbeddingScheduleSettings {
   hasApiKey: boolean;
 }
 
+const RUN_POLL_INTERVAL_MS = 3000;
+
 export function useDocEmbeddingSchedule(appId: MaybeRef<string>) {
   const settings = ref<DocEmbeddingScheduleSettings | null>(null);
   const isLoading = ref(false);
   const isSaving = ref(false);
   const isRunning = ref(false);
+  let disposed = false;
+  onScopeDispose(() => {
+    disposed = true;
+  });
 
   async function fetchSchedule() {
     const id = unref(appId);
@@ -97,9 +103,34 @@ export function useDocEmbeddingSchedule(appId: MaybeRef<string>) {
 
     isRunning.value = true;
     try {
-      await $fetch(`/api/apps/${id}/embedding-schedule/run`, { method: "POST" });
-      await fetchSchedule();
-      toast.success("Semantic index run finished");
+      const { data } = await $fetch<{ data: DocEmbeddingScheduleSettings }>(
+        `/api/apps/${id}/embedding-schedule/run`,
+        { method: "POST" },
+      );
+      settings.value = data;
+
+      // The server indexes in the background; poll until the run settles.
+      let latest = data;
+      while (latest.lastRunStatus === "running" && !disposed && unref(appId) === id) {
+        const tick = Promise.withResolvers<void>();
+        setTimeout(tick.resolve, RUN_POLL_INTERVAL_MS);
+        await tick.promise;
+        ({ data: latest } = await $fetch<{ data: DocEmbeddingScheduleSettings }>(
+          `/api/apps/${id}/embedding-schedule`,
+        ));
+        if (unref(appId) === id) settings.value = latest;
+      }
+
+      if (latest.lastRunStatus === "error") {
+        const failed = latest.lastRunResult?.failed ?? 0;
+        toast.error(
+          failed > 0
+            ? `Semantic index run failed for ${failed} doc(s); see server logs`
+            : "Semantic index run failed; see server logs",
+        );
+      } else if (latest.lastRunStatus !== "running") {
+        toast.success("Semantic index run finished");
+      }
     } catch (e: any) {
       toast.error(e?.data?.message || "Couldn't run the semantic index");
       throw e;
