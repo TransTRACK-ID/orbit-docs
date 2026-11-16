@@ -3,19 +3,11 @@ import { getDb } from "~/server/database";
 import { teamMembers } from "~/server/database/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth, getAuthUser, type SessionUser } from "./auth";
+import { loadRoles } from "./roles";
+import { roleLevel } from "~/server/lib/permissions";
+import type { RoleDefinition } from "~/types/permissions";
 
-export type TeamRole = "admin" | "product_manager" | "tech_writer" | "viewer";
-
-const ROLE_LEVELS: Record<TeamRole, number> = {
-  admin: 3,
-  product_manager: 2,
-  tech_writer: 1,
-  viewer: 0,
-};
-
-export function getRoleLevel(role: TeamRole): number {
-  return ROLE_LEVELS[role] ?? 0;
-}
+export type TeamRole = string;
 
 /**
  * Format a timestamp into a human-readable relative time string.
@@ -101,7 +93,7 @@ export async function getMemberForUser(user: Pick<SessionUser, "id" | "email">) 
  */
 export async function requireTeamAccess(
   event: H3Event,
-  minRole: TeamRole = "viewer"
+  minRole: string = "viewer"
 ): Promise<SessionUser> {
   const user = await requireAuth(event);
   const member = await getCurrentMember(event);
@@ -114,8 +106,10 @@ export async function requireTeamAccess(
     });
   }
 
-  const userLevel = getRoleLevel(member.role as TeamRole);
-  const requiredLevel = getRoleLevel(minRole);
+  const roles = await loadRoles();
+  const userLevel = roleLevel(roles, member.role as string);
+  const requiredLevel =
+    roles.find((r) => r.slug === minRole)?.level ?? Number.MAX_SAFE_INTEGER;
 
   if (userLevel < requiredLevel) {
     throw createError({
@@ -132,8 +126,11 @@ export async function requireTeamAccess(
  * Check if a team member role can manage (invite/update/delete) other members.
  * Admins and Product Managers can manage members.
  */
-export function canManageMembers(role: TeamRole): boolean {
-  return getRoleLevel(role) >= getRoleLevel("product_manager");
+export function canManageMembers(role: string, roles: RoleDefinition[]): boolean {
+  return (
+    roleLevel(roles, role) >=
+    (roles.find((r) => r.slug === "product_manager")?.level ?? Number.MAX_SAFE_INTEGER)
+  );
 }
 
 /**
@@ -141,13 +138,19 @@ export function canManageMembers(role: TeamRole): boolean {
  * Admin can invite any role.
  * Product Manager can invite tech_writer and viewer.
  */
-export function canInviteRole(inviterRole: TeamRole, targetRole: TeamRole): boolean {
-  const inviterLevel = getRoleLevel(inviterRole);
-  const targetLevel = getRoleLevel(targetRole);
-
-  if (inviterLevel >= getRoleLevel("admin")) return true;
-  if (inviterLevel >= getRoleLevel("product_manager")) {
-    return targetLevel < getRoleLevel("product_manager");
+export function canInviteRole(
+  inviterRole: string,
+  targetRole: string,
+  roles: RoleDefinition[]
+): boolean {
+  const inviterLevel = roleLevel(roles, inviterRole);
+  const adminLevel =
+    roles.find((r) => r.slug === "admin")?.level ?? Number.MAX_SAFE_INTEGER;
+  const pmLevel =
+    roles.find((r) => r.slug === "product_manager")?.level ?? Number.MAX_SAFE_INTEGER;
+  if (inviterLevel >= adminLevel) return true;
+  if (inviterLevel >= pmLevel) {
+    return roleLevel(roles, targetRole) < inviterLevel;
   }
   return false;
 }
@@ -175,7 +178,7 @@ export async function requireSuperAdminAccess(event: H3Event) {
 
 export interface EnsureTeamMemberOptions {
   /** Role assigned when creating a new member without a pending invitation. Defaults to viewer. */
-  role?: TeamRole;
+  role?: string;
 }
 
 /**

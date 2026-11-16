@@ -18,8 +18,8 @@ The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open p
 - **Health check endpoint** at `/health`
 
 > **In-app endpoint auth:** The Nuxt-hosted endpoint at `/api/mcp/connect` (shown on the **Settings → MCP Connection** page) supports two authentication modes:
-> - **Static API key** (`MCP_API_KEY`): If set, connections must authenticate with `Authorization: Bearer <key>` or `X-API-Key`. If unset, the endpoint is public.
-> - **OAuth 2.0 + PKCE** (`MCP_OAUTH_CLIENT_ID` / `MCP_OAUTH_CLIENT_SECRET`): If set, OAuth clients (Gemini Spark, etc.) can connect via the authorization code flow. See [OAuth 2.0 + PKCE](#oauth-20--pkce-authentication-gemini-spark--other-oauth-mcp-clients) below.
+> - **API keys** (`MCP_API_KEY` env key, or named keys created in **Settings → MCP Connection**): connections authenticate with `Authorization: Bearer <key>` or `X-API-Key`. Each key acts with its assigned role's permissions (the env key uses the seeded **MCP Service** role and can be deactivated or re-roled in Settings), limited to published content. If neither a key nor OAuth is configured, the endpoint is public with the MCP Service role.
+> - **OAuth 2.0 + PKCE** (`MCP_OAUTH_CLIENT_ID` / `MCP_OAUTH_CLIENT_SECRET`): If set, OAuth clients (Gemini Spark, etc.) can connect via the authorization code flow. See [OAuth 2.0 + PKCE](#oauth-20--pkce-authentication-gemini-spark--other-oauth-mcp-clients) below. The only accepted scope is `mcp:read`.
 >
 > The standalone server (`npm run mcp:start`) supports the same auth modes.
 - **Docker support** for easy deployment
@@ -360,18 +360,32 @@ alongside OAuth — you can use either or both.
 
 ### Who Sees What
 
+- Roles are managed in the database, not hardcoded: super admins create,
+  edit, and delete custom roles in **Settings → Access**, assign one role per
+  member in **Settings → Team**, and permission each role with the matrix on
+  the same page. Changes apply identically to the web app, the in-app MCP
+  endpoint, and the standalone MCP server.
+- The `mcp:access` permission ("Use MCP") gates MCP per role. It is on for
+  every built-in role by default; a role (or API key) without it cannot
+  connect via MCP, and OAuth consent is refused with an explanatory error.
 - Each tool requires the same read permission as its web counterpart
-  (`docs:read`, `apps:read`, `adrs:read`, …). A `viewer` calling a tool their
-  role forbids gets an explicit `forbidden` error naming the missing
-  permission.
-- Draft ADRs are hidden unless the user has `adrs:read` (admin by default);
-  everyone sees published ADRs — exactly like the web docs list.
-- Membership and role are re-checked from the database on every connection,
-  so removing a member, changing their role, or deactivating them takes
-  effect without waiting for token expiry.
-- The shared `MCP_API_KEY` acts as a **service principal**: read-only,
-  published content only, without draft counts that would leak unpublished
-  work.
+  (`docs:read`, `apps:read`, `adrs:read`, …). A caller whose role forbids a
+  tool gets an explicit `forbidden` error naming the missing permission, and
+  `tools/list` only advertises tools the caller may use.
+- Draft ADRs are hidden unless the user has `adrs:read`; everyone sees
+  published ADRs — exactly like the web docs list. This applies to
+  `grep_docs` and `ask_docs` retrieval as well as the ADR tools.
+- Membership, role, and key state are re-checked from the database on every
+  connection **and before every tool call**, so role changes, matrix edits,
+  removing a member, deactivating a key, or revoking `mcp:access` take
+  effect on the next tool call without waiting for token expiry or a
+  reconnect.
+- **API keys** act as service principals: the shared env `MCP_API_KEY` uses
+  the **MCP Service** role by default, and named keys (created in
+  **Settings → MCP Connection**, shown once at creation) each carry a role
+  chosen by a super admin. Keys are read-only and limited to published
+  content regardless of their role, without draft counts that would leak
+  unpublished work.
 - Users can disconnect apps anytime in **Settings → MCP Connection →
   Connected apps** (`GET`/`DELETE /api/oauth/grants`). Refresh tokens rotate
   single-use; replaying a consumed token revokes the whole family.

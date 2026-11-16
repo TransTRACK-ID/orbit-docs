@@ -2,8 +2,9 @@ import { defineEventHandler, createError, getRouterParam } from "h3";
 import { getDb } from "~/server/database";
 import { teamMembers } from "~/server/database/schema";
 import { eq, and } from "drizzle-orm";
-import { requireTeamAccess, getCurrentMember, canManageMembers } from "~/server/utils/team-access";
-import type { TeamRole } from "~/server/utils/team-access";
+import { requireTeamAccess, getCurrentMember } from "~/server/utils/team-access";
+import { loadRoles } from "~/server/utils/roles";
+import { roleLevel } from "~/server/lib/permissions";
 
 export default defineEventHandler(async (event) => {
   await requireTeamAccess(event, "product_manager");
@@ -36,10 +37,9 @@ export default defineEventHandler(async (event) => {
   }
 
   if (currentMember) {
-    const currentLevel =
-      currentMember.role === "admin" ? 3 : currentMember.role === "product_manager" ? 2 : 1;
-    const targetLevel =
-      targetMember.role === "admin" ? 3 : targetMember.role === "product_manager" ? 2 : 1;
+    const allRoles = await loadRoles();
+    const currentLevel = roleLevel(allRoles, currentMember.role);
+    const targetLevel = roleLevel(allRoles, targetMember.role);
 
     if (currentMember.id === targetMember.id) {
       throw createError({

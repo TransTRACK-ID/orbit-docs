@@ -311,6 +311,7 @@ export async function grepDocs(
     maxResults?: number;
     maxPerDoc?: number;
     publishedOnly?: boolean;
+    includeDraftAdrs?: boolean;
   },
 ): Promise<{ matches: GrepDocMatch[]; docsMatched: number; truncated: boolean }> {
   const regex = params.regex ?? false;
@@ -322,6 +323,9 @@ export async function grepDocs(
 
   const values: unknown[] = [];
   const where: string[] = [params.publishedOnly ? "d.status = 'published'" : "d.status <> 'archived'"];
+  if (!params.publishedOnly && params.includeDraftAdrs === false) {
+    where.push("(d.doc_type IS NULL OR d.doc_type <> 'adr' OR d.status = 'published')");
+  }
   if (params.app.id) {
     values.push(params.app.id);
     where.push(`d.app_id = $${values.length}`);

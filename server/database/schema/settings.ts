@@ -27,9 +27,7 @@ export const teamMembers = pgTable("team_members", {
   name: text("name").notNull(),
   email: text("email"),
   initials: text("initials").notNull(),
-  role: text("role", { enum: ["admin", "product_manager", "tech_writer", "viewer"] })
-    .notNull()
-    .default("viewer"),
+  role: text("role").notNull().default("viewer"),
   status: text("status", { enum: ["pending", "active"] })
     .notNull()
     .default("active"),

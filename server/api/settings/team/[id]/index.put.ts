@@ -3,10 +3,9 @@ import { getDb } from "~/server/database";
 import { teamMembers } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
-import { requireTeamAccess, formatLastActive, type TeamRole } from "~/server/utils/team-access";
+import { requireTeamAccess, formatLastActive } from "~/server/utils/team-access";
 import { requireSuperAdmin } from "~/server/utils/rbac";
-
-const VALID_TEAM_ROLES: TeamRole[] = ["admin", "product_manager", "tech_writer", "viewer"];
+import { loadRoles } from "~/server/utils/roles";
 
 export default defineEventHandler(async (event) => {
   await requireAuth(event);
@@ -41,7 +40,8 @@ export default defineEventHandler(async (event) => {
 
   // Role changes are super-admin only
   if (role !== undefined && role !== existing.role) {
-    if (!VALID_TEAM_ROLES.includes(role as TeamRole)) {
+    const allRolesCheck = await loadRoles();
+    if (!allRolesCheck.some((r) => r.slug === role && r.kind === "member")) {
       throw createError({
         statusCode: 400,
         statusMessage: "Bad Request",

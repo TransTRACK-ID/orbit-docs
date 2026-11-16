@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
   const responseType =
     typeof query.response_type === "string" ? query.response_type : undefined;
   const state = typeof query.state === "string" ? query.state : undefined;
-  const scope = typeof query.scope === "string" ? query.scope : "mcp:read";
+  const requestedScope = typeof query.scope === "string" ? query.scope : "mcp:read";
   const resource = typeof query.resource === "string" ? query.resource : undefined;
   const codeChallenge =
     typeof query.code_challenge === "string" ? query.code_challenge : undefined;
@@ -47,6 +47,15 @@ export default defineEventHandler(async (event) => {
       message: "client_id, redirect_uri, and response_type=code are required.",
     });
   }
+
+  if (!requestedScope.split(/\s+/).filter(Boolean).every((s) => s === "mcp:read")) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: "Only scope mcp:read is supported.",
+    });
+  }
+  const scope = "mcp:read";
 
   if (!codeChallenge || codeChallengeMethod !== "S256") {
     throw createError({

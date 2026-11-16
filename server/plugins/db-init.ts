@@ -84,6 +84,9 @@ export default defineNitroPlugin(async () => {
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE mcp_service_principals ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'mcp_service'`);
+  await pool.query(`ALTER TABLE mcp_service_principals ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP WITH TIME ZONE`);
+  await pool.query(`INSERT INTO mcp_service_principals (id, name, key_hash, role) SELECT gen_random_uuid()::text, 'Environment MCP_API_KEY', NULL, 'mcp_service' WHERE NOT EXISTS (SELECT 1 FROM mcp_service_principals WHERE key_hash IS NULL)`);
 
   // Create tables if they don't exist (PostgreSQL syntax)
   await pool.query(`
@@ -549,6 +552,20 @@ export default defineNitroPlugin(async () => {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS roles (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      description TEXT,
+      kind TEXT NOT NULL DEFAULT 'member',
+      is_system BOOLEAN NOT NULL DEFAULT false,
+      level INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )
+  `);
+
   // doc_generation_jobs table (used by Generate Docs feature)
   await pool.query(`
     CREATE TABLE IF NOT EXISTS doc_generation_jobs (
@@ -923,6 +940,9 @@ export default defineNitroPlugin(async () => {
     });
   }
 
+  const { seedDefaultRoles } = await import("~/server/utils/roles");
+  await seedDefaultRoles();
+  await pool.query(`UPDATE team_members SET role = 'viewer' WHERE role NOT IN (SELECT slug FROM roles)`);
   const { seedDefaultRolePermissions } = await import("~/server/utils/rbac");
   await seedDefaultRolePermissions();
 });

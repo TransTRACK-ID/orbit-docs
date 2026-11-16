@@ -1,4 +1,3 @@
-import type { TeamRole } from "./settings";
 
 export type PermissionKey =
   | "apps:read"
@@ -38,7 +37,8 @@ export type PermissionKey =
   | "doc_generation:run"
   | "adrs:read"
   | "adrs:write"
-  | "adrs:publish";
+  | "adrs:publish"
+  | "mcp:access";
 
 export interface PermissionDefinition {
   key: PermissionKey;
@@ -52,16 +52,25 @@ export interface PermissionGroup {
   permissions: PermissionDefinition[];
 }
 
-export type RolePermissionMatrix = Record<TeamRole, Record<PermissionKey, boolean>>;
+export type RolePermissionMatrix = Record<string, Record<PermissionKey, boolean>>;
+
+export interface RoleDefinition {
+  slug: string;
+  name: string;
+  description: string | null;
+  kind: "member" | "service";
+  isSystem: boolean;
+  level: number;
+}
 
 export interface AccessSettingsResponse {
   groups: PermissionGroup[];
   matrix: RolePermissionMatrix;
-  roles: TeamRole[];
+  roles: RoleDefinition[];
 }
 
 export interface CurrentAccessContext {
   isSuperAdmin: boolean;
-  role: TeamRole | null;
+  role: string | null;
   permissions: PermissionKey[];
 }

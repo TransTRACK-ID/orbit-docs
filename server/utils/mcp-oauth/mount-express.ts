@@ -65,7 +65,7 @@ async function handleAuthorize(req: Request, res: Response): Promise<void> {
   const responseType =
     typeof req.query.response_type === "string" ? req.query.response_type : undefined;
   const state = typeof req.query.state === "string" ? req.query.state : undefined;
-  const scope = typeof req.query.scope === "string" ? req.query.scope : "mcp:read";
+  const requestedScope = typeof req.query.scope === "string" ? req.query.scope : "mcp:read";
   const resource = typeof req.query.resource === "string" ? req.query.resource : undefined;
   const codeChallenge =
     typeof req.query.code_challenge === "string" ? req.query.code_challenge : undefined;
@@ -83,6 +83,12 @@ async function handleAuthorize(req: Request, res: Response): Promise<void> {
     );
     return;
   }
+
+  if (!requestedScope.split(/\s+/).filter(Boolean).every((s) => s === "mcp:read")) {
+    oauthError(res, 400, "invalid_request", "Only scope mcp:read is supported.");
+    return;
+  }
+  const scope = "mcp:read";
 
   if (!codeChallenge || codeChallengeMethod !== "S256") {
     oauthError(
