@@ -10,7 +10,7 @@ export interface WorkspaceSettings {
   updatedAt: string | null;
 }
 
-export type TeamRole = "admin" | "product_manager" | "tech_writer" | "viewer";
+export type TeamRole = string;
 export type TeamMemberStatus = "pending" | "active";
 
 export interface TeamMember {
@@ -28,6 +28,9 @@ export interface TeamMember {
   updatedAt: string | null;
   isSuperAdmin?: boolean;
   permissions?: import("./permissions").PermissionKey[];
+  roleName?: string | null;
+  roleLevel?: number;
+  canManageTeam?: boolean;
 }
 
 export interface IntegrationSettings {

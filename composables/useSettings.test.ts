@@ -73,7 +73,7 @@ describe("useSettings composable", () => {
     const { canManageTeam, currentMember } = useSettings();
     expect(canManageTeam.value).toBe(false);
 
-    currentMember.value = { id: "m1", name: "Alice", email: "alice@example.com", initials: "AL", role: "admin" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null };
+    currentMember.value = { id: "m1", name: "Alice", email: "alice@example.com", initials: "AL", role: "admin" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null, canManageTeam: true };
     expect(canManageTeam.value).toBe(true);
 
     currentMember.value = { id: "m2", name: "Bob", email: "bob@example.com", initials: "BO", role: "viewer" as const, status: "active" as const, invitedBy: null, userId: null, lastActive: "just now", lastActiveAt: null, createdAt: null, updatedAt: null };

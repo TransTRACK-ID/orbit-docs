@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import { getDb } from "~/server/database";
 import { users, rolePermissions } from "~/server/database/schema";
 import type { PermissionKey, RolePermissionMatrix } from "~/types/permissions";
-import type { TeamRole } from "~/types/settings";
 import {
   ALL_PERMISSION_KEYS,
   DEFAULT_ROLE_PERMISSION_MATRIX,
@@ -12,12 +11,13 @@ import {
   roleHasPermission,
 } from "~/server/lib/permissions";
 import { requireAuth, type SessionUser } from "./auth";
-import { getMemberForUser, type TeamRole as ServerTeamRole } from "./team-access";
+import { getMemberForUser } from "./team-access";
+import { loadRoles, invalidateRolesCache } from "./roles";
 
 export interface AuthContext {
   user: SessionUser;
   isSuperAdmin: boolean;
-  role: TeamRole | null;
+  role: string | null;
   permissions: PermissionKey[];
   matrix: RolePermissionMatrix;
 }
@@ -46,16 +46,17 @@ export async function loadRolePermissionMatrix(force = false): Promise<RolePermi
 
   const db = getDb();
   const rows = await db.select().from(rolePermissions);
-  const stored: Partial<Record<TeamRole, Partial<Record<PermissionKey, boolean>>>> = {};
+  const stored: Partial<Record<string, Partial<Record<PermissionKey, boolean>>>> = {};
 
   for (const row of rows) {
-    const role = row.role as TeamRole;
+    const role = row.role as string;
     const permission = row.permission as PermissionKey;
     if (!stored[role]) stored[role] = {};
     stored[role]![permission] = row.allowed;
   }
 
-  cachedMatrix = mergeMatrixWithDefaults(stored);
+  const slugs = (await loadRoles()).map((r) => r.slug);
+  cachedMatrix = mergeMatrixWithDefaults(stored, slugs);
   cacheLoadedAt = now;
   return cachedMatrix;
 }
@@ -63,21 +64,24 @@ export async function loadRolePermissionMatrix(force = false): Promise<RolePermi
 export function invalidatePermissionCache() {
   cachedMatrix = null;
   cacheLoadedAt = 0;
+  invalidateRolesCache();
 }
 
 export async function seedDefaultRolePermissions() {
   const db = getDb();
-  const existing = await db.select({ id: rolePermissions.id }).from(rolePermissions).limit(1);
-  if (existing.length > 0) return;
+  const existing = await db.select({ role: rolePermissions.role }).from(rolePermissions);
+  const existingRoles = new Set(existing.map((r) => r.role));
 
-  const values = Object.entries(DEFAULT_ROLE_PERMISSION_MATRIX).flatMap(([role, permissions]) =>
-    Object.entries(permissions).map(([permission, allowed]) => ({
-      id: crypto.randomUUID(),
-      role: role as TeamRole,
-      permission,
-      allowed,
-    }))
-  );
+  const values = Object.entries(DEFAULT_ROLE_PERMISSION_MATRIX)
+    .filter(([role]) => !existingRoles.has(role))
+    .flatMap(([role, permissions]) =>
+      Object.entries(permissions).map(([permission, allowed]) => ({
+        id: crypto.randomUUID(),
+        role,
+        permission,
+        allowed,
+      }))
+    );
 
   if (values.length > 0) {
     await db.insert(rolePermissions).values(values);
@@ -93,7 +97,7 @@ export async function saveRolePermissionMatrix(matrix: RolePermissionMatrix) {
   const values = Object.entries(matrix).flatMap(([role, permissions]) =>
     Object.entries(permissions).map(([permission, allowed]) => ({
       id: crypto.randomUUID(),
-      role: role as TeamRole,
+      role,
       permission,
       allowed,
     }))
@@ -131,7 +135,9 @@ export async function getAuthContextForUser(user: SessionUser): Promise<AuthCont
 
   const isSuperAdmin = user.id ? await isUserSuperAdmin(user.id) : false;
   const member = await getMemberForUser(user);
-  const role = (member?.role as TeamRole | undefined) ?? null;
+  const allRoles = await loadRoles();
+  const rawRole = (member?.role as string | undefined) ?? null;
+  const role = rawRole && allRoles.some((r) => r.slug === rawRole) ? rawRole : null;
 
   if (isSuperAdmin) {
     return {
@@ -235,8 +241,8 @@ export async function requireSuperAdmin(event: H3Event): Promise<AuthContext> {
 }
 
 export function mapTeamRoleToPermissions(
-  role: ServerTeamRole,
+  role: string,
   matrix: RolePermissionMatrix
 ): PermissionKey[] {
-  return listPermissionsForRole(role as TeamRole, matrix);
+  return listPermissionsForRole(role, matrix);
 }

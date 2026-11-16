@@ -35,10 +35,7 @@ export const useSettings = () => {
   const isInviting = ref(false);
   const isAccepting = ref(false);
 
-  const canManageTeam = computed(() => {
-    if (!currentMember.value) return false;
-    return ["admin", "product_manager"].includes(currentMember.value.role);
-  });
+  const canManageTeam = computed(() => Boolean(currentMember.value?.canManageTeam));
 
   async function fetchWorkspace() {
     isLoadingWorkspace.value = true;

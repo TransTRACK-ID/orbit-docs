@@ -3,10 +3,9 @@ import { getDb } from "~/server/database";
 import { teamMembers } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth, getAuthUser } from "~/server/utils/auth";
-import { getCurrentMember, canManageMembers, formatLastActive, type TeamRole } from "~/server/utils/team-access";
+import { getCurrentMember, canManageMembers, formatLastActive } from "~/server/utils/team-access";
 import { requireSuperAdmin } from "~/server/utils/rbac";
-
-const VALID_TEAM_ROLES: TeamRole[] = ["admin", "product_manager", "tech_writer", "viewer"];
+import { loadRoles } from "~/server/utils/roles";
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event);
@@ -68,7 +67,8 @@ export default defineEventHandler(async (event) => {
   const isRoleChange = role !== undefined && role !== targetMember.role;
 
   if (isRoleChange) {
-    if (!VALID_TEAM_ROLES.includes(role as TeamRole)) {
+    const allRolesCheck = await loadRoles();
+    if (!allRolesCheck.some((r) => r.slug === role && r.kind === "member")) {
       throw createError({
         statusCode: 400,
         statusMessage: "Bad Request",
@@ -78,7 +78,7 @@ export default defineEventHandler(async (event) => {
     await requireSuperAdmin(event);
   } else {
     const currentMember = await getCurrentMember(event);
-    if (!currentMember || !canManageMembers(currentMember.role as TeamRole)) {
+    if (!currentMember || !canManageMembers(currentMember.role as string, await loadRoles())) {
       throw createError({
         statusCode: 403,
         statusMessage: "Forbidden",

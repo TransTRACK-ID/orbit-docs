@@ -61,3 +61,7 @@ export function verifyMcpAccessToken(token: string): McpAccessTokenPayload | nul
     return null;
   }
 }
+
+export function scopeIncludesMcpRead(scope: string): boolean {
+  return scope.split(/\s+/).includes("mcp:read");
+}

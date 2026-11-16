@@ -1,12 +1,64 @@
-import type { TeamRole } from "~/types/settings";
-import type { PermissionGroup, PermissionKey, RolePermissionMatrix } from "~/types/permissions";
+import type {
+  PermissionGroup,
+  PermissionKey,
+  RoleDefinition,
+  RolePermissionMatrix,
+} from "~/types/permissions";
 
-export const TEAM_ROLES: TeamRole[] = [
-  "viewer",
-  "tech_writer",
-  "product_manager",
-  "admin",
+export const MCP_SERVICE_ROLE_SLUG = "mcp_service";
+
+export const SYSTEM_ROLES: RoleDefinition[] = [
+  {
+    slug: "viewer",
+    name: "Viewer",
+    description: "Read-only workspace access",
+    kind: "member",
+    isSystem: true,
+    level: 0,
+  },
+  {
+    slug: "tech_writer",
+    name: "Tech Writer",
+    description: "Writes documentation",
+    kind: "member",
+    isSystem: true,
+    level: 1,
+  },
+  {
+    slug: "product_manager",
+    name: "Product Manager",
+    description: "Manages apps, releases, and publishing",
+    kind: "member",
+    isSystem: true,
+    level: 2,
+  },
+  {
+    slug: "admin",
+    name: "Admin",
+    description: "Full workspace administration",
+    kind: "member",
+    isSystem: true,
+    level: 3,
+  },
+  {
+    slug: "mcp_service",
+    name: "MCP Service",
+    description: "Default role for MCP API keys (published content only)",
+    kind: "service",
+    isSystem: true,
+    level: 0,
+  },
 ];
+
+export const ROLE_SLUG_PATTERN = /^[a-z][a-z0-9_]{1,39}$/;
+
+export function isValidRoleSlug(slug: string): boolean {
+  return ROLE_SLUG_PATTERN.test(slug);
+}
+
+export function roleLevel(roles: RoleDefinition[], slug: string | null | undefined): number {
+  return roles.find((r) => r.slug === slug)?.level ?? 0;
+}
 
 export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
@@ -151,6 +203,17 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       { key: "adrs:publish", label: "Publish", description: "Publish or archive ADR documents" },
     ],
   },
+  {
+    id: "mcp",
+    label: "MCP",
+    permissions: [
+      {
+        key: "mcp:access",
+        label: "Use MCP",
+        description: "Connect AI apps via MCP with this role (OAuth users and API keys)",
+      },
+    ],
+  },
 ];
 
 export const ALL_PERMISSION_KEYS: PermissionKey[] = PERMISSION_GROUPS.flatMap((group) =>
@@ -179,7 +242,8 @@ export const DEFAULT_ROLE_PERMISSION_MATRIX: RolePermissionMatrix = {
     "api_docs:read",
     "feedback:read",
     "settings:read",
-    "team:read"
+    "team:read",
+    "mcp:access"
   ),
   tech_writer: keys(
     "apps:read",
@@ -196,7 +260,8 @@ export const DEFAULT_ROLE_PERMISSION_MATRIX: RolePermissionMatrix = {
     "settings:read",
     "team:read",
     "doc_generation:read",
-    "doc_generation:run"
+    "doc_generation:run",
+    "mcp:access"
   ),
   product_manager: keys(
     "apps:read",
@@ -224,7 +289,8 @@ export const DEFAULT_ROLE_PERMISSION_MATRIX: RolePermissionMatrix = {
     "team:read",
     "team:invite",
     "doc_generation:read",
-    "doc_generation:run"
+    "doc_generation:run",
+    "mcp:access"
   ),
   admin: keys(
     "apps:read",
@@ -262,17 +328,31 @@ export const DEFAULT_ROLE_PERMISSION_MATRIX: RolePermissionMatrix = {
     "doc_generation:run",
     "adrs:read",
     "adrs:write",
-    "adrs:publish"
+    "adrs:publish",
+    "mcp:access"
+  ),
+  mcp_service: keys(
+    "apps:read",
+    "owners:read",
+    "versions:read",
+    "releases:read",
+    "changelogs:read",
+    "docs:read",
+    "doc_sites:read",
+    "api_docs:read",
+    "mcp:access"
   ),
 };
 
 export function mergeMatrixWithDefaults(
-  stored: Partial<Record<TeamRole, Partial<Record<PermissionKey, boolean>>>>
+  stored: Partial<Record<string, Partial<Record<PermissionKey, boolean>>>>,
+  roleSlugs: string[]
 ): RolePermissionMatrix {
   const merged = {} as RolePermissionMatrix;
 
-  for (const role of TEAM_ROLES) {
-    merged[role] = { ...DEFAULT_ROLE_PERMISSION_MATRIX[role] };
+  for (const role of roleSlugs) {
+    const defaults = DEFAULT_ROLE_PERMISSION_MATRIX[role];
+    merged[role] = defaults ? { ...defaults } : keys();
     const overrides = stored[role];
     if (!overrides) continue;
     for (const key of ALL_PERMISSION_KEYS) {
@@ -286,14 +366,16 @@ export function mergeMatrixWithDefaults(
 }
 
 export function listPermissionsForRole(
-  role: TeamRole,
+  role: string,
   matrix: RolePermissionMatrix
 ): PermissionKey[] {
-  return ALL_PERMISSION_KEYS.filter((key) => matrix[role][key]);
+  const row = matrix[role];
+  if (!row) return [];
+  return ALL_PERMISSION_KEYS.filter((key) => row[key]);
 }
 
 export function roleHasPermission(
-  role: TeamRole,
+  role: string,
   permission: PermissionKey,
   matrix: RolePermissionMatrix
 ): boolean {

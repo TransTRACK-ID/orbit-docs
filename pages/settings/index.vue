@@ -67,6 +67,8 @@ const router = useRouter();
 const {
   isSuperAdmin,
   role,
+  roleName,
+  roleLevel,
   accessMatrix,
   accessGroups,
   accessRoles,
@@ -76,6 +78,8 @@ const {
   saveAccessMatrix,
   syncFromCurrentMember,
   can,
+  roleNameFor,
+  rolePillClassFor,
 } = usePermissions();
 
 const {
@@ -299,6 +303,11 @@ async function loadSuperAdminSettings() {
 onMounted(async () => {
   await fetchCurrentMember();
   await syncFromCurrentMember();
+  try {
+    await fetchAccessSettings();
+  } catch (e: any) {
+    toast.error(e?.data?.message || "Failed to load access permissions");
+  }
 
   fetchMcpConfig();
   fetchMcpGrants();
@@ -724,34 +733,26 @@ async function doDeleteMember() {
   memberToDelete.value = null;
 }
 
-const roleLabel: Record<TeamRole, string> = {
-  admin: "Admin",
-  product_manager: "Product Manager",
-  tech_writer: "Tech Writer",
-  viewer: "Viewer",
-};
-
-const rolePillClass: Record<TeamRole, string> = {
-  admin: "pill-green",
-  product_manager: "pill-blue",
-  tech_writer: "pill-blue",
-  viewer: "pill-amber",
-};
-
 const statusPillClass: Record<string, string> = {
   pending: "pill-amber",
   active: "pill-green",
 };
 
+const memberRoles = computed(() => accessRoles.value.filter((r) => r.kind === "member"));
+
 const inviteableRoles = computed(() => {
-  const roles: TeamRole[] = ["viewer", "tech_writer", "product_manager", "admin"];
-  if (!currentMember.value) return roles;
-  if (currentMember.value.role === "admin") return roles;
-  if (currentMember.value.role === "product_manager") return ["viewer", "tech_writer"];
+  const adminLevel =
+    accessRoles.value.find((r) => r.slug === "admin")?.level ?? Number.MAX_SAFE_INTEGER;
+  const pmLevel =
+    accessRoles.value.find((r) => r.slug === "product_manager")?.level ??
+    Number.MAX_SAFE_INTEGER;
+  if (isSuperAdmin.value || roleLevel.value >= adminLevel) return memberRoles.value;
+  if (roleLevel.value >= pmLevel) {
+    return memberRoles.value.filter((r) => r.level < roleLevel.value);
+  }
   return [];
 });
 
-const allTeamRoles: TeamRole[] = ["viewer", "tech_writer", "product_manager", "admin"];
 const changingRoleId = ref<string | null>(null);
 
 async function onMemberRoleChange(member: TeamMember, nextRole: TeamRole) {
@@ -1139,7 +1140,7 @@ function getCallbackUrl(provider: SsoProvider): string {
                 <div v-if="currentUserEmail" class="profile-summary-email">{{ currentUserEmail }}</div>
                 <div class="profile-summary-badges">
                   <span v-if="isSuperAdmin" class="pill pill-green">Super Admin</span>
-                  <span v-else-if="role" class="pill" :class="rolePillClass[role]">{{ roleLabel[role] }}</span>
+                  <span v-else-if="role" class="pill" :class="rolePillClassFor(role)">{{ roleName || roleNameFor(role) }}</span>
                 </div>
               </div>
             </div>
@@ -1421,12 +1422,12 @@ function getCallbackUrl(provider: SsoProvider): string {
                       :aria-label="`Role for ${member.name}`"
                       @change="onMemberRoleChange(member, ($event.target as HTMLSelectElement).value as TeamRole)"
                     >
-                      <option v-for="role in allTeamRoles" :key="role" :value="role">
-                        {{ roleLabel[role] }}
+                      <option v-for="r in memberRoles" :key="r.slug" :value="r.slug">
+                        {{ r.name }}
                       </option>
                     </select>
-                    <span v-else class="pill" :class="rolePillClass[member.role]">
-                      {{ roleLabel[member.role] }}
+                    <span v-else class="pill" :class="rolePillClassFor(member.role)">
+                      {{ roleNameFor(member.role) }}
                     </span>
                   </td>
                   <td>
@@ -1458,6 +1459,7 @@ function getCallbackUrl(provider: SsoProvider): string {
 
         <!-- Access (super admin) -->
         <div v-show="activeTab === 'access' && isSuperAdmin" class="settings-panel settings-panel-access">
+          <SettingsRoleManager :roles="accessRoles" />
           <SettingsAccessMatrix
             :matrix="accessMatrix"
             :groups="accessGroups"
@@ -1965,12 +1967,14 @@ function getCallbackUrl(provider: SsoProvider): string {
                   </p>
                   <p v-if="mcpConfig?.oauthEnabled" class="desc" style="margin: 0;">
                     OAuth is enabled: AI apps can sign in as you and only see what your account can see.
-                    The shared API key is limited to published content.
+                    The shared API key and the named keys below act with their assigned role's permissions, limited to published content.
                   </p>
                 </div>
               </div>
             </div>
           </div>
+
+          <SettingsMcpServicePrincipals v-if="isSuperAdmin" :roles="accessRoles" />
 
           <div class="setting-section">
             <h3>Connected apps</h3>
@@ -2070,8 +2074,8 @@ function getCallbackUrl(provider: SsoProvider): string {
             <div class="form-group">
               <label for="inviteRole">Role</label>
               <select id="inviteRole" v-model="inviteForm.role">
-                <option v-for="role in inviteableRoles" :key="role" :value="role">
-                  {{ roleLabel[role as TeamRole] }}
+                <option v-for="r in inviteableRoles" :key="r.slug" :value="r.slug">
+                  {{ r.name }}
                 </option>
               </select>
             </div>

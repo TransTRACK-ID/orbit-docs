@@ -1,5 +1,5 @@
 import { generateObject, generateText } from "ai";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "~/server/database";
 import { docs } from "~/server/database/schema";
@@ -150,13 +150,17 @@ function matchesKeywords(text: string, query: string): boolean {
 
 export async function buildAskDocIndex(
   appId: string,
-  options: { publishedOnly?: boolean } = {},
+  options: { publishedOnly?: boolean; includeDraftAdrs?: boolean } = {},
 ): Promise<AskDocIndex> {
   const db = getDb();
   const conditions = [eq(docs.appId, appId)];
 
   if (options.publishedOnly) {
     conditions.push(eq(docs.status, "published"));
+  } else if (options.includeDraftAdrs === false) {
+    conditions.push(
+      or(sql`(${docs.docType} IS NULL OR ${docs.docType} <> 'adr')`, eq(docs.status, "published"))!,
+    );
   }
 
   const rows = await db
@@ -337,7 +341,7 @@ async function filterBindingAdrsByQuery(
 async function executeSingleSearch(
   appId: string,
   item: AskSearchItem,
-  options: { publishedOnly?: boolean },
+  options: { publishedOnly?: boolean; includeDraftAdrs?: boolean },
 ): Promise<AskRetrievedSource[]> {
   const docTypes = normalizeDocTypes(item.docTypes);
   const limit = item.limit ?? 8;
@@ -376,6 +380,7 @@ async function executeSingleSearch(
       maxResults: 4,
       maxPerDoc: 2,
       publishedOnly: options.publishedOnly,
+      includeDraftAdrs: options.includeDraftAdrs,
     }).then(
       (result) => result.matches,
       (err) => {
@@ -545,12 +550,27 @@ export function dedupeAndBudgetSources(sources: AskRetrievedSource[]): AskRetrie
 export async function executeAskRetrieval(
   appId: string,
   plan: AskSearchPlan,
-  options: { publishedOnly?: boolean } = {},
+  options: { publishedOnly?: boolean; includeDraftAdrs?: boolean } = {},
 ): Promise<AskRetrievedSource[]> {
   const batches = await Promise.all(
     plan.searches.map((item) => executeSingleSearch(appId, item, options)),
   );
-  return dedupeAndBudgetSources(batches.flat());
+  let sources = batches.flat();
+  if (!options.publishedOnly && options.includeDraftAdrs === false) {
+    const adrIds = [...new Set(sources.filter((s) => s.docType === "adr").map((s) => s.id))];
+    if (adrIds.length > 0) {
+      const db = getDb();
+      const rows = await db
+        .select({ id: docs.id, status: docs.status })
+        .from(docs)
+        .where(inArray(docs.id, adrIds));
+      const statusById = new Map(rows.map((r) => [r.id, r.status]));
+      sources = sources.filter(
+        (s) => s.docType !== "adr" || statusById.get(s.id) === "published",
+      );
+    }
+  }
+  return dedupeAndBudgetSources(sources);
 }
 
 export function buildCitations(sources: AskRetrievedSource[]): AskCitation[] {
@@ -623,17 +643,18 @@ export async function runAskWorkflowContext(params: {
   userQuestion: string;
   module?: string;
   publishedOnly?: boolean;
+  includeDraftAdrs?: boolean;
   role?: string;
 }): Promise<AskWorkflowContextResult> {
-  const { appId, userQuestion, module, publishedOnly, role } = params;
+  const { appId, userQuestion, module, publishedOnly, includeDraftAdrs, role } = params;
 
-  const docIndex = await buildAskDocIndex(appId, { publishedOnly });
+  const docIndex = await buildAskDocIndex(appId, { publishedOnly, includeDraftAdrs });
   const searchPlan = await planAskSearches({
     userQuestion,
     docIndex,
     moduleHint: module,
   });
-  const sources = await executeAskRetrieval(appId, searchPlan, { publishedOnly });
+  const sources = await executeAskRetrieval(appId, searchPlan, { publishedOnly, includeDraftAdrs });
   const bindingAdrSummary = await loadBindingSummary(appId);
   const citations = buildCitations(sources);
   const systemPrompt = buildAskSynthesisPrompt({
@@ -667,6 +688,7 @@ export async function runAskWorkflowAnswer(params: {
   question: string;
   module?: string;
   publishedOnly?: boolean;
+  includeDraftAdrs?: boolean;
   role?: string;
 }): Promise<AskWorkflowAnswerResult> {
   const context = await runAskWorkflowContext({
@@ -674,6 +696,7 @@ export async function runAskWorkflowAnswer(params: {
     userQuestion: params.question,
     module: params.module,
     publishedOnly: params.publishedOnly,
+    includeDraftAdrs: params.includeDraftAdrs,
     role: params.role,
   });
 

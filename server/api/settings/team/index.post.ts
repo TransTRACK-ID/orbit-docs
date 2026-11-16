@@ -4,7 +4,7 @@ import { teamMembers } from "~/server/database/schema";
 import { eq, and } from "drizzle-orm";
 import { requireTeamAccess, canInviteRole, getCurrentMember } from "~/server/utils/team-access";
 import { requirePermission } from "~/server/utils/rbac";
-import type { TeamRole } from "~/server/utils/team-access";
+import { loadRoles } from "~/server/utils/roles";
 
 export default defineEventHandler(async (event) => {
   await requirePermission(event, "team:invite");
@@ -22,7 +22,15 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const targetRole: TeamRole = role || "viewer";
+  const targetRole: string = role || "viewer";
+  const allRoles = await loadRoles();
+  if (!allRoles.some((r) => r.slug === targetRole && r.kind === "member")) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: "Bad Request",
+      message: "Invalid team role.",
+    });
+  }
   const currentMember = await getCurrentMember(event);
 
   if (!currentMember) {
@@ -34,7 +42,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Role-based invitation restriction
-  if (!canInviteRole(currentMember.role as TeamRole, targetRole)) {
+  if (!canInviteRole(currentMember.role as string, targetRole, allRoles)) {
     throw createError({
       statusCode: 403,
       statusMessage: "Forbidden",

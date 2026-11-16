@@ -11,11 +11,12 @@ import {
 import { z } from "zod";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, desc, sql, and, count, asc } from "drizzle-orm";
+import { eq, desc, sql, and, count, asc, isNull } from "drizzle-orm";
+import { createHash, timingSafeEqual } from "node:crypto";
 import * as schema from "./server/database/schema";
 import { mountMcpOAuth } from "./server/utils/mcp-oauth/mount-express";
 import { isMcpOAuthEnabled, getProtectedResourceMetadataUrl } from "./server/utils/mcp-oauth/config";
-import { verifyMcpAccessToken } from "./server/utils/mcp-oauth/tokens";
+import { scopeIncludesMcpRead, verifyMcpAccessToken } from "./server/utils/mcp-oauth/tokens";
 
 // Default resource path for the standalone server is /mcp (the Nitro-hosted
 // endpoint uses /api/mcp/connect).  Set MCP_OAUTH_RESOURCE_PATH in .env to
@@ -104,24 +105,26 @@ type StandalonePrincipal =
   | {
       kind: "user";
       userId: string;
+      email: string | null;
+      scope: string;
       role: string | null;
       permissions: string[];
       isSuperAdmin: boolean;
     }
-  | { kind: "service" };
+  | { kind: "service"; principalId: string | null; role: string; permissions: string[] };
 
 function standaloneFingerprint(principal: StandalonePrincipal): string {
-  return principal.kind === "service" ? "service" : `user:${principal.userId}`;
+  return principal.kind === "service"
+    ? `service:${principal.principalId ?? "env"}`
+    : `user:${principal.userId}`;
 }
 
 function standalonePublishedOnly(principal: StandalonePrincipal): boolean {
   return principal.kind === "service";
 }
 
-async function loadStandalonePermissions(
-  role: string,
-): Promise<string[]> {
-  const { mergeMatrixWithDefaults, listPermissionsForRole } =
+async function loadStandalonePermissions(role: string): Promise<string[]> {
+  const { mergeMatrixWithDefaults, listPermissionsForRole, SYSTEM_ROLES } =
     await import("./server/lib/permissions");
   const stored: Record<string, Record<string, boolean>> = {};
   try {
@@ -133,13 +136,96 @@ async function loadStandalonePermissions(
   } catch {
     // Fall through to defaults when the table is unavailable.
   }
+  let slugs: string[] = SYSTEM_ROLES.map((r) => r.slug);
+  try {
+    const roleRows = await db.select({ slug: schema.roles.slug }).from(schema.roles);
+    if (roleRows.length > 0) slugs = roleRows.map((r) => r.slug);
+  } catch {
+    // Fall through to system role slugs when the table is unavailable.
+  }
   const matrix = mergeMatrixWithDefaults(
     stored as Parameters<typeof mergeMatrixWithDefaults>[0],
+    slugs,
   );
-  return listPermissionsForRole(
-    role as Parameters<typeof listPermissionsForRole>[0],
-    matrix,
-  );
+  return listPermissionsForRole(role, matrix);
+}
+
+function timingSafeKeyEqual(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+type StandaloneServiceRow = typeof schema.mcpServicePrincipals.$inferSelect;
+
+async function touchStandaloneLastUsed(row: StandaloneServiceRow): Promise<void> {
+  const now = new Date();
+  const last = row.lastUsedAt ? new Date(row.lastUsedAt) : null;
+  if (last && now.getTime() - last.getTime() <= 5 * 60 * 1000) return;
+  try {
+    await db
+      .update(schema.mcpServicePrincipals)
+      .set({ lastUsedAt: now, updatedAt: now })
+      .where(eq(schema.mcpServicePrincipals.id, row.id));
+  } catch {
+    // Non-critical
+  }
+}
+
+async function buildStandaloneServicePrincipal(
+  principalId: string | null,
+  role: string,
+  row?: StandaloneServiceRow | null,
+): Promise<StandalonePrincipal | null> {
+  const permissions = await loadStandalonePermissions(role);
+  if (!permissions.includes("mcp:access")) return null;
+  if (row) await touchStandaloneLastUsed(row);
+  return { kind: "service", principalId, role, permissions };
+}
+
+async function loadStandaloneUserPrincipal(
+  userId: string,
+  scope: string,
+  emailFallback?: string | null,
+): Promise<StandalonePrincipal | null> {
+  const userRow = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1)
+    .then((rows) => rows[0]);
+
+  const memberRows = await db
+    .select()
+    .from(schema.teamMembers)
+    .where(eq(schema.teamMembers.status, "active"));
+  const emailHint = userRow?.email ?? emailFallback ?? undefined;
+  const member =
+    memberRows.find((m) => m.userId && m.userId === userId) ??
+    memberRows.find(
+      (m) => m.email && emailHint && m.email.toLowerCase() === emailHint.toLowerCase(),
+    );
+  // The users row is optional: local/SSO bootstrap accounts may only have a
+  // team membership row.
+  if (!userRow && !member) return null;
+
+  const isSuperAdmin = Boolean(userRow?.isSuperAdmin);
+  const role = (member?.role as string | undefined) ?? null;
+  if (!isSuperAdmin && !role) return null;
+
+  const permissions = role ? await loadStandalonePermissions(role) : [];
+  if (!isSuperAdmin && !permissions.includes("mcp:access")) return null;
+
+  return {
+    kind: "user",
+    userId,
+    email: userRow?.email ?? member?.email ?? emailFallback ?? null,
+    scope,
+    role,
+    permissions,
+    isSuperAdmin,
+  };
 }
 
 async function resolveStandalonePrincipal(
@@ -148,54 +234,84 @@ async function resolveStandalonePrincipal(
 ): Promise<StandalonePrincipal | null> {
   const provided = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : apiKey;
 
-  if (MCP_API_KEY && provided === MCP_API_KEY) {
-    return { kind: "service" };
-  }
-
   if (isMcpOAuthEnabled() && authHeader.startsWith("Bearer ")) {
     const payload = verifyMcpAccessToken(authHeader.slice(7));
-    if (!payload) return null;
+    if (payload) {
+      if (!scopeIncludesMcpRead(payload.scope)) return null;
+      return loadStandaloneUserPrincipal(payload.sub, payload.scope);
+    }
+  }
 
-    const userRow = await db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.id, payload.sub))
-      .limit(1)
-      .then((rows) => rows[0]);
+  if (MCP_API_KEY && provided && timingSafeKeyEqual(provided, MCP_API_KEY)) {
+    let envRow: StandaloneServiceRow | null = null;
+    try {
+      envRow =
+        (await db
+          .select()
+          .from(schema.mcpServicePrincipals)
+          .where(isNull(schema.mcpServicePrincipals.keyHash))
+          .limit(1)
+          .then((rows) => rows[0])) ?? null;
+    } catch {
+      envRow = null;
+    }
+    if (envRow) {
+      if (!envRow.isActive) return null;
+      return buildStandaloneServicePrincipal(envRow.id, envRow.role, envRow);
+    }
+    return buildStandaloneServicePrincipal(null, "mcp_service");
+  }
 
-    const memberRows = await db
-      .select()
-      .from(schema.teamMembers)
-      .where(eq(schema.teamMembers.status, "active"));
-    const member =
-      memberRows.find((m) => m.userId && m.userId === payload.sub) ??
-      memberRows.find(
-        (m) =>
-          m.email &&
-          userRow?.email &&
-          m.email.toLowerCase() === userRow.email.toLowerCase(),
-      );
-    // The users row is optional: local/SSO bootstrap accounts may only have a
-    // team membership row.
-    if (!userRow && !member) return null;
-
-    const isSuperAdmin = Boolean(userRow?.isSuperAdmin);
-    const role = (member?.role as string | undefined) ?? null;
-    if (!isSuperAdmin && !role) return null;
-
-    const permissions = isSuperAdmin
-      ? null
-      : role
-        ? await loadStandalonePermissions(role)
-        : [];
-    return { kind: "user", userId: payload.sub, role, permissions: permissions ?? [], isSuperAdmin };
+  if (provided) {
+    const keyHash = createHash("sha256").update(provided).digest("hex");
+    let namedRow: StandaloneServiceRow | null = null;
+    try {
+      namedRow =
+        (await db
+          .select()
+          .from(schema.mcpServicePrincipals)
+          .where(
+            and(
+              eq(schema.mcpServicePrincipals.keyHash, keyHash),
+              eq(schema.mcpServicePrincipals.isActive, true),
+            ),
+          )
+          .limit(1)
+          .then((rows) => rows[0])) ?? null;
+    } catch {
+      namedRow = null;
+    }
+    if (namedRow) {
+      return buildStandaloneServicePrincipal(namedRow.id, namedRow.role, namedRow);
+    }
   }
 
   if (!MCP_API_KEY && !isMcpOAuthEnabled()) {
-    return { kind: "service" };
+    return buildStandaloneServicePrincipal(null, "mcp_service");
   }
 
   return null;
+}
+
+async function refreshStandalonePrincipal(
+  principal: StandalonePrincipal,
+): Promise<StandalonePrincipal | null> {
+  if (principal.kind === "user") {
+    if (!scopeIncludesMcpRead(principal.scope)) return null;
+    return loadStandaloneUserPrincipal(principal.userId, principal.scope, principal.email);
+  }
+  if (principal.principalId) {
+    const row = await db
+      .select()
+      .from(schema.mcpServicePrincipals)
+      .where(eq(schema.mcpServicePrincipals.id, principal.principalId))
+      .limit(1)
+      .then((rows) => rows[0])
+      .catch(() => null);
+    if (!row || !row.isActive) return null;
+    return buildStandaloneServicePrincipal(row.id, row.role, row);
+  }
+  return buildStandaloneServicePrincipal(null, principal.role);
 }
 
 /** Read permission required per tool (same keys as the web app). */
@@ -216,20 +332,11 @@ const STANDALONE_TOOL_PERMISSIONS: Record<string, string> = {
   get_stats: "apps:read",
 };
 
-const STANDALONE_SERVICE_PERMISSIONS = new Set([
-  "apps:read",
-  "owners:read",
-  "versions:read",
-  "releases:read",
-  "changelogs:read",
-  "docs:read",
-]);
-
 function checkStandaloneToolAccess(principal: StandalonePrincipal, name: string) {
   const permission = STANDALONE_TOOL_PERMISSIONS[name];
   if (!permission) return null;
   if (principal.kind === "service") {
-    if (STANDALONE_SERVICE_PERMISSIONS.has(permission)) return null;
+    if (principal.permissions.includes(permission)) return null;
     return {
       content: [
         {
@@ -238,6 +345,7 @@ function checkStandaloneToolAccess(principal: StandalonePrincipal, name: string)
             {
               error: "forbidden",
               tool: name,
+              missing_permission: permission,
               hint: `This tool needs a signed-in user with '${permission}'. Connect with OAuth instead of the shared API key.`,
             },
             null,
@@ -538,7 +646,8 @@ const TOOLS: Tool[] = [
 /* 5. Request Handlers (per-connection server, principal-scoped)         */
 /* ------------------------------------------------------------------ */
 
-function createStandaloneServer(principal: StandalonePrincipal) {
+function createStandaloneServer(initialPrincipal: StandalonePrincipal) {
+  let principal = initialPrincipal;
   const server = new Server(
     {
       name: "orbit-docs",
@@ -552,13 +661,35 @@ function createStandaloneServer(principal: StandalonePrincipal) {
   );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: TOOLS };
+  return { tools: TOOLS.filter((t) => checkStandaloneToolAccess(principal, t.name) === null) };
 });
 
 server.setRequestHandler(
   CallToolRequestSchema,
   async (request) => {
     const { name, arguments: args } = request.params;
+
+    const fresh = await refreshStandalonePrincipal(principal);
+    if (!fresh) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              {
+                error: "forbidden",
+                tool: name,
+                hint: "Your MCP access was revoked or your role no longer includes mcp:access. Reconnect or ask a workspace admin.",
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+        isError: true as const,
+      };
+    }
+    principal = fresh;
 
     const denied = checkStandaloneToolAccess(principal, name);
     if (denied) return denied;
@@ -1554,6 +1685,9 @@ const sessionPrincipals: Record<string, string> = {};
 function requestPrincipal(req: express.Request): StandalonePrincipal {
   return (req as express.Request & { mcpPrincipal?: StandalonePrincipal }).mcpPrincipal ?? {
     kind: "service",
+    principalId: null,
+    role: "mcp_service",
+    permissions: [],
   };
 }
 

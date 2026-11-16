@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { toRaw } from "vue";
-import type { PermissionGroup, PermissionKey, RolePermissionMatrix } from "~/types/permissions";
-import type { TeamRole } from "~/types/settings";
+import type {
+  PermissionGroup,
+  PermissionKey,
+  RoleDefinition,
+  RolePermissionMatrix,
+} from "~/types/permissions";
 
 const props = defineProps<{
   matrix: RolePermissionMatrix | null;
   groups: PermissionGroup[];
-  roles: TeamRole[];
+  roles: RoleDefinition[];
   loading?: boolean;
   saving?: boolean;
   editable?: boolean;
@@ -33,16 +37,9 @@ watch(
   { immediate: true }
 );
 
-const roleLabels: Record<TeamRole, string> = {
-  viewer: "Viewer",
-  tech_writer: "Tech Writer",
-  product_manager: "Product Manager",
-  admin: "Admin",
-};
-
-function togglePermission(role: TeamRole, key: PermissionKey) {
-  if (!props.editable || !draft.value) return;
-  draft.value[role][key] = !draft.value[role][key];
+function togglePermission(slug: string, key: PermissionKey) {
+  if (!props.editable || !draft.value || !draft.value[slug]) return;
+  draft.value[slug][key] = !draft.value[slug][key];
   dirty.value = true;
 }
 
@@ -114,11 +111,12 @@ const groupCount = computed(() => groups.value.length);
               <th scope="col" class="access-col-permission">Permission</th>
               <th
                 v-for="role in roles"
-                :key="role"
+                :key="role.slug"
                 scope="col"
                 class="access-col-role"
               >
-                {{ roleLabels[role] }}
+                {{ role.name }}
+                <span v-if="role.isSystem" class="access-system-badge">System</span>
               </th>
             </tr>
           </thead>
@@ -140,16 +138,16 @@ const groupCount = computed(() => groups.value.length);
                 </th>
                 <td
                   v-for="role in roles"
-                  :key="`${permission.key}-${role}`"
+                  :key="`${permission.key}-${role.slug}`"
                   class="access-check-cell"
                 >
                   <label class="access-check">
                     <input
                       type="checkbox"
-                      :checked="draft[role][permission.key]"
+                      :checked="draft[role.slug]?.[permission.key] ?? false"
                       :disabled="!editable"
-                      :aria-label="`${permission.label} for ${roleLabels[role]}`"
-                      @change="togglePermission(role, permission.key)"
+                      :aria-label="`${permission.label} for ${role.name}`"
+                      @change="togglePermission(role.slug, permission.key)"
                     />
                   </label>
                 </td>
@@ -399,5 +397,17 @@ const groupCount = computed(() => groups.value.length);
   .access-permission-cell {
     min-width: 200px;
   }
+}
+
+.access-system-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--surface, #f3f4f6);
+  color: var(--muted, #6b7280);
+  vertical-align: middle;
 }
 </style>

@@ -6,7 +6,15 @@ import {
   principalFingerprint,
   type McpPrincipal,
 } from "./mcp-principal";
+import { scopeIncludesMcpRead } from "./mcp-oauth/tokens";
 import type { AuthContext } from "./rbac";
+
+const servicePrincipal: McpPrincipal = {
+  kind: "service",
+  principalId: "sp1",
+  role: "mcp_service",
+  permissions: ["apps:read", "docs:read", "mcp:access"],
+};
 
 function userPrincipal(overrides?: Partial<AuthContext>): McpPrincipal {
   return {
@@ -28,14 +36,14 @@ function userPrincipal(overrides?: Partial<AuthContext>): McpPrincipal {
 describe("principalFingerprint", () => {
   it("binds sessions to the user id, not the client", () => {
     expect(principalFingerprint(userPrincipal())).toBe("user:user-123");
-    expect(principalFingerprint({ kind: "service" })).toBe("service");
+    expect(principalFingerprint(servicePrincipal)).toBe("service:sp1");
   });
 });
 
 describe("mcpPublishedOnly / mcpCanReadDraftAdrs", () => {
   it("restricts service principals to published content without draft ADRs", () => {
-    expect(mcpPublishedOnly({ kind: "service" })).toBe(true);
-    expect(mcpCanReadDraftAdrs({ kind: "service" })).toBe(false);
+    expect(mcpPublishedOnly(servicePrincipal)).toBe(true);
+    expect(mcpCanReadDraftAdrs(servicePrincipal)).toBe(false);
   });
 
   it("lets users with adrs:read see draft ADRs, others only published", () => {
@@ -67,8 +75,27 @@ describe("checkMcpToolAccess", () => {
   });
 
   it("lets service principals use read tools but not admin ones", () => {
-    expect(checkMcpToolAccess({ kind: "service" }, "list_docs", "docs:read")).toBeNull();
-    const denied = checkMcpToolAccess({ kind: "service" }, "x", "adrs:read");
+    expect(checkMcpToolAccess(servicePrincipal, "list_docs", "docs:read")).toBeNull();
+    const denied = checkMcpToolAccess(servicePrincipal, "x", "adrs:read");
     expect(denied?.isError).toBe(true);
+  });
+
+  it("denies service tools when role permissions lack the key", () => {
+    const limited: McpPrincipal = {
+      kind: "service",
+      principalId: "sp2",
+      role: "auditor",
+      permissions: ["adrs:read", "mcp:access"],
+    };
+    expect(checkMcpToolAccess(limited, "list_docs", "docs:read")?.isError).toBe(true);
+    expect(checkMcpToolAccess(limited, "x", "adrs:read")).toBeNull();
+  });
+});
+
+describe("scopeIncludesMcpRead", () => {
+  it("accepts mcp:read scopes", () => {
+    expect(scopeIncludesMcpRead("mcp:read")).toBe(true);
+    expect(scopeIncludesMcpRead("mcp:read offline")).toBe(true);
+    expect(scopeIncludesMcpRead("other")).toBe(false);
   });
 });

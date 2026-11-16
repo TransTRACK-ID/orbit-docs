@@ -1,11 +1,13 @@
-import { eq } from "drizzle-orm";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { and, eq, isNull } from "drizzle-orm";
 import { getDb } from "~/server/database";
-import { users } from "~/server/database/schema";
+import { mcpServicePrincipals, users } from "~/server/database/schema";
 import type { SessionUser } from "./auth";
-import { getAuthContextForUser, type AuthContext } from "./rbac";
+import { getAuthContextForUser, loadRolePermissionMatrix, type AuthContext } from "./rbac";
 import { getMemberForUser } from "./team-access";
-import { verifyMcpAccessToken } from "./mcp-oauth/tokens";
+import { scopeIncludesMcpRead, verifyMcpAccessToken } from "./mcp-oauth/tokens";
 import { isMcpOAuthEnabled } from "./mcp-oauth/config";
+import { MCP_SERVICE_ROLE_SLUG, listPermissionsForRole } from "~/server/lib/permissions";
 import type { PermissionKey } from "~/types/permissions";
 
 /**
@@ -14,8 +16,8 @@ import type { PermissionKey } from "~/types/permissions";
  * - `user`: an OAuth access token bound to a workspace user. The auth context
  *   is rebuilt from the database on every connection so role changes,
  *   deactivation, and removals take effect immediately.
- * - `service`: the static `MCP_API_KEY` (or an unconfigured server). A named
- *   automation identity restricted to published, read-only content.
+ * - `service`: an API key (env `MCP_API_KEY` or a named key) acting with its
+ *   assigned role's permissions, restricted to published content.
  */
 export type McpPrincipal =
   | {
@@ -25,21 +27,14 @@ export type McpPrincipal =
       scope: string;
       auth: AuthContext;
     }
-  | { kind: "service" };
+  | {
+      kind: "service";
+      principalId: string | null;
+      role: string;
+      permissions: PermissionKey[];
+    };
 
 export const MCP_API_KEY = process.env.MCP_API_KEY;
-
-/** Read-only permissions the service principal may exercise. */
-const SERVICE_TOOL_PERMISSIONS: ReadonlySet<PermissionKey> = new Set([
-  "apps:read",
-  "owners:read",
-  "versions:read",
-  "releases:read",
-  "changelogs:read",
-  "docs:read",
-  "doc_sites:read",
-  "api_docs:read",
-]);
 
 function extractProvidedKey(
   authHeader: string | undefined,
@@ -49,26 +44,107 @@ function extractProvidedKey(
   return apiKeyHeader || "";
 }
 
+function timingSafeKeyEqual(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
+type ServicePrincipalRow = typeof mcpServicePrincipals.$inferSelect;
+
+async function touchLastUsed(row: ServicePrincipalRow): Promise<void> {
+  const now = new Date();
+  const last = row.lastUsedAt ? new Date(row.lastUsedAt) : null;
+  if (last && now.getTime() - last.getTime() <= 5 * 60 * 1000) return;
+  try {
+    const db = getDb();
+    await db
+      .update(mcpServicePrincipals)
+      .set({ lastUsedAt: now, updatedAt: now })
+      .where(eq(mcpServicePrincipals.id, row.id));
+  } catch {
+    // Non-critical: don't fail the connection if activity tracking fails
+  }
+}
+
+async function buildServicePrincipal(
+  principalId: string | null,
+  role: string,
+  row?: ServicePrincipalRow | null,
+): Promise<McpPrincipal | null> {
+  const matrix = await loadRolePermissionMatrix();
+  const permissions = listPermissionsForRole(role, matrix);
+  if (!permissions.includes("mcp:access")) return null;
+  if (row) await touchLastUsed(row);
+  return { kind: "service", principalId, role, permissions };
+}
+
 export async function resolveMcpPrincipal(
   authHeader: string | undefined,
   apiKeyHeader: string | undefined,
 ): Promise<McpPrincipal | null> {
   const providedKey = extractProvidedKey(authHeader, apiKeyHeader);
 
-  if (MCP_API_KEY && providedKey === MCP_API_KEY) {
-    return { kind: "service" };
-  }
-
+  // 1. OAuth JWT. A Bearer token that verifies as an MCP JWT is
+  // authoritative — never fall through to key checks.
   if (isMcpOAuthEnabled() && authHeader?.startsWith("Bearer ")) {
     const payload = verifyMcpAccessToken(authHeader.slice(7));
-    if (!payload) return null;
-    return resolveUserPrincipal(payload.sub, payload.client_id, payload.scope);
+    if (payload) {
+      if (!scopeIncludesMcpRead(payload.scope)) return null;
+      return resolveUserPrincipal(payload.sub, payload.client_id, payload.scope);
+    }
   }
 
-  // No static key and OAuth disabled: legacy open mode. Kept for local
+  const db = getDb();
+
+  // 2. Environment MCP_API_KEY, mapped to its (nullable-hash) DB row.
+  if (MCP_API_KEY && providedKey && timingSafeKeyEqual(providedKey, MCP_API_KEY)) {
+    let envRow: ServicePrincipalRow | null = null;
+    try {
+      envRow =
+        (await db
+          .select()
+          .from(mcpServicePrincipals)
+          .where(isNull(mcpServicePrincipals.keyHash))
+          .limit(1)
+          .then((rows) => rows[0])) ?? null;
+    } catch {
+      envRow = null;
+    }
+    if (envRow) {
+      if (!envRow.isActive) return null;
+      return buildServicePrincipal(envRow.id, envRow.role, envRow);
+    }
+    return buildServicePrincipal(null, MCP_SERVICE_ROLE_SLUG);
+  }
+
+  // 3. Named API key (SHA-256 lookup).
+  if (providedKey) {
+    const keyHash = createHash("sha256").update(providedKey).digest("hex");
+    let namedRow: ServicePrincipalRow | null = null;
+    try {
+      namedRow =
+        (await db
+          .select()
+          .from(mcpServicePrincipals)
+          .where(
+            and(eq(mcpServicePrincipals.keyHash, keyHash), eq(mcpServicePrincipals.isActive, true)),
+          )
+          .limit(1)
+          .then((rows) => rows[0])) ?? null;
+    } catch {
+      namedRow = null;
+    }
+    if (namedRow) {
+      return buildServicePrincipal(namedRow.id, namedRow.role, namedRow);
+    }
+  }
+
+  // 4. No static key and OAuth disabled: legacy open mode. Kept for local
   // development, restricted to published content like the service principal.
   if (!MCP_API_KEY && !isMcpOAuthEnabled()) {
-    return { kind: "service" };
+    return buildServicePrincipal(null, MCP_SERVICE_ROLE_SLUG);
   }
 
   return null;
@@ -100,13 +176,45 @@ async function resolveUserPrincipal(
   // Membership (or super-admin) is required for MCP access. Login and SSO
   // auto-provision membership, so a missing row means a removed user.
   if (!auth.isSuperAdmin && !auth.role) return null;
+  if (!auth.isSuperAdmin && !auth.permissions.includes("mcp:access")) return null;
 
   return { kind: "user", userId, clientId, scope, auth };
 }
 
+/**
+ * Re-resolve a principal from the database so role/permission changes,
+ * membership removal, key deactivation, and `mcp:access` revocation take
+ * effect on the next tool call without reconnecting.
+ */
+export async function refreshMcpPrincipal(
+  principal: McpPrincipal,
+): Promise<McpPrincipal | null> {
+  if (principal.kind === "user") {
+    if (!scopeIncludesMcpRead(principal.scope)) return null;
+    return resolveUserPrincipal(principal.userId, principal.clientId, principal.scope);
+  }
+
+  if (principal.principalId) {
+    const db = getDb();
+    const row = await db
+      .select()
+      .from(mcpServicePrincipals)
+      .where(eq(mcpServicePrincipals.id, principal.principalId))
+      .limit(1)
+      .then((rows) => rows[0])
+      .catch(() => null);
+    if (!row || !row.isActive) return null;
+    return buildServicePrincipal(row.id, row.role, row);
+  }
+
+  return buildServicePrincipal(null, principal.role);
+}
+
 /** Stable identity tag used to bind an MCP session to its principal. */
 export function principalFingerprint(principal: McpPrincipal): string {
-  return principal.kind === "service" ? "service" : `user:${principal.userId}`;
+  return principal.kind === "service"
+    ? `service:${principal.principalId ?? "env"}`
+    : `user:${principal.userId}`;
 }
 
 export function mcpPublishedOnly(principal: McpPrincipal): boolean {
@@ -130,7 +238,7 @@ export function checkMcpToolAccess(
   if (!permission) return null;
 
   if (principal.kind === "service") {
-    if (SERVICE_TOOL_PERMISSIONS.has(permission)) return null;
+    if (principal.permissions.includes(permission)) return null;
     return {
       content: [
         {
@@ -139,6 +247,7 @@ export function checkMcpToolAccess(
             {
               error: "forbidden",
               tool: toolName,
+              missing_permission: permission,
               hint: "This tool needs a signed-in user with " +
                 `'${permission}'. Connect with OAuth instead of the shared API key.`,
             },

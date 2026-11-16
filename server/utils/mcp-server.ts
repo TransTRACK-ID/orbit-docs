@@ -59,6 +59,7 @@ import {
   checkMcpToolAccess,
   mcpCanReadDraftAdrs,
   mcpPublishedOnly,
+  refreshMcpPrincipal,
   type McpPrincipal,
 } from "~/server/utils/mcp-principal";
 import type { PermissionKey } from "~/types/permissions";
@@ -167,7 +168,8 @@ async function buildMcpServerInstructions(): Promise<string> {
 /* 2. MCP Server Factory                                               */
 /* ------------------------------------------------------------------ */
 
-export async function createMcpServer(principal: McpPrincipal = { kind: "service" }) {
+export async function createMcpServer(initialPrincipal: McpPrincipal) {
+  let principal = initialPrincipal;
   const instructions = await buildMcpServerInstructions();
   const mcpServer = new Server(
     {
@@ -995,13 +997,40 @@ function mcpCanSeeDoc(row: { status: string; docType: string | null }): boolean 
 }
 
 mcpServer.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: TOOLS };
+  return {
+    tools: TOOLS.filter((t) => {
+      const p = MCP_TOOL_PERMISSIONS[t.name];
+      return !p || checkMcpToolAccess(principal, t.name, p) === null;
+    }),
+  };
 });
 
 mcpServer.setRequestHandler(
   CallToolRequestSchema,
   async (request) => {
     const { name, arguments: args } = request.params;
+
+    const fresh = await refreshMcpPrincipal(principal);
+    if (!fresh) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify(
+              {
+                error: "forbidden",
+                tool: name,
+                hint: "Your MCP access was revoked or your role no longer includes mcp:access. Reconnect or ask a workspace admin.",
+              },
+              null,
+              2,
+            ),
+          },
+        ],
+        isError: true,
+      };
+    }
+    principal = fresh;
 
     const requiredPermission = MCP_TOOL_PERMISSIONS[name];
     if (requiredPermission) {
@@ -1967,6 +1996,7 @@ mcpServer.setRequestHandler(
             maxResults: params.maxResults,
             maxPerDoc: params.maxPerDoc,
             publishedOnly: mcpPublishedOnly(principal),
+            includeDraftAdrs: mcpCanReadDraftAdrs(principal),
           });
           return jsonResult({
             app: { id: app.id, name: app.name },
@@ -2720,6 +2750,7 @@ mcpServer.setRequestHandler(
             question: params.question,
             module: params.module ?? undefined,
             publishedOnly: mcpPublishedOnly(principal),
+            includeDraftAdrs: mcpCanReadDraftAdrs(principal),
             role,
           });
 

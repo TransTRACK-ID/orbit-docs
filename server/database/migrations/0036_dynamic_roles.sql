@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS roles (id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL, description TEXT, kind TEXT NOT NULL DEFAULT 'member', is_system BOOLEAN NOT NULL DEFAULT false, level INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(), updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW());--> statement-breakpoint
+INSERT INTO roles (id, slug, name, description, kind, is_system, level) VALUES (gen_random_uuid()::text, 'viewer', 'Viewer', 'Read-only workspace access', 'member', true, 0) ON CONFLICT (slug) DO NOTHING;--> statement-breakpoint
+INSERT INTO roles (id, slug, name, description, kind, is_system, level) VALUES (gen_random_uuid()::text, 'tech_writer', 'Tech Writer', 'Writes documentation', 'member', true, 1) ON CONFLICT (slug) DO NOTHING;--> statement-breakpoint
+INSERT INTO roles (id, slug, name, description, kind, is_system, level) VALUES (gen_random_uuid()::text, 'product_manager', 'Product Manager', 'Manages apps, releases, and publishing', 'member', true, 2) ON CONFLICT (slug) DO NOTHING;--> statement-breakpoint
+INSERT INTO roles (id, slug, name, description, kind, is_system, level) VALUES (gen_random_uuid()::text, 'admin', 'Admin', 'Full workspace administration', 'member', true, 3) ON CONFLICT (slug) DO NOTHING;--> statement-breakpoint
+INSERT INTO roles (id, slug, name, description, kind, is_system, level) VALUES (gen_random_uuid()::text, 'mcp_service', 'MCP Service', 'Default role for MCP API keys (published content only)', 'service', true, 0) ON CONFLICT (slug) DO NOTHING;--> statement-breakpoint
+ALTER TABLE mcp_service_principals ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'mcp_service';--> statement-breakpoint
+ALTER TABLE mcp_service_principals ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP WITH TIME ZONE;--> statement-breakpoint
+INSERT INTO mcp_service_principals (id, name, key_hash, role) SELECT gen_random_uuid()::text, 'Environment MCP_API_KEY', NULL, 'mcp_service' WHERE NOT EXISTS (SELECT 1 FROM mcp_service_principals WHERE key_hash IS NULL);--> statement-breakpoint
+UPDATE team_members SET role = 'viewer' WHERE role NOT IN (SELECT slug FROM roles);

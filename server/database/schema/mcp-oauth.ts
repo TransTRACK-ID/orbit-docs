@@ -75,7 +75,9 @@ export const mcpServicePrincipals = pgTable("mcp_service_principals", {
   name: text("name").notNull(),
   // SHA-256 hex of the API key. NULL marks the legacy env MCP_API_KEY entry.
   keyHash: text("key_hash").unique(),
+  role: text("role").notNull().default("mcp_service"),
   isActive: boolean("is_active").notNull().default(true),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 });

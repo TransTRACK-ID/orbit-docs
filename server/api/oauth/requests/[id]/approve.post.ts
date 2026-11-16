@@ -1,6 +1,7 @@
 import { defineEventHandler, createError, getRouterParam } from "h3";
 import { requireAuth } from "~/server/utils/auth";
 import { getCurrentMember } from "~/server/utils/team-access";
+import { getAuthContextForUser } from "~/server/utils/rbac";
 import {
   consumePendingRequest,
   issueAuthorizationCode,
@@ -34,6 +35,16 @@ export default defineEventHandler(async (event) => {
       statusCode: 403,
       statusMessage: "Forbidden",
       message: "You are not a member of this workspace.",
+    });
+  }
+
+  const access = await getAuthContextForUser(user);
+  if (!access.isSuperAdmin && !access.permissions.includes("mcp:access")) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Forbidden",
+      message:
+        "Your role does not include MCP access. Ask a workspace admin to enable 'Use MCP' (mcp:access) for your role.",
     });
   }
 
