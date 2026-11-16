@@ -14,8 +14,10 @@ import {
   isSyncIntervalDue,
   type WorkspaceSyncSchedule,
 } from "~/server/lib/sync-schedule";
-
-const TERMINAL_JOB_STATUSES = ["completed", "failed", "cancelled"] as const;
+import {
+  failStaleDocGenerationJobs,
+  TERMINAL_JOB_STATUSES,
+} from "~/server/lib/stale-generation-jobs";
 
 export interface DocGenerationSchedulePublic {
   scheduleEnabled: boolean;
@@ -95,6 +97,8 @@ export async function hasPendingDocGenerationJob(
   appId: string,
   scope: "product" | "wiki" | "repo"
 ) {
+  // A job orphaned by a restart/crash must not block this app forever.
+  await failStaleDocGenerationJobs({ appId });
   const db = getDb();
   const pending = await db
     .select({ id: docGenerationJobs.id })

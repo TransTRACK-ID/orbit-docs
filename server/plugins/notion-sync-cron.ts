@@ -10,6 +10,7 @@ import {
 } from "~/server/lib/sync-schedule";
 import { runScheduledDocGenerations } from "~/server/lib/doc-generation-schedule";
 import { runScheduledEmbeddingIndexes } from "~/server/lib/doc-embedding-schedule";
+import { failStaleDocGenerationJobs } from "~/server/lib/stale-generation-jobs";
 
 export default defineNitroPlugin(() => {
   // Reentrancy guard: a tick awaits full Notion syncs, scheduled doc
@@ -25,6 +26,9 @@ export default defineNitroPlugin(() => {
       // A "running" status can outlive its process (restart/crash mid-sync).
       // Clear stale runs before anything else so manual and scheduled syncs recover.
       await resetStaleNotionSyncRun();
+      // Same for generation jobs: they run in-process, so a restart mid-run
+      // leaves a non-terminal job that would 409 every later run for the app.
+      await failStaleDocGenerationJobs();
 
       const workspaceSchedule = await getWorkspaceSyncSchedule();
       if (!workspaceSchedule.enabled) return;
