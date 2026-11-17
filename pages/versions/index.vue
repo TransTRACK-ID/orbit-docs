@@ -36,13 +36,20 @@ const isArchiving = ref(false);
 const route = useRoute();
 const router = useRouter();
 
-// App filter: "" = all apps (aligned with /docs and /releases); app id when scoped
-const appFilter = ref((route.query.app as string) || "");
+// App filter: empty = all apps (aligned with /docs and /releases). `?app=<id>` deep-links one app.
+const initialAppId = typeof route.query.app === "string" ? route.query.app : "";
+const selectedAppIds = ref<string[]>(initialAppId ? [initialAppId] : []);
+// Exactly one selected app, or "" — used for the URL and server-side scoping.
+const appFilter = computed(() =>
+  selectedAppIds.value.length === 1 ? selectedAppIds.value[0]! : "",
+);
 
 watch(
   () => route.query.app,
   (app) => {
-    appFilter.value = (app as string) || "";
+    const id = typeof app === "string" ? app : "";
+    if (id === appFilter.value) return;
+    selectedAppIds.value = id ? [id] : [];
   },
 );
 
@@ -55,8 +62,7 @@ function syncUrlQuery() {
 
 onMounted(async () => {
   await fetchApps();
-  const appQuery = route.query.app as string;
-  appFilter.value = appQuery && apps.value.find((a) => a.id === appQuery) ? appQuery : "";
+  selectedAppIds.value = selectedAppIds.value.filter((id) => apps.value.some((a) => a.id === id));
 
   await fetchVersions(appFilter.value || undefined);
   document.addEventListener("keydown", onKeydown);
@@ -73,15 +79,12 @@ watch(appFilter, async (id) => {
   syncUrlQuery();
 });
 
-const showAllApps = computed(() => !appFilter.value);
 const selectedApp = computed(() =>
   appFilter.value ? apps.value.find((a) => a.id === appFilter.value) : null,
 );
 
-const appFilterOptions = computed(() => [
-  { id: "", label: "All apps" },
-  ...apps.value.map((a) => ({ id: a.id, label: a.name })),
-]);
+const appFilterOptions = computed(() => apps.value.map((a) => ({ id: a.id, label: a.name })));
+const appOptions = appFilterOptions;
 
 interface VersionAppGroup {
   key: string;
@@ -104,17 +107,18 @@ const versionAppGroups = computed((): VersionAppGroup[] => {
   return groups.sort((a, b) => a.label.localeCompare(b.label));
 });
 
-const expandedAppIds = ref<Set<string>>(new Set());
+// Groups start expanded; only collapsed ones are tracked.
+const collapsedAppIds = ref<Set<string>>(new Set());
 
 function isAppExpanded(appId: string) {
-  return expandedAppIds.value.has(appId);
+  return !collapsedAppIds.value.has(appId);
 }
 
 function toggleAppGroup(appId: string) {
-  const next = new Set(expandedAppIds.value);
+  const next = new Set(collapsedAppIds.value);
   if (next.has(appId)) next.delete(appId);
   else next.add(appId);
-  expandedAppIds.value = next;
+  collapsedAppIds.value = next;
 }
 
 const pageStats = computed(() => {
@@ -134,22 +138,51 @@ const headerStats = computed(() => [
 
 const pageSubtitle = computed(() => {
   const total = pageStats.value.total;
-  if (showAllApps.value) {
-    return `All apps · ${total} ${total === 1 ? "version" : "versions"}. Track releases across every app.`;
+  const noun = total === 1 ? "version" : "versions";
+  if (selectedAppIds.value.length === 0) {
+    return `All apps · ${total} ${noun}. Track releases across every app.`;
   }
-  const name = selectedApp.value?.name ?? "App";
-  return `${name} · ${total} ${total === 1 ? "version" : "versions"}.`;
+  if (selectedAppIds.value.length > 1) {
+    return `${selectedAppIds.value.length} apps · ${total} ${noun}.`;
+  }
+  return `${selectedApp.value?.name ?? "App"} · ${total} ${noun}.`;
 });
 
 function appNameForVersion(version: AppVersion) {
   return version.appName || apps.value.find((a) => a.id === version.appId)?.name || "Release";
 }
 
-// Search
+// Search, status filter and sort
 const searchQuery = ref("");
+const statusFilter = ref("");
+const sortKey = ref("date-desc");
+
+const statusFilterOptions = [
+  { id: "", label: "All Status" },
+  { id: "draft", label: "Draft" },
+  { id: "published", label: "Published" },
+  { id: "rc", label: "RC" },
+  { id: "archived", label: "Archived" },
+];
+
+const sortOptions = [
+  { id: "date-desc", label: "Recently Updated" },
+  { id: "date-asc", label: "Oldest First" },
+  { id: "version-desc", label: "Version (High to Low)" },
+  { id: "version-asc", label: "Version (Low to High)" },
+];
 
 const filteredVersions = computed(() => {
   let result = [...versions.value];
+
+  if (selectedAppIds.value.length > 0) {
+    const ids = new Set(selectedAppIds.value);
+    result = result.filter((v) => ids.has(v.appId));
+  }
+  if (statusFilter.value) {
+    result = result.filter((v) => v.status === statusFilter.value);
+  }
+
   const q = searchQuery.value.trim().toLowerCase();
   if (q) {
     result = result.filter(
@@ -157,44 +190,72 @@ const filteredVersions = computed(() => {
         v.version.toLowerCase().includes(q) ||
         (v.appName && v.appName.toLowerCase().includes(q)) ||
         (v.createdBy && v.createdBy.toLowerCase().includes(q)) ||
+        (v.approver && v.approver.toLowerCase().includes(q)) ||
         (v.releaseNotes && v.releaseNotes.toLowerCase().includes(q)) ||
         (v.branch && v.branch.toLowerCase().includes(q))
     );
   }
-  // Sort by newest first (releaseDate desc, fallback to createdAt desc)
+
+  const time = (v: AppVersion) => new Date(v.releaseDate || v.createdAt || 0).getTime();
+  const byVersion = (a: AppVersion, b: AppVersion) =>
+    a.version.localeCompare(b.version, undefined, { numeric: true });
   result.sort((a, b) => {
-    const dA = new Date(a.releaseDate || a.createdAt || 0).getTime();
-    const dB = new Date(b.releaseDate || b.createdAt || 0).getTime();
-    return dB - dA;
+    switch (sortKey.value) {
+      case "date-asc":
+        return time(a) - time(b);
+      case "version-desc":
+        return byVersion(b, a);
+      case "version-asc":
+        return byVersion(a, b);
+      default:
+        return time(b) - time(a);
+    }
   });
   return result;
 });
 
-// Selection for compare
+// Selection for compare / bulk archive
 const selectedVersions = ref<string[]>([]);
 
 function toggleVersionCheck(versionId: string, checked: boolean) {
-  if (checked) {
-    if (selectedVersions.value.length >= 2) {
-      selectedVersions.value.shift();
-    }
-    selectedVersions.value.push(versionId);
-  } else {
-    selectedVersions.value = selectedVersions.value.filter((v) => v !== versionId);
+  const next = new Set(selectedVersions.value);
+  if (checked) next.add(versionId);
+  else next.delete(versionId);
+  selectedVersions.value = [...next];
+}
+
+function groupSelectState(group: VersionAppGroup): "none" | "some" | "all" {
+  const picked = group.versions.filter((v) => selectedVersions.value.includes(v.id)).length;
+  if (picked === 0) return "none";
+  return picked === group.versions.length ? "all" : "some";
+}
+
+function toggleGroupSelection(group: VersionAppGroup, checked: boolean) {
+  const next = new Set(selectedVersions.value);
+  for (const v of group.versions) {
+    if (checked) next.add(v.id);
+    else next.delete(v.id);
   }
+  selectedVersions.value = [...next];
 }
 
 function clearSelection() {
   selectedVersions.value = [];
 }
 
-const compareBtnText = computed(() => {
-  if (selectedVersions.value.length === 2) {
-    const v1 = versions.value.find((v) => v.id === selectedVersions.value[0]);
-    const v2 = versions.value.find((v) => v.id === selectedVersions.value[1]);
-    return `Compare v${v1?.version} vs v${v2?.version}`;
+// Selection never outlives what is on screen (filters, search, refetch).
+watch(filteredVersions, (list) => {
+  const visible = new Set(list.map((v) => v.id));
+  if (selectedVersions.value.some((id) => !visible.has(id))) {
+    selectedVersions.value = selectedVersions.value.filter((id) => visible.has(id));
   }
-  return "Compare";
+});
+
+// Comparing only makes sense for two versions of the same app.
+const canCompare = computed(() => {
+  if (selectedVersions.value.length !== 2) return false;
+  const [a, b] = selectedVersions.value.map((id) => versions.value.find((v) => v.id === id));
+  return !!a && !!b && a.appId === b.appId;
 });
 
 // Bulk archive selected versions
@@ -279,8 +340,12 @@ const newVersionForm = reactive({
   ciStatus: "unknown",
 });
 const newVersionError = ref(false);
+const newVersionAppId = ref("");
+const newVersionAppError = ref(false);
 
 function openNewVersionModal() {
+  newVersionAppId.value = appFilter.value;
+  newVersionAppError.value = false;
   showNewVersionModal.value = true;
   newVersionError.value = false;
   newVersionForm.version = "";
@@ -305,13 +370,13 @@ function closeNewVersionModal() {
 
 async function submitNewVersion() {
   const cleanVersion = newVersionForm.version.trim().replace(/^v/i, "");
-  if (!cleanVersion) {
-    newVersionError.value = true;
-    return;
-  }
-  newVersionError.value = false;
-  if (!appFilter.value || isCreating.value) return;
-  const newVersion = await createVersion(appFilter.value, {
+  newVersionError.value = !cleanVersion;
+  newVersionAppError.value = !newVersionAppId.value;
+  if (newVersionError.value || newVersionAppError.value || isCreating.value) return;
+
+  const appId = newVersionAppId.value;
+  const appName = apps.value.find((a) => a.id === appId)?.name || "Release";
+  const newVersion = await createVersion(appId, {
     version: cleanVersion,
     status: newVersionForm.status,
     releaseDate: newVersionForm.releaseDate || undefined,
@@ -324,13 +389,13 @@ async function submitNewVersion() {
   });
 
   // Auto-create quick release (normal) for the new version
-  if (newVersion?.id && appFilter.value) {
+  if (newVersion?.id) {
     try {
       const categories = parseChangelogMarkdown(newVersionForm.releaseNotes || "");
       await createRelease({
-        appId: appFilter.value,
+        appId,
         versionId: newVersion.id,
-        heroTitle: `${selectedApp.value?.name || "Release"} v${newVersion.version}`,
+        heroTitle: `${appName} v${newVersion.version}`,
         summary: (newVersionForm.releaseNotes || "").slice(0, 500),
         categories,
         type: "normal",
@@ -346,7 +411,7 @@ async function submitNewVersion() {
   closeNewVersionModal();
   // Navigate to changelog editor with the new version pre-selected
   if (newVersion?.id) {
-    await navigateTo(`/changelogs?app=${appFilter.value}&versionId=${newVersion.id}`);
+    await navigateTo(`/changelogs?app=${appId}&versionId=${newVersion.id}`);
   }
 }
 
@@ -645,66 +710,50 @@ function onKeydown(e: KeyboardEvent) {
 <template>
   <div class="versions-page">
     <GeneralPageHeader
-      v-model:search="searchQuery"
       title="Versions"
       :subtitle="pageSubtitle"
-      search-placeholder="Search versions or apps..."
-      search-label="Search versions or apps"
       :stats="headerStats"
       stats-label="Version summary"
     >
       <template v-if="canWriteVersions" #actions>
-        <button
-          type="button"
-          class="btn btn-primary"
-          :disabled="!appFilter"
-          :title="!appFilter ? 'Select an app to create a version' : undefined"
-          @click="openNewVersionModal"
-        >
-          + New Version
+        <button type="button" class="btn btn-primary create-version-btn" @click="openNewVersionModal">
+          Create Version
         </button>
       </template>
       <template #filters>
+        <GeneralSplitSearch
+          v-model="searchQuery"
+          placeholder="Search by keyword, version"
+          label="Search versions or apps"
+        >
+          <template #prefix>
+            <GeneralMultiSelectDropdown
+              v-model="selectedAppIds"
+              :options="appFilterOptions"
+              all-label="All Apps"
+              noun="apps"
+              search-placeholder="Filter app name..."
+              aria-label="Filter by app"
+            />
+          </template>
+        </GeneralSplitSearch>
         <GeneralSearchableDropdown
-          v-model="appFilter"
-          :options="appFilterOptions"
-          placeholder="All apps"
-          search-placeholder="Search apps..."
+          v-model="statusFilter"
+          class="versions-filter versions-filter--status"
+          :options="statusFilterOptions"
+          placeholder="All Status"
+          search-placeholder="Filter status..."
         />
-        <div v-if="canManageVersions" class="toolbar-actions">
-          <button
-            v-if="canWriteVersions"
-            type="button"
-            class="btn btn-secondary btn-sm"
-            :disabled="selectedVersions.length !== 2 || isArchiving"
-            @click="openCompare"
-          >
-            {{ compareBtnText }}
-          </button>
-          <button
-            v-if="canPublishVersions"
-            type="button"
-            class="btn btn-ghost btn-sm"
-            :disabled="selectedVersions.length === 0 || isArchiving"
-            @click="archiveSelectedVersions"
-          >
-            <span v-if="isArchiving">Archiving…</span>
-            <span v-else>Archive</span>
-          </button>
-        </div>
+        <GeneralSearchableDropdown
+          v-model="sortKey"
+          class="versions-filter"
+          trigger-prefix="Sort :"
+          :options="sortOptions"
+          placeholder="Recently Updated"
+          search-placeholder="Sort..."
+        />
       </template>
     </GeneralPageHeader>
-
-    <div class="selection-bar" :class="{ active: selectedVersions.length > 0 }">
-      <span>
-        <span class="num">{{ selectedVersions.length }}</span>
-        {{ selectedVersions.length === 1 ? "version" : "versions" }} selected
-      </span>
-      <span class="text-muted-sm">Select 2 to compare</span>
-      <button type="button" class="btn btn-ghost btn-sm" style="margin-left: auto;" @click="clearSelection">
-        Cancel
-      </button>
-    </div>
 
     <div
       class="versions-workspace"
@@ -753,10 +802,19 @@ function onKeydown(e: KeyboardEvent) {
               <GeneralDataTable :scrollable="true">
                 <thead>
                   <tr>
-                    <th class="check-col" />
+                    <th class="check-col">
+                      <input
+                        type="checkbox"
+                        :checked="groupSelectState(group) === 'all'"
+                        :indeterminate.prop="groupSelectState(group) === 'some'"
+                        :aria-label="`Select all versions of ${group.label}`"
+                        @change="toggleGroupSelection(group, ($event.target as HTMLInputElement).checked)"
+                      />
+                    </th>
                     <th>Version</th>
-                    <th>Author</th>
                     <th>Date</th>
+                    <th>Approver</th>
+                    <th>Created By</th>
                     <th>Status</th>
                     <th>CI</th>
                     <th>Release</th>
@@ -783,8 +841,9 @@ function onKeydown(e: KeyboardEvent) {
                       />
                     </td>
                     <td class="col-num col-strong">v{{ v.version }}</td>
-                    <td class="col-muted">{{ v.createdBy || "—" }}</td>
                     <td class="col-num col-muted">{{ formatDate(v.releaseDate || v.createdAt) }}</td>
+                    <td class="col-muted">{{ v.approver || "—" }}</td>
+                    <td class="col-muted">{{ v.createdBy || "—" }}</td>
                     <td>
                       <span class="pill" :class="statusClass[v.status] || 'pill-blue'">
                         {{ statusDisplay(v.status) }}
@@ -823,12 +882,12 @@ function onKeydown(e: KeyboardEvent) {
                         </button>
                       </div>
                     </td>
-                    <td v-if="canWriteVersions" class="col-actions" @click.stop>
+                    <td v-if="canWriteVersions" class="col-actions row-actions" @click.stop>
                       <div class="cell-actions">
-                        <button class="btn btn-ghost btn-sm" title="Edit version" @click="openEditVersionModal(v)">
+                        <button class="btn btn-ghost btn-sm" title="Edit version" aria-label="Edit version" @click="openEditVersionModal(v)">
                           <IconsPencil size="14" />
                         </button>
-                        <button class="btn btn-ghost btn-sm" title="Delete version" @click="confirmDeleteVersion(v)">
+                        <button class="btn btn-ghost btn-sm" title="Delete version" aria-label="Delete version" @click="confirmDeleteVersion(v)">
                           <IconsTrash size="14" />
                         </button>
                       </div>
@@ -934,6 +993,47 @@ function onKeydown(e: KeyboardEvent) {
         </div>
       </aside>
     </div>
+
+    <Transition name="sel-bar">
+      <div
+        v-if="selectedVersions.length > 0"
+        class="selection-float"
+        role="region"
+        aria-label="Selected versions"
+      >
+        <span class="selection-float__count">
+          <span class="num">{{ selectedVersions.length }}</span>
+          {{ selectedVersions.length === 1 ? "version" : "versions" }} selected
+        </span>
+        <button
+          v-if="canWriteVersions"
+          type="button"
+          class="sel-btn"
+          :disabled="!canCompare || isArchiving"
+          :title="canCompare ? undefined : 'Select exactly 2 versions of the same app to compare'"
+          @click="openCompare"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="6" cy="6" r="3" /><circle cx="18" cy="18" r="3" /><path d="M6 9v3a3 3 0 0 0 3 3h6M13 12l3 3-3 3" />
+          </svg>
+          Compare
+        </button>
+        <button
+          v-if="canPublishVersions"
+          type="button"
+          class="sel-btn"
+          :disabled="isArchiving"
+          @click="archiveSelectedVersions"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="5" rx="1" /><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4" />
+          </svg>
+          <span v-if="isArchiving">Archiving…</span>
+          <span v-else>Archive</span>
+        </button>
+        <button type="button" class="sel-cancel" @click="clearSelection">Cancel</button>
+      </div>
+    </Transition>
 
     <!-- Compare overlay -->
     <div class="compare-overlay" :class="{ active: showCompare }" role="dialog" aria-modal="true" aria-label="Compare versions" @click.self="closeCompare">
@@ -1044,6 +1144,19 @@ function onKeydown(e: KeyboardEvent) {
         </div>
         <form novalidate @submit.prevent="submitNewVersion">
           <div class="modal-body">
+            <div class="form-group" :class="{ 'has-error': newVersionAppError }">
+              <label for="versionApp-trigger">App</label>
+              <GeneralSearchableDropdown
+                id="versionApp"
+                v-model="newVersionAppId"
+                block
+                :options="appOptions"
+                placeholder="Choose app"
+                search-placeholder="Search apps..."
+                @update:model-value="newVersionAppError = false"
+              />
+              <span class="error-msg" :class="{ show: newVersionAppError }">Choose an app</span>
+            </div>
             <div class="form-row">
               <div class="form-group">
                 <label for="versionNumber">Version Number</label>
@@ -1274,12 +1387,126 @@ function onKeydown(e: KeyboardEvent) {
   /* inherits global tokens */
 }
 
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-  flex-wrap: wrap;
+.create-version-btn {
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.create-version-btn:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--accent-strong) 88%, black);
+}
+
+.versions-filter :deep(.dropdown-trigger) {
+  min-height: 39px;
+  min-width: 0;
+  font-weight: 500;
+  border-color: var(--control-border);
+}
+
+.versions-filter :deep(.dropdown-trigger:hover) {
+  border-color: var(--fg);
+}
+
+.versions-filter--status :deep(.dropdown-trigger) {
+  min-width: 158px;
+}
+
+.form-group.has-error :deep(.dropdown-trigger) {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--error) 20%, transparent);
+}
+
+/* Same column widths in every app group */
+.accordion-body :deep(.ds-table) {
+  table-layout: fixed;
+}
+
+.accordion-body :deep(.ds-table th:nth-child(1)) { width: 52px; }
+.accordion-body :deep(.ds-table th:nth-child(2)) { width: 14%; }
+.accordion-body :deep(.ds-table th:nth-child(3)) { width: 11%; }
+.accordion-body :deep(.ds-table th:nth-child(4)) { width: 15%; }
+.accordion-body :deep(.ds-table th:nth-child(5)) { width: 14%; }
+.accordion-body :deep(.ds-table th:nth-child(6)) { width: 10%; }
+.accordion-body :deep(.ds-table th:nth-child(7)) { width: 10%; }
+.accordion-body :deep(.ds-table th.col-actions) { width: 88px; }
+
+.accordion-body :deep(.ds-table td) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.accordion-body :deep(.ds-table td.col-actions),
+.accordion-body :deep(.ds-table td:has(.release-cell)) {
+  overflow: visible;
+}
+
+/* Red checkboxes, matching the toolbar accent */
+.system-accordion input[type="checkbox"] {
+  appearance: none;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.system-accordion input[type="checkbox"]:checked,
+.system-accordion input[type="checkbox"]:indeterminate {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.system-accordion input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--surface);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.system-accordion input[type="checkbox"]:indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 6.5px;
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--surface);
+}
+
+.system-accordion input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Row edit/delete stay out of the way until the row is hovered or focused */
+.row-actions .cell-actions {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+tr:hover .row-actions .cell-actions,
+tr:focus-within .row-actions .cell-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .row-actions .cell-actions {
+    opacity: 1;
+  }
 }
 
 .versions-workspace {
@@ -1598,7 +1825,7 @@ h2 {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 .release-pill-link {
   text-decoration: none;
@@ -1657,23 +1884,92 @@ h2 {
   to { transform: rotate(360deg); }
 }
 
-.selection-bar {
-  display: none;
+/* Floating selection bar */
+.selection-float {
+  position: fixed;
+  bottom: 24px;
+  left: calc(50% + var(--sidebar-w, 260px) / 2);
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  background: var(--accent-soft);
-  border: 1px solid color-mix(in oklch, var(--accent) 20%, transparent);
-  border-radius: var(--radius);
-  margin-bottom: 16px;
+  padding: 10px 12px 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px color-mix(in oklch, var(--fg) 14%, transparent);
   font-size: 14px;
+  white-space: nowrap;
 }
-.selection-bar.active {
-  display: flex;
+
+.selection-float__count {
+  margin-right: 12px;
+  color: var(--fg);
 }
-.selection-bar .num {
+
+.selection-float__count .num {
   font-weight: 600;
-  color: var(--accent);
+}
+
+.sel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--accent-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sel-btn:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.sel-btn:focus-visible,
+.sel-cancel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sel-btn:disabled {
+  border-color: var(--border);
+  color: var(--muted);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sel-cancel {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sel-cancel:hover {
+  color: var(--fg);
+  background: var(--fg-soft);
+}
+
+.sel-bar-enter-active,
+.sel-bar-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.sel-bar-enter-from,
+.sel-bar-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(12px);
 }
 
 .detail-loading {
@@ -2219,9 +2515,13 @@ h2 {
 }
 
 @media (max-width: 768px) {
-  .toolbar-actions {
-    margin-left: 0;
-    justify-content: flex-end;
+  .selection-float {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: space-between;
   }
 
   .compare-overlay {
