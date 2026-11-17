@@ -1,5 +1,6 @@
 import { defineEventHandler, setResponseStatus } from "h3";
 import { getPool } from "~/server/database";
+import { errorCauseMessage } from "~/server/utils/error-cause";
 
 /**
  * Liveness/readiness probe for Docker HEALTHCHECK (see Dockerfile).
@@ -26,9 +27,12 @@ export default defineEventHandler(async (event) => {
     };
   } catch (err) {
     setResponseStatus(event, 503);
+    const message = err instanceof Error ? err.message : "database unreachable";
+    const cause = errorCauseMessage(err);
     return {
       status: "error",
-      message: err instanceof Error ? err.message : "database unreachable",
+      message,
+      ...(cause ? { cause } : {}),
     };
   }
 });

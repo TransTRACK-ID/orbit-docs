@@ -11,6 +11,7 @@ import {
 import { runScheduledDocGenerations } from "~/server/lib/doc-generation-schedule";
 import { runScheduledEmbeddingIndexes } from "~/server/lib/doc-embedding-schedule";
 import { failStaleDocGenerationJobs } from "~/server/lib/stale-generation-jobs";
+import { errorCauseMessage } from "~/server/utils/error-cause";
 
 export default defineNitroPlugin(() => {
   // Reentrancy guard: a tick awaits full Notion syncs, scheduled doc
@@ -47,8 +48,14 @@ export default defineNitroPlugin(() => {
 
       await runScheduledDocGenerations();
       await runScheduledEmbeddingIndexes();
-    } catch (err: any) {
-      console.warn("[sync-cron]", err?.message || err);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      const cause = errorCauseMessage(err);
+      if (cause) {
+        console.warn("[sync-cron]", message, "| cause:", cause);
+      } else {
+        console.warn("[sync-cron]", message);
+      }
     } finally {
       tickInFlight = false;
     }
