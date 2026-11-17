@@ -145,6 +145,13 @@ const docListSelectFields = {
     order by ${docVersions.createdAt} asc
     limit 1
   )`.as("created_by"),
+  modifiedBy: sql<string | null>`(
+    select ${docVersions.actor}
+    from ${docVersions}
+    where ${docVersions.docId} = ${docs.id}
+    order by ${docVersions.createdAt} desc
+    limit 1
+  )`.as("modified_by"),
 } as const;
 
 export function mapDocListRow(
@@ -171,6 +178,8 @@ export function mapDocListRow(
     siteSlug: string | null;
     /** Actor of the earliest doc_versions row; null for docs imported without history. */
     createdBy?: string | null;
+    /** Actor of the latest doc_versions row; null for docs imported without history. */
+    modifiedBy?: string | null;
   },
   options: { includeContent: boolean; includeDraftAdrs: boolean; applyLegacyAdrFilter: boolean },
 ) {
@@ -198,6 +207,7 @@ export function mapDocListRow(
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     createdBy: row.createdBy ?? null,
+    modifiedBy: row.modifiedBy ?? null,
     app: row.appName && row.appId ? { id: row.appId, name: row.appName } : null,
     version: row.version && row.versionId ? { id: row.versionId, version: row.version } : null,
     site: row.siteId ? { id: row.siteId, name: row.siteName, slug: row.siteSlug } : null,

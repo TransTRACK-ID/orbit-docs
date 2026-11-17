@@ -11,6 +11,8 @@ const props = withDefaults(
     searchable?: boolean;
     /** Stretch the trigger to its container (form fields). */
     block?: boolean;
+    /** Open the menu above the trigger (for controls pinned to the bottom of the screen). */
+    placement?: "bottom" | "top";
     disabled?: boolean;
     label?: string;
     id?: string;
@@ -37,11 +39,11 @@ const menuStyle = ref<Record<string, string>>({ top: "0px", left: "0px", minWidt
 function updateMenuPosition() {
   if (!triggerRef.value) return;
   const rect = triggerRef.value.getBoundingClientRect();
-  menuStyle.value = {
-    top: `${rect.bottom + 6}px`,
-    left: `${rect.left}px`,
-    minWidth: `${rect.width}px`,
-  };
+  const horizontal = { left: `${rect.left}px`, minWidth: `${rect.width}px` };
+  menuStyle.value =
+    props.placement === "top"
+      ? { bottom: `${window.innerHeight - rect.top + 6}px`, ...horizontal }
+      : { top: `${rect.bottom + 6}px`, ...horizontal };
 }
 
 const selectedOption = computed(() => props.options.find((o) => o.id === props.modelValue));

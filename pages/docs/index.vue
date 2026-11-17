@@ -127,7 +127,7 @@ function formatEmbeddingScheduleTime(iso: string | null | undefined) {
 }
 
 const statusFilterOptions = [
-  { id: "", label: "All statuses" },
+  { id: "", label: "All Status" },
   { id: "draft", label: "Draft" },
   { id: "in_review", label: "In review" },
   { id: "published", label: "Published" },
@@ -149,12 +149,12 @@ watch(
 );
 
 const appFilterOptions = computed(() => [
-  { id: "", label: "All apps" },
+  { id: "", label: "All Apps" },
   ...apps.value.map((a) => ({ id: a.id, label: a.name })),
 ]);
 
 const siteFilterOptions = computed(() => [
-  { id: "", label: "All sites" },
+  { id: "", label: "All Sites" },
   ...docSites.value.map((s) => ({ id: s.id, label: s.name })),
 ]);
 
@@ -320,7 +320,8 @@ const headerStats = computed(() => [
 ]);
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === "Escape") {
+  // A dropdown that handled Esc itself calls preventDefault; don't also clear selection/filters.
+  if (e.key === "Escape" && !e.defaultPrevented) {
     if (selectedDocIds.value.size > 0) {
       clearSelection();
       return;
@@ -647,6 +648,8 @@ const bulkStatusOptions: { value: DocItem["status"]; label: string }[] = [
   { value: "archived", label: "Archived" },
 ];
 
+const bulkStatusDropdownOptions = bulkStatusOptions.map((o) => ({ id: o.value, label: o.label }));
+
 function clearSelection() {
   selectedDocIds.value = new Set();
 }
@@ -704,21 +707,21 @@ watch(knowledgeDocs, () => {
 <template>
   <div class="docs-page">
     <GeneralPageHeader
-      v-model:search="search"
       title="Docs"
       :subtitle="pageSubtitle"
-      search-placeholder="Search docs..."
-      search-label="Search docs"
       :stats="headerStats"
       stats-label="Docs summary"
     >
       <template v-if="canRunDocGeneration || canWriteDocs" #actions>
-        <NuxtLink v-if="canRunDocGeneration" to="/docs/generate" class="btn btn-secondary">
-          <span class="btn-sparkle" aria-hidden="true">✦</span>
-          Generate Docs
+        <NuxtLink v-if="canRunDocGeneration" to="/docs/generate" class="btn-outline-accent">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9.5 3 11 8l5 1.5L11 11l-1.5 5L8 11 3 9.5 8 8z" />
+            <path d="M18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8z" />
+          </svg>
+          Generate Document
         </NuxtLink>
-        <button v-if="canWriteDocs" type="button" class="btn btn-primary" @click="openCreateModal">
-          + New Doc
+        <button v-if="canWriteDocs" type="button" class="btn-solid-accent" @click="openCreateModal">
+          Create Document
         </button>
       </template>
       <template #nav>
@@ -763,24 +766,35 @@ watch(knowledgeDocs, () => {
         </div>
       </template>
       <template #filters>
+        <GeneralSplitSearch
+          v-model="search"
+          placeholder="Search by document name, keyword, version"
+          label="Search docs"
+        >
+          <template #prefix>
+            <GeneralSearchableDropdown
+              v-model="appFilter"
+              class="docs-app-filter"
+              :options="appFilterOptions"
+              placeholder="All Apps"
+              search-placeholder="Search apps..."
+            />
+          </template>
+        </GeneralSplitSearch>
         <GeneralSearchableDropdown
-          v-model="appFilter"
-          :options="appFilterOptions"
-          placeholder="All apps"
-          search-placeholder="Search apps..."
+          v-model="statusFilter"
+          class="docs-filter"
+          :options="statusFilterOptions"
+          placeholder="All Status"
+          search-placeholder="Filter status..."
         />
         <GeneralSearchableDropdown
           v-if="docSites.length > 0"
           v-model="siteFilter"
+          class="docs-filter"
           :options="siteFilterOptions"
-          placeholder="All sites"
+          placeholder="All Sites"
           search-placeholder="Search sites..."
-        />
-        <GeneralSearchableDropdown
-          v-model="statusFilter"
-          :options="statusFilterOptions"
-          placeholder="All statuses"
-          search-placeholder="Filter status..."
         />
       </template>
     </GeneralPageHeader>
@@ -854,46 +868,40 @@ watch(knowledgeDocs, () => {
       </template>
     </div>
 
-    <div
-      v-if="bulkSelectionEnabled && selectedCount > 0"
-      class="selection-bar active"
-      role="region"
-      aria-label="Bulk status update"
-    >
-      <span>
-        <span class="num">{{ selectedCount }}</span>
-        {{ selectedCount === 1 ? "feature" : "features" }} selected
-      </span>
-      <label class="selection-status">
-        <span class="selection-status-label">Set status</span>
-        <select
+    <Transition name="sel-bar">
+      <div
+        v-if="bulkSelectionEnabled && selectedCount > 0"
+        class="selection-float"
+        role="region"
+        aria-label="Bulk status update"
+      >
+        <span class="selection-float__count">
+          <span class="num">{{ selectedCount }}</span>
+          {{ selectedCount === 1 ? "document" : "documents" }} selected
+        </span>
+        <span class="selection-float__label">set status</span>
+        <GeneralSearchableDropdown
           v-model="bulkStatus"
-          class="select selection-status-select"
+          :options="bulkStatusDropdownOptions"
+          :searchable="false"
           :disabled="isBulkUpdating"
-          aria-label="Status to apply"
+          placement="top"
+          placeholder="Status"
+        />
+        <button
+          type="button"
+          class="sel-update"
+          :disabled="isBulkUpdating"
+          @click="applyBulkStatus"
         >
-          <option v-for="o in bulkStatusOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
-        </select>
-      </label>
-      <button
-        type="button"
-        class="btn btn-primary btn-sm"
-        :disabled="isBulkUpdating"
-        @click="applyBulkStatus"
-      >
-        <span v-if="isBulkUpdating">Updating…</span>
-        <span v-else>Update status</span>
-      </button>
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm"
-        style="margin-left: auto;"
-        :disabled="isBulkUpdating"
-        @click="clearSelection"
-      >
-        Cancel
-      </button>
-    </div>
+          <span v-if="isBulkUpdating">Updating…</span>
+          <span v-else>Update</span>
+        </button>
+        <button type="button" class="sel-cancel" :disabled="isBulkUpdating" @click="clearSelection">
+          Cancel
+        </button>
+      </div>
+    </Transition>
 
     <GeneralSkeletonAccordionList v-if="isLoading" />
 
@@ -953,7 +961,8 @@ watch(knowledgeDocs, () => {
                   <th>Doc</th>
                   <th>Status</th>
                   <th>Updated</th>
-                  <th>By</th>
+                  <th>Author</th>
+                  <th>Modified By</th>
                   <th class="col-actions" />
                 </tr>
               </thead>
@@ -963,7 +972,7 @@ watch(knowledgeDocs, () => {
                     v-if="section.docs.length > 0 && (section.label || section.kind !== 'product')"
                     class="subsection-row"
                   >
-                    <td colspan="5">
+                    <td colspan="6">
                       <div class="subsection-label">
                         <span>{{ sectionLabel(section) }}</span>
                         <span v-if="section.kind === 'architectural_decisions'" class="subsection-count">
@@ -982,7 +991,7 @@ watch(knowledgeDocs, () => {
                     @click="openKnowledgeSection(group.key, section)"
                     @keydown.enter.prevent="openKnowledgeSection(group.key, section)"
                   >
-                    <td colspan="5">
+                    <td colspan="6">
                       <div class="section-summary">
                         <div class="section-summary-copy">
                           <strong>
@@ -1002,7 +1011,7 @@ watch(knowledgeDocs, () => {
                       v-if="shouldCollapseKnowledgeSection(section)"
                       class="section-expand-hint-row"
                     >
-                      <td colspan="5">
+                      <td colspan="6">
                         <button
                           type="button"
                           class="btn btn-ghost btn-sm section-collapse-btn"
@@ -1012,10 +1021,10 @@ watch(knowledgeDocs, () => {
                         </button>
                       </td>
                     </tr>
-                    <tr v-for="doc in section.docs" :key="doc.id">
+                    <tr v-for="doc in section.docs" :key="doc.id" class="is-link">
                     <td>
                       <div class="cell-stack">
-                        <span class="col-strong">{{ docListPrimaryLabel(doc) }}</span>
+                        <NuxtLink :to="`/docs/${doc.id}`" class="col-strong row-link">{{ docListPrimaryLabel(doc) }}</NuxtLink>
                         <span v-if="docListSecondaryLabel(doc)" class="doc-kind col-truncate">
                           {{ docListSecondaryLabel(doc) }}
                         </span>
@@ -1041,19 +1050,15 @@ watch(knowledgeDocs, () => {
                     </td>
                     <td class="col-num col-muted">{{ formatDate(doc.updatedAt) }}</td>
                     <td class="col-muted">{{ doc.author || "—" }}</td>
-                    <td class="col-actions" @click.stop>
+                    <td class="col-muted">{{ doc.modifiedBy || "—" }}</td>
+                    <td class="col-actions row-actions" @click.stop>
                       <div class="cell-actions">
-                        <NuxtLink
-                          :to="`/docs/${doc.id}`"
-                          class="btn btn-ghost btn-sm row-action"
-                        >
-                          Open
-                        </NuxtLink>
                         <button
                           v-if="canManageDoc(doc)"
                           type="button"
                           class="btn btn-ghost btn-sm"
                           title="Delete"
+                          aria-label="Delete doc"
                           @click="confirmDelete(doc)"
                         >
                           <IconsTrash size="14" />
@@ -1098,13 +1103,7 @@ watch(knowledgeDocs, () => {
 
       <div v-else id="knowledge-panel" class="knowledge-panel">
         <div class="knowledge-panel__header">
-          <div>
-            <h2>Knowledge base</h2>
-            <p>{{ knowledgeCount }} synced {{ knowledgeCount === 1 ? "feature" : "features" }}</p>
-          </div>
-          <button type="button" class="btn btn-ghost btn-sm" @click="selectDocView('product')">
-            Back to product docs
-          </button>
+          <h2>Knowledge base</h2>
         </div>
         <GeneralSkeletonAccordionList v-if="isKnowledgeLoading" />
         <GeneralDataTable v-else>
@@ -1124,7 +1123,8 @@ watch(knowledgeDocs, () => {
               <th>Doc</th>
               <th>Status</th>
               <th>Updated</th>
-              <th>By</th>
+              <th>Author</th>
+              <th>Updated By</th>
               <th class="col-actions" />
             </tr>
           </thead>
@@ -1132,7 +1132,7 @@ watch(knowledgeDocs, () => {
             <tr
               v-for="doc in knowledgeDocs"
               :key="doc.id"
-              :class="{ 'is-selected': selectedDocIds.has(doc.id) }"
+              :class="{ 'is-selected': selectedDocIds.has(doc.id), 'is-link': true }"
             >
               <td v-if="bulkSelectionEnabled" class="check-col" @click.stop>
                 <input
@@ -1146,7 +1146,7 @@ watch(knowledgeDocs, () => {
               </td>
               <td>
                 <div class="cell-stack">
-                  <span class="col-strong">{{ docListPrimaryLabel(doc) }}</span>
+                  <NuxtLink :to="`/docs/${doc.id}`" class="col-strong row-link">{{ docListPrimaryLabel(doc) }}</NuxtLink>
                   <span v-if="docListSecondaryLabel(doc)" class="doc-kind col-truncate">
                     {{ docListSecondaryLabel(doc) }}
                   </span>
@@ -1160,19 +1160,15 @@ watch(knowledgeDocs, () => {
               </td>
               <td class="col-num col-muted">{{ formatDate(doc.updatedAt) }}</td>
               <td class="col-muted">{{ doc.author || "—" }}</td>
-              <td class="col-actions" @click.stop>
+              <td class="col-muted">{{ doc.modifiedBy || "—" }}</td>
+              <td class="col-actions row-actions" @click.stop>
                 <div class="cell-actions">
-                  <NuxtLink
-                    :to="`/docs/${doc.id}`"
-                    class="btn btn-ghost btn-sm row-action"
-                  >
-                    Open
-                  </NuxtLink>
                   <button
                     v-if="canManageDoc(doc)"
                     type="button"
                     class="btn btn-ghost btn-sm"
                     title="Delete"
+                    aria-label="Delete doc"
                     @click="confirmDelete(doc)"
                   >
                     <IconsTrash size="14" />
@@ -1306,6 +1302,116 @@ watch(knowledgeDocs, () => {
 <style scoped>
 .docs-page {
   /* Inherits global semantic tokens from :root */
+}
+
+.btn-outline-accent,
+.btn-solid-accent {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: 1px solid var(--accent-strong);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-outline-accent {
+  background: var(--surface);
+  color: var(--accent-strong);
+}
+
+.btn-outline-accent:hover {
+  background: var(--accent-soft);
+}
+
+.btn-solid-accent {
+  background: var(--accent-strong);
+  color: var(--surface);
+}
+
+.btn-solid-accent:hover {
+  background: color-mix(in oklch, var(--accent-strong) 88%, black);
+}
+
+/* App picker joined to the search box */
+.docs-app-filter :deep(.dropdown-trigger) {
+  min-width: 0;
+  min-height: 39px;
+  font-weight: 500;
+  border-color: var(--control-border);
+  border-radius: 8px 0 0 8px;
+}
+
+.docs-filter :deep(.dropdown-trigger) {
+  min-width: 158px;
+  min-height: 39px;
+  font-weight: 500;
+  border-color: var(--control-border);
+}
+
+.docs-app-filter :deep(.dropdown-trigger:hover),
+.docs-filter :deep(.dropdown-trigger:hover) {
+  border-color: var(--fg);
+}
+
+/* Whole row opens the doc; delete stays out of the way until hover/focus */
+.docs-page :deep(tbody tr.is-link) {
+  position: relative;
+  cursor: pointer;
+}
+
+.docs-page :deep(tbody tr.is-link:hover:not(.is-selected)) {
+  background: var(--accent-soft);
+}
+
+.row-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.row-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.row-link:focus-visible {
+  outline: none;
+}
+
+.row-link:focus-visible::after {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.row-actions,
+.docs-page :deep(td.check-col) {
+  position: relative;
+  z-index: 1;
+}
+
+.row-actions .cell-actions {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+tr:hover .row-actions .cell-actions,
+tr:focus-within .row-actions .cell-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .row-actions .cell-actions {
+    opacity: 1;
+  }
 }
 
 .docs-view-tabs {
@@ -1641,23 +1747,14 @@ watch(knowledgeDocs, () => {
 }
 
 .knowledge-panel__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
   margin-bottom: 12px;
 }
 
 .knowledge-panel__header h2 {
-  margin: 0 0 4px;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.knowledge-panel__header p {
   margin: 0;
-  font-size: 13px;
-  color: var(--muted);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
 }
 
 .cell-actions {
@@ -1687,6 +1784,8 @@ watch(knowledgeDocs, () => {
   color: var(--muted);
 }
 .doc-site-link {
+  position: relative;
+  z-index: 1;
   color: var(--accent);
   text-decoration: none;
 }
@@ -1728,47 +1827,170 @@ watch(knowledgeDocs, () => {
   font-weight: 400;
 }
 
-.selection-bar {
-  display: none;
+/* Floating bulk-status bar */
+.selection-float {
+  position: fixed;
+  bottom: 24px;
+  left: calc(50% + var(--sidebar-w, 260px) / 2);
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
-  padding: 12px 16px;
-  background: var(--accent-soft);
-  border: 1px solid color-mix(in oklch, var(--accent) 20%, transparent);
-  border-radius: var(--radius);
-  margin-bottom: 16px;
+  padding: 10px 12px 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px color-mix(in oklch, var(--fg) 14%, transparent);
   font-size: 14px;
+  white-space: nowrap;
 }
-.selection-bar.active {
-  display: flex;
+
+.selection-float__count {
+  color: var(--fg);
 }
-.selection-bar .num {
+
+.selection-float__count .num {
   font-weight: 600;
-  color: var(--accent);
 }
-.selection-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.selection-status-label {
-  font-size: 12px;
-  font-weight: 500;
+
+.selection-float__label {
+  font-size: 13px;
   color: var(--muted);
 }
-.selection-status-select {
-  width: auto;
-  min-width: 140px;
+
+.selection-float :deep(.dropdown-trigger) {
+  min-width: 128px;
+  min-height: 34px;
   padding: 5px 10px;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent-strong);
+  border-color: var(--accent-strong);
 }
-.row-check {
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  accent-color: var(--accent);
+
+.selection-float :deep(.dropdown-trigger .chevron) {
+  color: var(--accent-strong);
+}
+
+.sel-update {
+  padding: 7px 14px;
+  border: 1px solid var(--accent-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sel-update:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.sel-update:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.sel-cancel {
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.sel-cancel:hover:not(:disabled) {
+  color: var(--fg);
+  background: var(--fg-soft);
+}
+
+.sel-update:focus-visible,
+.sel-cancel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sel-bar-enter-active,
+.sel-bar-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.sel-bar-enter-from,
+.sel-bar-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(12px);
+}
+
+@media (max-width: 768px) {
+  .selection-float {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+}
+
+/* Red checkboxes, matching the toolbar accent */
+.row-check {
+  appearance: none;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+  vertical-align: middle;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.row-check:checked,
+.row-check:indeterminate {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.row-check:checked::after {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: 1.5px;
+  width: 4px;
+  height: 8px;
+  border: solid var(--surface);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.row-check:indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 6.5px;
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--surface);
+}
+
+.row-check:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.row-check:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .empty-state {
