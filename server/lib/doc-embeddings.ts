@@ -10,6 +10,11 @@ import {
   isIndexableDocType,
   type IndexableDocType,
 } from "~/server/lib/doc-chunking";
+import {
+  DOC_CHUNKS_EMBEDDING_SCHEMA_ERROR,
+  ensureDocChunksVectorSchema,
+  isDocChunksEmbeddingSchemaError,
+} from "~/server/lib/doc-chunks-vector-schema";
 import { getEmbeddingClient } from "~/server/lib/openai";
 
 function readPositiveIntEnv(name: string, fallback: number): number {
@@ -152,6 +157,11 @@ export async function indexDocChunks(docId: string): Promise<IndexDocChunksResul
 
   if (!isEmbeddingConfigured()) {
     return { indexed: 0, skipped: true, reason: "missing_api_key" };
+  }
+
+  const vectorReady = await ensureDocChunksVectorSchema(pool);
+  if (!vectorReady) {
+    throw new Error(DOC_CHUNKS_EMBEDDING_SCHEMA_ERROR);
   }
 
   const chunks = chunkMarkdownForEmbedding(content, row.docType);
@@ -567,6 +577,11 @@ export async function reindexPendingAndStaleDocEmbeddings(
     return { candidates: 0, indexed: 0, skipped: 0, failed: 0 };
   }
 
+  const vectorReady = await ensureDocChunksVectorSchema(pool);
+  if (!vectorReady) {
+    throw new Error(DOC_CHUNKS_EMBEDDING_SCHEMA_ERROR);
+  }
+
   const db = getDb();
   const rows = await db
     .select({ id: docs.id })
@@ -600,8 +615,11 @@ export async function reindexPendingAndStaleDocEmbeddings(
       consecutiveFailures = 0;
     } catch (err) {
       failed += 1;
-      consecutiveFailures += 1;
       console.error(`[doc-embed] reindex failed for doc ${row.id} (app ${appId}):`, err);
+      if (isDocChunksEmbeddingSchemaError(err)) {
+        throw err instanceof Error ? err : new Error(String(err));
+      }
+      consecutiveFailures += 1;
       if (consecutiveFailures >= MAX_CONSECUTIVE_REINDEX_FAILURES) {
         await onProgress?.({ candidates, indexed, skipped, failed });
         const reason = err instanceof Error ? err.message : String(err);
