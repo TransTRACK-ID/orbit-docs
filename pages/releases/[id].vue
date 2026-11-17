@@ -42,8 +42,9 @@ onMounted(async () => {
     }
     isFetchingList.value = true;
     try {
+      // Prev/next stay within the same app, like the version timeline.
       const data = await $fetch<{ data: ReleaseItem[] }>("/api/releases", {
-        query: { limit: "100" },
+        query: { app: release.value?.appName, limit: "100" },
       });
       allReleases.value = data.data;
     } catch (e) {
@@ -66,6 +67,19 @@ function formatDate(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
+
+function formatShortDate(dateStr: string | null) {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function releaseDatesLabel(r: Pick<ReleaseItem, "releaseDate" | "createdAt" | "updatedAt">) {
+  return `Release Date : ${formatShortDate(r.releaseDate || r.createdAt)} | Update Date : ${formatShortDate(r.updatedAt)}`;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -109,7 +123,7 @@ const adjacent = computed(() => {
   const idx = sorted.findIndex((r) => r.id === releaseId.value);
   return {
     prev: idx > 0 ? sorted[idx - 1] : null,
-    next: idx < sorted.length - 1 ? sorted[idx + 1] : null,
+    next: idx >= 0 && idx < sorted.length - 1 ? sorted[idx + 1] : null,
   };
 });
 
@@ -749,7 +763,6 @@ onBeforeUnmount(() => {
       <header class="topbar">
         <div class="flex-gap-md">
           <h1>Release Notes</h1>
-          <span class="pill pill-accent">{{ formatReleaseHeading(release.appName, release.version, release.heroTitle) }}</span>
           <span class="pill" :class="release.type === 'article' ? 'pill-purple' : 'pill-muted'">
             {{ release.type === 'article' ? 'Article' : 'Normal' }}
           </span>
@@ -777,7 +790,7 @@ onBeforeUnmount(() => {
         <article class="article-wrap">
           <!-- Hero -->
             <header class="release-hero">
-              <div class="release-hero-date">{{ formatDate(release.releaseDate) }}</div>
+              <div class="release-hero-date">{{ releaseDatesLabel(release) }}</div>
               <h1 class="release-hero-title">{{ formatReleaseHeading(release.appName, release.version, release.heroTitle) }}</h1>
               <div class="release-hero-meta">
                 <span class="release-hero-app">{{ release.appName }}</span>
@@ -917,15 +930,25 @@ onBeforeUnmount(() => {
           <!-- Prev / Next -->
           <nav class="release-footer-nav" aria-label="Release navigation">
             <NuxtLink v-if="adjacent.prev" :to="`/releases/${adjacent.prev.id}`" class="prev">
-              <span class="label">Previous</span>
-              <span class="version">{{ adjacent.prev.appName }} {{ adjacent.prev.version }}</span>
-              <span class="date">{{ formatDate(adjacent.prev.releaseDate) }}</span>
+              <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" /><path d="m12 8-4 4 4 4M16 12H8" />
+              </svg>
+              <span class="nav-text">
+                <span class="label">Previous</span>
+                <span class="version">{{ formatReleaseHeading(adjacent.prev.appName, adjacent.prev.version, adjacent.prev.heroTitle) }}</span>
+                <span class="date">{{ releaseDatesLabel(adjacent.prev) }}</span>
+              </span>
             </NuxtLink>
             <div v-else />
             <NuxtLink v-if="adjacent.next" :to="`/releases/${adjacent.next.id}`" class="next">
-              <span class="label">Next</span>
-              <span class="version">{{ adjacent.next.appName }} {{ adjacent.next.version }}</span>
-              <span class="date">{{ formatDate(adjacent.next.releaseDate) }}</span>
+              <span class="nav-text">
+                <span class="label">Next</span>
+                <span class="version">{{ formatReleaseHeading(adjacent.next.appName, adjacent.next.version, adjacent.next.heroTitle) }}</span>
+                <span class="date">{{ releaseDatesLabel(adjacent.next) }}</span>
+              </span>
+              <svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" /><path d="m12 16 4-4-4-4M8 12h8" />
+              </svg>
             </NuxtLink>
             <div v-else />
           </nav>
@@ -1881,8 +1904,7 @@ onBeforeUnmount(() => {
 /* ═══ Article layout ═════════════════════════════════════════ */
 .article-layout {
   width: 100%;
-  max-width: 1080px;
-  margin: 0 auto;
+  max-width: none;
 }
 
 .article-wrap {
@@ -2272,31 +2294,46 @@ onBeforeUnmount(() => {
 }
 .release-footer-nav a {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 8px;
   padding: 16px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
+  background: var(--surface);
   transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   text-decoration: none;
 }
 .release-footer-nav a:hover {
   border-color: var(--fg);
-  background: var(--surface);
+}
+.release-footer-nav a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .release-footer-nav a.next {
+  justify-content: flex-end;
   text-align: right;
-  align-items: flex-end;
+}
+.release-footer-nav .nav-icon {
+  flex-shrink: 0;
+  color: var(--fg);
+}
+.release-footer-nav .nav-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 .release-footer-nav .label {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  line-height: 16px;
 }
 .release-footer-nav .version {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--fg);
 }
 .release-footer-nav .date {

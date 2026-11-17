@@ -54,6 +54,9 @@ watch(
       'markdown-reader--with-outline': showOutlinePane,
     }"
   >
+    <div ref="bodyRef" class="markdown-reader__body">
+      <MermaidHtml class="markdown-body preview-body" :html="renderedHtml" />
+    </div>
     <aside v-if="showOutlinePane" class="outline-pane" aria-label="Document outline">
       <div class="outline-header">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="opacity: 0.6;">
@@ -97,8 +100,5 @@ watch(
       </ul>
     </aside>
 
-    <div ref="bodyRef" class="markdown-reader__body">
-      <MermaidHtml class="markdown-body preview-body" :html="renderedHtml" />
-    </div>
   </div>
 </template>

@@ -648,8 +648,8 @@ pre.mermaid:not([data-mermaid-rendered="true"]) {
 
 .markdown-reader--with-outline {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(0, 1fr) 304px;
+  gap: 48px;
   align-items: start;
 }
 
@@ -659,6 +659,10 @@ pre.mermaid:not([data-mermaid-rendered="true"]) {
 
 .markdown-reader__body {
   min-width: 0;
+}
+
+.markdown-reader--with-outline .preview-body {
+  max-width: none;
 }
 
 .outline-pane {
