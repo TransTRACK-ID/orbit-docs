@@ -427,8 +427,19 @@ const saveStatusLabel = computed(() => {
   return "";
 });
 
-const saveButtonLabel = computed(() => (isPublished.value ? "Save Changes" : "Save Draft"));
-const publishButtonLabel = computed(() => (isPublished.value ? "Update" : "Publish"));
+/**
+ * Single "Save Document" action. Publishing is chosen with the Status field:
+ * a doc set to Published goes through the publish endpoint (publish snapshot + activity)
+ * when the user may publish; everything else is a plain save.
+ */
+async function saveDocument() {
+  if (isSaving.value || isPublishing.value) return;
+  if (canPublishDoc.value && editorStatus.value === "published") {
+    await doPublish();
+    return;
+  }
+  await saveDraft();
+}
 
 function showToast(msg: string) {
   toastMsg.value = msg;
@@ -874,7 +885,7 @@ function onKeydown(e: KeyboardEvent) {
   // Ctrl+S / Cmd+S — Save
   if ((e.ctrlKey || e.metaKey) && e.key === "s") {
     e.preventDefault();
-    saveDraft();
+    void saveDocument();
   }
   // Ctrl+P / Cmd+P — Preview toggle
   if ((e.ctrlKey || e.metaKey) && e.key === "p") {
@@ -1097,27 +1108,7 @@ const lastModified = computed(() => {
         <h1 :title="editorTitle || undefined">{{ editorTitle.trim() || "Untitled doc" }}</h1>
         <span v-if="appName" class="pill pill-blue">{{ appName }}</span>
       </div>
-      <div class="flex-gap-sm topbar-actions">
-        <p
-          v-if="saveStatusLabel"
-          class="save-status"
-          :class="{
-            'save-status--saving': saveStatusLabel === 'Saving…',
-            'save-status--dirty': saveStatusLabel === 'Unsaved changes',
-            'save-status--saved': saveStatusLabel === 'Saved',
-          }"
-          aria-live="polite"
-        >
-          {{ saveStatusLabel }}
-        </p>
-        <NuxtLink
-          v-if="editorStatus === 'published' && !isWikiDoc"
-          :to="`/p/${docId}`"
-          target="_blank"
-          class="btn btn-ghost"
-        >
-          Public View
-        </NuxtLink>
+      <div class="flex-gap-sm topbar-center">
         <button
           type="button"
           class="btn btn-ghost"
@@ -1151,10 +1142,32 @@ const lastModified = computed(() => {
             {{ mode.label }}
           </button>
         </div>
+      </div>
+      <div class="flex-gap-sm topbar-actions">
+        <p
+          v-if="saveStatusLabel"
+          class="save-status"
+          :class="{
+            'save-status--saving': saveStatusLabel === 'Saving…',
+            'save-status--dirty': saveStatusLabel === 'Unsaved changes',
+            'save-status--saved': saveStatusLabel === 'Saved',
+          }"
+          aria-live="polite"
+        >
+          {{ saveStatusLabel }}
+        </p>
+        <NuxtLink
+          v-if="editorStatus === 'published' && !isWikiDoc"
+          :to="`/p/${docId}`"
+          target="_blank"
+          class="btn btn-ghost"
+        >
+          Public View
+        </NuxtLink>
         <button
           v-if="canDeleteDoc"
           type="button"
-          class="btn btn-ghost btn-delete"
+          class="btn-accent-outline btn-delete"
           title="Delete doc"
           aria-label="Delete doc"
           :disabled="isSaving || isPublishing"
@@ -1165,22 +1178,12 @@ const lastModified = computed(() => {
         <button
           v-if="canEditDoc"
           type="button"
-          class="btn btn-secondary"
+          class="btn-accent-outline"
           :disabled="isSaving || isPublishing"
-          @click="saveDraft"
+          @click="saveDocument"
         >
-          <span v-if="isSaving">Saving…</span>
-          <span v-else>{{ saveButtonLabel }}</span>
-        </button>
-        <button
-          v-if="canPublishDoc"
-          type="button"
-          class="btn btn-primary"
-          :disabled="isSaving || isPublishing"
-          @click="doPublish"
-        >
-          <span v-if="isPublishing">{{ isPublished ? 'Updating…' : 'Publishing…' }}</span>
-          <span v-else>{{ publishButtonLabel }}</span>
+          <span v-if="isSaving || isPublishing">Saving…</span>
+          <span v-else>Save Document</span>
         </button>
       </div>
     </header>
@@ -1366,9 +1369,30 @@ const lastModified = computed(() => {
               <!-- Properties Panel -->
               <div v-if="rightSidebarTab === 'properties'" key="properties" class="props-panel">
               <div class="props-section">
+                <div class="props-section-label">Metadata</div>
+                <div class="field">
+                  <label for="docAuthor">Author</label>
+                  <input
+                    id="docAuthor"
+                    class="input input-readonly"
+                    :value="currentDoc?.author || '—'"
+                    readonly
+                  />
+                </div>
+                <div class="field">
+                  <label for="docLastModified">Last Modified</label>
+                  <input
+                    id="docLastModified"
+                    class="input input-readonly num"
+                    :value="lastModified || '—'"
+                    readonly
+                  />
+                </div>
+              </div>
+              <div class="props-section">
                 <div class="props-section-label">Document</div>
                 <div class="field">
-                  <label for="docTitle">Title</label>
+                  <label for="docTitle">Title <span class="req" aria-hidden="true">*</span></label>
                   <input
                     id="docTitle"
                     v-model="editorTitle"
@@ -1377,7 +1401,7 @@ const lastModified = computed(() => {
                   />
                 </div>
                 <div class="field">
-                  <label for="docStatus">Status</label>
+                  <label for="docStatus">Status <span class="req" aria-hidden="true">*</span></label>
                   <select
                     v-if="!isWikiDoc"
                     id="docStatus"
@@ -1701,28 +1725,6 @@ const lastModified = computed(() => {
                 </div>
               </div>
 
-              <div class="props-section">
-                <div class="props-section-label">Metadata</div>
-                <div class="field">
-                  <label for="docAuthor">Author</label>
-                  <input
-                    id="docAuthor"
-                    class="input"
-                    :value="currentDoc?.author || ''"
-                    readonly
-                  />
-                </div>
-                <div class="field">
-                  <label for="docModified">Last Modified</label>
-                  <input
-                    id="docModified"
-                    class="input num"
-                    :value="lastModified"
-                    readonly
-                  />
-                </div>
-              </div>
-
               <div class="props-actions">
                 <button
                   type="button"
@@ -1884,7 +1886,7 @@ const lastModified = computed(() => {
     <!-- Shortcuts hint -->
     <div class="shortcuts-hint" :class="{ show: shortcutsVisible }">
       <strong>Keyboard shortcuts</strong><br />
-      Ctrl+S {{ isPublished ? 'Save changes' : 'Save draft' }} · Ctrl+/ Edit, Split, Preview · Ctrl+K Link · / Blocks · Ctrl+? Shortcuts
+      Ctrl+S Save document · Ctrl+/ Edit, Split, Preview · Ctrl+K Link · / Blocks · Ctrl+? Shortcuts
     </div>
   </div>
 </template>
@@ -1900,9 +1902,9 @@ const lastModified = computed(() => {
 .topbar {
   height: 56px;
   flex-shrink: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   padding: 0 32px;
   background: var(--surface);
@@ -1946,6 +1948,10 @@ const lastModified = computed(() => {
 .topbar-actions {
   flex-shrink: 0;
   justify-content: flex-end;
+}
+
+.topbar-center {
+  justify-content: center;
 }
 
 .save-status {
@@ -2558,9 +2564,19 @@ const lastModified = computed(() => {
 }
 
 .field label {
-  font-size: 12px;
-  color: var(--muted);
+  font-size: 13px;
+  color: var(--fg);
   font-weight: 500;
+}
+
+.field label .req {
+  color: var(--accent-strong);
+}
+
+.input-readonly {
+  background: var(--fg-soft);
+  color: var(--fg);
+  cursor: default;
 }
 
 .field-hint {
@@ -2674,15 +2690,28 @@ const lastModified = computed(() => {
 .input,
 .select {
   padding: 8px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background-color: var(--surface);
   font: inherit;
   font-size: 13px;
   color: var(--fg);
   transition: border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1),
-    background 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    background-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.select {
+  appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+}
+
+.input.input-readonly {
+  background-color: var(--fg-soft);
 }
 
 .input:hover,
@@ -2695,7 +2724,7 @@ const lastModified = computed(() => {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
-  background: var(--surface);
+  background-color: var(--surface);
 }
 
 .input[readonly] {
@@ -3047,13 +3076,43 @@ const lastModified = computed(() => {
   gap: 8px;
 }
 
-.btn-delete {
-  color: var(--muted);
+/* Outlined accent buttons from the design: Save Document, Delete */
+.btn-accent-outline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 1px solid var(--accent-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
 
-.btn-delete:hover:not(:disabled) {
-  color: var(--error-text);
-  background: color-mix(in oklch, var(--error) 10%, transparent);
+.btn-accent-outline:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.btn-accent-outline:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-accent-outline:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.btn-delete {
+  width: 36px;
+  padding: 0;
 }
 
 .btn-danger {
