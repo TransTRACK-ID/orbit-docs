@@ -2,6 +2,7 @@
 import { usePageStore } from "~/store/page";
 import type { AppItem } from "~/composables/useApps";
 import GeneralLogoUploadField from "~/components/general/LogoUploadField.vue";
+import type { AppDrawerTab } from "~/components/app/DetailDrawer.vue";
 import { timeAgo } from "~/utils/ui";
 
 definePageMeta({
@@ -9,15 +10,12 @@ definePageMeta({
 });
 
 const $page = usePageStore();
-const { can, canAny } = usePermissions();
+const { can } = usePermissions();
 
 const canCreateApp = computed(() => can("apps:write"));
 const canEditApp = computed(() => can("apps:write"));
 const canDeleteApp = computed(() => can("apps:delete"));
 const canGenerateDocs = computed(() => can("doc_generation:run"));
-const canOpenAppMenu = computed(() =>
-  canAny("apps:write", "apps:delete", "doc_generation:run")
-);
 
 onBeforeMount(() => {
   $page.setTitle("Apps");
@@ -28,7 +26,6 @@ const {
   stats,
   activities,
   isLoading,
-  isCreating,
   fetchApps,
   fetchApp,
   fetchStats,
@@ -46,16 +43,29 @@ const statusFilter = ref("");
 const sortKey = ref("updatedAt-desc");
 const openAppMenu = ref<string | null>(null);
 
+const selectedAppIds = ref<string[]>([]);
+const appFilterOptions = computed(() =>
+  apps.value.map((a) => ({ id: a.id, label: a.name }))
+);
+
+// Drop selections for apps that no longer exist (e.g. just deleted).
+watch(apps, (list) => {
+  const known = new Set(list.map((a) => a.id));
+  if (selectedAppIds.value.some((id) => !known.has(id))) {
+    selectedAppIds.value = selectedAppIds.value.filter((id) => known.has(id));
+  }
+});
+
 const statusFilterOptions = [
-  { id: "", label: "All statuses" },
+  { id: "", label: "All Status" },
   { id: "active", label: "Active" },
   { id: "draft", label: "Draft" },
   { id: "maintenance", label: "Maintenance" },
 ];
 
 const sortOptions = [
-  { id: "updatedAt-desc", label: "Recently updated" },
-  { id: "updatedAt-asc", label: "Least recently updated" },
+  { id: "updatedAt-desc", label: "Recently Updated" },
+  { id: "updatedAt-asc", label: "Least Recently Updated" },
   { id: "name-asc", label: "Name A–Z" },
   { id: "name-desc", label: "Name Z–A" },
   { id: "status-asc", label: "Status" },
@@ -114,11 +124,16 @@ const headerStats = computed(() => [
 ]);
 
 const hasActiveFilters = computed(
-  () => !!searchQuery.value.trim() || !!statusFilter.value
+  () => !!searchQuery.value.trim() || !!statusFilter.value || selectedAppIds.value.length > 0
 );
 
 const filteredApps = computed(() => {
   let result = [...apps.value];
+
+  if (selectedAppIds.value.length > 0) {
+    const ids = new Set(selectedAppIds.value);
+    result = result.filter((a) => ids.has(a.id));
+  }
 
   const q = searchQuery.value.trim().toLowerCase();
   if (q) {
@@ -176,7 +191,46 @@ const activitySubtitle = computed(() => {
 function clearFilters() {
   searchQuery.value = "";
   statusFilter.value = "";
+  selectedAppIds.value = [];
 }
+
+// App detail drawer, deep-linkable via ?app=<id>&tab=<docs|releases|sites>
+const DRAWER_TABS: AppDrawerTab[] = ["docs", "releases", "sites"];
+
+const drawerAppId = computed(() => {
+  const id = route.query.app;
+  return typeof id === "string" && id ? id : null;
+});
+
+const drawerTab = computed<AppDrawerTab>(() => {
+  const tab = route.query.tab;
+  // "versions" was a tab on the old detail page; it is now merged into Releases.
+  if (tab === "versions") return "releases";
+  return DRAWER_TABS.includes(tab as AppDrawerTab) ? (tab as AppDrawerTab) : "docs";
+});
+
+const drawerApp = computed(
+  () => (drawerAppId.value ? apps.value.find((a) => a.id === drawerAppId.value) ?? null : null)
+);
+
+function drawerLink(app: AppItem) {
+  const { app: _app, tab: _tab, ...rest } = route.query;
+  return { query: { ...rest, app: app.id } };
+}
+
+function closeDrawer() {
+  const { app: _app, tab: _tab, ...rest } = route.query;
+  router.replace({ query: rest });
+}
+
+function setDrawerTab(tab: AppDrawerTab) {
+  router.replace({ query: { ...route.query, tab } });
+}
+
+// Unknown or deleted app id: drop the drawer once the list has loaded.
+watch([isLoading, apps, drawerAppId], () => {
+  if (!isLoading.value && drawerAppId.value && !drawerApp.value) closeDrawer();
+});
 
 function onDocClick(e: MouseEvent) {
   const t = e.target as HTMLElement;
@@ -184,12 +238,12 @@ function onDocClick(e: MouseEvent) {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === "Escape") {
-    openAppMenu.value = null;
-    if (showCreateModal.value) closeCreateModal();
-    if (showEditModal.value) closeEditModal();
-    if (appToDelete.value) appToDelete.value = null;
-  }
+  // A dropdown that handled Esc itself calls preventDefault; don't also close what's behind it.
+  if (e.key !== "Escape" || e.defaultPrevented) return;
+  openAppMenu.value = null;
+  if (showFormModal.value) closeFormModal();
+  else if (appToDelete.value) appToDelete.value = null;
+  else if (drawerAppId.value) closeDrawer();
 }
 
 async function refreshActivities() {
@@ -202,107 +256,92 @@ async function refreshActivities() {
   }
 }
 
-// Create modal
-const showCreateModal = ref(false);
-const createForm = reactive({
+// Create / edit modal (shared form)
+type FormMode = "create" | "edit";
+
+const formMode = ref<FormMode | null>(null);
+const showFormModal = computed(() => formMode.value !== null);
+const editingApp = ref<AppItem | null>(null);
+const isSubmitting = ref(false);
+
+const appForm = reactive({
   name: "",
   description: "",
   owner: "",
-  status: "active",
+  status: "",
   logoUrl: "",
 });
-const createNameError = ref(false);
+const formErrors = reactive({ name: false, owner: false, status: false });
+
+const formStatusOptions = [
+  { id: "active", label: "Active" },
+  { id: "draft", label: "Draft" },
+  { id: "maintenance", label: "Maintenance" },
+];
+
+function resetFormErrors() {
+  formErrors.name = false;
+  formErrors.owner = false;
+  formErrors.status = false;
+}
+
+function fillForm(source: Pick<AppItem, "name" | "description" | "owner" | "status" | "logoUrl"> | null) {
+  appForm.name = source?.name ?? "";
+  appForm.description = source?.description ?? "";
+  appForm.owner = source?.owner ?? "";
+  appForm.status = source?.status ?? "";
+  appForm.logoUrl = source?.logoUrl ?? "";
+  resetFormErrors();
+}
 
 function openCreateModal() {
-  showCreateModal.value = true;
-  createNameError.value = false;
-  createForm.name = "";
-  createForm.description = "";
-  createForm.owner = "";
-  createForm.status = "active";
-  createForm.logoUrl = "";
+  editingApp.value = null;
+  fillForm(null);
+  formMode.value = "create";
 }
-
-function closeCreateModal() {
-  showCreateModal.value = false;
-  createNameError.value = false;
-}
-
-async function submitCreate() {
-  if (!createForm.name.trim()) {
-    createNameError.value = true;
-    return;
-  }
-  createNameError.value = false;
-  await createApp({
-    name: createForm.name.trim(),
-    description: createForm.description,
-    owner: createForm.owner,
-    status: createForm.status,
-    logoUrl: createForm.logoUrl || null,
-  });
-  closeCreateModal();
-}
-
-// Edit modal
-const showEditModal = ref(false);
-const editingApp = ref<AppItem | null>(null);
-const editForm = reactive({
-  name: "",
-  description: "",
-  owner: "",
-  status: "active",
-  logoUrl: "",
-});
-const editNameError = ref(false);
-const isEditing = ref(false);
 
 async function openEditModal(app: AppItem) {
+  let target = app;
   try {
-    const fresh = await fetchApp(app.id);
-    editingApp.value = fresh;
-    editForm.name = fresh.name;
-    editForm.description = fresh.description || "";
-    editForm.owner = fresh.owner || "";
-    editForm.status = fresh.status;
-    editForm.logoUrl = fresh.logoUrl || "";
+    target = await fetchApp(app.id);
   } catch {
-    editingApp.value = app;
-    editForm.name = app.name;
-    editForm.description = app.description || "";
-    editForm.owner = app.owner || "";
-    editForm.status = app.status;
-    editForm.logoUrl = app.logoUrl || "";
+    // fall back to the list copy
   }
-  showEditModal.value = true;
-  editNameError.value = false;
+  editingApp.value = target;
+  fillForm(target);
+  formMode.value = "edit";
 }
 
-function closeEditModal() {
-  showEditModal.value = false;
-  editingApp.value = null;
-  editNameError.value = false;
+function closeFormModal() {
+  formMode.value = null;
+  resetFormErrors();
 }
 
-async function submitEdit() {
-  if (!editForm.name.trim()) {
-    editNameError.value = true;
-    return;
-  }
-  editNameError.value = false;
-  if (!editingApp.value || isEditing.value) return;
-  isEditing.value = true;
+async function submitForm() {
+  const mode = formMode.value;
+  if (!mode || isSubmitting.value) return;
+
+  formErrors.name = !appForm.name.trim();
+  // Owner and initial status are mandatory when creating; legacy apps may lack an owner.
+  formErrors.owner = mode === "create" && !appForm.owner.trim();
+  formErrors.status = mode === "create" && !appForm.status;
+  if (formErrors.name || formErrors.owner || formErrors.status) return;
+
+  const payload = {
+    name: appForm.name.trim(),
+    description: appForm.description,
+    owner: appForm.owner,
+    status: appForm.status,
+    logoUrl: appForm.logoUrl || null,
+  };
+
+  isSubmitting.value = true;
   try {
-    await updateApp(editingApp.value.id, {
-      name: editForm.name.trim(),
-      description: editForm.description,
-      owner: editForm.owner,
-      status: editForm.status,
-      logoUrl: editForm.logoUrl || null,
-    });
-    closeEditModal();
+    if (mode === "create") await createApp(payload);
+    else if (editingApp.value) await updateApp(editingApp.value.id, payload);
+    closeFormModal();
   } finally {
-    isEditing.value = false;
+    isSubmitting.value = false;
   }
 }
 
@@ -327,10 +366,6 @@ function formatDate(dateStr: string | null) {
   if (!dateStr) return "—";
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function versionAuthor(app: AppItem): string | null {
-  return app.latestVersion?.createdBy || app.owner || null;
 }
 
 function appUpdatedLabel(app: AppItem) {
@@ -358,30 +393,46 @@ const statusLabel: Record<string, string> = {
 <template>
   <div class="apps-page">
     <GeneralPageHeader
-      v-model:search="searchQuery"
       title="Apps"
       :subtitle="pageSubtitle"
-      search-placeholder="Search apps, versions, docs..."
-      search-label="Search apps, versions, and docs"
       :stats="headerStats"
       stats-label="App summary"
     >
       <template v-if="canCreateApp" #actions>
-        <button type="button" class="btn btn-primary" @click="openCreateModal">
-          + New App
+        <button type="button" class="btn btn-primary create-app-btn" @click="openCreateModal">
+          Create App
         </button>
       </template>
       <template #filters>
+        <GeneralSplitSearch
+          v-model="searchQuery"
+          placeholder="Search by docs name, keyword, version"
+          label="Search apps, versions, and docs"
+        >
+          <template #prefix>
+            <GeneralMultiSelectDropdown
+              v-model="selectedAppIds"
+              :options="appFilterOptions"
+              all-label="All Apps"
+              noun="apps"
+              search-placeholder="Filter app name..."
+              aria-label="Filter by app"
+            />
+          </template>
+        </GeneralSplitSearch>
         <GeneralSearchableDropdown
           v-model="statusFilter"
+          class="apps-filter apps-filter--status"
           :options="statusFilterOptions"
-          placeholder="All statuses"
+          placeholder="All Status"
           search-placeholder="Filter status..."
         />
         <GeneralSearchableDropdown
           v-model="sortKey"
+          class="apps-filter"
+          trigger-prefix="Sort :"
           :options="sortOptions"
-          placeholder="Recently updated"
+          placeholder="Recently Updated"
           search-placeholder="Sort..."
         />
       </template>
@@ -421,7 +472,7 @@ const statusLabel: Record<string, string> = {
             <AppLogo :name="app.name" :logo-url="app.logoUrl" />
             <div class="app-card__titles">
               <h3 class="app-card__name">
-                <NuxtLink :to="`/apps/${app.id}`" class="app-card__link">{{ app.name }}</NuxtLink>
+                <NuxtLink :to="drawerLink(app)" class="app-card__link">{{ app.name }}</NuxtLink>
               </h3>
               <p class="app-card__meta">{{ appUpdatedLabel(app) }}</p>
             </div>
@@ -431,81 +482,81 @@ const statusLabel: Record<string, string> = {
           </span>
         </div>
 
-        <div v-if="app.latestVersion" class="app-version-strip">
-          <span class="num">v{{ app.latestVersion.version }}</span>
-          <span v-if="versionAuthor(app)" class="app-version-strip__by">
-            by {{ versionAuthor(app) }}
-          </span>
-        </div>
-
-        <footer class="app-card__foot">
-          <div class="cell-actions">
-            <div class="app-card__links">
-              <NuxtLink :to="`/docs?app=${app.id}`" class="btn btn-ghost btn-sm row-action">
-                Docs &rarr;
-              </NuxtLink>
-              <NuxtLink :to="`/apps/${app.id}/versions`" class="btn btn-ghost btn-sm row-action">
-                Versions &rarr;
-              </NuxtLink>
-            </div>
-            <div v-if="canOpenAppMenu" class="action-dropdown-wrap actions-menu">
-              <button
-                type="button"
-                class="btn btn-ghost btn-sm row-action row-action--icon"
-                aria-label="More actions"
-                aria-haspopup="menu"
-                :aria-expanded="openAppMenu === app.id"
-                @click.stop="toggleAppMenu(app.id)"
-              >
-                <IconsDotsVertical size="14" />
-              </button>
-              <div
-                v-if="openAppMenu === app.id"
-                class="dropdown-menu actions-dropdown"
-                role="menu"
-                @click.stop
-              >
-                <NuxtLink
-                  :to="`/releases?app=${app.name}`"
-                  class="dropdown-item"
-                  role="menuitem"
-                  @click="openAppMenu = null"
-                >
-                  Releases
-                </NuxtLink>
-                <NuxtLink
-                  v-if="canGenerateDocs"
-                  :to="`/docs/generate/${app.id}`"
-                  class="dropdown-item"
-                  role="menuitem"
-                  @click="openAppMenu = null"
-                >
-                  Generate Docs
-                </NuxtLink>
-                <button
-                  v-if="canEditApp"
-                  type="button"
-                  class="dropdown-item"
-                  role="menuitem"
-                  @click="openEditModal(app); openAppMenu = null"
-                >
-                  <IconsPencil size="14" />
-                  Edit
-                </button>
-                <button
-                  v-if="canDeleteApp"
-                  type="button"
-                  class="dropdown-item dropdown-item--danger"
-                  role="menuitem"
-                  @click="confirmDelete(app); openAppMenu = null"
-                >
-                  <IconsTrash size="14" />
-                  Delete
-                </button>
-              </div>
-            </div>
+        <div
+          class="action-dropdown-wrap actions-menu app-card__menu"
+          :class="{ 'is-open': openAppMenu === app.id }"
+        >
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm row-action row-action--icon"
+            aria-label="More actions"
+            aria-haspopup="menu"
+            :aria-expanded="openAppMenu === app.id"
+            @click.stop="toggleAppMenu(app.id)"
+          >
+            <IconsDotsVertical size="14" />
+          </button>
+          <div
+            v-if="openAppMenu === app.id"
+            class="dropdown-menu actions-dropdown"
+            role="menu"
+            @click.stop
+          >
+            <NuxtLink
+              :to="`/docs?app=${app.id}`"
+              class="dropdown-item"
+              role="menuitem"
+              @click="openAppMenu = null"
+            >
+              Docs
+            </NuxtLink>
+            <NuxtLink
+              :to="`/versions?app=${app.id}`"
+              class="dropdown-item"
+              role="menuitem"
+              @click="openAppMenu = null"
+            >
+              Versions
+            </NuxtLink>
+            <NuxtLink
+              :to="`/releases?app=${app.name}`"
+              class="dropdown-item"
+              role="menuitem"
+              @click="openAppMenu = null"
+            >
+              Releases
+            </NuxtLink>
+            <NuxtLink
+              v-if="canGenerateDocs"
+              :to="`/docs/generate/${app.id}`"
+              class="dropdown-item"
+              role="menuitem"
+              @click="openAppMenu = null"
+            >
+              Generate Docs
+            </NuxtLink>
+            <button
+              v-if="canEditApp"
+              type="button"
+              class="dropdown-item"
+              role="menuitem"
+              @click="openEditModal(app); openAppMenu = null"
+            >
+              <IconsPencil size="14" />
+              Edit
+            </button>
+            <button
+              v-if="canDeleteApp"
+              type="button"
+              class="dropdown-item dropdown-item--danger"
+              role="menuitem"
+              @click="confirmDelete(app); openAppMenu = null"
+            >
+              <IconsTrash size="14" />
+              Delete
+            </button>
           </div>
-        </footer>
+        </div>
       </article>
     </div>
 
@@ -577,60 +628,88 @@ const statusLabel: Record<string, string> = {
       </div>
     </section>
 
-    <!-- Create Modal -->
-    <div class="modal-overlay" :class="{ open: showCreateModal }" @click.self="closeCreateModal">
-      <div class="modal">
+    <!-- Create / Edit Modal -->
+    <div class="modal-overlay" :class="{ open: showFormModal }" @click.self="closeFormModal">
+      <div
+        class="modal modal--form"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="appFormTitle"
+      >
         <div class="modal-header">
-          <h2>New App</h2>
-          <button type="button" class="modal-close" aria-label="Close" @click="closeCreateModal">
-            ✕
+          <h2 id="appFormTitle">{{ formMode === "edit" ? "Edit App" : "Create App" }}</h2>
+          <button type="button" class="modal-close" aria-label="Close" @click="closeFormModal">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
-        <form novalidate @submit.prevent="submitCreate">
+        <form novalidate @submit.prevent="submitForm">
           <div class="modal-body">
-            <div class="form-group">
-              <label for="appName">App name</label>
+            <div class="form-group" :class="{ 'has-error': formErrors.name }">
+              <label for="appName">App Name <span class="req" aria-hidden="true">*</span></label>
               <input
                 id="appName"
-                v-model="createForm.name"
+                v-model="appForm.name"
                 type="text"
-                placeholder="e.g. Payment Gateway"
+                placeholder="E.g. Payment Gateway"
                 required
-                :class="{ 'input-error': createNameError }"
+                :aria-invalid="formErrors.name"
                 aria-describedby="appNameError"
-                @input="createNameError = false"
+                @input="formErrors.name = false"
               />
-              <span id="appNameError" class="error-msg" :class="{ show: createNameError }">
+              <span id="appNameError" class="error-msg" :class="{ show: formErrors.name }">
                 App name is required
               </span>
             </div>
+
             <div class="form-group">
               <label for="appDesc">
                 Description <span class="opt">(optional)</span>
               </label>
-              <textarea id="appDesc" v-model="createForm.description" placeholder="What does this app do?" />
+              <textarea id="appDesc" v-model="appForm.description" placeholder="What does this app do?" />
             </div>
+
             <div class="form-row">
-              <div class="form-group">
-                <label for="appOwner">Owner</label>
-                <AppOwnerSelect id="appOwner" v-model="createForm.owner" />
+              <div class="form-group" :class="{ 'has-error': formErrors.owner }">
+                <label for="appOwner">
+                  Owner <span v-if="formMode === 'create'" class="req" aria-hidden="true">*</span>
+                </label>
+                <AppOwnerSelect
+                  id="appOwner"
+                  v-model="appForm.owner"
+                  placeholder="Choose Owner"
+                  @update:model-value="formErrors.owner = false"
+                />
+                <span class="error-msg" :class="{ show: formErrors.owner }">Choose an owner</span>
               </div>
-              <div class="form-group">
-                <label for="appStatus">Initial status</label>
-                <select id="appStatus" v-model="createForm.status">
-                  <option value="active">Active</option>
-                  <option value="draft">Draft</option>
-                  <option value="maintenance">Maintenance</option>
-                </select>
+              <div class="form-group" :class="{ 'has-error': formErrors.status }">
+                <label for="appStatus">
+                  {{ formMode === "edit" ? "Status" : "Initial Status" }}
+                  <span v-if="formMode === 'create'" class="req" aria-hidden="true">*</span>
+                </label>
+                <GeneralSearchableDropdown
+                  id="appStatus"
+                  v-model="appForm.status"
+                  block
+                  :searchable="false"
+                  :options="formStatusOptions"
+                  placeholder="Choose Initial status"
+                  @update:model-value="formErrors.status = false"
+                />
+                <span class="error-msg" :class="{ show: formErrors.status }">
+                  Choose an initial status
+                </span>
               </div>
             </div>
+
             <div class="form-group">
               <GeneralLogoUploadField
-                v-model="createForm.logoUrl"
+                v-model="appForm.logoUrl"
                 input-id="appLogo"
                 label="Logo"
                 optional-label="(optional)"
-                url-placeholder="https://cdn.example.com/product-logo.svg"
+                url-placeholder="E.g. https://cdn.example.com/product-logo.svg"
                 drop-hint="Drop an image here, or"
                 browse-label="browse"
                 remove-label="Remove"
@@ -639,85 +718,12 @@ const statusLabel: Record<string, string> = {
             </div>
           </div>
           <div class="modal-foot">
-            <button type="button" class="btn btn-secondary" @click="closeCreateModal">
+            <button type="button" class="btn btn-form btn-form--outline" @click="closeFormModal">
               Cancel
             </button>
-            <button type="submit" class="btn btn-primary" :disabled="isCreating">
-              <span v-if="isCreating">Creating…</span>
-              <span v-else>Create App</span>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Edit Modal -->
-    <div class="modal-overlay" :class="{ open: showEditModal }" @click.self="closeEditModal">
-      <div class="modal">
-        <div class="modal-header">
-          <h2>Edit App</h2>
-          <button type="button" class="modal-close" aria-label="Close" @click="closeEditModal">
-            ✕
-          </button>
-        </div>
-        <form novalidate @submit.prevent="submitEdit">
-          <div class="modal-body">
-            <div class="form-group">
-              <label for="editName">App name</label>
-              <input
-                id="editName"
-                v-model="editForm.name"
-                type="text"
-                required
-                :class="{ 'input-error': editNameError }"
-                aria-describedby="editNameError"
-                @input="editNameError = false"
-              />
-              <span id="editNameError" class="error-msg" :class="{ show: editNameError }">
-                App name is required
-              </span>
-            </div>
-            <div class="form-group">
-              <label for="editDesc">
-                Description <span class="opt">(optional)</span>
-              </label>
-              <textarea id="editDesc" v-model="editForm.description" placeholder="What does this app do?" />
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label for="editOwner">Owner</label>
-                <AppOwnerSelect id="editOwner" v-model="editForm.owner" />
-              </div>
-              <div class="form-group">
-                <label for="editStatus">Status</label>
-                <select id="editStatus" v-model="editForm.status">
-                  <option value="active">Active</option>
-                  <option value="draft">Draft</option>
-                  <option value="maintenance">Maintenance</option>
-                </select>
-              </div>
-            </div>
-            <div class="form-group">
-              <GeneralLogoUploadField
-                v-model="editForm.logoUrl"
-                input-id="editLogo"
-                label="Logo"
-                optional-label="(optional)"
-                url-placeholder="https://cdn.example.com/product-logo.svg"
-                drop-hint="Drop an image here, or"
-                browse-label="browse"
-                remove-label="Remove"
-                url-label="Or paste a URL"
-              />
-            </div>
-          </div>
-          <div class="modal-foot">
-            <button type="button" class="btn btn-secondary" @click="closeEditModal">
-              Cancel
-            </button>
-            <button type="submit" class="btn btn-primary" :disabled="isEditing">
-              <span v-if="isEditing">Saving…</span>
-              <span v-else>Save</span>
+            <button type="submit" class="btn btn-form btn-form--solid" :disabled="isSubmitting">
+              <template v-if="formMode === 'edit'">{{ isSubmitting ? "Saving…" : "Save" }}</template>
+              <template v-else>{{ isSubmitting ? "Creating…" : "Create App" }}</template>
             </button>
           </div>
         </form>
@@ -749,6 +755,17 @@ const statusLabel: Record<string, string> = {
         </div>
       </div>
     </div>
+
+    <AppDetailDrawer
+      v-if="drawerAppId"
+      :app="drawerApp"
+      :tab="drawerTab"
+      :can-edit="canEditApp"
+      :can-generate-docs="canGenerateDocs"
+      @close="closeDrawer"
+      @edit="openEditModal"
+      @update:tab="setDrawerTab"
+    />
   </div>
 </template>
 
@@ -785,6 +802,33 @@ const statusLabel: Record<string, string> = {
   font-family: var(--font-mono);
 }
 
+.create-app-btn {
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.create-app-btn:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--accent-strong) 88%, black);
+}
+
+.apps-filter :deep(.dropdown-trigger) {
+  min-height: 39px;
+  min-width: 0;
+  font-weight: 500;
+  border-color: var(--control-border);
+}
+
+.apps-filter :deep(.dropdown-trigger:hover) {
+  border-color: var(--fg);
+}
+
+.apps-filter--status :deep(.dropdown-trigger) {
+  min-width: 158px;
+}
+
 .app-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -796,11 +840,9 @@ const statusLabel: Record<string, string> = {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 18px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  min-height: 168px;
   position: relative;
   transition: border-color 0.15s cubic-bezier(0.25, 1, 0.5, 1);
 }
@@ -867,47 +909,6 @@ const statusLabel: Record<string, string> = {
   color: var(--muted);
 }
 
-.app-version-strip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: var(--radius);
-  background: color-mix(in oklch, var(--info) 10%, var(--surface));
-  font-size: 12px;
-  color: var(--info-text);
-}
-
-.app-version-strip__by {
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.app-card__foot {
-  position: relative;
-  z-index: 1;
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.cell-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-}
-
-.app-card__links {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-}
-
 .row-action {
   min-height: 32px;
   padding: 6px 10px;
@@ -933,6 +934,27 @@ const statusLabel: Record<string, string> = {
 
 .actions-menu {
   position: relative;
+}
+
+.app-card__menu {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.15s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.app-card:hover .app-card__menu,
+.app-card:focus-within .app-card__menu,
+.app-card__menu.is-open {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .app-card__menu {
+    opacity: 1;
+  }
 }
 
 .dropdown-menu {
@@ -1007,6 +1029,15 @@ const statusLabel: Record<string, string> = {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
+}
+
+.activity-panel :deep(th:nth-child(1)) {
+  width: 10%;
+}
+
+.activity-panel :deep(th:nth-child(3)),
+.activity-panel :deep(th:nth-child(4)) {
+  width: 19%;
 }
 
 .actor-cell {
@@ -1120,12 +1151,14 @@ const statusLabel: Record<string, string> = {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px;
+  min-height: 72px;
+  padding: 16px 24px;
   border-bottom: 1px solid var(--border);
 }
 
 .modal-header h2 {
   font-size: 18px;
+  font-weight: 500;
   margin: 0;
 }
 
@@ -1136,21 +1169,24 @@ const statusLabel: Record<string, string> = {
   align-items: center;
   justify-content: center;
   border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted);
+  border: 1px solid var(--control-border);
+  background: var(--surface);
+  color: var(--fg);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-  font-size: 16px;
+  transition: border-color 0.15s;
 }
 
 .modal-close:hover {
-  color: var(--fg);
   border-color: var(--fg);
 }
 
+.modal-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .modal-body {
-  padding: 20px 24px;
+  padding: 24px;
 }
 
 .modal-text {
@@ -1161,26 +1197,56 @@ const statusLabel: Record<string, string> = {
 .modal-foot {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
+  gap: 12px;
   padding: 16px 24px;
   border-top: 1px solid var(--border);
 }
 
+.btn-form {
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--accent-strong);
+}
+
+.btn-form--outline {
+  background: var(--surface);
+  color: var(--accent-strong);
+}
+
+.btn-form--outline:hover:not(:disabled) {
+  background: var(--accent-soft);
+}
+
+.btn-form--solid {
+  background: var(--accent-strong);
+  color: var(--surface);
+}
+
+.btn-form--solid:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--accent-strong) 88%, black);
+}
+
 .form-group {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .form-group label {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   color: var(--fg);
 }
 
 .form-group label .opt {
   color: var(--muted);
+  font-size: 13px;
   font-weight: 400;
+}
+
+.form-group label .req {
+  color: var(--accent-strong);
 }
 
 .error-msg {
@@ -1195,22 +1261,25 @@ const statusLabel: Record<string, string> = {
 }
 
 .form-group input,
-.form-group textarea,
-.form-group select {
+.form-group textarea {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
+  padding: 8px 12px;
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface);
   font: inherit;
   font-size: 14px;
   color: var(--fg);
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+  color: var(--muted);
+}
+
 .form-group input:focus,
-.form-group textarea:focus,
-.form-group select:focus {
+.form-group textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
@@ -1221,9 +1290,11 @@ const statusLabel: Record<string, string> = {
   min-height: 80px;
 }
 
-.input-error {
-  border-color: var(--error) !important;
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--error) 20%, transparent) !important;
+.form-group.has-error input,
+.form-group.has-error :deep(.owner-trigger),
+.form-group.has-error :deep(.dropdown-trigger) {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--error) 20%, transparent);
 }
 
 .form-row {

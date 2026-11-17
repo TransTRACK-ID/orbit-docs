@@ -8,9 +8,13 @@ interface Owner {
   role: string | null;
 }
 
-const props = defineProps<{
-  modelValue: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: string;
+    placeholder?: string;
+  }>(),
+  { placeholder: "Select owner…" }
+);
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: string): void;
@@ -197,8 +201,12 @@ function onDocClick(e: MouseEvent) {
   }
 }
 
-function onScrollResize() {
-  if (dropdownOpen.value) close(false);
+function onScrollResize(e: Event) {
+  if (!dropdownOpen.value) return;
+  // Scrolling the menu's own list must not dismiss or move it.
+  if (e.target instanceof Node && menuRef.value?.contains(e.target)) return;
+  // Scrolling the page/modal behind: follow the trigger.
+  updateMenuPosition();
 }
 
 onMounted(() => {
@@ -329,9 +337,9 @@ async function deleteOwner() {
       @click="toggle"
       @keydown="onTriggerKeydown"
     >
-      <span class="owner-trigger-text">
+      <span class="owner-trigger-text" :class="{ 'is-placeholder': !modelValue && !isLoading }">
         <template v-if="isLoading">Loading…</template>
-        <template v-else>{{ modelValue || "Select owner…" }}</template>
+        <template v-else>{{ modelValue || placeholder }}</template>
       </span>
       <svg
         width="14"
@@ -553,7 +561,7 @@ async function deleteOwner() {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
   background: var(--surface);
   font: inherit;
@@ -587,6 +595,10 @@ async function deleteOwner() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.owner-trigger-text.is-placeholder {
+  color: var(--muted);
 }
 
 .chevron {
@@ -664,8 +676,10 @@ async function deleteOwner() {
 .search-input {
   flex: 1;
   min-width: 0;
-  border: none;
-  background: transparent;
+  padding: 6px 8px;
+  border: 1px solid var(--control-border);
+  border-radius: 6px;
+  background: var(--surface);
   font: inherit;
   font-size: 14px;
   color: var(--fg);
@@ -673,6 +687,10 @@ async function deleteOwner() {
 }
 .search-input::placeholder {
   color: var(--muted);
+}
+.search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .search-input:focus-visible {
   outline: none;

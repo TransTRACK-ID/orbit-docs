@@ -1,6 +1,6 @@
 import { and, count, desc, eq, or, sql } from "drizzle-orm";
 import type { getDb } from "~/server/database";
-import { apps, appVersions, docSites, docs } from "~/server/database/schema";
+import { apps, appVersions, docSites, docVersions, docs } from "~/server/database/schema";
 import type { DocListView } from "~/utils/doc-display";
 import { DOCS_LIST_MAX_PAGE_SIZE } from "~/utils/docs-list-constants";
 import { knowledgeDocCondition } from "~/server/lib/mcp-doc-queries";
@@ -138,6 +138,13 @@ const docListSelectFields = {
   version: appVersions.version,
   siteName: docSites.name,
   siteSlug: docSites.slug,
+  createdBy: sql<string | null>`(
+    select ${docVersions.actor}
+    from ${docVersions}
+    where ${docVersions.docId} = ${docs.id}
+    order by ${docVersions.createdAt} asc
+    limit 1
+  )`.as("created_by"),
 } as const;
 
 export function mapDocListRow(
@@ -162,6 +169,8 @@ export function mapDocListRow(
     version: string | null;
     siteName: string | null;
     siteSlug: string | null;
+    /** Actor of the earliest doc_versions row; null for docs imported without history. */
+    createdBy?: string | null;
   },
   options: { includeContent: boolean; includeDraftAdrs: boolean; applyLegacyAdrFilter: boolean },
 ) {
@@ -188,6 +197,7 @@ export function mapDocListRow(
     slug: row.slug,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    createdBy: row.createdBy ?? null,
     app: row.appName && row.appId ? { id: row.appId, name: row.appName } : null,
     version: row.version && row.versionId ? { id: row.versionId, version: row.version } : null,
     site: row.siteId ? { id: row.siteId, name: row.siteName, slug: row.siteSlug } : null,

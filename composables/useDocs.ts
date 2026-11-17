@@ -9,6 +9,8 @@ export interface DocItem {
   versionId: string | null;
   tags: string[] | null;
   author: string | null;
+  /** Who created the doc (first saved version); distinct from `author`, the chosen owner. */
+  createdBy?: string | null;
   source: "manual" | "generated" | "op_sync";
   docType: string | null;
   externalId: string | null;

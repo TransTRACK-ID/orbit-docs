@@ -1,13 +1,22 @@
 <script setup lang="ts" generic="T extends { id: string; label: string; disabled?: boolean }">
-const props = defineProps<{
-  modelValue: string;
-  options: T[];
-  placeholder?: string;
-  searchPlaceholder?: string;
-  disabled?: boolean;
-  label?: string;
-  id?: string;
-}>();
+const props = withDefaults(
+  defineProps<{
+    modelValue: string;
+    options: T[];
+    placeholder?: string;
+    /** Text rendered before the selected label in the trigger, e.g. "Sort :". */
+    triggerPrefix?: string;
+    searchPlaceholder?: string;
+    /** Show the filter input in the menu. Turn off for short option lists. */
+    searchable?: boolean;
+    /** Stretch the trigger to its container (form fields). */
+    block?: boolean;
+    disabled?: boolean;
+    label?: string;
+    id?: string;
+  }>(),
+  { searchable: true }
+);
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: string): void;
@@ -35,10 +44,16 @@ function updateMenuPosition() {
   };
 }
 
-const selectedLabel = computed(() => {
-  const found = props.options.find((o) => o.id === props.modelValue);
-  return found?.label || props.placeholder || "Select…";
-});
+const selectedOption = computed(() => props.options.find((o) => o.id === props.modelValue));
+const hasSelection = computed(() => !!selectedOption.value);
+
+const selectedLabel = computed(
+  () => selectedOption.value?.label || props.placeholder || "Select…"
+);
+
+const triggerText = computed(() =>
+  props.triggerPrefix ? `${props.triggerPrefix} ${selectedLabel.value}` : selectedLabel.value
+);
 
 const filteredOptions = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
@@ -59,7 +74,7 @@ function open() {
   updateMenuPosition();
   activeIndex.value = filteredOptions.value.findIndex((o) => o.id === props.modelValue);
   nextTick(() => {
-    searchInputRef.value?.focus();
+    (searchInputRef.value ?? menuRef.value)?.focus();
     scrollActiveIntoView();
   });
 }
@@ -218,7 +233,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="dropdownRef" class="searchable-dropdown">
+  <div
+    ref="dropdownRef"
+    class="searchable-dropdown"
+    :class="{ 'searchable-dropdown--block': block }"
+  >
     <label
       v-if="label"
       :for="`${instanceId}-trigger`"
@@ -232,16 +251,17 @@ onBeforeUnmount(() => {
       ref="triggerRef"
       type="button"
       class="dropdown-trigger"
+      :class="{ 'is-placeholder': !hasSelection }"
       :disabled="disabled"
       :aria-expanded="isOpen"
       :aria-haspopup="'listbox'"
       :aria-controls="isOpen ? `${instanceId}-listbox` : undefined"
       :aria-activedescendant="isOpen ? activeDescendantId : undefined"
-      :aria-label="label ? undefined : selectedLabel"
+      :aria-label="label ? undefined : triggerText"
       @click="toggle"
       @keydown="onTriggerKeydown"
     >
-      <span class="trigger-label">{{ selectedLabel }}</span>
+      <span class="trigger-label">{{ triggerText }}</span>
       <svg
         width="14"
         height="14"
@@ -272,7 +292,7 @@ onBeforeUnmount(() => {
           tabindex="-1"
           @keydown="onMenuKeydown"
         >
-        <div class="search-wrap">
+        <div v-if="searchable" class="search-wrap">
           <svg
             width="14"
             height="14"
@@ -417,6 +437,21 @@ onBeforeUnmount(() => {
 }
 .rotate-180 {
   transform: rotate(180deg);
+}
+
+.dropdown-trigger.is-placeholder .trigger-label {
+  color: var(--muted);
+}
+
+/* Full-width form field variant */
+.searchable-dropdown--block {
+  display: flex;
+}
+.searchable-dropdown--block .dropdown-trigger {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  border-color: var(--control-border);
 }
 
 /* ── Dropdown Menu ───────────────────────────────────────────── */

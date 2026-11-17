@@ -199,7 +199,7 @@ function clearLogo() {
 
 .logo-upload-field__label {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--fg);
 }
@@ -222,8 +222,8 @@ function clearLogo() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
 }
 
@@ -262,9 +262,9 @@ function clearLogo() {
   gap: 4px;
   min-height: 72px;
   padding: 12px;
-  border: 1px dashed var(--border);
+  border: 1px dashed var(--control-border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface);
   color: var(--fg);
   cursor: pointer;
   transition:
@@ -274,8 +274,8 @@ function clearLogo() {
 }
 
 .logo-upload-field__dropzone:hover:not(:disabled) {
-  border-color: color-mix(in oklch, var(--fg) 24%, var(--border));
-  background: color-mix(in oklch, var(--fg) 3%, var(--bg));
+  border-color: color-mix(in oklch, var(--fg) 24%, var(--control-border));
+  background: color-mix(in oklch, var(--fg) 3%, var(--surface));
 }
 
 .logo-upload-field__dropzone--active {
@@ -296,7 +296,7 @@ function clearLogo() {
 }
 
 .logo-upload-field__browse {
-  color: var(--accent);
+  color: var(--accent-strong);
   font-weight: 500;
 }
 
@@ -346,10 +346,10 @@ function clearLogo() {
 
 .logo-upload-field__url-input {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
+  padding: 8px 12px;
+  border: 1px solid var(--control-border);
   border-radius: var(--radius);
-  background: var(--bg);
+  background: var(--surface);
   font: inherit;
   font-size: 14px;
   color: var(--fg);
