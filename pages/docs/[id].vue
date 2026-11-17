@@ -47,6 +47,7 @@ const {
   publishDoc,
   fetchDocVersions,
   restoreDocVersion,
+  deleteDoc,
 } = useDocs();
 
 const { docSites, fetchDocSites } = useDocSites();
@@ -184,6 +185,7 @@ const shortcutsVisible = ref(false);
 const activeHeading = ref("");
 const docLoading = ref(false);
 const docNotFound = ref(false);
+const isDocDeleted = ref(false);
 type SidebarTab = 'properties' | 'attachments' | 'versions';
 const rightSidebarTab = ref<SidebarTab>('properties');
 const restoreConfirmVisible = ref(false);
@@ -392,6 +394,7 @@ const autosaveEnabled = computed(
     && !docLoading.value
     && !docNotFound.value
     && editorStatus.value !== "published"
+    && !isDocDeleted.value
 );
 
 const {
@@ -820,11 +823,54 @@ async function onDiffToChange(toId: string) {
 
 const hasUnsavedEditorChanges = computed(
   () =>
-    (autosaveEnabled.value && (isDirty.value || hasPendingChanges()))
-    || hasEditorChanges.value,
+    !isDocDeleted.value
+    && ((autosaveEnabled.value && (isDirty.value || hasPendingChanges()))
+      || hasEditorChanges.value),
 );
 
+// Delete
+const canDeleteDoc = computed(
+  () => canEditDoc.value && !!currentDoc.value && !docLoading.value && !docNotFound.value,
+);
+const showDeleteModal = ref(false);
+const isDeletingDoc = ref(false);
+const deleteCancelRef = ref<HTMLButtonElement | null>(null);
+
+function openDeleteModal() {
+  if (!canDeleteDoc.value) return;
+  showDeleteModal.value = true;
+  nextTick(() => deleteCancelRef.value?.focus());
+}
+
+function cancelDelete() {
+  if (isDeletingDoc.value) return;
+  showDeleteModal.value = false;
+}
+
+async function confirmDeleteDoc() {
+  if (!docId.value || isDeletingDoc.value) return;
+  const id = docId.value;
+  const backTo = isAdrDoc.value ? "/settings?tab=adr" : "/docs";
+  isDeletingDoc.value = true;
+  // Stop autosave and the unsaved-changes guard: saving a doc that is being deleted would 404.
+  isDocDeleted.value = true;
+  try {
+    await deleteDoc(id);
+    showDeleteModal.value = false;
+    await router.replace(backTo);
+  } catch {
+    isDocDeleted.value = false; // toast already shown by deleteDoc
+  } finally {
+    isDeletingDoc.value = false;
+  }
+}
+
 function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape" && showDeleteModal.value) {
+    e.preventDefault();
+    cancelDelete();
+    return;
+  }
   // Ctrl+S / Cmd+S — Save
   if ((e.ctrlKey || e.metaKey) && e.key === "s") {
     e.preventDefault();
@@ -1105,6 +1151,17 @@ const lastModified = computed(() => {
             {{ mode.label }}
           </button>
         </div>
+        <button
+          v-if="canDeleteDoc"
+          type="button"
+          class="btn btn-ghost btn-delete"
+          title="Delete doc"
+          aria-label="Delete doc"
+          :disabled="isSaving || isPublishing"
+          @click="openDeleteModal"
+        >
+          <IconsTrash size="16" />
+        </button>
         <button
           v-if="canEditDoc"
           type="button"
@@ -1750,6 +1807,46 @@ const lastModified = computed(() => {
           >
             <span v-if="isRestoring">Restoring…</span>
             <span v-else>Restore</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showDeleteModal" class="delete-overlay" @click="cancelDelete">
+      <div
+        class="delete-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="delete-doc-title"
+        aria-describedby="delete-doc-desc"
+        @click.stop
+      >
+        <h3 id="delete-doc-title" class="delete-dialog__title">Delete doc</h3>
+        <p id="delete-doc-desc" class="delete-dialog__desc">
+          Delete <strong>{{ editorTitle.trim() || "Untitled doc" }}</strong>? This permanently
+          removes the doc and its version history. This can't be undone.
+          <template v-if="isPublished">
+            It is currently published, so its public link will stop working.
+          </template>
+        </p>
+        <div class="delete-dialog__actions">
+          <button
+            ref="deleteCancelRef"
+            type="button"
+            class="btn btn-secondary"
+            :disabled="isDeletingDoc"
+            @click="cancelDelete"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="btn btn-danger"
+            :disabled="isDeletingDoc"
+            @click="confirmDeleteDoc"
+          >
+            <span v-if="isDeletingDoc">Deleting…</span>
+            <span v-else>Delete</span>
           </button>
         </div>
       </div>
@@ -2948,6 +3045,85 @@ const lastModified = computed(() => {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.btn-delete {
+  color: var(--muted);
+}
+
+.btn-delete:hover:not(:disabled) {
+  color: var(--error-text);
+  background: color-mix(in oklch, var(--error) 10%, transparent);
+}
+
+.btn-danger {
+  background: var(--error);
+  color: var(--surface);
+  border-color: var(--error);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--error-text);
+  border-color: var(--error-text);
+}
+
+/* Delete confirmation (own class names: global .modal-* rules leak into this page) */
+.delete-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in oklch, var(--fg) 25%, transparent);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: modal-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.delete-dialog {
+  width: 100%;
+  max-width: 420px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px color-mix(in oklch, var(--fg) 12%, transparent);
+  animation: dialog-in 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.delete-dialog__title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.delete-dialog__desc {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.delete-dialog__desc strong {
+  color: var(--fg);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.delete-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .delete-overlay,
+  .delete-dialog {
+    animation: none;
+  }
 }
 
 /* Focus-visible states */

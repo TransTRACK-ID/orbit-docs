@@ -3,6 +3,7 @@ import { getDb } from "~/server/database";
 import { docs, activityLogs } from "~/server/database/schema";
 import { eq } from "drizzle-orm";
 import { requireAuth, getActorName } from "~/server/utils/auth";
+import { requirePermission } from "~/server/utils/rbac";
 
 export default defineEventHandler(async (event) => {
   const user = await requireAuth(event);
@@ -31,6 +32,9 @@ export default defineEventHandler(async (event) => {
       message: "Doc not found",
     });
   }
+
+  // Same gate as editing: ADRs need adrs:write, everything else docs:write.
+  await requirePermission(event, existing.docType === "adr" ? "adrs:write" : "docs:write");
 
   await db.insert(activityLogs).values({
     appId: existing.appId,
