@@ -3,6 +3,10 @@ import { getDb } from "~/server/database";
 import { docSites, docs, apps, workspaceSettings } from "~/server/database/schema";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
+import {
+  resolvePublishedPageSlug,
+  rewritePublicSiteMarkdownLinks,
+} from "~/server/lib/public-site-page-resolve";
 
 export default defineEventHandler(async (event) => {
   const db = getDb();
@@ -40,40 +44,42 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: "Not Found", message: "Doc site not found" });
   }
 
-  const pageRows = await db
+  const sitePages = await db
     .select({
       id: docs.id,
       title: docs.title,
-      content: docs.content,
       slug: docs.slug,
+      content: docs.content,
       status: docs.status,
       frontmatter: docs.frontmatter,
       author: docs.author,
       updatedAt: docs.updatedAt,
     })
     .from(docs)
-    .where(and(eq(docs.siteId, site.id), eq(docs.slug, pageSlug)))
-    .limit(1);
+    .where(and(eq(docs.siteId, site.id), eq(docs.status, "published")));
 
-  const page = pageRows[0];
-  if (!page || page.status !== "published") {
+  const publishedRefs = sitePages
+    .filter((p) => p.slug)
+    .map((p) => ({ slug: p.slug!, title: p.title }));
+
+  const resolved = resolvePublishedPageSlug(pageSlug!, publishedRefs);
+  const page = resolved
+    ? sitePages.find((p) => p.slug === resolved.slug)
+    : undefined;
+
+  if (!page || page.status !== "published" || !page.slug) {
     throw createError({ statusCode: 404, statusMessage: "Not Found", message: "Page not found" });
   }
 
-  const sitePages = await db
-    .select({
-      id: docs.id,
-      title: docs.title,
-      slug: docs.slug,
-    })
-    .from(docs)
-    .where(and(eq(docs.siteId, site.id), eq(docs.status, "published")));
+  const content = page.content
+    ? rewritePublicSiteMarkdownLinks(page.content, publishedRefs)
+    : page.content;
 
   return {
     data: {
       id: page.id,
       title: page.title,
-      content: page.content,
+      content,
       slug: page.slug,
       frontmatter: page.frontmatter,
       author: page.author,

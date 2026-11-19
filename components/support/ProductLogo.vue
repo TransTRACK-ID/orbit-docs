@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { appIconStyle, appInitials } from "~/utils/app-icon";
+import { sanitizeBrandLogoUrl } from "~/utils/brand-logo-url";
 
 const props = withDefaults(
   defineProps<{
@@ -23,12 +24,13 @@ watch(
 );
 
 const sizeClass = computed(() => `support-product-logo--${props.size}`);
+const resolvedLogoUrl = computed(() => sanitizeBrandLogoUrl(props.logoUrl));
 </script>
 
 <template>
   <img
-    v-if="logoUrl && !logoFailed"
-    :src="logoUrl"
+    v-if="resolvedLogoUrl && !logoFailed"
+    :src="resolvedLogoUrl"
     :alt="`${name} logo`"
     class="support-product-logo"
     :class="sizeClass"

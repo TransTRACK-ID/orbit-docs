@@ -17,8 +17,8 @@ describe("shouldIncludeDocSiteInCatalog", () => {
     expect(shouldIncludeDocSiteInCatalog(false, "published", 0)).toBe(true);
   });
 
-  it("includes draft sites with published pages", () => {
-    expect(shouldIncludeDocSiteInCatalog(false, "draft", 2)).toBe(true);
+  it("excludes draft public sites even when they have published pages", () => {
+    expect(shouldIncludeDocSiteInCatalog(false, "draft", 2)).toBe(false);
   });
 
   it("excludes empty draft sites", () => {

@@ -2,6 +2,7 @@ import { and, eq, ne, sql } from "drizzle-orm";
 import { apps, docSites, docs, releases } from "~/server/database/schema";
 import { slugify } from "~/server/utils/slug";
 import { deriveWikiOnlySiteIds } from "~/utils/wiki-content";
+import { sanitizeBrandLogoUrl } from "~/utils/brand-logo-url";
 
 export interface PublicProductPage {
   id: string;
@@ -47,8 +48,10 @@ export function shouldIncludeDocSiteInCatalog(
   siteStatus: string,
   publishedPageCount: number,
 ): boolean {
-  const hasPublicSite = !isWikiSite && siteStatus === "published";
-  return hasPublicSite || publishedPageCount > 0;
+  if (isWikiSite) return publishedPageCount > 0;
+  // Public /s/ sites must be published or every catalog link 404s at runtime.
+  if (siteStatus !== "published") return false;
+  return true;
 }
 
 function assignUniqueSlugs<T extends { id: string; name: string }>(
@@ -228,7 +231,7 @@ export async function listPublicProducts(
         slug: app.slug,
         description: app.description,
         status: app.status,
-        logoUrl: app.logoUrl,
+        logoUrl: sanitizeBrandLogoUrl(app.logoUrl),
         isWikiSite: false,
         homePath: `/support/${app.slug}`,
         kind: "app" as const,

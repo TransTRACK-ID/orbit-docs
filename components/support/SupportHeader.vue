@@ -1,22 +1,27 @@
 <script setup lang="ts">
 import type { PublicWorkspace } from "~/composables/usePublicSupport";
 import { appInitials } from "~/utils/app-icon";
+import { sanitizeBrandLogoUrl } from "~/utils/brand-logo-url";
 
-defineProps<{
+const props = defineProps<{
   workspace: PublicWorkspace | null;
 }>();
 
 const { status } = useAuth();
 const isAuthenticated = computed(() => status.value === "authenticated");
+
+const workspaceLogoUrl = computed(() =>
+  props.workspace ? sanitizeBrandLogoUrl(props.workspace.logoUrl) : null,
+);
 </script>
 
 <template>
   <header class="support-header">
     <NuxtLink to="/" class="support-brand">
       <img
-        v-if="workspace?.logoUrl"
-        :src="workspace.logoUrl"
-        :alt="workspace.name"
+        v-if="workspaceLogoUrl"
+        :src="workspaceLogoUrl"
+        :alt="workspace?.name"
         class="support-brand-logo"
       />
       <span v-else class="support-brand-mark" aria-hidden="true">

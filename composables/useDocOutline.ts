@@ -34,10 +34,65 @@ export function pickActiveHeadingId(
 const SCROLL_SPY_OFFSET = 96;
 
 export function useDocOutline(contentRef: Ref<HTMLElement | null>) {
+  const route = useRoute();
+  const router = useRouter();
   const activeSlug = ref("");
   const spyRootId = ref("docContent");
   let scrollCleanup: (() => void) | null = null;
   let syncActive: (() => void) | null = null;
+  let pinnedSlug: string | null = null;
+  let pinClearTimer: ReturnType<typeof setTimeout> | null = null;
+  let scrollPinCleanup: (() => void) | null = null;
+
+  function syncRouteHash(targetId: string) {
+    if (!import.meta.client || !targetId) return;
+    const hash = `#${targetId}`;
+    if (route.hash === hash) return;
+    router.replace({ hash });
+  }
+
+  function clearPinnedSlug(runSpy = true) {
+    pinnedSlug = null;
+    if (pinClearTimer) {
+      clearTimeout(pinClearTimer);
+      pinClearTimer = null;
+    }
+    scrollPinCleanup?.();
+    scrollPinCleanup = null;
+    if (!runSpy) return;
+
+    const hashId = route.hash?.replace(/^#/, "");
+    if (hashId && document.getElementById(hashId)) {
+      activeSlug.value = hashId;
+      return;
+    }
+    syncActive?.();
+  }
+
+  function pinActiveSlug(targetId: string, container: HTMLElement) {
+    pinnedSlug = targetId;
+    activeSlug.value = targetId;
+    scrollPinCleanup?.();
+
+    if (pinClearTimer) {
+      clearTimeout(pinClearTimer);
+      pinClearTimer = null;
+    }
+
+    let scrollIdleTimer: ReturnType<typeof setTimeout> | null = null;
+    const onScroll = () => {
+      if (scrollIdleTimer) clearTimeout(scrollIdleTimer);
+      scrollIdleTimer = setTimeout(() => clearPinnedSlug(true), 120);
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    scrollPinCleanup = () => {
+      container.removeEventListener("scroll", onScroll);
+      if (scrollIdleTimer) clearTimeout(scrollIdleTimer);
+    };
+
+    // Safety net when smooth scroll never fires scroll events (short pages).
+    pinClearTimer = setTimeout(() => clearPinnedSlug(true), 2500);
+  }
 
   function scrollToSection(targetId: string) {
     const container = contentRef.value;
@@ -53,7 +108,8 @@ export function useDocOutline(contentRef: Ref<HTMLElement | null>) {
       container.scrollTop -
       16;
     container.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-    activeSlug.value = targetId;
+    pinActiveSlug(targetId, container);
+    syncRouteHash(targetId);
   }
 
   function scrollToTop(rootId = "docContent") {
@@ -76,6 +132,11 @@ export function useDocOutline(contentRef: Ref<HTMLElement | null>) {
     spyRootId.value = rootId;
 
     syncActive = () => {
+      if (pinnedSlug) {
+        activeSlug.value = pinnedSlug;
+        return;
+      }
+
       const headings = [
         ...docContent.querySelectorAll<HTMLElement>("h2[id], h3[id]"),
       ];
@@ -109,6 +170,7 @@ export function useDocOutline(contentRef: Ref<HTMLElement | null>) {
     scrollCleanup?.();
     scrollCleanup = null;
     syncActive = null;
+    clearPinnedSlug(false);
   }
 
   watch(

@@ -3,6 +3,7 @@ import { getDb } from "~/server/database";
 import { releases, apps, appVersions, workspaceSettings } from "~/server/database/schema";
 import { desc, eq, and } from "drizzle-orm";
 import { requireAuth } from "~/server/utils/auth";
+import { dedupePublicReleases } from "~/server/lib/public-releases-list";
 
 export default defineEventHandler(async (event) => {
   const db = getDb();
@@ -52,9 +53,9 @@ export default defineEventHandler(async (event) => {
     .orderBy(desc(releases.updatedAt))
     .limit(limit);
 
-  let result = rows;
+  let result = dedupePublicReleases(rows);
   if (search) {
-    result = rows.filter((r) => {
+    result = result.filter((r) => {
       const haystack = [r.appName, r.version, r.summary, r.heroTitle]
         .filter(Boolean)
         .join(" ")

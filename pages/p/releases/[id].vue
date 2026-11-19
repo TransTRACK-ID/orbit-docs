@@ -133,6 +133,10 @@ async function copyEmbedCode() {
 
     <div v-else-if="!release" class="rd-empty">
       <p>Release not found or not published.</p>
+      <NuxtLink :to="backUrl" class="rd-back rd-back--empty">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+        Back to release notes
+      </NuxtLink>
     </div>
 
     <article v-else class="rd-article">
@@ -259,6 +263,9 @@ async function copyEmbedCode() {
   color: var(--muted);
   text-decoration: none;
   transition: color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.rd-back--empty {
+  margin-top: 16px;
 }
 .rd-back:hover {
   color: var(--accent);
